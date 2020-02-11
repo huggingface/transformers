@@ -87,6 +87,11 @@ class BaseTransformer(pl.LightningModule):
         )
         return [optimizer], [scheduler]
 
+    def test_step(self, batch, batch_nb):
+        return self.validation_step(batch, batch_nb)
+
+    def test_end(self, outputs):
+        return self.validation_end(batch, outputs)
 
     @pl.data_loader
     def train_dataloader(self):
