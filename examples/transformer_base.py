@@ -92,7 +92,6 @@ class BaseTransformer(pl.LightningModule):
         model = self.model
 
         t_total = len(self.train_dataloader()) // args.gradient_accumulation_steps * float(args.num_train_epochs)
-        print("t_total", t_total)
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
