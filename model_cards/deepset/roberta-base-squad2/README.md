@@ -83,13 +83,13 @@ reader = TransformersReader(model="deepset/roberta-base-squad2",tokenizer="deeps
 
 
 ## Authors
-Branden Chan: `branden.chan [at] deepset.ai` <br>
-Timo Möller: `timo.moeller [at] deepset.ai` <br>
-Malte Pietsch: `malte.pietsch [at] deepset.ai` <br> 
-Tanay Soni: `tanay.soni [at] deepset.ai` <br>
+Branden Chan: `branden.chan [at] deepset.ai`
+Timo Möller: `timo.moeller [at] deepset.ai`
+Malte Pietsch: `malte.pietsch [at] deepset.ai`
+Tanay Soni: `tanay.soni [at] deepset.ai`
 
 ## About us
-![deepset logo](https://raw.githubusercontent.com/deepset-ai/FARM/master/docs/img/deepset_logo.png)<br>
+![deepset logo](https://raw.githubusercontent.com/deepset-ai/FARM/master/docs/img/deepset_logo.png)
 
 We bring NLP to the industry via open source!  
 Our focus: Industry specific language models & large scale QA systems.  
