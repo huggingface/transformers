@@ -42,7 +42,8 @@ class NERTransformer(BaseTransformer):
         loss = outputs[0]
 
         tensorboard_logs = {
-            'loss': loss
+            'loss': loss,
+            'rate' : self.trainer.lr_schedulers[0].get_last_lr()
         }
         return {'loss': loss, "log": tensorboard_logs}
 

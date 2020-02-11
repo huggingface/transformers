@@ -111,15 +111,9 @@ class BaseTransformer(pl.LightningModule):
 
 
     def get_tqdm_dict(self):
-        r"""
-        Additional items to be displayed in the progress bar.
-        Return:
-            Dictionary with the items to be displayed in the progress bar.
-        """
         tqdm_dict = {
             'loss': '{:.3f}'.format(self.trainer.avg_loss),
-            'rate' : self.trainer.optimizers[0],
-            'lr' : self.trainer.lr_schedulers[0]
+            'lr' : self.trainer.lr_schedulers[0].get_last_lr()
         }
 
         return tqdm_dict
