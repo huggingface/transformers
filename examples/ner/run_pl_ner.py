@@ -112,8 +112,9 @@ class NERTransformer(BaseTransformer):
         # Save results
         output_test_results_file = os.path.join(self.hparams.output_dir, "test_results.txt")
         with open(output_test_results_file, "w") as writer:
-            for key in sorted(result.keys()):
-                writer.write("{} = {}\n".format(key, str(result[key])))
+            for key in sorted(ret.keys()):
+                if key != "log":
+                    writer.write("{} = {}\n".format(key, str(result[key])))
         # Save predictions
         output_test_predictions_file = os.path.join(
             self.hparams.output_dir, "test_predictions.txt"
