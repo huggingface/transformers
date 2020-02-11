@@ -319,6 +319,7 @@ def main(hparams):
     model = NERTransformer(hparams)
     trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
                          gpus=hparams.n_gpu,
+                         default_save_path=hparams.output_dir,
                          use_amp=hparams.fp16,
                          gradient_clip_val=args.max_grad_norm
     )
@@ -327,6 +328,13 @@ def main(hparams):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="parser for fast-neural-style")
+    parser.add_argument(
+            "--output_dir",
+            default=None,
+            type=str,
+            required=True,
+            help="The output directory where the model predictions and checkpoints will be written.",
+        )
 
     parser.add_argument(
         "--fp16",
