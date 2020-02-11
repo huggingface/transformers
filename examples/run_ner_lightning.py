@@ -102,6 +102,12 @@ class NERTransformer(BaseTransformer):
             "recall": recall_score(out_label_list, preds_list),
             "f1": f1_score(out_label_list, preds_list),
         }
+
+
+        logger.info("***** Eval results %s *****", prefix)
+        for key in sorted(results.keys()):
+            logger.info("  %s = %s", key, str(results[key]))
+
         tensorboard_logs = results
         ret = {k: v for k, v in results.items()}
         ret["log"] = tensorboard_logs

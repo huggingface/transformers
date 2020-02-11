@@ -116,7 +116,9 @@ class BaseTransformer(pl.LightningModule):
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx,
                        second_order_closure=None):
-        scheduler.step()
+
+        # Step each time.
+        self.trainer.lr_schedulers[0].step()
         optimizer.step()
         optimizer.zero_grad()
 
