@@ -198,8 +198,11 @@ Follow these steps to start contributing:
 3. To indicate a work in progress please prefix the title with `[WIP]`. These
    are useful to avoid duplicated work, and to differentiate it from PRs ready
    to be merged;
-4. Make sure pre-existing tests still pass;
-5. Add high-coverage tests. No quality test, no merge;
+4. Make sure existing tests pass;
+5. Add high-coverage tests. No quality test, no merge. 
+If you are adding a new model, make sure that you use `ModelTester.all_model_classes`, which triggers the common tests.
+If you are adding new `@slow` tests, make sure they pass using `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`. 
+CircleCI does not run them. 
 6. All public methods must have informative docstrings;
 
 
