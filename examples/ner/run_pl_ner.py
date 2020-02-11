@@ -3,7 +3,8 @@ import glob
 import logging
 import os
 import random
-
+import sys
+sys.path.append("..")
 import numpy as np
 import torch
 from seqeval.metrics import f1_score, precision_score, recall_score
@@ -11,13 +12,13 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 
-from ..transformer_base import (
+from transformer_base import (
     BaseTransformer,
     set_seed,
     add_generic_args,
     generic_train,
 )
-from .utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
+from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 import pytorch_lightning as pl
 
 logger = logging.getLogger(__name__)
