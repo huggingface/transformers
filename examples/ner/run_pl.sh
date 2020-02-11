@@ -6,7 +6,7 @@ export NUM_EPOCHS=3
 export SAVE_STEPS=750
 export SEED=1
 
-python3 run_ner_lightning.py --data_dir ./ \
+python3 run_pl_ner.py --data_dir ./ \
 --model_type bert \
 --labels ./labels.txt \
 --model_name_or_path $BERT_MODEL \
