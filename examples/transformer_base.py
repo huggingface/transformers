@@ -4,7 +4,6 @@ import logging
 import os
 import random
 import pytorch_lightning as pl
-# from pytorch_lightning.loggers import LightningLoggerBase, rank_zero_only
 
 from transformers import *
 import numpy as np
@@ -40,52 +39,50 @@ class BaseTransformer(pl.LightningModule):
 
         super(BaseTransformer, self).__init__()
         self.hparams = hparams
-        args = self.hparams
-        args.model_type = args.model_type.lower()
+        self.hparams.model_type = self.hparams.model_type.lower()
 
-        config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
+        config_class, model_class, tokenizer_class = MODEL_CLASSES[self.hparams.model_type]
         config = config_class.from_pretrained(
-            args.config_name if args.config_name else args.model_name_or_path,
+            self.hparams.config_name if self.hparams.config_name else self.hparams.model_name_or_path,
             num_labels=num_labels,
-            cache_dir=args.cache_dir if args.cache_dir else None,
+            cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
         )
         tokenizer = tokenizer_class.from_pretrained(
-            args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
-            do_lower_case=args.do_lower_case,
-            cache_dir=args.cache_dir if args.cache_dir else None,
+            self.hparams.tokenizer_name if self.hparams.tokenizer_name else self.hparams.model_name_or_path,
+            do_lower_case=self.hparams.do_lower_case,
+            cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
         )
         model = model_class.from_pretrained(
-            args.model_name_or_path,
-            from_tf=bool(".ckpt" in args.model_name_or_path),
+            self.hparams.model_name_or_path,
+            from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
             config=config,
-            cache_dir=args.cache_dir if args.cache_dir else None,
+            cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
         )
         self.config, self.tokenizer, self.model = config, tokenizer, model
 
 
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
-        args = self.hparams
         model = self.model
 
-        t_total = len(self.train_dataloader()) // args.gradient_accumulation_steps * float(args.num_train_epochs)
+        t_total = len(self.train_dataloader()) // self.hparams.gradient_accumulation_steps * float(self.hparams.num_train_epochs)
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
                 "params": [p for n, p in model.named_parameters()
                            if not any(nd in n for nd in no_decay)],
-                "weight_decay": args.weight_decay,
+                "weight_decay": self.hparams.weight_decay,
             },
             {"params": [p for n, p in model.named_parameters()
                         if any(nd in n for nd in no_decay)],
              "weight_decay": 0.0},
         ]
         optimizer = AdamW(optimizer_grouped_parameters,
-                          lr=args.learning_rate,
-                          eps=args.adam_epsilon)
+                          lr=self.hparams.learning_rate,
+                          eps=self.hparams.adam_epsilon)
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
-            num_warmup_steps=args.warmup_steps,
+            num_warmup_steps=self.hparams.warmup_steps,
             num_training_steps=t_total
         )
         self.lr_scheduler = scheduler
@@ -116,18 +113,15 @@ class BaseTransformer(pl.LightningModule):
 
     @pl.data_loader
     def train_dataloader(self):
-        args = self.hparams
-        return self.load_dataset("train", args.train_batch_size)
+        return self.load_dataset("train", self.hparams.train_batch_size)
 
     @pl.data_loader
     def val_dataloader(self):
-        args = self.hparams
-        return self.load_dataset("dev", args.eval_batch_size)
+        return self.load_dataset("dev", self.hparams.eval_batch_size)
 
     @pl.data_loader
     def test_dataloader(self):
-        args = self.hparams
-        return self.load_dataset("test", args.eval_batch_size)
+        return self.load_dataset("test", self.hparams.eval_batch_size)
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
@@ -235,7 +229,6 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
-
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
 def generic_train(model, args):
@@ -277,6 +270,4 @@ def generic_train(model, args):
     if args.do_train:
         trainer.fit(model)
 
-    if args.do_predict:
-        MyLightningModule.load_from_checkpoint(args.output_dir)
-        trainer.test(model)
+    return trainer
