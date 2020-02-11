@@ -117,23 +117,11 @@ class ModelTesterMixin:
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        decoder_seq_length = (
-            self.model_tester.decoder_seq_length
-            if hasattr(self.model_tester, "decoder_seq_length")
-            else self.model_tester.seq_length
-        )
-        encoder_seq_length = (
-            self.model_tester.encoder_seq_length
-            if hasattr(self.model_tester, "encoder_seq_length")
-            else self.model_tester.seq_length
-        )
-        decoder_key_length = (
-            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else decoder_seq_length
-        )
-        encoder_key_length = (
-            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else encoder_seq_length
-        )
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
             config.output_attentions = True

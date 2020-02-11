@@ -10,13 +10,13 @@ from .utils import require_tf, require_torch
 QA_FINETUNED_MODELS = {
     ("bert-base-uncased", "bert-large-uncased-whole-word-masking-finetuned-squad", None),
     ("bert-base-cased", "bert-large-cased-whole-word-masking-finetuned-squad", None),
-    ("bert-base-uncased", "distilbert-base-uncased-distilled-squad", None),
+    ("bert-base-cased", "distilbert-base-cased-distilled-squad", None),
 }
 
 TF_QA_FINETUNED_MODELS = {
     ("bert-base-uncased", "bert-large-uncased-whole-word-masking-finetuned-squad", None),
     ("bert-base-cased", "bert-large-cased-whole-word-masking-finetuned-squad", None),
-    ("bert-base-uncased", "distilbert-base-uncased-distilled-squad", None),
+    ("bert-base-cased", "distilbert-base-cased-distilled-squad", None),
 }
 
 TF_NER_FINETUNED_MODELS = {
@@ -38,13 +38,13 @@ NER_FINETUNED_MODELS = {
 FEATURE_EXTRACT_FINETUNED_MODELS = {
     ("bert-base-cased", "bert-base-cased", None),
     # ('xlnet-base-cased', 'xlnet-base-cased', None), # Disabled for now as it crash for TF2
-    ("distilbert-base-uncased", "distilbert-base-uncased", None),
+    ("distilbert-base-cased", "distilbert-base-cased", None),
 }
 
 TF_FEATURE_EXTRACT_FINETUNED_MODELS = {
     ("bert-base-cased", "bert-base-cased", None),
     # ('xlnet-base-cased', 'xlnet-base-cased', None), # Disabled for now as it crash for TF2
-    ("distilbert-base-uncased", "distilbert-base-uncased", None),
+    ("distilbert-base-cased", "distilbert-base-cased", None),
 }
 
 TF_TEXT_CLASSIF_FINETUNED_MODELS = {

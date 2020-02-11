@@ -26,19 +26,22 @@ Your model will then be accessible through its identifier, a concatenation of yo
 "username/pretrained_model"
 ```
 
+**Please add a README.md model card** to the repo under `model_cards/` with: model description, training params (dataset, preprocessing, hyperparameters), evaluation results, intended uses & limitations, etc.
+
+Your model now has a page on huggingface.co/models 🔥
+
 Anyone can load it from code:
 ```python
 tokenizer = AutoTokenizer.from_pretrained("username/pretrained_model")
 model = AutoModel.from_pretrained("username/pretrained_model")
 ```
 
-Finally, list all your files on S3:
+List all your files on S3:
 ```shell
 transformers-cli s3 ls
-# List all your S3 objects.
 ```
 
-You can also delete files:
+You can also delete unneeded files:
 
 ```shell
 transformers-cli s3 rm …

@@ -79,7 +79,10 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
         name = txt_name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
-        if any(n in ["adam_v", "adam_m", "global_step"] for n in name):
+        if any(
+            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
+            for n in name
+        ):
             logger.info("Skipping {}".format("/".join(name)))
             tf_weights.pop(txt_name, None)
             continue
@@ -802,8 +805,8 @@ class T5WithLMHeadModel(T5PreTrainedModel):
     r"""
         **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the masked language modeling loss.
-            Indices should either be in ``[0, ..., config.vocab_size]`` or -1 (see ``input_ids`` docstring).
-            Tokens with indices set to ``-1`` are ignored (masked), the loss is only computed for the tokens with labels
+            Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``.
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
@@ -906,7 +909,7 @@ class T5WithLMHeadModel(T5PreTrainedModel):
         if lm_labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = lm_labels[..., 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
+            loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
             decoder_outputs = (
                 loss,
