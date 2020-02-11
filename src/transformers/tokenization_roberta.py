@@ -187,10 +187,10 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         add_prefix_space=False,
         **kwargs
     ):
-        kwargs["pad_token"] = pad_token
-        kwargs["sep_token"] = sep_token
-        kwargs["cls_token"] = cls_token
-        kwargs["mask_token"] = mask_token
+        kwargs.setdefault("pad_token", pad_token)
+        kwargs.setdefault("sep_token", sep_token)
+        kwargs.setdefault("cls_token", cls_token)
+        kwargs.setdefault("mask_token", mask_token)
 
         super().__init__(
             vocab_file, merges_file, unk_token, bos_token, eos_token, add_prefix_space=add_prefix_space, **kwargs
