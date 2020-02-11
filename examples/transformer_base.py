@@ -57,6 +57,7 @@ class ExampleLogger(LightningLoggerBase):
     def finalize(self, status):
         # Optional. Any code that needs to be run after training
         # finishes goes here
+        pass
 
 class BaseTransformer(pl.LightningModule):
     def __init__(self, hparams, num_labels=None):
