@@ -11,16 +11,23 @@ from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 
-from ..transformer_base import BaseTransformer, set_seed, add_generic_args, generic_train
+from ..transformer_base import (
+    BaseTransformer,
+    set_seed,
+    add_generic_args,
+    generic_train,
+)
 from .utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 import pytorch_lightning as pl
 
 logger = logging.getLogger(__name__)
 
+
 class NERTransformer(BaseTransformer):
     """
     A training module for NER. See BaseTransformer for the core options.
     """
+
     def __init__(self, hparams):
         self.labels = get_labels(hparams.labels)
         num_labels = len(self.labels)
@@ -40,25 +47,18 @@ class NERTransformer(BaseTransformer):
         outputs = self.forward(**inputs)
         loss = outputs[0]
 
-        tensorboard_logs = {
-            'loss': loss,
-            'rate' : self.lr_scheduler.get_last_lr()[-1]
-        }
-        return {'loss': loss, "log": tensorboard_logs}
+        tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
+        return {"loss": loss, "log": tensorboard_logs}
 
     def load_dataset(self, mode, batch_size):
         args = self.hparams
         labels = get_labels(args.labels)
         self.pad_token_label_id = CrossEntropyLoss().ignore_index
-        dataset = load_and_cache_examples(args,
-                                          self.tokenizer,
-                                          labels,
-                                          self.pad_token_label_id,
-                                          mode=mode)
+        dataset = load_and_cache_examples(
+            args, self.tokenizer, labels, self.pad_token_label_id, mode=mode
+        )
         sampler = RandomSampler(dataset)
-        dataloader = DataLoader(dataset,
-                                sampler=sampler,
-                                batch_size=batch_size)
+        dataloader = DataLoader(dataset, sampler=sampler, batch_size=batch_size)
         return dataloader
 
     def validation_step(self, batch, batch_nb):
@@ -72,18 +72,14 @@ class NERTransformer(BaseTransformer):
         preds = logits.detach().cpu().numpy()
         out_label_ids = inputs["labels"].detach().cpu().numpy()
 
-        return {"val_loss": tmp_eval_loss,
-                "pred" : preds,
-                "target" : out_label_ids
-        }
+        return {"val_loss": tmp_eval_loss, "pred": preds, "target": out_label_ids}
 
     def validation_end(self, outputs):
         "Task specific validation"
-        val_loss_mean = torch.stack([x['val_loss'] for x in outputs]).mean()
-        preds = np.concatenate([x['pred'] for x in outputs], axis=0)
+        val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean()
+        preds = np.concatenate([x["pred"] for x in outputs], axis=0)
         preds = np.argmax(preds, axis=2)
-        out_label_ids = np.concatenate([x['target'] for x in outputs], axis=0)
-
+        out_label_ids = np.concatenate([x["target"] for x in outputs], axis=0)
 
         label_map = {i: label for i, label in enumerate(self.labels)}
         out_label_list = [[] for _ in range(out_label_ids.shape[0])]
@@ -102,7 +98,6 @@ class NERTransformer(BaseTransformer):
             "f1": f1_score(out_label_list, preds_list),
         }
 
-
         logger.info("***** Eval results *****")
         for key in sorted(results.keys()):
             logger.info("  %s = %s", key, str(results[key]))
@@ -111,7 +106,6 @@ class NERTransformer(BaseTransformer):
         ret = {k: v for k, v in results.items()}
         ret["log"] = tensorboard_logs
         return ret
-
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
@@ -141,11 +135,12 @@ class NERTransformer(BaseTransformer):
         )
 
         parser.add_argument(
-            "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
+            "--overwrite_cache",
+            action="store_true",
+            help="Overwrite the cached training and evaluation sets",
         )
 
         return parser
-
 
 
 def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
@@ -156,7 +151,9 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
     cached_features_file = os.path.join(
         args.data_dir,
         "cached_{}_{}_{}".format(
-            mode, list(filter(None, args.model_name_or_path.split("/"))).pop(), str(args.max_seq_length)
+            mode,
+            list(filter(None, args.model_name_or_path.split("/"))).pop(),
+            str(args.max_seq_length),
         ),
     )
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
@@ -193,10 +190,13 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
     all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
     all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
 
-    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+    dataset = TensorDataset(
+        all_input_ids, all_input_mask, all_segment_ids, all_label_ids
+    )
     return dataset
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
     parser = NERTransformer.add_model_specific_args(parser, os.getcwd())

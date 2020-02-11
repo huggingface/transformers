@@ -35,39 +35,71 @@ except ImportError:
 
 
 ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig, DistilBertConfig)), ()
+    (
+        tuple(conf.pretrained_config_archive_map.keys())
+        for conf in (BertConfig, RobertaConfig, DistilBertConfig)
+    ),
+    (),
 )
 
 MODEL_CLASSES = {
     "bert": (BertConfig, TFBertForTokenClassification, BertTokenizer),
     "roberta": (RobertaConfig, TFRobertaForTokenClassification, RobertaTokenizer),
-    "distilbert": (DistilBertConfig, TFDistilBertForTokenClassification, DistilBertTokenizer),
+    "distilbert": (
+        DistilBertConfig,
+        TFDistilBertForTokenClassification,
+        DistilBertTokenizer,
+    ),
 }
 
 
 flags.DEFINE_string(
-    "data_dir", None, "The input data dir. Should contain the .conll files (or other data files) " "for the task."
+    "data_dir",
+    None,
+    "The input data dir. Should contain the .conll files (or other data files) "
+    "for the task.",
 )
 
-flags.DEFINE_string("model_type", None, "Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
+flags.DEFINE_string(
+    "model_type",
+    None,
+    "Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
+)
 
 flags.DEFINE_string(
     "model_name_or_path",
     None,
-    "Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS),
+    "Path to pre-trained model or shortcut name selected in the list: "
+    + ", ".join(ALL_MODELS),
 )
-
-flags.DEFINE_string("output_dir", None, "The output directory where the model checkpoints will be written.")
 
 flags.DEFINE_string(
-    "labels", "", "Path to a file containing all labels. If not specified, CoNLL-2003 labels are used."
+    "output_dir",
+    None,
+    "The output directory where the model checkpoints will be written.",
 )
 
-flags.DEFINE_string("config_name", "", "Pretrained config name or path if not the same as model_name")
+flags.DEFINE_string(
+    "labels",
+    "",
+    "Path to a file containing all labels. If not specified, CoNLL-2003 labels are used.",
+)
 
-flags.DEFINE_string("tokenizer_name", "", "Pretrained tokenizer name or path if not the same as model_name")
+flags.DEFINE_string(
+    "config_name", "", "Pretrained config name or path if not the same as model_name"
+)
 
-flags.DEFINE_string("cache_dir", "", "Where do you want to store the pre-trained models downloaded from s3")
+flags.DEFINE_string(
+    "tokenizer_name",
+    "",
+    "Pretrained tokenizer name or path if not the same as model_name",
+)
+
+flags.DEFINE_string(
+    "cache_dir",
+    "",
+    "Where do you want to store the pre-trained models downloaded from s3",
+)
 
 flags.DEFINE_integer(
     "max_seq_length",
@@ -94,17 +126,27 @@ flags.DEFINE_boolean("do_eval", False, "Whether to run eval on the dev set.")
 flags.DEFINE_boolean("do_predict", False, "Whether to run predictions on the test set.")
 
 flags.DEFINE_boolean(
-    "evaluate_during_training", False, "Whether to run evaluation during training at each logging step."
+    "evaluate_during_training",
+    False,
+    "Whether to run evaluation during training at each logging step.",
 )
 
-flags.DEFINE_boolean("do_lower_case", False, "Set this flag if you are using an uncased model.")
-
-flags.DEFINE_integer("per_device_train_batch_size", 8, "Batch size per GPU/CPU/TPU for training.")
-
-flags.DEFINE_integer("per_device_eval_batch_size", 8, "Batch size per GPU/CPU/TPU for evaluation.")
+flags.DEFINE_boolean(
+    "do_lower_case", False, "Set this flag if you are using an uncased model."
+)
 
 flags.DEFINE_integer(
-    "gradient_accumulation_steps", 1, "Number of updates steps to accumulate before performing a backward/update pass."
+    "per_device_train_batch_size", 8, "Batch size per GPU/CPU/TPU for training."
+)
+
+flags.DEFINE_integer(
+    "per_device_eval_batch_size", 8, "Batch size per GPU/CPU/TPU for evaluation."
+)
+
+flags.DEFINE_integer(
+    "gradient_accumulation_steps",
+    1,
+    "Number of updates steps to accumulate before performing a backward/update pass.",
 )
 
 flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
@@ -115,10 +157,14 @@ flags.DEFINE_float("adam_epsilon", 1e-8, "Epsilon for Adam optimizer.")
 
 flags.DEFINE_float("max_grad_norm", 1.0, "Max gradient norm.")
 
-flags.DEFINE_integer("num_train_epochs", 3, "Total number of training epochs to perform.")
+flags.DEFINE_integer(
+    "num_train_epochs", 3, "Total number of training epochs to perform."
+)
 
 flags.DEFINE_integer(
-    "max_steps", -1, "If > 0: set total number of training steps to perform. Override num_train_epochs."
+    "max_steps",
+    -1,
+    "If > 0: set total number of training steps to perform. Override num_train_epochs.",
 )
 
 flags.DEFINE_integer("warmup_steps", 0, "Linear warmup over warmup_steps.")
@@ -135,13 +181,19 @@ flags.DEFINE_boolean(
 
 flags.DEFINE_boolean("no_cuda", False, "Avoid using CUDA when available")
 
-flags.DEFINE_boolean("overwrite_output_dir", False, "Overwrite the content of the output directory")
+flags.DEFINE_boolean(
+    "overwrite_output_dir", False, "Overwrite the content of the output directory"
+)
 
-flags.DEFINE_boolean("overwrite_cache", False, "Overwrite the cached training and evaluation sets")
+flags.DEFINE_boolean(
+    "overwrite_cache", False, "Overwrite the cached training and evaluation sets"
+)
 
 flags.DEFINE_integer("seed", 42, "random seed for initialization")
 
-flags.DEFINE_boolean("fp16", False, "Whether to use 16-bit (mixed) precision instead of 32-bit")
+flags.DEFINE_boolean(
+    "fp16", False, "Whether to use 16-bit (mixed) precision instead of 32-bit"
+)
 
 flags.DEFINE_string(
     "gpus",
@@ -152,7 +204,15 @@ flags.DEFINE_string(
 
 
 def train(
-    args, strategy, train_dataset, tokenizer, model, num_train_examples, labels, train_batch_size, pad_token_label_id
+    args,
+    strategy,
+    train_dataset,
+    tokenizer,
+    model,
+    num_train_examples,
+    labels,
+    train_batch_size,
+    pad_token_label_id,
 ):
     if args["max_steps"] > 0:
         num_train_steps = args["max_steps"] * args["gradient_accumulation_steps"]
@@ -167,11 +227,17 @@ def train(
     writer = tf.summary.create_file_writer("/tmp/mylogs")
 
     with strategy.scope():
-        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
-        optimizer = create_optimizer(args["learning_rate"], num_train_steps, args["warmup_steps"])
+        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
+            reduction=tf.keras.losses.Reduction.NONE
+        )
+        optimizer = create_optimizer(
+            args["learning_rate"], num_train_steps, args["warmup_steps"]
+        )
 
         if args["fp16"]:
-            optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(optimizer, "dynamic")
+            optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(
+                optimizer, "dynamic"
+            )
 
         loss_metric = tf.keras.metrics.Mean(name="loss", dtype=tf.float32)
         gradient_accumulator = GradientAccumulator()
@@ -179,12 +245,17 @@ def train(
     logging.info("***** Running training *****")
     logging.info("  Num examples = %d", num_train_examples)
     logging.info("  Num Epochs = %d", args["num_train_epochs"])
-    logging.info("  Instantaneous batch size per device = %d", args["per_device_train_batch_size"])
+    logging.info(
+        "  Instantaneous batch size per device = %d",
+        args["per_device_train_batch_size"],
+    )
     logging.info(
         "  Total train batch size (w. parallel, distributed & accumulation) = %d",
         train_batch_size * args["gradient_accumulation_steps"],
     )
-    logging.info("  Gradient Accumulation steps = %d", args["gradient_accumulation_steps"])
+    logging.info(
+        "  Gradient Accumulation steps = %d", args["gradient_accumulation_steps"]
+    )
     logging.info("  Total training steps = %d", num_train_steps)
 
     model.summary()
@@ -193,9 +264,13 @@ def train(
     def apply_gradients():
         grads_and_vars = []
 
-        for gradient, variable in zip(gradient_accumulator.gradients, model.trainable_variables):
+        for gradient, variable in zip(
+            gradient_accumulator.gradients, model.trainable_variables
+        ):
             if gradient is not None:
-                scaled_gradient = gradient / (args["n_device"] * args["gradient_accumulation_steps"])
+                scaled_gradient = gradient / (
+                    args["n_device"] * args["gradient_accumulation_steps"]
+                )
                 grads_and_vars.append((scaled_gradient, variable))
             else:
                 grads_and_vars.append((gradient, variable))
@@ -210,7 +285,9 @@ def train(
 
             if args["model_type"] != "distilbert":
                 inputs["token_type_ids"] = (
-                    train_features["segment_ids"] if args["model_type"] in ["bert", "xlnet"] else None
+                    train_features["segment_ids"]
+                    if args["model_type"] in ["bert", "xlnet"]
+                    else None
                 )
 
             with tf.GradientTape() as tape:
@@ -228,8 +305,12 @@ def train(
 
             return cross_entropy
 
-        per_example_losses = strategy.experimental_run_v2(step_fn, args=(train_features, train_labels))
-        mean_loss = strategy.reduce(tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0)
+        per_example_losses = strategy.experimental_run_v2(
+            step_fn, args=(train_features, train_labels)
+        )
+        mean_loss = strategy.reduce(
+            tf.distribute.ReduceOp.MEAN, per_example_losses, axis=0
+        )
 
         return mean_loss
 
@@ -240,7 +321,10 @@ def train(
 
     for epoch in train_iterator:
         epoch_iterator = progress_bar(
-            train_dataset, total=num_train_steps, parent=train_iterator, display=args["n_device"] > 1
+            train_dataset,
+            total=num_train_steps,
+            parent=train_iterator,
+            display=args["n_device"] > 1,
         )
         step = 1
 
@@ -255,17 +339,30 @@ def train(
 
                     global_step += 1
 
-                    if args["logging_steps"] > 0 and global_step % args["logging_steps"] == 0:
+                    if (
+                        args["logging_steps"] > 0
+                        and global_step % args["logging_steps"] == 0
+                    ):
                         # Log metrics
                         if (
                             args["n_device"] == 1 and args["evaluate_during_training"]
                         ):  # Only evaluate when single GPU otherwise metrics may not average well
                             y_true, y_pred, eval_loss = evaluate(
-                                args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev"
+                                args,
+                                strategy,
+                                model,
+                                tokenizer,
+                                labels,
+                                pad_token_label_id,
+                                mode="dev",
                             )
-                            report = metrics.classification_report(y_true, y_pred, digits=4)
+                            report = metrics.classification_report(
+                                y_true, y_pred, digits=4
+                            )
 
-                            logging.info("Eval at step " + str(global_step) + "\n" + report)
+                            logging.info(
+                                "Eval at step " + str(global_step) + "\n" + report
+                            )
                             logging.info("eval_loss: " + str(eval_loss))
 
                             precision = metrics.precision_score(y_true, y_pred)
@@ -284,7 +381,10 @@ def train(
                         with writer.as_default():
                             tf.summary.scalar("lr", learning_rate, global_step)
                             tf.summary.scalar(
-                                "loss", (loss_metric.result() - logging_loss) / args["logging_steps"], global_step
+                                "loss",
+                                (loss_metric.result() - logging_loss)
+                                / args["logging_steps"],
+                                global_step,
                             )
 
                         logging_loss = loss_metric.result()
@@ -294,7 +394,9 @@ def train(
 
                     if args["save_steps"] > 0 and global_step % args["save_steps"] == 0:
                         # Save model checkpoint
-                        output_dir = os.path.join(args["output_dir"], "checkpoint-{}".format(global_step))
+                        output_dir = os.path.join(
+                            args["output_dir"], "checkpoint-{}".format(global_step)
+                        )
 
                         if not os.path.exists(output_dir):
                             os.makedirs(output_dir)
@@ -309,7 +411,9 @@ def train(
 
         loss_metric.reset_states()
 
-    logging.info("  Training took time = {}".format(datetime.datetime.now() - current_time))
+    logging.info(
+        "  Training took time = {}".format(datetime.datetime.now() - current_time)
+    )
 
 
 def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode):
@@ -321,8 +425,12 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
     preds = None
     num_eval_steps = math.ceil(size / eval_batch_size)
     master = master_bar(range(1))
-    eval_iterator = progress_bar(eval_dataset, total=num_eval_steps, parent=master, display=args["n_device"] > 1)
-    loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
+    eval_iterator = progress_bar(
+        eval_dataset, total=num_eval_steps, parent=master, display=args["n_device"] > 1
+    )
+    loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
+        reduction=tf.keras.losses.Reduction.NONE
+    )
     loss = 0.0
 
     logging.info("***** Running evaluation *****")
@@ -334,7 +442,9 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
 
         if args["model_type"] != "distilbert":
             inputs["token_type_ids"] = (
-                eval_features["segment_ids"] if args["model_type"] in ["bert", "xlnet"] else None
+                eval_features["segment_ids"]
+                if args["model_type"] in ["bert", "xlnet"]
+                else None
             )
 
         with strategy.scope():
@@ -409,21 +519,27 @@ def save_cache(features, cached_features_file):
         record_feature["segment_ids"] = create_int_feature(feature.segment_ids)
         record_feature["label_ids"] = create_int_feature(feature.label_ids)
 
-        tf_example = tf.train.Example(features=tf.train.Features(feature=record_feature))
+        tf_example = tf.train.Example(
+            features=tf.train.Features(feature=record_feature)
+        )
 
         writer.write(tf_example.SerializeToString())
 
     writer.close()
 
 
-def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, batch_size, mode):
+def load_and_cache_examples(
+    args, tokenizer, labels, pad_token_label_id, batch_size, mode
+):
     drop_remainder = True if args["tpu"] or mode == "train" else False
 
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(
         args["data_dir"],
         "cached_{}_{}_{}.tf_record".format(
-            mode, list(filter(None, args["model_name_or_path"].split("/"))).pop(), str(args["max_seq_length"])
+            mode,
+            list(filter(None, args["model_name_or_path"].split("/"))).pop(),
+            str(args["max_seq_length"]),
         ),
     )
     if os.path.exists(cached_features_file) and not args["overwrite_cache"]:
@@ -491,13 +607,17 @@ def main(_):
         args["n_device"] = args["num_tpu_cores"]
     elif len(args["gpus"].split(",")) > 1:
         args["n_device"] = len([f"/gpu:{gpu}" for gpu in args["gpus"].split(",")])
-        strategy = tf.distribute.MirroredStrategy(devices=[f"/gpu:{gpu}" for gpu in args["gpus"].split(",")])
+        strategy = tf.distribute.MirroredStrategy(
+            devices=[f"/gpu:{gpu}" for gpu in args["gpus"].split(",")]
+        )
     elif args["no_cuda"]:
         args["n_device"] = 1
         strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
     else:
         args["n_device"] = len(args["gpus"].split(","))
-        strategy = tf.distribute.OneDeviceStrategy(device="/gpu:" + args["gpus"].split(",")[0])
+        strategy = tf.distribute.OneDeviceStrategy(
+            device="/gpu:" + args["gpus"].split(",")[0]
+        )
 
     logging.warning(
         "n_device: %s, distributed training: %s, 16-bits training: %s",
@@ -521,7 +641,9 @@ def main(_):
     # Training
     if args["do_train"]:
         tokenizer = tokenizer_class.from_pretrained(
-            args["tokenizer_name"] if args["tokenizer_name"] else args["model_name_or_path"],
+            args["tokenizer_name"]
+            if args["tokenizer_name"]
+            else args["model_name_or_path"],
             do_lower_case=args["do_lower_case"],
             cache_dir=args["cache_dir"] if args["cache_dir"] else None,
         )
@@ -562,7 +684,9 @@ def main(_):
 
     # Evaluation
     if args["do_eval"]:
-        tokenizer = tokenizer_class.from_pretrained(args["output_dir"], do_lower_case=args["do_lower_case"])
+        tokenizer = tokenizer_class.from_pretrained(
+            args["output_dir"], do_lower_case=args["do_lower_case"]
+        )
         checkpoints = []
         results = []
 
@@ -570,7 +694,9 @@ def main(_):
             checkpoints = list(
                 os.path.dirname(c)
                 for c in sorted(
-                    glob.glob(args["output_dir"] + "/**/" + TF2_WEIGHTS_NAME, recursive=True),
+                    glob.glob(
+                        args["output_dir"] + "/**/" + TF2_WEIGHTS_NAME, recursive=True
+                    ),
                     key=lambda f: int("".join(filter(str.isdigit, f)) or -1),
                 )
             )
@@ -581,7 +707,11 @@ def main(_):
             checkpoints.append(args["output_dir"])
 
         for checkpoint in checkpoints:
-            global_step = checkpoint.split("-")[-1] if re.match(".*checkpoint-[0-9]", checkpoint) else "final"
+            global_step = (
+                checkpoint.split("-")[-1]
+                if re.match(".*checkpoint-[0-9]", checkpoint)
+                else "final"
+            )
 
             with strategy.scope():
                 model = model_class.from_pretrained(checkpoint)
@@ -592,7 +722,9 @@ def main(_):
             report = metrics.classification_report(y_true, y_pred, digits=4)
 
             if global_step:
-                results.append({global_step + "_report": report, global_step + "_loss": eval_loss})
+                results.append(
+                    {global_step + "_report": report, global_step + "_loss": eval_loss}
+                )
 
         output_eval_file = os.path.join(args["output_dir"], "eval_results.txt")
 
@@ -611,15 +743,21 @@ def main(_):
                         writer.write("\n")
 
     if args["do_predict"]:
-        tokenizer = tokenizer_class.from_pretrained(args["output_dir"], do_lower_case=args["do_lower_case"])
+        tokenizer = tokenizer_class.from_pretrained(
+            args["output_dir"], do_lower_case=args["do_lower_case"]
+        )
         model = model_class.from_pretrained(args["output_dir"])
         eval_batch_size = args["per_device_eval_batch_size"] * args["n_device"]
         predict_dataset, _ = load_and_cache_examples(
             args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode="test"
         )
-        y_true, y_pred, pred_loss = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode="test")
+        y_true, y_pred, pred_loss = evaluate(
+            args, strategy, model, tokenizer, labels, pad_token_label_id, mode="test"
+        )
         output_test_results_file = os.path.join(args["output_dir"], "test_results.txt")
-        output_test_predictions_file = os.path.join(args["output_dir"], "test_predictions.txt")
+        output_test_predictions_file = os.path.join(
+            args["output_dir"], "test_predictions.txt"
+        )
         report = metrics.classification_report(y_true, y_pred, digits=4)
 
         with tf.io.gfile.GFile(output_test_results_file, "w") as writer:
@@ -631,7 +769,9 @@ def main(_):
             writer.write("\n\nloss = " + str(pred_loss))
 
         with tf.io.gfile.GFile(output_test_predictions_file, "w") as writer:
-            with tf.io.gfile.GFile(os.path.join(args["data_dir"], "test.txt"), "r") as f:
+            with tf.io.gfile.GFile(
+                os.path.join(args["data_dir"], "test.txt"), "r"
+            ) as f:
                 example_id = 0
 
                 for line in f:
@@ -641,10 +781,15 @@ def main(_):
                         if not y_pred[example_id]:
                             example_id += 1
                     elif y_pred[example_id]:
-                        output_line = line.split()[0] + " " + y_pred[example_id].pop(0) + "\n"
+                        output_line = (
+                            line.split()[0] + " " + y_pred[example_id].pop(0) + "\n"
+                        )
                         writer.write(output_line)
                     else:
-                        logging.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
+                        logging.warning(
+                            "Maximum sequence length exceeded: No prediction for '%s'.",
+                            line.split()[0],
+                        )
 
 
 if __name__ == "__main__":
