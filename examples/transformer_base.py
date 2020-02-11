@@ -123,7 +123,7 @@ class BaseTransformer(pl.LightningModule):
     def get_tqdm_dict(self):
         tqdm_dict = {
             'loss': '{:.3f}'.format(self.trainer.avg_loss),
-            'lr' : self.trainer.lr_schedulers[0].get_last_lr()
+            'lr' : self.trainer.lr_schedulers[0].get_last_lr()[-1]
         }
 
         return tqdm_dict
