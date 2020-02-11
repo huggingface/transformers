@@ -353,7 +353,7 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        "--num_train_epochs", default=3.0, type=float, help="Total number of training epochs to perform."
+        "--num_train_epochs", default=3, type=int, help="Total number of training epochs to perform."
     )
 
     parser.add_argument(
