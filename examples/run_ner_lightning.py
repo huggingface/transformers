@@ -83,9 +83,9 @@ class NERTransformer(BaseTransformer):
     def validation_end(self, outputs):
         "Task specific validation"
         val_loss_mean = torch.stack([x['val_loss'] for x in outputs]).mean()
-        preds = np.cat([x['pred'] for x in outputs], axis=0)
+        preds = np.concatenate([x['pred'] for x in outputs], axis=0)
         preds = np.argmax(preds, axis=2)
-        out_label_ids = np.cat([x['target'] for x in outputs], axis=0)
+        out_label_ids = np.concatenate([x['target'] for x in outputs], axis=0)
 
 
         label_map = {i: label for i, label in enumerate(self.labels)}

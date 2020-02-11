@@ -241,3 +241,5 @@ def generic_train(model, args):
     )
     if args.do_train:
         trainer.fit(model)
+    if args.do_predict:
+        trainer.test(model)
