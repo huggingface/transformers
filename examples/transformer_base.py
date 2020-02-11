@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import pytorch_lightning as pl
+from pytorch_lightning.loggers import LightningLoggerBase, rank_zero_only
 
 from transformers import *
 import numpy as np
@@ -33,6 +34,29 @@ def set_seed(args):
         torch.cuda.manual_seed_all(args.seed)
 
 
+
+class ExampleLogger(LightningLoggerBase):
+    @rank_zero_only
+    def log_hyperparams(self, params):
+        # params is an argparse.Namespace
+        # your code to record hyperparameters goes here
+        self.params = params
+
+    @rank_zero_only
+    def log_metrics(self, metrics, step):
+        # metrics is a dictionary of metric names and values
+        # your code to record metrics goes here
+        if step % self.params.logging_steps
+
+    def save(self):
+        # Optional. Any code necessary to save logger data goes here
+        pass
+
+    @rank_zero_only
+    def finalize(self, status):
+        # Optional. Any code that needs to be run after training
+        # finishes goes here
+
 class BaseTransformer(pl.LightningModule):
     def __init__(self, hparams, num_labels=None):
         "Initialize a model."
@@ -41,8 +65,6 @@ class BaseTransformer(pl.LightningModule):
         self.hparams = hparams
         args = self.hparams
         args.model_type = args.model_type.lower()
-
-
 
         config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
         config = config_class.from_pretrained(
@@ -86,6 +108,21 @@ class BaseTransformer(pl.LightningModule):
             optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
         )
         return [optimizer], [scheduler]
+
+
+    def get_tqdm_dict(self):
+        r"""
+        Additional items to be displayed in the progress bar.
+        Return:
+            Dictionary with the items to be displayed in the progress bar.
+        """
+        tqdm_dict = {
+            'loss': '{:.3f}'.format(self.trainer.avg_loss),
+            'rate' : self.trainer.optimizers[0],
+            'lr' : self.trainer.lr_schedulers[0]
+        }
+
+        return tqdm_dict
 
     def test_step(self, batch, batch_nb):
         return self.validation_step(batch, batch_nb)
@@ -203,7 +240,6 @@ def add_generic_args(parser, root_dir):
         help="Whether to run evaluation during training at each logging step.",
     )
 
-
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
     parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
     parser.add_argument(
@@ -231,9 +267,10 @@ def generic_train(model, args):
         ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
         ptvsd.wait_for_attach()
 
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(filepath=args.output_dir,
-                                                       prefix="checkpoint",
-                                                       period=args.save_steps)
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        filepath=args.output_dir,
+        save_top_k=5,
+        prefix="checkpoint-{epoch:02d}-{val_loss:.2f}.hdf5")
 
     trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
                          gpus=args.n_gpu,
@@ -242,9 +279,9 @@ def generic_train(model, args):
                          use_amp=args.fp16,
                          gradient_clip_val=args.max_grad_norm,
                          checkpoint_callback=checkpoint_callback,
-                         log_save_interval=args.logging_steps
     )
     if args.do_train:
         trainer.fit(model)
     if args.do_predict:
+        #model.load_from_checkpoint(args.output_dir)
         trainer.test(model)
