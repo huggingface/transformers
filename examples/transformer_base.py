@@ -256,13 +256,12 @@ def generic_train(model, args):
         )
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        filepath=args.output_dir + "/checkpoint-{epoch:02d}-{val_loss:.2f}.ckpt",
+        filepath=args.output_dir + "/checkpoint-{val_loss:.2f}-{epoch:02d}",
         save_top_k=5)
 
     trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
                          gpus=args.n_gpu,
                          max_epochs=args.num_train_epochs,
-                         default_save_path=args.output_dir,
                          use_amp=args.fp16,
                          gradient_clip_val=args.max_grad_norm,
                          checkpoint_callback=checkpoint_callback,
