@@ -104,7 +104,7 @@ class NERTransformer(BaseTransformer):
             "f1": f1_score(out_label_list, preds_list),
         }
         tensorboard_logs = results
-        ret = {k: v for k, v in results.item()}
+        ret = {k: v for k, v in results.items()}
         ret["log"] = tensorboard_logs
         return ret
 
