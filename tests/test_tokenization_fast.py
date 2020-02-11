@@ -69,12 +69,12 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         self.assertSequenceEqual(input_p["attention_mask"], input_r["attention_mask"])
 
         # Ensure truncation with stride match
-        # input_p = tokenizer_p.encode_plus(self._data, max_length=512, stride=3, return_overflowing_tokens=True)
-        # input_r = tokenizer_r.encode_plus(self._data, max_length=512, stride=3, return_overflowing_tokens=True)
-        #
-        # self.assertSequenceEqual(input_p['input_ids'], input_r['input_ids'])
-        # self.assertSequenceEqual(input_p['token_type_ids'], input_r['token_type_ids'])
-        # self.assertSequenceEqual(input_p['attention_mask'], input_r['attention_mask'])
+        input_p = tokenizer_p.encode_plus(self._data, max_length=512, stride=3, return_overflowing_tokens=True)
+        input_r = tokenizer_r.encode_plus(self._data, max_length=512, stride=3, return_overflowing_tokens=True)
+
+        self.assertSequenceEqual(input_p['input_ids'], input_r['input_ids'])
+        self.assertSequenceEqual(input_p['token_type_ids'], input_r['token_type_ids'])
+        self.assertSequenceEqual(input_p['attention_mask'], input_r['attention_mask'])
 
     def test_bert(self):
         for tokenizer_name in BertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
