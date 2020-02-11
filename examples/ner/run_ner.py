@@ -194,7 +194,6 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
 
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
-            print(loss, scheduler.get_last_lr()[-1])
 
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
