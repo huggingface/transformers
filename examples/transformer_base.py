@@ -91,7 +91,8 @@ class BaseTransformer(pl.LightningModule):
         args = self.hparams
         model = self.model
 
-        t_total = len(self.train_dataloader()) // args.gradient_accumulation_steps * args.num_train_epochs
+        t_total = len(self.train_dataloader()) // args.gradient_accumulation_steps * float(args.num_train_epochs)
+        print("t_total", t_total)
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
@@ -103,9 +104,13 @@ class BaseTransformer(pl.LightningModule):
                         if any(nd in n for nd in no_decay)],
              "weight_decay": 0.0},
         ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+        optimizer = AdamW(optimizer_grouped_parameters,
+                          lr=args.learning_rate,
+                          eps=args.adam_epsilon)
         scheduler = get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
+            optimizer,
+            num_warmup_steps=args.warmup_steps,
+            num_training_steps=t_total
         )
         return [optimizer], [scheduler]
 
@@ -113,7 +118,7 @@ class BaseTransformer(pl.LightningModule):
     def get_tqdm_dict(self):
         tqdm_dict = {
             'loss': '{:.3f}'.format(self.trainer.avg_loss),
-            'lr' : self.trainer.lr_schedulers[0].get_last_lr()[-1]
+            'lr' : self.trainer.lr_schedulers[0].get_last_lr()[0]
         }
 
         return tqdm_dict
