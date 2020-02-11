@@ -81,7 +81,14 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_p = BertTokenizer.from_pretrained(tokenizer_name)
             tokenizer_r = BertTokenizerFast.from_pretrained(tokenizer_name)
 
-            # Bert should match 100%
+            # Assert the set of special tokens match.
+            self.assertSequenceEqual(
+                tokenizer_p.special_tokens_map.items(),
+                tokenizer_r.special_tokens_map.items(),
+                "Bert tokenizers doesn't have the same set of special_tokens"
+            )
+
+            # Assure tokenization overlap between python and rust impl.
             self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
 
     @require_torch
@@ -90,6 +97,14 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_p = TransfoXLTokenizer.from_pretrained(tokenizer_name)
             tokenizer_r = TransfoXLTokenizerFast.from_pretrained(tokenizer_name)
 
+            # Assert the set of special tokens match.
+            self.assertSequenceEqual(
+                tokenizer_p.special_tokens_map.items(),
+                tokenizer_r.special_tokens_map.items(),
+                "TransfoXL tokenizers doesn't have the same set of special_tokens"
+            )
+
+            # Assure tokenization overlap between python and rust impl.
             self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
 
     def test_distilbert(self):
@@ -98,6 +113,14 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_r = DistilBertTokenizerFast.from_pretrained(tokenizer_name)
 
             # DistilBert should match 100%
+            # Assert the set of special tokens match.
+            self.assertSequenceEqual(
+                tokenizer_p.special_tokens_map.items(),
+                tokenizer_r.special_tokens_map.items(),
+                "DistilBert tokenizers doesn't have the same set of special_tokens"
+            )
+
+            # Assure tokenization overlap between python and rust impl.
             self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
 
     def test_gpt2(self):
@@ -105,21 +128,45 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_p = GPT2Tokenizer.from_pretrained(tokenizer_name)
             tokenizer_r = GPT2TokenizerFast.from_pretrained(tokenizer_name)
 
-            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.05)
+            # Assert the set of special tokens match.
+            self.assertSequenceEqual(
+                tokenizer_p.special_tokens_map.items(),
+                tokenizer_r.special_tokens_map.items(),
+                "GPT2 tokenizers doesn't have the same set of special_tokens"
+            )
+
+            # Assure tokenization overlap between python and rust impl.
+            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
 
     def test_roberta(self):
         for tokenizer_name in RobertaTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = RobertaTokenizer.from_pretrained(tokenizer_name)
             tokenizer_r = RobertaTokenizerFast.from_pretrained(tokenizer_name)
 
-            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.05)
+            # Assert the set of special tokens match.
+            self.assertSequenceEqual(
+                tokenizer_p.special_tokens_map.items(),
+                tokenizer_r.special_tokens_map.items(),
+                "Roberta tokenizers doesn't have the same set of special_tokens"
+            )
+
+            # Assure tokenization overlap between python and rust impl.
+            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
 
     def test_openai(self):
         for tokenizer_name in OpenAIGPTTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = OpenAIGPTTokenizer.from_pretrained(tokenizer_name)
             tokenizer_r = OpenAIGPTTokenizerFast.from_pretrained(tokenizer_name)
 
-            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.05)
+            # Assert the set of special tokens match.
+            self.assertSequenceEqual(
+                tokenizer_p.special_tokens_map.items(),
+                tokenizer_r.special_tokens_map.items(),
+                "GPT tokenizers doesn't have the same set of special_tokens"
+            )
+
+            # Assure tokenization overlap between python and rust impl.
+            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
 
 
 if __name__ == "__main__":
