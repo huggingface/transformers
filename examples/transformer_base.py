@@ -273,6 +273,19 @@ def generic_train(model, args):
         ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
         ptvsd.wait_for_attach()
 
+
+
+    if (os.path.exists(args.output_dir)
+        and os.listdir(args.output_dir)
+        and args.do_train
+    ):
+        raise ValueError(
+            "Output directory ({}) already exists and is not empty.".format(
+                args.output_dir
+            )
+        )
+
+
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         filepath=args.output_dir,
         save_top_k=5,
