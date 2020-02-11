@@ -195,8 +195,7 @@ if __name__ == "__main__":
 
     if args.do_predict:
         checkpoints = list(
-            os.path.dirname(c)
-            for c in sorted(
+            sorted(
                 glob.glob(args.output_dir + "/checkpoint-*.ckpt", recursive=True)
             )
         )
