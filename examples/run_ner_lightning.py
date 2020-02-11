@@ -114,11 +114,15 @@ class NERTransformer(pl.LightningModule):
     def load_dataset(self, mode, batch_size):
         args = self.hparams
         labels = get_labels(args.labels)
-        train_dataset = load_and_cache_examples(args, self.tokenizer, labels,
-                                                self.pad_token_label_id, mode="train")
-        train_sampler = RandomSampler(train_dataset)
-        train_dataloader = DataLoader(train_dataset, sampler=train_sampler,
-                                      batch_size=args.train_batch_size)
+        dataset = load_and_cache_examples(args,
+                                          self.tokenizer,
+                                          labels,
+                                          self.pad_token_label_id,
+                                          mode=mode)
+        sampler = RandomSampler(dataset)
+        dataloader = DataLoader(dataset,
+                                sampler=train_sampler,
+                                batch_size=batch_size)
         return train_dataloader
 
     @pl.data_loader
@@ -322,11 +326,12 @@ def main(hparams):
                                                        prefix="checkpoint",
                                                        period=args.save_steps)
 
-    model = NERTransformer(hparams)
+    model = NERTransformer(args)
     trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
-                         gpus=hparams.n_gpu,
-                         default_save_path=hparams.output_dir,
-                         use_amp=hparams.fp16,
+                         gpus=args.n_gpu,
+                         max_epochs=args.num_train_epochs,
+                         default_save_path=args.output_dir,
+                         use_amp=args.fp16,
                          gradient_clip_val=args.max_grad_norm,
                          checkpoint_callback=checkpoint_callback,
                          log_save_interval=args.logging_steps
@@ -348,6 +353,10 @@ if __name__ == '__main__':
         "--fp16",
         action="store_true",
         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
+    )
+
+    parser.add_argument(
+        "--num_train_epochs", default=3.0, type=float, help="Total number of training epochs to perform."
     )
 
     parser.add_argument(
