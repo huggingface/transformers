@@ -196,8 +196,8 @@ if __name__ == "__main__":
     if args.do_predict:
         checkpoints = list(
             sorted(
-                glob.glob(args.output_dir + "/checkpoint-*.ckpt", recursive=True)
+                glob.glob(args.output_dir + "/checkpoint_*.ckpt", recursive=True)
             )
         )
-        NERTransformer.load_from_checkpoint(checkpoints[0])
+        NERTransformer.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)
