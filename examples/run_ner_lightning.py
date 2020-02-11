@@ -104,7 +104,7 @@ class NERTransformer(BaseTransformer):
         }
 
 
-        logger.info("***** Eval results %s *****", prefix)
+        logger.info("***** Eval results *****")
         for key in sorted(results.keys()):
             logger.info("  %s = %s", key, str(results[key]))
 
