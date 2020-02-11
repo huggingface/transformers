@@ -203,7 +203,7 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     # add model specific args
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
-    parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
+    # parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
     parser.add_argument("--do_predict", action="store_true", help="Whether to run predictions on the test set.")
     parser.add_argument(
         "--gradient_accumulation_steps",

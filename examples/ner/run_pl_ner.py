@@ -102,11 +102,11 @@ class NERTransformer(BaseTransformer):
         return ret, preds_list, out_label_list
 
     def validation_end(self, outputs):
-        ret, preds, targets =  self._eval_end(outputs)
+        ret, preds, targets = self._eval_end(outputs)
         return ret
 
     def test_end(self, outputs):
-        ret, predictions, targets =  self._eval_end(outputs)
+        ret, predictions, targets = self._eval_end(outputs)
 
         # Write output to a file:
         # Save results
@@ -116,9 +116,7 @@ class NERTransformer(BaseTransformer):
                 if key != "log":
                     writer.write("{} = {}\n".format(key, str(ret[key])))
         # Save predictions
-        output_test_predictions_file = os.path.join(
-            self.hparams.output_dir, "test_predictions.txt"
-        )
+        output_test_predictions_file = os.path.join(self.hparams.output_dir, "test_predictions.txt")
         with open(output_test_predictions_file, "w") as writer:
             with open(os.path.join(self.hparams.data_dir, "test.txt"), "r") as f:
                 example_id = 0
@@ -128,21 +126,11 @@ class NERTransformer(BaseTransformer):
                         if not predictions[example_id]:
                             example_id += 1
                     elif predictions[example_id]:
-                        output_line = (
-                            line.split()[0]
-                            + " "
-                            + predictions[example_id].pop(0)
-                            + "\n"
-                        )
+                        output_line = line.split()[0] + " " + predictions[example_id].pop(0) + "\n"
                         writer.write(output_line)
                     else:
-                        logger.warning(
-                            "Maximum sequence length exceeded: No prediction for '%s'.",
-                            line.split()[0],
-                        )
+                        logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
         return ret
-
-
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
@@ -237,10 +225,6 @@ if __name__ == "__main__":
     trainer = generic_train(model, args)
 
     if args.do_predict:
-        checkpoints = list(
-            sorted(
-                glob.glob(args.output_dir + "/checkpoint_*.ckpt", recursive=True)
-            )
-        )
+        checkpoints = list(sorted(glob.glob(args.output_dir + "/checkpoint_*.ckpt", recursive=True)))
         NERTransformer.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)
