@@ -38,11 +38,13 @@ from .file_utils import (
 from .pytorch_activations import get_activation
 
 
+logger = logging.getLogger(__name__)
+
 try:
     from torch.nn import Identity
 except ImportError:
     # Older PyTorch compatibility
-    class Identity(torch.nn.Module):
+    class Identity(nn.Module):
         r"""A placeholder identity operator that is argument-insensitive.
         """
 
@@ -51,9 +53,6 @@ except ImportError:
 
         def forward(self, input):
             return input
-
-
-logger = logging.getLogger(__name__)
 
 
 class ModuleUtilsMixin:
