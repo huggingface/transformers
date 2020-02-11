@@ -10,13 +10,13 @@ from .utils import require_tf, require_torch
 QA_FINETUNED_MODELS = [
     (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
     (("bert-base-cased", {"use_fast": False}), "bert-large-cased-whole-word-masking-finetuned-squad", None),
-    (("bert-base-uncased", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
+    (("bert-base-cased", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
 ]
 
 TF_QA_FINETUNED_MODELS = [
     (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
     (("bert-base-cased", {"use_fast": False}), "bert-large-cased-whole-word-masking-finetuned-squad", None),
-    (("bert-base-uncased", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
+    (("bert-base-cased", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
 ]
 
 TF_NER_FINETUNED_MODELS = {
