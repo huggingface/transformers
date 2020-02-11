@@ -599,7 +599,7 @@ class PreTrainedTokenizer(object):
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
 
         Args:
-            new_tokens: list of string. Each string is a token to add. Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
+            new_tokens: string or list of string. Each string is a token to add. Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
 
         Returns:
             Number of tokens added to the vocabulary.
@@ -616,6 +616,9 @@ class PreTrainedTokenizer(object):
         """
         if not new_tokens:
             return 0
+
+        if not isinstance(new_tokens, list):
+            new_tokens = [new_tokens]
 
         to_add_tokens = []
         for token in new_tokens:
@@ -1624,7 +1627,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return self._tokenizer.decode(tokens)
 
     def add_tokens(self, new_tokens):
-        self._tokenizer.add_tokens(new_tokens)
+        if isinstance(new_tokens, str):
+            new_tokens = [new_tokens]
+        return self._tokenizer.add_tokens(new_tokens)
 
     def add_special_tokens(self, special_tokens_dict):
         added = super().add_special_tokens(special_tokens_dict)
