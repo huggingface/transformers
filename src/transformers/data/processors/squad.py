@@ -628,7 +628,7 @@ class SquadExample(object):
         self.doc_tokens = doc_tokens
         self.char_to_word_offset = char_to_word_offset
 
-        # Start end end positions only has a value during evaluation.
+        # Start and end positions only has a value during evaluation.
         if start_position_character is not None and not is_impossible:
             self.start_position = char_to_word_offset[start_position_character]
             self.end_position = char_to_word_offset[
