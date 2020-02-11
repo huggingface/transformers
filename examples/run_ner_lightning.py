@@ -144,11 +144,12 @@ class NERTransformer(pl.LightningModule):
             )  # XLM and RoBERTa don"t use segment_ids
         outputs = self.forward(**inputs)
         tmp_eval_loss, logits = outputs[:2]
-        return tmp_eval_loss
+        return {"val_loss", tmp_eval_loss}
 
     def validation_end(self, outputs):
         "Task specific validation"
-        return torch.stack(outputs).mean()
+        val_loss_mean = torch.stack([x['val_loss'] for x in outputs]).mean()
+        return {'val_loss': val_loss_mean}
 
 
     @staticmethod
@@ -243,6 +244,7 @@ class NERTransformer(pl.LightningModule):
             help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.",
         )
 
+
         return parser
 
 
@@ -316,12 +318,18 @@ def main(hparams):
         ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
         ptvsd.wait_for_attach()
 
+    checkpoint_callback = ModelCheckpoint(filepath=args.output_dir,
+                                          prefix="checkpoint",
+                                          period=args.save_steps)
+
     model = NERTransformer(hparams)
     trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
                          gpus=hparams.n_gpu,
                          default_save_path=hparams.output_dir,
                          use_amp=hparams.fp16,
-                         gradient_clip_val=args.max_grad_norm
+                         gradient_clip_val=args.max_grad_norm,
+                         checkpoint_callback=checkpoint_callback,
+                         log_save_interval=args.logging_steps
     )
     if args.do_train:
         trainer.fit(model)
@@ -363,6 +371,7 @@ if __name__ == '__main__':
         action="store_true",
         help="Whether to run evaluation during training at each logging step.",
     )
+
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
     parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
