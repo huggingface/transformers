@@ -19,7 +19,10 @@ logger = logging.getLogger(__name__)
 
 
 
-class NERTransformer(pl.LightningModule):
+class NERTransformer(BaseTransformer):
+    """
+    A training module for NER. See BaseTransformer for the core options.
+    """
     def __init__(self, hparams):
         super(NERTransformer, self).__init__(hparams)
 
