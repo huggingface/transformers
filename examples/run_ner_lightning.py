@@ -17,8 +17,6 @@ import pytorch_lightning as pl
 
 logger = logging.getLogger(__name__)
 
-
-
 class NERTransformer(BaseTransformer):
     """
     A training module for NER. See BaseTransformer for the core options.
