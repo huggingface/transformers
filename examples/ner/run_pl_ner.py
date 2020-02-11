@@ -194,5 +194,11 @@ if __name__ == "__main__":
     trainer = generic_train(model, args)
 
     if args.do_predict:
-        NERTransformer.load_from_checkpoint(args.output_dir)
+        checkpoints = list(
+            os.path.dirname(c)
+            for c in sorted(
+                glob.glob(args.output_dir + "/checkpoint-*.ckpt", recursive=True)
+            )
+        )
+        NERTransformer.load_from_checkpoint(checkpoints[0])
         trainer.test(model)
