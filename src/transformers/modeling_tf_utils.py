@@ -78,6 +78,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         return {"input_ids": tf.constant(DUMMY_INPUTS)}
 
     def __init__(self, config, *inputs, **kwargs):
+        """
+        Args:
+          **kwargs: keywords arguments. Allowed to be {`optimizer_name`}.
+            `optimizer_name` is the name for the wanted optimizer.
+        """
         super().__init__(*inputs, **kwargs)
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
@@ -89,6 +94,82 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             )
         # Save config in model
         self.config = config
+    
+    def create_optimizer(self, **kwargs):
+        """
+        Create the training optimizer with its name. Allowed names:
+          - adam: Adam optimizer
+          - adamw: Adam with Weight decay optimizer
+          - adadelta: Adadelta optimizer
+          - rmsprop: Root Mean Square Propogation optimizer
+          - sgd: Stochastic Gradient Descent optimizer
+        
+        Args:
+          **kwargs: keywords arguments. Allowed to be {`scheduler`}.
+            `scheduler` is learning rate scheduler used for the optimizer.
+        """
+        raise NotImplementedError
+
+    def get_loss(self, real, pred):
+        """
+        Custom loss computation function.
+        Note: I still thinking what will be the best way to
+        either customing a loss or using an already existing one
+        """
+        raise NotImplementedError
+
+    def create_checkpoint_manager(self, checkpoint_path, max_to_keep=5, load_model=True):
+        """
+        Create a checkpoint manager in order to be able to make the training
+        fault-tolerant.
+
+        Args:
+          checkpoint_path: the path where the checkpoints will be saved.
+          max_to_keep: the maximum number of checkpoints to keep in the
+            checkpoint path.
+          load_model: if we want to start the training from the latest checkpoint.
+        """
+        raise NotImplementedError
+
+    def create_summary_writer(self, log_path):
+        """
+        Create a summary writer to be able to read the logs in Tensorboard.
+
+        Args:
+          log_path: the path where to write the logs
+        """
+        raise NotImplementedError
+    
+    def fit(self, train_dataset):
+        """
+        Fit method to train the model.
+
+        Args:
+          train_dataset: training dataset.
+        """
+        self.fit(train_dataset)
+    
+    def distributed_train_step(self, inputs, targets, step):
+        """
+        Method that represents a custom training step in distributed training mode.
+
+        Args:
+          inputs: the features batch of the training data
+          targets: the labels batch of the training data
+          step: training step number 
+        """
+        raise NotImplementedError
+
+    def train_step(self, inputs, targets, step):
+        """
+        Method that represents a custom training step in single GPU training mode.
+
+        Args:
+          inputs: the features batch of the training data
+          targets: the labels batch of the training data
+          step: training step number
+        """
+        raise NotImplementedError
 
     def get_input_embeddings(self):
         """
