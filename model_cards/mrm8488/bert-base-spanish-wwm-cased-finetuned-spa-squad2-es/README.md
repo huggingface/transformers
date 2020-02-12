@@ -1,6 +1,6 @@
 ---
 language: spanish
-thumbnail: https://pbs.twimg.com/profile_images/1216627400722845696/AVtlzvgl_400x400.jpg
+thumbnail: https://i.imgur.com/jgBdimh.png
 ---
 
 # BETO (Spanish BERT) + Spanish SQuAD2.0
