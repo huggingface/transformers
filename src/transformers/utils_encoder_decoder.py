@@ -34,18 +34,10 @@ def prepare_encoder_decoder_model_kwargs(**kwargs):
     decoder_kwargs = kwargs_common.copy()
     encoder_kwargs = kwargs_common.copy()
     encoder_kwargs.update(
-        {
-            argument[len("encoder_") :]: value
-            for argument, value in kwargs.items()
-            if argument.startswith("encoder_")
-        }
+        {argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")}
     )
     decoder_kwargs.update(
-        {
-            argument[len("decoder_") :]: value
-            for argument, value in kwargs.items()
-            if argument.startswith("decoder_")
-        }
+        {argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")}
     )
     decoder_kwargs["encoder_attention_mask"] = encoder_kwargs.get("attention_mask", None)
     return encoder_kwargs, decoder_kwargs

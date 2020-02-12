@@ -312,5 +312,3 @@ class Model2LSTM(PreTrainedEncoderDecoder):
             kwargs["decoder_model"] = torch.nn.LSTM(kwargs.pop("decoder_config"))
         model = super().from_pretrained(*args, **kwargs)
         return model
-
-

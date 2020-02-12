@@ -142,10 +142,17 @@ class ModelTesterMixin:
             out_len = len(outputs)
 
             if self.is_encoder_decoder:
-                self.assertEqual(out_len % 2, 0)
-                decoder_attentions = outputs[(out_len // 2) - 1]
-                self.assertEqual(model.config.output_attentions, True)
-                self.assertEqual(model.config.output_hidden_states, False)
+                correct_outlen = (
+                    4  # decoder_features_or_logits, decoder_attentions, encoder_features, encoder_attentions
+                )
+                decoder_attention_idx = 1
+                if "lm_labels" in inputs_dict or "decoder_lm_labels" in inputs_dict:  # loss will come first
+                    correct_outlen += 1  # compute loss
+                    decoder_attention_idx += 1
+                self.assertEqual(out_len, correct_outlen)
+
+                decoder_attentions = outputs[decoder_attention_idx]
+                self.assertIsInstance(decoder_attentions, (list, tuple))
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),

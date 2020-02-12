@@ -42,7 +42,8 @@ rename_keys = [
     ("model.classification_heads.mnli.out_proj.weight", "classification_head.out_proj.weight"),
     ("model.classification_heads.mnli.out_proj.bias", "classification_head.out_proj.bias"),
 ]
-IGNORE_KEYS = ['encoder.version', 'decoder.version']
+IGNORE_KEYS = ["encoder.version", "decoder.version"]
+
 
 def rename_key(dct, old, new):
     val = dct.pop(old)

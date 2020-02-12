@@ -29,12 +29,13 @@ from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel
 from .utils_encoder_decoder import prepare_encoder_decoder_model_kwargs
 
+
 logger = logging.getLogger(__name__)
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-pytorch_model.bin",
-    "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli-pytorch_model.bin",
+    "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/pytorch_model.bin",
+    "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/pytorch_model.bin",
 }
 
 
@@ -94,13 +95,13 @@ class BartModel(PretrainedBartModel,):
     def set_input_embeddings(self, value):
         self.shared = value
 
-    #def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
-    def forward(self,return_for_head=False, **kwargs):
+    # def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
+    def forward(self, return_for_head=False, **kwargs):
         kwargs_encoder, kwargs_decoder = prepare_encoder_decoder_model_kwargs(**kwargs)
         # TODO(SS): only call encoder if we need to
         # import ipdb; ipdb.set_trace()
         encoder_out = self.encoder(**kwargs_encoder)
-        input_ids = kwargs_encoder.pop('input_ids')
+        input_ids = kwargs_encoder.pop("input_ids")
         prev_output_tokens = self.shift_tokens_left(input_ids, self.config.pad_token_id)
         dec_features, dec_hidden, dec_attn = self.decoder(prev_output_tokens, encoder_out=encoder_out,)
         if return_for_head:  # split encoder and decoder outputs nicely
@@ -179,7 +180,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         )
         self.loss_fn = nn.CrossEntropyLoss()
 
-    def forward(self,  **kwargs):
+    def forward(self, **kwargs):
         labels = kwargs.pop("labels", None)
         decoder_outputs, encoder_outputs = self.model(return_for_head=True, **kwargs)
         x = decoder_outputs[0]  # last hidden state
@@ -200,7 +201,9 @@ class BartForSequenceClassification(PretrainedBartModel):
 
 def _get_input_ids_from_kwargs(**kwargs):
     """Try to get input_ids and if that key is not present get encoder_input_ids."""
-    return kwargs.get('input_ids', kwargs.get('encoder_input_ids', None))
+    return kwargs.get("input_ids", kwargs.get("encoder_input_ids", None))
+
+
 # Encoder and Decoder
 
 
