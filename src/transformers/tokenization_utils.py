@@ -1645,7 +1645,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             return max(0, len(self.encode(self.mask_token or "")) - 1)
 
     def tokenize(self, text, **kwargs):
-        return self.tokenizer._tokenizer.encode(text).tokens
+        return self.tokenizer.encode(text).tokens
 
     def batch_encode_plus(
         self,
