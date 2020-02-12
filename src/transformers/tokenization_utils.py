@@ -90,8 +90,8 @@ def truncate_and_pad(
     if max_length is not None:
         tokenizer.no_truncation()
 
-        if pad_to_max_length:
-            tokenizer.no_padding()
+    if pad_token and pad_token_id >= 0:
+        tokenizer.no_padding()
 
 
 class PreTrainedTokenizer(object):
