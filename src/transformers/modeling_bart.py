@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-pytorch_model.bin",
-    "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/bart-large-mnli-pytorch_model.bin",
+    "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-pytorch_model.bin",
+    "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli-pytorch_model.bin",
 }
 
 
@@ -98,6 +98,7 @@ class BartModel(PretrainedBartModel,):
     def forward(self,return_for_head=False, **kwargs):
         kwargs_encoder, kwargs_decoder = prepare_encoder_decoder_model_kwargs(**kwargs)
         # TODO(SS): only call encoder if we need to
+        # import ipdb; ipdb.set_trace()
         encoder_out = self.encoder(**kwargs_encoder)
         input_ids = kwargs_encoder.pop('input_ids')
         prev_output_tokens = self.shift_tokens_left(input_ids, self.config.pad_token_id)
@@ -414,7 +415,7 @@ class BartEncoder(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         return x, embedded_tokens
 
-    def forward(self, input_ids, **unused):  # TODO(SS): this will need more
+    def forward(self, input_ids=None, **unused):  # TODO(SS): this will need more
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
