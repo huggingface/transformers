@@ -1,5 +1,5 @@
 ---
-language: es
+language: spanish
 ---
 
 # BETO (Spanish BERT) + Spanish SQuAD2.0
