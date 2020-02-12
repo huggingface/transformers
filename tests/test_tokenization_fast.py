@@ -97,25 +97,27 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         text = "Wonderful no inspiration example with subtoken"
         pair = "Along with an awesome pair"
 
-        ### No pair ###
+        # No pair
         tokens_with_offsets = tokenizer.encode_plus(text, return_special_tokens_mask=True, return_offsets_mapping=True)
         added_tokens = tokenizer.num_added_tokens(False)
-        offsets = tokens_with_offsets['offset_mapping']
+        offsets = tokens_with_offsets["offset_mapping"]
 
         # Assert there is the same number of tokens and offsets
-        self.assertEqual(len(offsets), len(tokens_with_offsets['input_ids']))
+        self.assertEqual(len(offsets), len(tokens_with_offsets["input_ids"]))
 
         # Assert there is online added_tokens special_tokens
         self.assertEqual(sum([0 if x else 1 for x in offsets]), added_tokens)
         self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
-        ### Pairs ###
-        tokens_with_offsets = tokenizer.encode_plus(text, pair, return_special_tokens_mask=True, return_offsets_mapping=True)
+        # Pairs
+        tokens_with_offsets = tokenizer.encode_plus(
+            text, pair, return_special_tokens_mask=True, return_offsets_mapping=True
+        )
         added_tokens = tokenizer.num_added_tokens(True)
-        offsets = tokens_with_offsets['offset_mapping']
+        offsets = tokens_with_offsets["offset_mapping"]
 
         # Assert there is the same number of tokens and offsets
-        self.assertEqual(len(offsets), len(tokens_with_offsets['input_ids']))
+        self.assertEqual(len(offsets), len(tokens_with_offsets["input_ids"]))
 
         # Assert there is online added_tokens special_tokens
         self.assertEqual(sum([0 if x else 1 for x in offsets]), added_tokens)
