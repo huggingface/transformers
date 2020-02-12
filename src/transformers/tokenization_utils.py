@@ -1587,7 +1587,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         if return_special_tokens_mask:
             encoding_dict["special_tokens_mask"] = [e.special_tokens_mask for e in encodings]
         if return_offsets_mapping:
-            encoding_dict["offset_mapping"] = [e.offsets for e in encodings]
+            encoding_dict["offset_mapping"] = [[e.original_str.offsets(o) for o in e.offsets] for e in encodings]
 
         # Prepare inputs as tensors if asked
         if return_tensors == "tf" and is_tf_available():
@@ -1635,6 +1635,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         added = super().add_special_tokens(special_tokens_dict)
         self._update_special_tokens()
         return added
+
+    def num_added_tokens(self, pair=False):
+        # TODO: Need to expose PostProcessor.added_tokens, but it needs some refactoring on Rust side.
+        # Let's encode a special token so that it cant be truncated and just get the length - 1 or - 2 (pairs)
+        if pair:
+            return max(0, len(self.encode(self.mask_token or "", self.mask_token or "")) - 2)
+        else:
+            return max(0, len(self.encode(self.mask_token or "")) - 1)
 
     def tokenize(self, text, **kwargs):
         return self.tokenizer._tokenizer.encode(text).tokens

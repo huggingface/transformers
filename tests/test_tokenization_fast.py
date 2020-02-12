@@ -93,6 +93,34 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         )
         self.assertEqual(len(tokenizer_r), vocab_size + 6)
 
+    def assert_offsets_mapping(self, tokenizer):
+        text = "Wonderful no inspiration example with subtoken"
+        pair = "Along with an awesome pair"
+
+        ### No pair ###
+        tokens_with_offsets = tokenizer.encode_plus(text, return_special_tokens_mask=True, return_offsets_mapping=True)
+        added_tokens = tokenizer.num_added_tokens(False)
+        offsets = tokens_with_offsets['offset_mapping']
+
+        # Assert there is the same number of tokens and offsets
+        self.assertEqual(len(offsets), len(tokens_with_offsets['input_ids']))
+
+        # Assert there is online added_tokens special_tokens
+        self.assertEqual(sum([0 if x else 1 for x in offsets]), added_tokens)
+        self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
+
+        ### Pairs ###
+        tokens_with_offsets = tokenizer.encode_plus(text, pair, return_special_tokens_mask=True, return_offsets_mapping=True)
+        added_tokens = tokenizer.num_added_tokens(True)
+        offsets = tokens_with_offsets['offset_mapping']
+
+        # Assert there is the same number of tokens and offsets
+        self.assertEqual(len(offsets), len(tokens_with_offsets['input_ids']))
+
+        # Assert there is online added_tokens special_tokens
+        self.assertEqual(sum([0 if x else 1 for x in offsets]), added_tokens)
+        self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
+
     def test_bert(self):
         for tokenizer_name in BertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = BertTokenizer.from_pretrained(tokenizer_name)
@@ -110,6 +138,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Ensure add_tokens and add_special_tokens return the correct vocab size
             self.assert_add_tokens(tokenizer_r)
+
+            # Check for offsets mapping
+            self.assert_offsets_mapping(tokenizer_r)
 
     @require_torch
     def test_transfoxl(self):
@@ -130,6 +161,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Ensure add_tokens and add_special_tokens return the correct vocab size
             self.assert_add_tokens(tokenizer_r)
 
+            # Check for offsets mapping
+            self.assert_offsets_mapping(tokenizer_r)
+
     def test_distilbert(self):
         for tokenizer_name in DistilBertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = DistilBertTokenizer.from_pretrained(tokenizer_name)
@@ -149,6 +183,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Ensure add_tokens and add_special_tokens return the correct vocab size
             self.assert_add_tokens(tokenizer_r)
 
+            # Check for offsets mapping
+            self.assert_offsets_mapping(tokenizer_r)
+
     def test_gpt2(self):
         for tokenizer_name in GPT2Tokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = GPT2Tokenizer.from_pretrained(tokenizer_name)
@@ -166,6 +203,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Ensure add_tokens and add_special_tokens return the correct vocab size
             self.assert_add_tokens(tokenizer_r)
+
+            # Check for offsets mapping
+            self.assert_offsets_mapping(tokenizer_r)
 
     def test_roberta(self):
         for tokenizer_name in RobertaTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
@@ -185,6 +225,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Ensure add_tokens and add_special_tokens return the correct vocab size
             self.assert_add_tokens(tokenizer_r)
 
+            # Check for offsets mapping
+            self.assert_offsets_mapping(tokenizer_r)
+
     def test_openai(self):
         for tokenizer_name in OpenAIGPTTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = OpenAIGPTTokenizer.from_pretrained(tokenizer_name)
@@ -202,6 +245,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Ensure add_tokens and add_special_tokens return the correct vocab size
             self.assert_add_tokens(tokenizer_r)
+
+            # Check for offsets mapping
+            self.assert_offsets_mapping(tokenizer_r)
 
 
 if __name__ == "__main__":
