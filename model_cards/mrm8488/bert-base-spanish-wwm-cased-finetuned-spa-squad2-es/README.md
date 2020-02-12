@@ -1,5 +1,6 @@
 ---
 language: spanish
+thumbnail: https://pbs.twimg.com/profile_images/1216627400722845696/AVtlzvgl_400x400.jpg
 ---
 
 # BETO (Spanish BERT) + Spanish SQuAD2.0
@@ -26,7 +27,7 @@ BETO is a [BERT model](https://github.com/google-research/bert) trained on a [bi
 
 The model was trained on a Tesla P100 GPU and 25GB of RAM with the following command:
 
-```python
+```bash
 export SQUAD_DIR=path/to/nl_squad
 python transformers/examples/run_squad.py \
   --model_type bert \
@@ -54,7 +55,8 @@ python transformers/examples/run_squad.py \
 | ---------------------- | ----- |
 | **Exact**              | **76.50**50 |
 | **F1**                 | **86.07**81 |
-```js
+
+```json
 {
   "exact": 76.50501430594491,
   "f1": 86.07818773108252,
