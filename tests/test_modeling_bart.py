@@ -228,12 +228,13 @@ class BartSequenceClassifTest(unittest.TestCase):
 
 
 class BartModelIntegrationTest(unittest.TestCase):
+    input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]).long()
+
     @slow
     def test_inference_no_head(self):
         model = BartModel.from_pretrained("bart-large")
-        input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
-            output = model.forward(encoder_input_ids=input_ids)[0]
+            output = model.forward(encoder_input_ids=self.input_ids)[0]
         expected_shape = torch.Size((1, 11, 1024))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.Tensor(
@@ -244,9 +245,8 @@ class BartModelIntegrationTest(unittest.TestCase):
     @slow
     def test_mnli_inference(self):
         model = AutoModelForSequenceClassification.from_pretrained("bart-large-mnli")
-        input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]).long()
         with torch.no_grad():
-            logits = model.forward(encoder_input_ids=input_ids)[0]
+            logits = model.forward(encoder_input_ids=self.input_ids)[0]
         expected_shape = torch.Size((1, 3))
         self.assertEqual(logits.shape, expected_shape)
         expected_slice = torch.Tensor([[0.1907, 1.4342, -1.0289]])
