@@ -69,6 +69,7 @@ class RobertaTokenizer(GPT2Tokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    n_seps_between_sentences = 2
 
     def __init__(
         self,
@@ -112,7 +113,7 @@ class RobertaTokenizer(GPT2Tokenizer):
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
         cls = [self.cls_token_id]
         sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + sep + token_ids_1 + sep
+        return cls + token_ids_0 + [sep] * self.n_seps_between_sentences + token_ids_1 + sep
 
     def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
         """
@@ -139,7 +140,7 @@ class RobertaTokenizer(GPT2Tokenizer):
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1] * self.n_seps_between_sentences + ([0] * len(token_ids_1)) + [1]
 
     def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
         """
@@ -153,4 +154,4 @@ class RobertaTokenizer(GPT2Tokenizer):
 
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+        return len(cls + token_ids_0 + [sep] * self.n_seps_between_sentences + token_ids_1 + sep) * [0]
