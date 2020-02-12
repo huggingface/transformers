@@ -116,11 +116,11 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             return (
                 config,
                 {
-                    "input_ids": input_ids,
+                    #"input_ids": input_ids,
                     "token_type_ids": token_type_ids,
                     "attention_mask": input_mask,
                     "encoder_input_ids": input_ids,
-                    "decoder_input_ids": input_ids,  # TODO(SS): use prepare_model_kwargs llike T5
+                    "decoder_input_ids": input_ids,
                     "decoder_lm_labels": decoder_lm_labels,
                 },
             )
@@ -213,13 +213,13 @@ class BartSequenceClassifTest(unittest.TestCase):
             max_position_embeddings=48,
         )
         model = BartForSequenceClassification(config)
-        outputs = model(input_ids)
+        outputs = model(input_ids=input_ids)
         logits = outputs[0]
         expected_shape = torch.Size((self.batch_size, config.num_labels))
         self.assertEqual(logits.shape, expected_shape)
 
         lm_model = BartForMaskedLM(config)
-        output = lm_model(input_ids)[0]
+        output = lm_model(input_ids=input_ids)[0]
         expected_shape = (self.batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(output.shape, expected_shape)
 
@@ -230,7 +230,7 @@ class BartModelIntegrationTest(unittest.TestCase):
         model = BartModel.from_pretrained("bart-large")
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         with torch.no_grad():
-            output = model(input_ids)[0]
+            output = model(input_ids=input_ids)[0]
         expected_shape = torch.Size((1, 11, 1024))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.Tensor(

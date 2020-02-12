@@ -27,7 +27,7 @@ from torch import Tensor, nn
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel
-
+from .utils_encoder_decoder import prepare_encoder_decoder_model_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -94,15 +94,12 @@ class BartModel(PretrainedBartModel,):
     def set_input_embeddings(self, value):
         self.shared = value
 
-    def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
-        input_ids = input_ids if input_ids is not None else kwargs["encoder_input_ids"]  # TODO(SS): decide on API
-        if input_ids.dim() == 1:
-            input_ids = input_ids.unsqueeze(0)
-        if input_ids.size(-1) > min(self.max_positions()):
-            raise ValueError(
-                "input_ids exceeds maximum length: {} > {}".format(input_ids.size(-1), self.max_positions())
-            )
-        encoder_out = self.encoder(input_ids)
+    #def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
+    def forward(self,return_for_head=False, **kwargs):
+        kwargs_encoder, kwargs_decoder = prepare_encoder_decoder_model_kwargs(**kwargs)
+        # TODO(SS): only call encoder if we need to
+        encoder_out = self.encoder(**kwargs_encoder)
+        input_ids = kwargs_encoder.pop('input_ids')
         prev_output_tokens = self.shift_tokens_left(input_ids, self.config.pad_token_id)
         dec_features, dec_hidden, dec_attn = self.decoder(prev_output_tokens, encoder_out=encoder_out,)
         if return_for_head:  # split encoder and decoder outputs nicely
@@ -176,20 +173,16 @@ class BartForSequenceClassification(PretrainedBartModel):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = BartModel(config)
-        self.classification_head = BARTClassificationHead(
+        self.classification_head = BartClassificationHead(
             config.d_model, config.d_model, config.num_labels, config.classif_dropout,
         )
         self.loss_fn = nn.CrossEntropyLoss()
 
-    def forward(self, input_ids, *args, **kwargs):
-
-        if input_ids.ndim == 1:
-            input_ids = input_ids.unsqueeze(0)
-        kwargs["return_for_head"] = True
+    def forward(self,  **kwargs):
         labels = kwargs.pop("labels", None)
-        decoder_outputs, encoder_outputs = self.model(input_ids, *args, **kwargs)
+        decoder_outputs, encoder_outputs = self.model(return_for_head=True, **kwargs)
         x = decoder_outputs[0]  # last hidden state
-
+        input_ids = _get_input_ids_from_kwargs(**kwargs)
         eos_mask = input_ids.eq(self.eos_token)
         if len(torch.unique(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
@@ -204,6 +197,9 @@ class BartForSequenceClassification(PretrainedBartModel):
         return decoder_outputs + encoder_outputs
 
 
+def _get_input_ids_from_kwargs(**kwargs):
+    """Try to get input_ids and if that key is not present get encoder_input_ids."""
+    return kwargs.get('input_ids', kwargs.get('encoder_input_ids', None))
 # Encoder and Decoder
 
 
@@ -481,33 +477,6 @@ class BartEncoder(nn.Module):
         """Maximum input length supported by the encoder."""
         return min(self.max_source_positions, self.embed_positions.max_positions)
 
-    # Unused
-    def reorder_encoder_out(self, encoder_out, new_order):
-        """
-        Reorder encoder output according to *new_order*.
-
-        Args:
-            encoder_out: output from the ``forward()`` method
-            new_order (LongTensor): desired order
-
-        Returns:
-            *encoder_out* rearranged according to *new_order*
-        """
-        if encoder_out.encoder_out is not None:
-            encoder_out = encoder_out._replace(encoder_out=encoder_out.encoder_out.index_select(1, new_order))
-        if encoder_out.encoder_padding_mask is not None:
-            encoder_out = encoder_out._replace(
-                encoder_padding_mask=encoder_out.encoder_padding_mask.index_select(0, new_order)
-            )
-        if encoder_out.encoder_embedding is not None:
-            encoder_out = encoder_out._replace(
-                encoder_embedding=encoder_out.encoder_embedding.index_select(0, new_order)
-            )
-        if encoder_out.encoder_states is not None:
-            for idx, state in enumerate(encoder_out.encoder_states):
-                encoder_out.encoder_states[idx] = state.index_select(1, new_order)
-        return encoder_out
-
 
 class BartDecoder(nn.Module):
     """
@@ -644,7 +613,7 @@ class BartDecoder(nn.Module):
 # Helper Modules
 
 
-class BARTClassificationHead(nn.Module):
+class BartClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     # This can trivially be shared with RobertaClassificationHead
@@ -919,16 +888,6 @@ class SelfAttention(nn.Module):
         else:
             new_key_padding_mask = prev_key_padding_mask
         return new_key_padding_mask
-
-    def reorder_incremental_state(self, incremental_state: Dict[str, Dict[str, Optional[Tensor]]], new_order):
-        """Reorder buffered internal state (for incremental generation)."""
-        # TODO(SS): Where is this used?
-        input_buffer = self._get_input_buffer(incremental_state)
-        if input_buffer is not None:
-            for k in input_buffer.keys():
-                if input_buffer[k] is not None:
-                    input_buffer[k] = input_buffer[k].index_select(0, new_order)
-            self._set_input_buffer(incremental_state, input_buffer)
 
     def _get_input_buffer(
         self, incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]]
