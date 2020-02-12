@@ -301,7 +301,7 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
             processor = SquadV1Processor()
 
         if args.data_dir:
-            directory = args.directory
+            directory = args.data_dir
             examples = processor.get_dev_examples(directory) if evaluate else processor.get_train_examples(directory)
         else:
             try:
