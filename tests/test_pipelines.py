@@ -94,7 +94,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         for key in output_keys:
             self.assertIn(key, mono_result[0])
 
-        multi_result = nlp(valid_inputs)
+        multi_result = [nlp(input) for input in valid_inputs]
         self.assertIsInstance(multi_result, list)
         self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -129,7 +129,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
         for tokenizer, model, config in TF_NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model, config=config, tokenizer=tokenizer)
+            nlp = pipeline(task="ner", model=model, config=config, tokenizer=tokenizer, framework="tf")
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
     @require_torch
@@ -147,7 +147,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
         for tokenizer, model, config in TF_TEXT_CLASSIF_FINETUNED_MODELS:
-            nlp = pipeline(task="sentiment-analysis", model=model, config=config, tokenizer=tokenizer)
+            nlp = pipeline(task="sentiment-analysis", model=model, config=config, tokenizer=tokenizer, framework="tf")
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
     @require_torch
@@ -163,7 +163,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
         for tokenizer, model, config in TF_FEATURE_EXTRACT_FINETUNED_MODELS:
-            nlp = pipeline(task="feature-extraction", model=model, config=config, tokenizer=tokenizer)
+            nlp = pipeline(task="feature-extraction", model=model, config=config, tokenizer=tokenizer, framework="tf")
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
 
     @require_torch
@@ -230,7 +230,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             ],
         ]
         for tokenizer, model, config in TF_FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model, config=config, tokenizer=tokenizer, topk=2)
+            nlp = pipeline(task="fill-mask", model=model, config=config, tokenizer=tokenizer, framework="tf", topk=2)
             self._test_mono_column_pipeline(
                 nlp,
                 valid_inputs,
@@ -301,5 +301,5 @@ class MultiColumnInputTestCase(unittest.TestCase):
         ]
 
         for tokenizer, model, config in TF_QA_FINETUNED_MODELS:
-            nlp = pipeline(task="question-answering", model=model, config=config, tokenizer=tokenizer)
+            nlp = pipeline(task="question-answering", model=model, config=config, tokenizer=tokenizer, framework="tf")
             self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
