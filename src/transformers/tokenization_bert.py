@@ -20,7 +20,7 @@ import logging
 import os
 import unicodedata
 
-import tokenizers as tk
+from tokenizers import BertWordPieceTokenizer
 
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -554,7 +554,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         **kwargs
     ):
         super().__init__(
-            tk.implementations.BertWordPieceTokenizer(
+            BertWordPieceTokenizer(
                 vocab_file,
                 add_special_tokens,
                 unk_token,
