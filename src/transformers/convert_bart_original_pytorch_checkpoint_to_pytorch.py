@@ -42,7 +42,7 @@ rename_keys = [
     ("model.classification_heads.mnli.out_proj.weight", "classification_head.out_proj.weight"),
     ("model.classification_heads.mnli.out_proj.bias", "classification_head.out_proj.bias"),
 ]
-
+IGNORE_KEYS = ['encoder.version', 'decoder.version']
 
 def rename_key(dct, old, new):
     val = dct.pop(old)
@@ -76,7 +76,8 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
         state_dict.pop("_float_tensor", None)
         model = BartForSequenceClassification(config)
         their_output = b2.predict("mnli", tokens, return_logits=True)
-
+    for k in IGNORE_KEYS:
+        state_dict.pop(k, None)
     model.load_state_dict(state_dict)
     model.eval()
     our_outputs = model(tokens)[0]

@@ -390,7 +390,6 @@ class BartEncoder(nn.Module):
 
     def __init__(self, config: BartConfig, embed_tokens):
         super().__init__()
-        self.register_buffer("version", torch.Tensor([3]))
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
@@ -489,7 +488,6 @@ class BartDecoder(nn.Module):
 
     def __init__(self, config: BartConfig, embed_tokens: nn.Embedding):
         super().__init__()
-        self.register_buffer("version", torch.Tensor([3]))  # TODO(SS): could delete this and pop from state_dict
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
