@@ -1769,4 +1769,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             return text
 
     def save_vocabulary(self, save_directory):
-        self._tokenizer.save(save_directory)
+        if os.path.isdir(save_directory):
+            folder, file = save_directory, self.vocab_files_names['vocab_file']
+        else:
+            folder, file = os.path.split(os.path.abspath(save_directory))
+        self._tokenizer.save(folder, file)
