@@ -56,6 +56,10 @@ def truncate_and_pad(
     This contextmanager is in charge of defining the truncation and the padding strategies and then
     restore the tokenizer settings afterwards.
 
+    This contextmanager assumes the provider tokenizer has no padding / truncation strategy
+    before the managed section. If your tokenizer set a padding / truncation strategy before,
+    then it will be reset to no padding/truncation when exiting the managed section.
+
     :param tokenizer:
     :param max_length:
     :param stride:
