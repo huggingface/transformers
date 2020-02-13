@@ -1,3 +1,7 @@
+---
+language: french
+---
+
 # flaubert-base-uncased-squad
 
 ## Description
