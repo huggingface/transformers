@@ -1500,7 +1500,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         self._tokenizer = tokenizer
 
         super().__init__(**kwargs)
-        self.max_len_single_sentence = self.max_len_sentences_pair = self.max_len
+        self.max_len_single_sentence = self.max_len - self.num_added_tokens(False)  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - self.num_added_tokens(True)  # take into account special tokens
 
     @property
     def tokenizer(self):

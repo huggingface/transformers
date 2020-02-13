@@ -199,12 +199,14 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             bos_token=bos_token,
             eos_token=eos_token,
             add_prefix_space=add_prefix_space,
-            **kwargs
+            **kwargs,
         )
-
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
 
         self.tokenizer._tokenizer.post_processor = RobertaProcessing(
             (sep_token, self.sep_token_id), (cls_token, self.cls_token_id)
         )
+
+        # As we override the post_processor post super.__init__ the computed num_added_tokens is wrong in super().
+        # We need to recompute max_len according to the newly register post_processor to get real values.
+        self.max_len_single_sentence = self.max_len - self.num_added_tokens(False)  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - self.num_added_tokens(True)  # take into account special tokens
