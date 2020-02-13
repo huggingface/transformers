@@ -94,10 +94,6 @@ class BartModel(PretrainedBartModel):
     def get_output_embeddings(self):
         return _make_linear_from_emb(self.shared)
 
-    # def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
-        return {"input_ids": input_ids, **kwargs}
-
     def forward(self, return_for_head=False, **kwargs):
         kwargs_encoder, kwargs_decoder = prepare_encoder_decoder_model_kwargs(**kwargs)
         # TODO(SS): only call encoder if we need to
@@ -105,6 +101,7 @@ class BartModel(PretrainedBartModel):
         encoder_out = self.encoder(**kwargs_encoder)
         input_ids = kwargs_encoder.pop("input_ids")
         prev_output_tokens = self.shift_tokens_left(input_ids, self.config.pad_token_id)
+
         dec_features, past, dec_hidden, dec_attn = self.decoder.forward(
             prev_output_tokens, encoder_out=encoder_out, **kwargs_decoder
         )
@@ -176,6 +173,10 @@ class BartForMaskedLM(PretrainedBartModel):
             decoder_outputs = (masked_lm_loss,) + decoder_outputs
 
         return decoder_outputs + encoder_outputs
+
+    # def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
+        return {"input_ids": input_ids, "decoder_past": past}
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -304,8 +305,8 @@ class DecoderLayer(nn.Module):
         x,
         encoder_out=None,
         encoder_padding_mask=None,
-        incremental_state=None,
         past=None,
+        # past=None,
         self_attn_mask=None,
         self_attn_padding_mask=None,
         need_attn_weights=False,
@@ -322,13 +323,18 @@ class DecoderLayer(nn.Module):
         Returns:
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
-        prev_self_attn_state, prev_attn_state = (None, None) if past is None else past
-        if incremental_state is None:
-            incremental_state = {}
+        if past is None:
+            prev_self_attn_state, prev_attn_state = (None, None)
+        else:
+            prev_self_attn_state, prev_attn_state = past["self_attn"], past["encoder_decoder_attn"]
+
+        print(f"PAST {len(past) if past else 0}")
+        if past is None:
+            past = {}
         residual = x
         if prev_self_attn_state is not None:
-            saved_state = self._past_to_dict(prev_self_attn_state)
-            self.self_attn._update_incremental_state(incremental_state, saved_state)
+            saved_state = prev_self_attn_state
+            self.self_attn._update_incremental_state(past, saved_state)
 
         y = x  # TODO(SS): why
         x, self_attn_weights = self.self_attn.forward(
@@ -336,7 +342,7 @@ class DecoderLayer(nn.Module):
             key=y,
             value=y,
             key_padding_mask=self_attn_padding_mask,
-            incremental_state=incremental_state,
+            incremental_state=past,
             need_weights=need_attn_weights,
             attn_mask=self_attn_mask,
         )
@@ -346,15 +352,15 @@ class DecoderLayer(nn.Module):
         residual = x
         assert self.encoder_attn.attn_key != self.self_attn.attn_key
         if prev_attn_state is not None:
-            saved_state = self._past_to_dict(prev_attn_state)
-            self.encoder_attn._update_incremental_state(incremental_state, saved_state)
+            saved_state = prev_attn_state
+            self.encoder_attn._update_incremental_state(past, saved_state)
 
         x, encoder_attn_weights = self.encoder_attn.forward(
             query=x,
             key=encoder_out,  # could be None
             value=encoder_out,
             key_padding_mask=encoder_padding_mask,
-            incremental_state=incremental_state,
+            incremental_state=past,
             static_kv=True,
             need_weights=False,  # not returning it so why compute it
         )
@@ -370,7 +376,7 @@ class DecoderLayer(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.final_layer_norm(x)
-        return x, self_attn_weights, incremental_state  # just self_attn weights for now, following t5
+        return x, self_attn_weights, past  # just self_attn weights for now, following t5
 
     def _past_to_dict(self, prev_attn_state):
         prev_key, prev_value = prev_attn_state[:2]
@@ -595,7 +601,7 @@ class BartDecoder(nn.Module):
                     x,
                     encoder_state,
                     encoder_padding_mask,
-                    past[i] if past is not None else None,
+                    past=past[i] if past is not None else None,
                     self_attn_mask=self_attn_mask,
                     self_attn_padding_mask=self_attn_padding_mask,
                     need_attn_weights=self.output_attentions,
@@ -779,7 +785,7 @@ class SelfAttention(nn.Module):
             if "prev_key" in saved_state:
                 # previous time steps are cached - no need to recompute key and value if they are static
                 if static_kv:
-                    assert self.encoder_decoder_attention and not self.self_attention
+                    assert self.encoder_decoder_attention
                     key = value = None
         else:
             saved_state = None

@@ -575,9 +575,9 @@ class ModelTesterMixin:
             del inputs_dict["input_ids"]
         else:
             encoder_input_ids = inputs_dict["encoder_input_ids"]
-            decoder_input_ids = inputs_dict["decoder_input_ids"]
+            decoder_input_ids = inputs_dict.get("decoder_input_ids", encoder_input_ids)
             del inputs_dict["encoder_input_ids"]
-            del inputs_dict["decoder_input_ids"]
+            inputs_dict.pop("decoder_input_ids", None)
 
         for model_class in self.all_model_classes:
             model = model_class(config)
