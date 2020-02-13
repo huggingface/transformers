@@ -334,7 +334,7 @@ class DecoderLayer(nn.Module):
         residual = x
         if prev_self_attn_state is not None:
             saved_state = prev_self_attn_state
-            self.self_attn._update_incremental_state(past, saved_state)
+            self.self_attn._update_layer_cache(past, saved_state)
 
         y = x  # TODO(SS): why
         x, self_attn_weights = self.self_attn.forward(
@@ -342,7 +342,7 @@ class DecoderLayer(nn.Module):
             key=y,
             value=y,
             key_padding_mask=self_attn_padding_mask,
-            incremental_state=past,
+            past=past,
             need_weights=need_attn_weights,
             attn_mask=self_attn_mask,
         )
@@ -353,14 +353,14 @@ class DecoderLayer(nn.Module):
         assert self.encoder_attn.attn_key != self.self_attn.attn_key
         if prev_attn_state is not None:
             saved_state = prev_attn_state
-            self.encoder_attn._update_incremental_state(past, saved_state)
+            self.encoder_attn._update_layer_cache(past, saved_state)
 
         x, encoder_attn_weights = self.encoder_attn.forward(
             query=x,
             key=encoder_out,  # could be None
             value=encoder_out,
             key_padding_mask=encoder_padding_mask,
-            incremental_state=past,
+            past=past,
             static_kv=True,
             need_weights=False,  # not returning it so why compute it
         )
@@ -759,7 +759,7 @@ class SelfAttention(nn.Module):
         key: Optional[Tensor],
         value: Optional[Tensor],
         key_padding_mask: Optional[Tensor] = None,
-        incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
+        past: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
         need_weights: bool = False,
         static_kv: bool = False,
         attn_mask: Optional[Tensor] = None,
@@ -780,8 +780,8 @@ class SelfAttention(nn.Module):
         assert embed_dim == self.embed_dim
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
         # get here for encoder decoder cause of static_kv
-        if incremental_state is not None:
-            saved_state = incremental_state.get(self.attn_key, {})
+        if past is not None:  # get the last k,v and mask for reuse
+            saved_state = past.get(self.attn_key, {})
             if "prev_key" in saved_state:
                 # previous time steps are cached - no need to recompute key and value if they are static
                 if static_kv:
@@ -809,9 +809,13 @@ class SelfAttention(nn.Module):
             v = self._shape(v, -1, bsz)
 
         if saved_state is not None:
-            k, key_padding_mask, v = self._use_and_update_saved_state(
-                k, v, saved_state, key_padding_mask, incremental_state, static_kv, bsz
+            k, v, key_padding_mask = self._use_and_update_saved_state(
+                k, v, saved_state, key_padding_mask, past, static_kv, bsz
             )
+            # new_entry = {"prev_key": k.view(bsz, self.num_heads, -1, self.head_dim),
+            #              "prev_value": v.view(bsz, self.num_heads, -1, self.head_dim),
+            #              "prev_key_padding_mask": key_padding_mask}
+            # self._update_layer_cache(past, new_entry)
         assert k is not None
         src_len = k.size(1)
 
@@ -877,8 +881,8 @@ class SelfAttention(nn.Module):
         saved_state["prev_key_padding_mask"] = key_padding_mask
         # In this branch past is never None
         assert incremental_state is not None
-        self._update_incremental_state(incremental_state, saved_state)
-        return k, key_padding_mask, v
+        self._update_layer_cache(incremental_state, saved_state)
+        return k, v, key_padding_mask
 
     @staticmethod
     def _cat_prev_key_padding_mask(
@@ -911,10 +915,10 @@ class SelfAttention(nn.Module):
             new_key_padding_mask = prev_key_padding_mask
         return new_key_padding_mask
 
-    def _update_incremental_state(
-        self, incremental_state: Dict[str, Dict[str, Optional[Tensor]]], saved_state: Dict[str, Optional[Tensor]],
+    def _update_layer_cache(
+        self, layer_cache: Dict[str, Dict[str, Optional[Tensor]]], new_entry: Dict[str, Optional[Tensor]],
     ):
-        incremental_state[self.attn_key] = saved_state
+        layer_cache[self.attn_key] = new_entry
 
 
 def fill_with_neg_inf(t):
