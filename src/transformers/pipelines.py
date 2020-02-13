@@ -1001,6 +1001,7 @@ def pipeline(
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
     modelcard: Optional[Union[str, ModelCard]] = None,
+    framework: Optional[str] = None,
     **kwargs
 ) -> Pipeline:
     """
@@ -1021,7 +1022,7 @@ def pipeline(
     if task not in SUPPORTED_TASKS:
         raise KeyError("Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys())))
 
-    framework = get_framework(model)
+    framework = framework or get_framework(model)
 
     targeted_task = SUPPORTED_TASKS[task]
     task, model_class = targeted_task["impl"], targeted_task[framework]
