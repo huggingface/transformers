@@ -248,7 +248,7 @@ class BartHeadTests(unittest.TestCase):
 
 
 class BartModelIntegrationTest(unittest.TestCase):
-    input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]).long()
+    input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2],]).long()
 
     @slow
     def test_inference_no_head(self):
@@ -264,13 +264,18 @@ class BartModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_mnli_inference(self):
+        example_b = [0, 31414, 232, 328, 740, 1140, 69, 46078, 1588, 2, 1]
+        input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2], example_b]).long()
         model = AutoModelForSequenceClassification.from_pretrained("bart-large-mnli")
         with torch.no_grad():
-            logits = model.forward(input_ids=self.input_ids)[0]
-        expected_shape = torch.Size((1, 3))
+            logits = model.forward(input_ids=input_ids)[0]
+        expected_shape = torch.Size((2, 3))
         self.assertEqual(logits.shape, expected_shape)
         expected_slice = torch.Tensor([[0.1907, 1.4342, -1.0289]])
-        self.assertTrue(torch.allclose(logits, expected_slice, atol=1e-3))
+        self.assertTrue(torch.allclose(logits[0], expected_slice, atol=1e-3))
+        input_ids_no_pad = torch.Tensor([example_b[:-1]]).long()
+        logits2 = model.forward(input_ids=input_ids_no_pad)[0]
+        self.assertTrue(torch.allclose(logits[1], logits2, atol=1e-3))
 
     @slow
     def test_model_from_pretrained(self):
