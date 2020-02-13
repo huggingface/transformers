@@ -69,12 +69,11 @@ class PretrainedBartModel(PreTrainedModel):
     BART_START_DOCSTRING,
     "FIXME(SS)",
 )
-class BartModel(PretrainedBartModel,):
+class BartModel(PretrainedBartModel):
     """FIXME(SS)"""
 
     def __init__(self, config: BartConfig):  # should take config
         super().__init__(config)
-        self.config = config
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
@@ -92,7 +91,13 @@ class BartModel(PretrainedBartModel,):
     def set_input_embeddings(self, value):
         self.shared = value
 
+    def get_output_embeddings(self):
+        return  _make_linear_from_emb(self.shared)
+
     # def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        return {"input_ids": input_ids, **kwargs}
+
     def forward(self, return_for_head=False, **kwargs):
         kwargs_encoder, kwargs_decoder = prepare_encoder_decoder_model_kwargs(**kwargs)
         # TODO(SS): only call encoder if we need to
@@ -100,10 +105,10 @@ class BartModel(PretrainedBartModel,):
         encoder_out = self.encoder(**kwargs_encoder)
         input_ids = kwargs_encoder.pop("input_ids")
         prev_output_tokens = self.shift_tokens_left(input_ids, self.config.pad_token_id)
-        dec_features, dec_hidden, dec_attn = self.decoder(prev_output_tokens, encoder_out=encoder_out,)
+        dec_features, past, dec_hidden, dec_attn = self.decoder.forward(prev_output_tokens, encoder_out=encoder_out, **kwargs_decoder)
         if return_for_head:  # split encoder and decoder outputs nicely
             return (
-                _filter_out_nones(dec_features, dec_hidden, dec_attn),
+                _filter_out_nones(dec_features, past, dec_hidden, dec_attn),
                 _filter_out_nones(encoder_out.encoder_out, encoder_out.encoder_states, encoder_out.encoder_attn),
             )
         if self.output_hidden_states and self.output_attentions:
@@ -142,29 +147,36 @@ class BartModel(PretrainedBartModel,):
         return (self.encoder.max_positions(), self.decoder.max_positions())
 
 
+def _make_linear_from_emb(emb):
+    vocab_size, emb_size = emb.weight.shape
+    lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
+    lin_layer.weight.data = emb.weight.data  # .T
+    return lin_layer
+
+
 class BartForMaskedLM(PretrainedBartModel):
     base_model_prefix = "model"
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
         self.model = BartModel(config)
+        self.lm_head = _make_linear_from_emb(self.model.shared)
 
-    def forward(self, *args, **kwargs):  # TODO(SS): better signature when base API decided
+    def forward(self, *args, **kwargs):  # TODO(SS): copy signature, docstring when API decided
         kwargs["return_for_head"] = True
         lm_labels = kwargs.pop("lm_labels", None)
         decoder_outputs, encoder_outputs = self.model(*args, **kwargs)
-        lm_logits = self.output_layer(decoder_outputs[0])
+        lm_logits = self.lm_head.forward(decoder_outputs[0])
         decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
-
         if lm_labels is not None:
             loss_fct = nn.CrossEntropyLoss()
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), lm_labels.view(-1))
             decoder_outputs = (masked_lm_loss,) + decoder_outputs
+
         return decoder_outputs + encoder_outputs
 
-    def output_layer(self, x):
-        return F.linear(x, self.model.shared.weight)
-
+    def get_output_embeddings(self):
+        return self.lm_head
 
 class BartForSequenceClassification(PretrainedBartModel):
     eos_token = 2
@@ -290,11 +302,10 @@ class DecoderLayer(nn.Module):
         encoder_out=None,
         encoder_padding_mask=None,
         incremental_state=None,
-        prev_self_attn_state=None,
-        prev_attn_state=None,
+        past=None,
         self_attn_mask=None,
         self_attn_padding_mask=None,
-        need_attn=False,
+        need_attn_weights=False,
     ):
         """
         Args:
@@ -302,22 +313,19 @@ class DecoderLayer(nn.Module):
             encoder_padding_mask (ByteTensor, optional): binary
                 ByteTensor of shape `(batch, src_len)` where padding
                 elements are indicated by ``1``.
-            need_attn (bool, optional): return attention weights
+            need_attn_weights (bool, optional): return attention weights
                 for each head (default: return average over heads).
 
         Returns:
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
-
+        prev_self_attn_state, prev_attn_state = (None,  None) if past is None else past
+        if incremental_state is None:
+            incremental_state = {}
         residual = x
         if prev_self_attn_state is not None:
-            if incremental_state is None:
-                incremental_state = {}
-            prev_key, prev_value = prev_self_attn_state[:2]
-            saved_state = {"prev_key": prev_key, "prev_value": prev_value}
-            if len(prev_self_attn_state) >= 3:
-                saved_state["prev_key_padding_mask"] = prev_self_attn_state[2]
-            self.self_attn._set_input_buffer(incremental_state, saved_state)
+            saved_state = self._past_to_dict(prev_self_attn_state)
+            self.self_attn._update_incremental_state(incremental_state, saved_state)
 
         y = x  # TODO(SS): why
         x, self_attn_weights = self.self_attn.forward(
@@ -326,23 +334,19 @@ class DecoderLayer(nn.Module):
             value=y,
             key_padding_mask=self_attn_padding_mask,
             incremental_state=incremental_state,
-            need_weights=need_attn,
+            need_weights=need_attn_weights,
             attn_mask=self_attn_mask,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
         residual = x
+        assert self.encoder_attn.attn_key != self.self_attn.attn_key
         if prev_attn_state is not None:
-            if incremental_state is None:
-                incremental_state = {}
-            prev_key, prev_value = prev_attn_state[:2]
-            saved_state = {"prev_key": prev_key, "prev_value": prev_value}
-            if len(prev_attn_state) >= 3:
-                saved_state["prev_key_padding_mask"] = prev_attn_state[2]
-            self.encoder_attn._set_input_buffer(incremental_state, saved_state)
+            saved_state = self._past_to_dict(prev_attn_state)
+            self.encoder_attn._update_incremental_state(incremental_state, saved_state)
 
-        x, encoder_attn_weights = self.encoder_attn(
+        x, encoder_attn_weights = self.encoder_attn.forward(
             query=x,
             key=encoder_out,  # could be None
             value=encoder_out,
@@ -363,7 +367,14 @@ class DecoderLayer(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.final_layer_norm(x)
-        return x, self_attn_weights  # just self_attn weights for now, following t5
+        return x, self_attn_weights, incremental_state  # just self_attn weights for now, following t5
+
+    def _past_to_dict(self, prev_attn_state):
+        prev_key, prev_value = prev_attn_state[:2]
+        saved_state = {"prev_key": prev_key, "prev_value": prev_value}
+        if len(prev_attn_state) >= 3:
+            saved_state["prev_key_padding_mask"] = prev_attn_state[2]
+        return saved_state
 
 
 EncoderOut = namedtuple(
@@ -462,7 +473,7 @@ class BartEncoder(nn.Module):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 attn = None
             else:
-                x, attn = layer(x, encoder_padding_mask)
+                x, attn = layer.forward(x, encoder_padding_mask)
 
             if self.output_attentions:
                 all_attentions.append(attn)
@@ -494,6 +505,7 @@ class BartDecoder(nn.Module):
 
     def __init__(self, config: BartConfig, embed_tokens: nn.Embedding):
         super().__init__()
+        self.output_past = config.output_past
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
@@ -510,19 +522,20 @@ class BartDecoder(nn.Module):
         self.layernorm_embedding = LayerNorm(config.d_model)
 
     def forward(
-        self, prev_output_tokens, encoder_out=None, incremental_state=None, full_context_alignment=False,
+        self, input_ids, encoder_out, past=None, full_context_alignment=False,
+            **unused
     ):
         """
         Includes several features from "Jointly Learning to Align and
         Translate with Transformer Models" (Garg et al., EMNLP 2019).
 
         Args:
-            prev_output_tokens (LongTensor): previous decoder outputs of shape
+            input_ids (LongTensor): previous decoder outputs of shape
                 `(batch, tgt_len)`, for teacher forcing
 
             encoder_out (optional): output from the encoder, used for
                 encoder-side attention
-            incremental_state (dict): dictionary used for storing state during
+            past (dict): dictionary used for storing state during
                 :ref:`Incremental decoding`
             full_context_alignment (bool, optional): don't apply
                 auto-regressive mask to self-attention (default: False).
@@ -535,14 +548,13 @@ class BartDecoder(nn.Module):
         """
 
         # embed positions
-        positions = self.embed_positions(prev_output_tokens)
-        if incremental_state is not None:
-            prev_output_tokens = prev_output_tokens[:, -1:]
-            if positions is not None:
-                positions = positions[:, -1:]
+        positions = self.embed_positions(input_ids)
+        if past is not None:
+            input_ids = input_ids[:, -1:]
+            positions = positions[:, -1:]
 
         # embed tokens and positions
-        x = self.embed_tokens(prev_output_tokens)
+        x = self.embed_tokens(input_ids)
 
         if positions is not None:
             x += positions
@@ -554,34 +566,38 @@ class BartDecoder(nn.Module):
         x = x.transpose(0, 1)
 
         self_attn_padding_mask = None
-        if prev_output_tokens.eq(self.padding_idx).any():
-            self_attn_padding_mask = prev_output_tokens.eq(self.padding_idx)
+        if input_ids.eq(self.padding_idx).any():
+            self_attn_padding_mask = input_ids.eq(self.padding_idx)
 
         # decoder layers
         all_hidden_states = ()
         all_self_attns = ()
-        for layer in self.layers:
-            # layer: DecoderLayer
-            encoder_state = None if encoder_out is None else encoder_out.encoder_out
+        present = []
+        encoder_state = encoder_out.encoder_out
+        encoder_padding_mask = encoder_out.encoder_padding_mask
+        for i, layer in enumerate(self.layers):
+            # type layer: DecoderLayer
 
-            if incremental_state is None and not full_context_alignment:
+            if past is None and not full_context_alignment:
                 self_attn_mask = self.buffered_future_mask(x)
             else:
-                # TODO(SS): check this
                 self_attn_mask = None
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
+
             if not self.training or (dropout_probability > self.layerdrop):
-                x, layer_self_attn = layer(  # TODO(SS): remove forward
+                x, layer_self_attn, layer_past = layer.forward(
                     x,
                     encoder_state,
-                    encoder_out.encoder_padding_mask if encoder_out is not None else None,
-                    incremental_state,
+                    encoder_padding_mask,
+                    past[i] if past is not None else None,
                     self_attn_mask=self_attn_mask,
                     self_attn_padding_mask=self_attn_padding_mask,
-                    need_attn=self.output_attentions,  # (i == alignment_layer),
+                    need_attn_weights=self.output_attentions,
                 )
+                if self.output_past:
+                    present.append(layer_past)
                 if self.output_hidden_states:
                     all_hidden_states += (x,)
                 if self.output_attentions:
@@ -593,7 +609,7 @@ class BartDecoder(nn.Module):
         all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
         x = x.transpose(0, 1)
 
-        return x, all_hidden_states, list(all_self_attns)
+        return x, present, all_hidden_states, list(all_self_attns)
 
     def max_positions(self):
         """Maximum output length supported by the decoder."""
@@ -722,6 +738,7 @@ class SelfAttention(nn.Module):
         self.v_proj = nn.Linear(self.vdim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.attn_key = '{}_attn'.format('encoder_decoder' if self.encoder_decoder_attention else 'self')
 
     def _shape(self, tensor, dim_0, bsz):
         return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
@@ -754,10 +771,9 @@ class SelfAttention(nn.Module):
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
         # get here for encoder decoder cause of static_kv
         if incremental_state is not None:
-            saved_state = self._get_input_buffer(incremental_state)
-            if saved_state is not None and "prev_key" in saved_state:
-                # previous time steps are cached - no need to recompute
-                # key and value if they are static
+            saved_state = incremental_state.get(self.attn_key, {})
+            if "prev_key" in saved_state:
+                # previous time steps are cached - no need to recompute key and value if they are static
                 if static_kv:
                     assert self.encoder_decoder_attention and not self.self_attention
                     key = value = None
@@ -849,7 +865,7 @@ class SelfAttention(nn.Module):
         saved_state["prev_key_padding_mask"] = key_padding_mask
         # In this branch past is never None
         assert incremental_state is not None
-        self._set_input_buffer(incremental_state, saved_state)
+        self._update_incremental_state(incremental_state, saved_state)
         return k, key_padding_mask, v
 
     @staticmethod
@@ -883,28 +899,10 @@ class SelfAttention(nn.Module):
             new_key_padding_mask = prev_key_padding_mask
         return new_key_padding_mask
 
-    def _get_input_buffer(
-        self, incremental_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]]
-    ) -> Dict[str, Optional[Tensor]]:
-        empty_dict_annotated = {}  # type: Dict[str, Optional[Tensor]]
-        if incremental_state is None:
-            return empty_dict_annotated
-        full_key = _get_full_incremental_state_key(self, "attn_state")
-        if full_key not in incremental_state:
-            return empty_dict_annotated
-        return incremental_state[full_key]
-
-    def _set_input_buffer(
-        self, incremental_state: Dict[str, Dict[str, Optional[Tensor]]], buffer: Dict[str, Optional[Tensor]],
+    def _update_incremental_state(
+        self, incremental_state: Dict[str, Dict[str, Optional[Tensor]]], saved_state: Dict[str, Optional[Tensor]],
     ):
-        full_key = _get_full_incremental_state_key(self, "attn_state")
-        incremental_state[full_key] = buffer
-
-
-def _get_full_incremental_state_key(module_instance, key: str) -> str:
-    return "{}.{}.{}".format(
-        module_instance.module_name, module_instance._fairseq_instance_id, key
-    )
+        incremental_state[self.attn_key] = saved_state
 
 
 def fill_with_neg_inf(t):

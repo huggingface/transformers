@@ -26,11 +26,16 @@ def prepare_encoder_decoder_model_kwargs(**kwargs):
     We let the specific kwargs override the common ones in case of
     conflict.
     """
+
     kwargs_common = {
         argument: value
         for argument, value in kwargs.items()
         if not argument.startswith("encoder_") and not argument.startswith("decoder_")
     }
+    if 'input_ids' in kwargs_common:
+        kwargs['encoder_input_ids'] = kwargs_common.pop('input_ids')
+
+
     decoder_kwargs = kwargs_common.copy()
     encoder_kwargs = kwargs_common.copy()
     encoder_kwargs.update(
