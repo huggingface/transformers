@@ -173,6 +173,10 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
+    @unittest.skip("Passing embeddings not yet implemented for Bart.")
+    def test_inputs_embeds(self):
+        pass
+
     def test_incremental_state(self):
         pass
         # TODO(SS), separate PR: try to generate with model using incremental state
