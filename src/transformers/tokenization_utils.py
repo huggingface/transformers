@@ -1686,7 +1686,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
             # Avoid thread overhead if only one example.
             if len(batch_text_or_text_pairs) == 1:
-                if isinstance(batch_text_or_text_pairs[0], tuple):
+                if isinstance(batch_text_or_text_pairs[0], (tuple, list)):
                     tokens = self._tokenizer.encode(*batch_text_or_text_pairs[0])
                 else:
                     tokens = self._tokenizer.encode(batch_text_or_text_pairs[0])
