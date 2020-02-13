@@ -179,7 +179,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class BartSequenceClassifTest(unittest.TestCase):
+class BartHeadTests(unittest.TestCase):
     batch_size = 13
     vocab_size = 99
 
@@ -225,6 +225,23 @@ class BartSequenceClassifTest(unittest.TestCase):
         expected_shape = (self.batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
         self.assertIsInstance(loss.item(), float)
+
+    def test_generate(self):
+        config = BartConfig(
+            vocab_size=self.vocab_size,
+            d_model=24,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_ffn_dim=32,
+            decoder_ffn_dim=32,
+            max_position_embeddings=48,
+            output_past=True
+        )
+        lm_model = BartForMaskedLM(config)
+        new_input_ids = lm_model.generate(input_ids=self.input_ids)
+
 
 
 class BartModelIntegrationTest(unittest.TestCase):
