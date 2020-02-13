@@ -1,6 +1,6 @@
 # German BERT for literary texts
 
-This German BERT is based on `bert-base-german-dbmdz-cased`, and has been adapted to the domain of literary texts by fine-tuning the language modeling task on the [Corpus of German-Language Fiction](https://figshare.com/articles/Corpus_of_German-Language_Fiction_txt_/4524680/1). Afterwards the model was fine-tuned for named entity recognition on the [DROC](https://gitlab2.informatik.uni-wuerzburg.de/kallimachos/DROC-Release) corpus, so you can use it to recognize (mostly fictional) protagonists in German novels.
+This German BERT is based on `bert-base-german-dbmdz-cased`, and has been adapted to the domain of literary texts by fine-tuning the language modeling task on the [Corpus of German-Language Fiction](https://figshare.com/articles/Corpus_of_German-Language_Fiction_txt_/4524680/1). Afterwards the model was fine-tuned for named entity recognition on the [DROC](https://gitlab2.informatik.uni-wuerzburg.de/kallimachos/DROC-Release) corpus, so you can use it to recognize protagonists in German novels.
 
 
 # Stats
@@ -34,14 +34,7 @@ The provided model was also fine-tuned for two epochs on 10,799 sentences for tr
 | Dev     | 96.4      | 87.3   | 91.6 |
 | Test    | 92.8      | 94.9   | 93.8 |
 
-The model has also been evaluated using 10-fold cross validation and compared with a classic Conditional Random Field baseline described in [Jannidis et al.](https://opus.bibliothek.uni-wuerzburg.de/opus4-wuerzburg/frontdoor/deliver/index/docId/14333/file/Jannidis_Figurenerkennung_Roman.pdf) (2015):loss = 0.021780780213373582
-macro_accuracy = 0.8456
-macro_f1 = 0.9163
-micro_accuracy = 0.8456
-micro_f1 = 0.9163
-precision = 0.9637
-recall = 0.8734
-
+The model has also been evaluated using 10-fold cross validation and compared with a classic Conditional Random Field baseline described in [Jannidis et al.](https://opus.bibliothek.uni-wuerzburg.de/opus4-wuerzburg/frontdoor/deliver/index/docId/14333/file/Jannidis_Figurenerkennung_Roman.pdf) (2015):
 
 ![kfold](https://raw.githubusercontent.com/severinsimmler/transformers/master/model_cards/severinsimmler/kfold.png)
 
