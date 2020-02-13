@@ -40,9 +40,31 @@ Sequence classification is the task of classifying sequences according to a give
 of sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune
 a model on a GLUE sequence classification task, you may leverage the `run_glue.py` or `run_tf_glue.py` scripts.
 
+Here is an example using the pipelines do to sentiment analysis: identifying if a sequence is positive or negative.
+It leverages a fine-tuned model on sst2, which is a GLUE task.
+
+::
+
+    from transformers import pipeline
+
+    nlp = pipeline("sentiment-analysis")
+
+    print(nlp("I hate you"))
+    print(nlp("I love you"))
+
+This should return a label ("POSITIVE" or "NEGATIVE") alongside a score, as follows:
+
+::
+
+    [{'label': 'NEGATIVE', 'score': 0.9991129}]
+    [{'label': 'POSITIVE', 'score': 0.99986565}]
+
+
 Here is an example of doing a sequence classification using a model to determine if two sequences are paraphrases
 of each other. The process is the following:
 
+- Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and loads it
+  with the weights stored in the checkpoint.
 - Build a sequence from the two sentences, with the correct model-specific separators token type ids
   and attention masks
 - Pass this sequence through the model so that it is classified in one of the two available classes: 0
@@ -94,13 +116,52 @@ This should output the following results:
     is paraphrase: 6%
 
 Extractive Question Answering
---------------------------
+----------------------------------------------------
 
-Extractive Question Answering is the task of extracting an answer from a text according to a given question classifying sequences according to a given number of classes. An example
-of sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune
-a model on a GLUE sequence classification task, you may leverage the `run_glue.py` or `run_tf_glue.py` scripts.
+Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
+question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
+a model on a SQuAD task, you may leverage the `run_squad.py`.
 
-Here is an example of doing a sequence classification using a model lo
+Here is an example using the pipelines do to sentiment analysis: identifying if a sequence is positive or negative.
+It leverages a fine-tuned model on sst2, which is a GLUE task.
+
+::
+
+    from transformers import pipeline
+
+    nlp = pipeline("question-answering")
+
+    context = r"""
+    Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
+    question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
+    a model on a SQuAD task, you may leverage the `run_squad.py`.
+    """
+
+    print(nlp(question="What is extractive question answering?", context=context))
+    print(nlp(question="What is a good example of a question answering dataset?", context=context))
+
+This should return an answer extracted from the text, a confidence score, alongside "start" and "end" values which
+are the positions of the extracted answer in the text.
+
+::
+
+    {'score': 0.622232091629833, 'start': 34, 'end': 96, 'answer': 'the task of extracting an answer from a text given a question.'}
+    {'score': 0.5115299158662765, 'start': 147, 'end': 161, 'answer': 'SQuAD dataset,'}
+
+
+Here is an example of question answering using a model and a tokenizer. The process is the following:
+
+- Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and loads it
+  with the weights stored in the checkpoint.
+- Define a text and a few questions.
+- Iterate over the questions and build a sequence from the text and the current question, with the correct
+  model-specific separators token type ids and attention masks
+- Pass this sequence through the model. This outputs a range of scores across the entire sequence tokens (question and
+  text), for both the start and end positions.
+- Compute the softmax of the result to get probabilities over the tokens
+- Fetch the tokens from the identified start and stop values, convert those tokens to a string.
+- Print the results
+
 ::
 
     from transformers import AutoTokenizer, AutoModelForQuestionAnswering
