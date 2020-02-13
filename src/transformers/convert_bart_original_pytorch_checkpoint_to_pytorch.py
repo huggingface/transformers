@@ -42,7 +42,7 @@ rename_keys = [
     ("model.classification_heads.mnli.out_proj.weight", "classification_head.out_proj.weight"),
     ("model.classification_heads.mnli.out_proj.bias", "classification_head.out_proj.bias"),
 ]
-IGNORE_KEYS = ["encoder.version", "decoder.version"]
+IGNORE_KEYS = ["encoder.version", "decoder.version", "model.encoder.version", "model.decoder.version"]
 
 
 def rename_key(dct, old, new):
@@ -81,7 +81,7 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
         state_dict.pop(k, None)
     model.load_state_dict(state_dict)
     model.eval()
-    our_outputs = model(tokens)[0]
+    our_outputs = model.forward(tokens)[0]
 
     assert their_output.shape == our_outputs.shape
     assert (their_output == our_outputs).all().item()

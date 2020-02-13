@@ -55,13 +55,12 @@ class BartConfig(PretrainedConfig):
         init_std=0.02,
         classifier_dropout=0.0,
         output_past=False,
+        num_labels=3,
         **common_kwargs
     ):
-        super().__init__(**common_kwargs)
-        self.output_past = output_past
+        super().__init__(num_labels=num_labels, output_past=output_past, pad_token_id=pad_token_id, **common_kwargs)
 
         self.vocab_size = vocab_size
-        self.pad_token_id = pad_token_id
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
 
         self.encoder_ffn_dim = encoder_ffn_dim

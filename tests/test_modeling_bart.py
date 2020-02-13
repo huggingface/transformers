@@ -119,7 +119,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                     # "input_ids": input_ids,
                     "token_type_ids": token_type_ids,
                     "attention_mask": input_mask,
-                    "encoder_input_ids": input_ids,
+                    "input_ids": input_ids,
                     # "decoder_input_ids": input_ids,
                     # "lm_labels": decoder_lm_labels,
                 },
@@ -154,9 +154,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         _check_var(model.encoder.embed_positions)
 
         decoder_features_with_mask, _ = model.forward(
-            encoder_input_ids=input_ids, attention_mask=input_mask
+            input_ids=input_ids, attention_mask=input_mask
         )  # check that attention_mask doesnt break or something
-        decoder_features, enc_features = model.forward(encoder_input_ids=input_ids)
+        decoder_features, enc_features = model.forward(input_ids=input_ids)
         self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
         self.assertEqual(
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
@@ -176,10 +176,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("Passing embeddings not yet implemented for Bart.")
     def test_inputs_embeds(self):
         pass
-
-    def test_incremental_state(self):
-        pass
-        # TODO(SS), separate PR: try to generate with model using incremental state
 
 
 @require_torch
@@ -248,6 +244,7 @@ class BartHeadTests(unittest.TestCase):
         lm_model = BartForMaskedLM(config)
         new_input_ids = lm_model.generate(input_ids)
         self.assertEqual(new_input_ids.shape, (input_ids.shape[0], 20))
+        # TODO(SS): fix the below in a separate PR
 
 
 class BartModelIntegrationTest(unittest.TestCase):
@@ -257,7 +254,7 @@ class BartModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
         model = BartModel.from_pretrained("bart-large")
         with torch.no_grad():
-            output = model.forward(encoder_input_ids=self.input_ids)[0]
+            output = model.forward(input_ids=self.input_ids)[0]
         expected_shape = torch.Size((1, 11, 1024))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.Tensor(
@@ -269,7 +266,7 @@ class BartModelIntegrationTest(unittest.TestCase):
     def test_mnli_inference(self):
         model = AutoModelForSequenceClassification.from_pretrained("bart-large-mnli")
         with torch.no_grad():
-            logits = model.forward(encoder_input_ids=self.input_ids)[0]
+            logits = model.forward(input_ids=self.input_ids)[0]
         expected_shape = torch.Size((1, 3))
         self.assertEqual(logits.shape, expected_shape)
         expected_slice = torch.Tensor([[0.1907, 1.4342, -1.0289]])

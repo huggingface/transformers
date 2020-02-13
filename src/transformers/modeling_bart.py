@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2020 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +26,6 @@ from torch import Tensor, nn
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel
-from .utils_encoder_decoder import prepare_encoder_decoder_model_kwargs
 
 
 logger = logging.getLogger(__name__)
@@ -94,42 +92,53 @@ class BartModel(PretrainedBartModel):
     def get_output_embeddings(self):
         return _make_linear_from_emb(self.shared)
 
-    def forward(self, return_for_head=False, **kwargs):
-        kwargs_encoder, kwargs_decoder = prepare_encoder_decoder_model_kwargs(**kwargs)
-        # TODO(SS): only call encoder if we need to
-        # import ipdb; ipdb.set_trace()
-        encoder_out = self.encoder(**kwargs_encoder)
-        input_ids = kwargs_encoder.pop("input_ids")
-        prev_output_tokens = self.shift_tokens_left(input_ids, self.config.pad_token_id)
+    def forward(
+        self,
+        input_ids,
+        attention_mask=None,
+        decoder_input_ids=None,
+        encoder_hidden_states=None,
+        return_for_head=False,
+        **unused
+    ):
+        if encoder_hidden_states is None:
+            encoder_hidden_states = self.encoder.forward(input_ids=input_ids, attention_mask=attention_mask)
+        if decoder_input_ids is None:
+            decoder_input_ids = self.shift_tokens_left(input_ids, self.config.pad_token_id)
 
         dec_features, past, dec_hidden, dec_attn = self.decoder.forward(
-            prev_output_tokens, encoder_out=encoder_out, **kwargs_decoder
+            decoder_input_ids, encoder_hidden_states.encoder_hidden_states, encoder_hidden_states.encoder_padding_mask
         )
+        # Massage return types to conform to standard API
         if return_for_head:  # split encoder and decoder outputs nicely
             return (
                 _filter_out_nones(dec_features, past, dec_hidden, dec_attn),
-                _filter_out_nones(encoder_out.encoder_out, encoder_out.encoder_states, encoder_out.encoder_attn),
+                _filter_out_nones(
+                    encoder_hidden_states.encoder_hidden_states,
+                    encoder_hidden_states.encoder_states,
+                    encoder_hidden_states.encoder_attn,
+                ),
             )
         if self.output_hidden_states and self.output_attentions:
             return (
                 dec_features,
                 dec_hidden,
                 dec_attn,
-                encoder_out.encoder_out,
-                encoder_out.encoder_states,
-                encoder_out.encoder_attn,
+                encoder_hidden_states.encoder_hidden_states,
+                encoder_hidden_states.encoder_states,
+                encoder_hidden_states.encoder_attn,
             )
         elif self.output_hidden_states:
             return (
                 dec_features,
                 dec_hidden,
-                encoder_out.encoder_out,
-                encoder_out.encoder_states,
+                encoder_hidden_states.encoder_hidden_states,
+                encoder_hidden_states.encoder_states,
             )
         elif self.output_attentions:
-            return (dec_features, dec_attn, encoder_out.encoder_out, encoder_out.encoder_attn)
+            return (dec_features, dec_attn, encoder_hidden_states.encoder_hidden_states, encoder_hidden_states.encoder_attn)
         else:
-            return (dec_features, encoder_out.encoder_out)
+            return (dec_features, encoder_hidden_states.encoder_hidden_states)
 
     @staticmethod
     def shift_tokens_left(input_ids, pad_token_id):
@@ -140,10 +149,6 @@ class BartModel(PretrainedBartModel):
         ).squeeze()
         prev_output_tokens[:, 1:] = input_ids[:, :-1]
         return prev_output_tokens
-
-    def max_positions(self):
-        """Maximum length supported by the model."""
-        return (self.encoder.max_positions(), self.decoder.max_positions())
 
 
 def _make_linear_from_emb(emb):
@@ -161,10 +166,16 @@ class BartForMaskedLM(PretrainedBartModel):
         self.model = BartModel(config)
         self.lm_head = _make_linear_from_emb(self.model.shared)
 
-    def forward(self, *args, **kwargs):  # TODO(SS): copy signature, docstring when API decided
-        kwargs["return_for_head"] = True
-        lm_labels = kwargs.pop("lm_labels", None)
-        decoder_outputs, encoder_outputs = self.model(*args, **kwargs)
+    def forward(
+        self, input_ids, attention_mask=None, decoder_input_ids=None, encoder_hidden_states=None, lm_labels=None, **unused
+    ):
+        decoder_outputs, encoder_outputs = self.model.forward(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_hidden_states=encoder_hidden_states,
+            return_for_head=True,
+        )
         lm_logits = self.lm_head.forward(decoder_outputs[0])
         decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
         if lm_labels is not None:
@@ -174,8 +185,8 @@ class BartForMaskedLM(PretrainedBartModel):
 
         return decoder_outputs + encoder_outputs
 
-    # def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
-    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
+    @staticmethod
+    def prepare_inputs_for_generation(input_ids, past, **kwargs):
         return {"input_ids": input_ids, "decoder_past": past}
 
     def get_output_embeddings(self):
@@ -193,11 +204,15 @@ class BartForSequenceClassification(PretrainedBartModel):
         )
         self.loss_fn = nn.CrossEntropyLoss()
 
-    def forward(self, **kwargs):
-        labels = kwargs.pop("labels", None)
-        decoder_outputs, encoder_outputs = self.model(return_for_head=True, **kwargs)
+    def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, encoder_hidden_states=None, labels=None, **unused):
+        decoder_outputs, encoder_outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_hidden_states=encoder_hidden_states,
+            return_for_head=True,
+        )
         x = decoder_outputs[0]  # last hidden state
-        input_ids = _get_input_ids_from_kwargs(**kwargs)
         eos_mask = input_ids.eq(self.eos_token)
         if len(torch.unique(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
@@ -210,11 +225,6 @@ class BartForSequenceClassification(PretrainedBartModel):
             decoder_outputs = (loss,) + decoder_outputs
 
         return decoder_outputs + encoder_outputs
-
-
-def _get_input_ids_from_kwargs(**kwargs):
-    """Try to get input_ids and if that key is not present get encoder_input_ids."""
-    return kwargs.get("input_ids", kwargs.get("encoder_input_ids", None))
 
 
 # Encoder and Decoder
@@ -303,7 +313,7 @@ class DecoderLayer(nn.Module):
     def forward(
         self,
         x,
-        encoder_out=None,
+        encoder_hidden_states=None,
         encoder_padding_mask=None,
         past=None,
         # past=None,
@@ -357,8 +367,8 @@ class DecoderLayer(nn.Module):
 
         x, encoder_attn_weights = self.encoder_attn.forward(
             query=x,
-            key=encoder_out,  # could be None
-            value=encoder_out,
+            key=encoder_hidden_states,  # could be None
+            value=encoder_hidden_states,
             key_padding_mask=encoder_padding_mask,
             past=past,
             static_kv=True,
@@ -389,7 +399,7 @@ class DecoderLayer(nn.Module):
 EncoderOut = namedtuple(
     "TransformerEncoderOut",
     [
-        "encoder_out",  # T x B x C
+        "encoder_hidden_states",  # T x B x C
         "encoder_padding_mask",  # B x T
         "encoder_states",  # List[T x B x C]
         "encoder_attn",
@@ -426,14 +436,6 @@ class BartEncoder(nn.Module):
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim)
 
-    def forward_embedding(self, input_ids):
-        # embed tokens and positions
-        embedded_tokens = self.embed_tokens(input_ids)
-        x = embedded_tokens + self.embed_positions(input_ids)
-        x = self.layernorm_embedding(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        return x, embedded_tokens
-
     def forward(
         self,
         input_ids=None,
@@ -449,7 +451,7 @@ class BartEncoder(nn.Module):
                 shape `(batch)`
         Returns:
             namedtuple:
-                - **encoder_out** (Tensor): the last encoder layer's output of
+                - **encoder_hidden_states** (Tensor): the last encoder layer's output of
                   shape `(src_len, batch, embed_dim)`
                 - **encoder_padding_mask** (ByteTensor): the positions of
                   padding elements of shape `(batch, src_len)`
@@ -496,15 +498,11 @@ class BartEncoder(nn.Module):
         encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
 
         return EncoderOut(
-            encoder_out=x,  # T x B x C
+            encoder_hidden_states=x,  # T x B x C
             encoder_padding_mask=encoder_padding_mask,  # B x T
             encoder_states=encoder_states,  # List[T x B x C]
             encoder_attn=all_attentions,  # TODO(SS): document types
         )
-
-    def max_positions(self):
-        """Maximum input length supported by the encoder."""
-        return min(self.max_source_positions, self.embed_positions.max_positions)
 
 
 class BartDecoder(nn.Module):
@@ -534,7 +532,10 @@ class BartDecoder(nn.Module):
         )  # type: List[DecoderLayer]
         self.layernorm_embedding = LayerNorm(config.d_model)
 
-    def forward(self, input_ids, encoder_out, past=None, full_context_alignment=False, **unused):
+    def forward(
+        self, input_ids, encoder_state, encoder_padding_mask,
+            past=None, full_context_alignment=False, **unused
+    ):
         """
         Includes several features from "Jointly Learning to Align and
         Translate with Transformer Models" (Garg et al., EMNLP 2019).
@@ -543,10 +544,9 @@ class BartDecoder(nn.Module):
             input_ids (LongTensor): previous decoder outputs of shape
                 `(batch, tgt_len)`, for teacher forcing
 
-            encoder_out (optional): output from the encoder, used for
+            encoder_hidden_states (optional): output from the encoder, used for
                 encoder-side attention
-            past (dict): dictionary used for storing state during
-                :ref:`Incremental decoding`
+            past (dict): dictionary used for storing state during generation
             full_context_alignment (bool, optional): don't apply
                 auto-regressive mask to self-attention (default: False).
 
@@ -583,8 +583,6 @@ class BartDecoder(nn.Module):
         all_hidden_states = ()
         all_self_attns = ()
         present = []
-        encoder_state = encoder_out.encoder_out
-        encoder_padding_mask = encoder_out.encoder_padding_mask
         for i, layer in enumerate(self.layers):
             # type layer: DecoderLayer
 
@@ -621,13 +619,8 @@ class BartDecoder(nn.Module):
 
         return x, present, all_hidden_states, list(all_self_attns)
 
-    def max_positions(self):
-        """Maximum output length supported by the decoder."""
-        return min(self.max_target_positions, self.embed_positions.max_positions)
-
     def buffered_future_mask(self, tensor):
         """Upper triangular matrix filled with negative inf for masking."""
-        # TODO(SS): identical to encoder code
         dim = tensor.size(0)
         if (
             not hasattr(self, "_future_mask")
@@ -680,7 +673,6 @@ class LearnedPositionalEmbedding(nn.Embedding):
         assert padding_idx is not None
         num_embeddings += padding_idx + 1  # WHY?
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
-        self.max_positions = num_embeddings - self.padding_idx - 1
 
     def forward(self, input, past=None):
         """Input is expected to be of size [bsz x seqlen]."""
@@ -928,12 +920,3 @@ def fill_with_neg_inf(t):
 
 def _filter_out_nones(*tup):
     return tuple(x for x in tup if isinstance(x, torch.Tensor) or x)
-
-
-def calc_causal_lm_loss(lm_labels, lm_logits):
-    """Unused"""
-    shift_logits = lm_logits[..., :-1, :].contiguous()
-    shift_labels = lm_labels[..., 1:].contiguous()
-    loss_fct = nn.CrossEntropyLoss(ignore_index=-100)
-    loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-    return loss
