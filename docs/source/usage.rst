@@ -213,3 +213,139 @@ This should output the questions followed by the answers:
 
     Question: Transformers provides interoperability between which frameworks?
     Answer: tensorflow 2 . 0 and pytorch
+
+
+
+Language Modeling
+----------------------------------------------------
+
+Language modeling is the task of fitting a model to a corpus, which can be domain specific. All popular transformer
+based models are trained using a variant of language modeling, e.g. BERT with masked language modeling, GPT-2 with
+causal language modeling.
+
+Language modeling can be useful outside of pre-training as well, for example to shift the model distribution to be
+domain-specific: using a language model trained over a very large corpus, and then fine-tuning it to a news dataset
+or on scientific paper e.g. `LysandreJik/arxiv-nlp <https://huggingface.co/lysandre/arxiv-nlp>`__.
+
+Masked Language Modeling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Masked language modeling is the task of masking tokens in a sequence with a masking token, and prompting the model to
+fill that mask with an appropriate token. This allows the model to attend to both the right context (tokens on the
+right of the mask) and the left context (tokens on the left of the mask). Such a training creates a strong basis
+for downstream tasks requiring bi-directional context such as SQuAD
+(see `Lewis, Lui, Goyal et al. <https://arxiv.org/abs/1910.13461>`__, part 4.2).
+
+Here is an example of using pipelines to replace a mask from a sequence:
+
+::
+
+    from transformers import pipeline
+
+    nlp = pipeline("fill-mask")
+    print(nlp(f"HuggingFace is creating a {nlp.tokenizer.mask_token} that the community uses to solve NLP tasks."))
+
+This should output the sequences with the mask filled, the confidence score as well as the token id in the tokenizer
+vocabulary:
+
+::
+
+    [
+        {'sequence': '<s> HuggingFace is creating a tool that the community uses to solve NLP tasks.</s>', 'score': 0.15627853572368622, 'token': 3944},
+        {'sequence': '<s> HuggingFace is creating a framework that the community uses to solve NLP tasks.</s>', 'score': 0.11690319329500198, 'token': 7208},
+        {'sequence': '<s> HuggingFace is creating a library that the community uses to solve NLP tasks.</s>', 'score': 0.058063216507434845, 'token': 5560},
+        {'sequence': '<s> HuggingFace is creating a database that the community uses to solve NLP tasks.</s>', 'score': 0.04211743175983429, 'token': 8503},
+        {'sequence': '<s> HuggingFace is creating a prototype that the community uses to solve NLP tasks.</s>', 'score': 0.024718601256608963, 'token': 17715}
+    ]
+
+Here is an example doing masked language modeling using a model and a tokenizer. The process is the following:
+
+- Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a DistilBERT model and
+  loads it with the weights stored in the checkpoint.
+- Define a sequence with a masked token, placing the :obj:`tokenizer.mask_token` instead of a word.
+- Encode that sequence into IDs and find the position of the masked token in that list of IDs.
+- Retrieve the predictions at the index of the mask token: this tensor has the same size as the vocabulary, and the
+  values are the scores attributed to each token. The model gives higher score to tokens he deems probable in that
+  context.
+- Retrieve the top 5 tokens using the PyTorch :obj:`topk` method.
+- Replace the mask token by the tokens and print the results
+
+::
+
+    from transformers import AutoModelWithLMHead, AutoTokenizer
+    import torch
+
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased")
+    model = AutoModelWithLMHead.from_pretrained("distilbert-base-cased")
+
+    sequence = f"Distilled models are smaller than the models they mimic. Using them instead of the large versions would help {tokenizer.mask_token} our carbon footprint."
+
+    input = tokenizer.encode(sequence, return_tensors="pt")
+    mask_token_index = torch.where(input == tokenizer.mask_token_id)[1]
+
+    token_logits = model(input)[0]
+    mask_token_logits = token_logits[0, mask_token_index, :]
+
+    top_5_tokens = torch.topk(mask_token_logits, 5, dim=1).indices[0].tolist()
+
+    for token in top_5_tokens:
+        print(sequence.replace(tokenizer.mask_token, tokenizer.decode([token])))
+
+
+This should print five sequences, with the top 5 tokens predicted by the model:
+
+::
+
+    Distilled models are smaller than the models they mimic. Using them instead of the large versions would help reduce our carbon footprint.
+    Distilled models are smaller than the models they mimic. Using them instead of the large versions would help increase our carbon footprint.
+    Distilled models are smaller than the models they mimic. Using them instead of the large versions would help decrease our carbon footprint.
+    Distilled models are smaller than the models they mimic. Using them instead of the large versions would help offset our carbon footprint.
+    Distilled models are smaller than the models they mimic. Using them instead of the large versions would help improve our carbon footprint.
+
+It is totally possible to put more than one mask token in a single sequence, but doing so would reduce the available
+context (one less token in the context) and therefore decrease the prediction accuracy.
+
+
+Causal Language Modeling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Causal language modeling is the task of predicting the token following a sequence of tokens. In this situation, the
+model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
+for generation tasks.
+
+There is currently no pipeline to do causal language modeling/generation. This page will be completed once there is one.
+
+Here is an example using the tokenizer and model. leveraging the :func:`generate` method to generate the tokens
+following the initial sequence.
+
+::
+
+    from transformers import AutoModelWithLMHead, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    model = AutoModelWithLMHead.from_pretrained("gpt2")
+
+    sequence = f"Hugging Face is based in DUMBO, New York City, and is"
+
+    input = tokenizer.encode(sequence, return_tensors="pt")
+    generated = model.generate(input, max_length=50)
+
+    resulting_string = tokenizer.decode(generated.tolist()[0])
+    print(resulting_string)
+
+This outputs a (hopefully) coherent string from the original sequence:
+
+::
+
+    Hugging Face is based in DUMBO, New York City, and is a live-action TV series based on the novel by John
+    Carpenter, and its producers, David Kustlin and Steve Pichar. The film is directed by!
+
+
+Named Entity Recognition
+----------------------------------------------------
+
+Multiple Choice
+----------------------------------------------------
+
+Summarization
+----------------------------------------------------
