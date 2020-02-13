@@ -6,7 +6,7 @@ from .utils import require_torch
 
 
 if is_torch_available():
-    from transformers.pytorch_activations import _gelu_python, get_activation, gelu_new
+    from transformers.activations import _gelu_python, get_activation, gelu_new
     import torch
 
 
@@ -26,7 +26,3 @@ class TestActivations(unittest.TestCase):
             get_activation("bogus")
         with self.assertRaises(KeyError):
             get_activation(None)
-
-
-if __name__ == "__main__":
-    unittest.main()

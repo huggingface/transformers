@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
+from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
     DUMMY_INPUTS,
@@ -35,7 +36,6 @@ from .file_utils import (
     hf_bucket_url,
     is_remote_url,
 )
-from .pytorch_activations import get_activation
 
 
 logger = logging.getLogger(__name__)
