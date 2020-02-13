@@ -18,13 +18,13 @@
 
 
 import logging
-import math
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
+from .activations import gelu_new, swish
 from .configuration_xlnet import XLNetConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PoolerAnswerClass, PoolerEndLogits, PoolerStartLogits, PreTrainedModel, SequenceSummary
@@ -183,20 +183,7 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
     return model
 
 
-def gelu(x):
-    """ Implementation of the gelu activation function.
-        XLNet is using OpenAI GPT's gelu (not exactly the same as BERT)
-        Also see https://arxiv.org/abs/1606.08415
-    """
-    cdf = 0.5 * (1.0 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-    return x * cdf
-
-
-def swish(x):
-    return x * torch.sigmoid(x)
-
-
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish}
+ACT2FN = {"gelu": gelu_new, "relu": torch.nn.functional.relu, "swish": swish}
 
 
 XLNetLayerNorm = nn.LayerNorm

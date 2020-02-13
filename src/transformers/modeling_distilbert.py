@@ -27,6 +27,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from .activations import gelu
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, prune_linear_layer
@@ -47,8 +48,6 @@ DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 
 
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
-def gelu(x):
-    return 0.5 * x * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
