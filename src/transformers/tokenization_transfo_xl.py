@@ -379,14 +379,14 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
 
         super().__init__(
             _TransfoXLDelimiterLookupTokenizer(
-                vocab_file or pretrained_vocab_file,
-                delimiter,
-                lower_case,
-                unk_token,
-                eos_token,
-                add_eos,
-                add_double_eos,
-                normalization,
+                vocab_file=vocab_file or pretrained_vocab_file,
+                delimiter=delimiter,
+                lowercase=lower_case,
+                unk_token=unk_token,
+                eos_token=eos_token,
+                add_eos=add_eos,
+                add_double_eos=add_double_eos,
+                normalization=normalization,
             ),
             unk_token=unk_token,
             eos_token=eos_token,

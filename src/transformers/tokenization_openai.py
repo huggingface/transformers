@@ -309,4 +309,6 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
         kwargs.setdefault("unk_token", unk_token)
-        super().__init__(_OpenAIGPTCharBPETokenizer(vocab_file, merges_file, unk_token), **kwargs)
+        super().__init__(
+            _OpenAIGPTCharBPETokenizer(vocab_file=vocab_file, merges_file=merges_file, unk_token=unk_token), **kwargs
+        )

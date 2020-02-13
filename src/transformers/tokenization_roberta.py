@@ -193,7 +193,13 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         kwargs.setdefault("mask_token", mask_token)
 
         super().__init__(
-            vocab_file, merges_file, unk_token, bos_token, eos_token, add_prefix_space=add_prefix_space, **kwargs
+            vocab_file=vocab_file,
+            merges_file=merges_file,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs
         )
 
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens

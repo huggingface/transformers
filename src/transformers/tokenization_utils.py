@@ -1666,15 +1666,16 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
         # Set the truncation and padding strategy and restore the initial configuration
         with truncate_and_pad(
-            self._tokenizer,
-            max_length,
-            stride,
-            truncation_strategy,
-            pad_to_max_length or return_tensors,  # Need to pad to the max seq length if creating tensors
-            self.padding_side,
-            self.pad_token_id,
-            self.pad_token_type_id,
-            self._pad_token,
+            tokenizer=self._tokenizer,
+            max_length=max_length,
+            stride=stride,
+            strategy=truncation_strategy,
+            pad_to_max_length=pad_to_max_length
+            or return_tensors,  # Need to pad to the max seq length if creating tensors
+            padding_side=self.padding_side,
+            pad_token_id=self.pad_token_id,
+            pad_token_type_id=self.pad_token_type_id,
+            pad_token=self._pad_token,
         ):
 
             if not isinstance(batch_text_or_text_pairs, list):
@@ -1695,13 +1696,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         # Convert encoding to dict
         tokens = [
             self._convert_encoding(
-                encoding,
-                return_tensors,
-                return_token_type_ids,
-                return_attention_mask,
-                return_overflowing_tokens,
-                return_special_tokens_mask,
-                return_offsets_mapping,
+                encoding=encoding,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
             )
             for encoding in tokens
         ]

@@ -555,11 +555,11 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
     ):
         super().__init__(
             BertWordPieceTokenizer(
-                vocab_file,
-                add_special_tokens,
-                unk_token,
-                sep_token,
-                cls_token,
+                vocab_file=vocab_file,
+                add_special_tokens=add_special_tokens,
+                unk_token=unk_token,
+                sep_token=sep_token,
+                cls_token=cls_token,
                 handle_chinese_chars=tokenize_chinese_chars,
                 lowercase=do_lower_case,
             ),
