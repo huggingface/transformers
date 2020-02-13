@@ -92,7 +92,7 @@ class BartModel(PretrainedBartModel):
         self.shared = value
 
     def get_output_embeddings(self):
-        return  _make_linear_from_emb(self.shared)
+        return _make_linear_from_emb(self.shared)
 
     # def forward(self, input_ids: torch.LongTensor = None, return_for_head=False, **kwargs):
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
@@ -105,7 +105,9 @@ class BartModel(PretrainedBartModel):
         encoder_out = self.encoder(**kwargs_encoder)
         input_ids = kwargs_encoder.pop("input_ids")
         prev_output_tokens = self.shift_tokens_left(input_ids, self.config.pad_token_id)
-        dec_features, past, dec_hidden, dec_attn = self.decoder.forward(prev_output_tokens, encoder_out=encoder_out, **kwargs_decoder)
+        dec_features, past, dec_hidden, dec_attn = self.decoder.forward(
+            prev_output_tokens, encoder_out=encoder_out, **kwargs_decoder
+        )
         if return_for_head:  # split encoder and decoder outputs nicely
             return (
                 _filter_out_nones(dec_features, past, dec_hidden, dec_attn),
@@ -177,6 +179,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
 
 class BartForSequenceClassification(PretrainedBartModel):
     eos_token = 2
@@ -319,7 +322,7 @@ class DecoderLayer(nn.Module):
         Returns:
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
-        prev_self_attn_state, prev_attn_state = (None,  None) if past is None else past
+        prev_self_attn_state, prev_attn_state = (None, None) if past is None else past
         if incremental_state is None:
             incremental_state = {}
         residual = x
@@ -425,9 +428,13 @@ class BartEncoder(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         return x, embedded_tokens
 
-    def forward(self, input_ids=None, inputs_embeds=None,
-                # token_type_ids=None, attention_mask=None,
-                **unused):  # TODO(SS): this will need more
+    def forward(
+        self,
+        input_ids=None,
+        inputs_embeds=None,
+        # token_type_ids=None, attention_mask=None,
+        **unused
+    ):  # TODO(SS): this will need more
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
@@ -521,10 +528,7 @@ class BartDecoder(nn.Module):
         )  # type: List[DecoderLayer]
         self.layernorm_embedding = LayerNorm(config.d_model)
 
-    def forward(
-        self, input_ids, encoder_out, past=None, full_context_alignment=False,
-            **unused
-    ):
+    def forward(self, input_ids, encoder_out, past=None, full_context_alignment=False, **unused):
         """
         Includes several features from "Jointly Learning to Align and
         Translate with Transformer Models" (Garg et al., EMNLP 2019).
@@ -738,7 +742,7 @@ class SelfAttention(nn.Module):
         self.v_proj = nn.Linear(self.vdim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.attn_key = '{}_attn'.format('encoder_decoder' if self.encoder_decoder_attention else 'self')
+        self.attn_key = "{}_attn".format("encoder_decoder" if self.encoder_decoder_attention else "self")
 
     def _shape(self, tensor, dim_0, bsz):
         return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
@@ -859,7 +863,9 @@ class SelfAttention(nn.Module):
         if "prev_key_padding_mask" in saved_state:
             prev_key_padding_mask = saved_state["prev_key_padding_mask"]
         assert k is not None and v is not None
-        key_padding_mask = self._cat_prev_key_padding_mask(key_padding_mask, prev_key_padding_mask, bsz, k.size(1), static_kv)
+        key_padding_mask = self._cat_prev_key_padding_mask(
+            key_padding_mask, prev_key_padding_mask, bsz, k.size(1), static_kv
+        )
         saved_state["prev_key"] = k.view(bsz, self.num_heads, -1, self.head_dim)
         saved_state["prev_value"] = v.view(bsz, self.num_heads, -1, self.head_dim)
         saved_state["prev_key_padding_mask"] = key_padding_mask

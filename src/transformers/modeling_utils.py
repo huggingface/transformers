@@ -911,7 +911,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 if temperature != 1.0:
                     scores = scores / temperature
                 # Top-p/top-k filtering
-                scores = top_k_top_p_filtering(scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2)  # (batch_size * num_beams, vocab_size)
+                scores = top_k_top_p_filtering(
+                    scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2
+                )  # (batch_size * num_beams, vocab_size)
                 # Sample 2 next words for each beam (so we have some spare tokens and match output of greedy beam search)
                 next_words = torch.multinomial(F.softmax(scores, dim=-1), num_samples=2)  # (batch_size * num_beams, 2)
                 # Compute next scores

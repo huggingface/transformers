@@ -120,7 +120,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                     "token_type_ids": token_type_ids,
                     "attention_mask": input_mask,
                     "encoder_input_ids": input_ids,
-                    #"decoder_input_ids": input_ids,
+                    # "decoder_input_ids": input_ids,
                     # "lm_labels": decoder_lm_labels,
                 },
             )
@@ -228,12 +228,7 @@ class BartHeadTests(unittest.TestCase):
         self.assertIsInstance(loss.item(), float)
 
     def test_generate(self):
-        input_ids = torch.Tensor(
-            [
-                [71, 82, 18, 33, 46, 91, 2],
-                [68, 34, 26, 58, 30, 82, 2],
-            ]
-        ).long()
+        input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long()
         config = BartConfig(
             vocab_size=self.vocab_size,
             d_model=24,
@@ -244,12 +239,11 @@ class BartHeadTests(unittest.TestCase):
             encoder_ffn_dim=32,
             decoder_ffn_dim=32,
             max_position_embeddings=48,
-            output_past=True
+            output_past=True,
         )
         lm_model = BartForMaskedLM(config)
         new_input_ids = lm_model.generate(input_ids)
-        self.assertEqual(new_input_ids.shape, (input_ids.shape[0],20))
-
+        self.assertEqual(new_input_ids.shape, (input_ids.shape[0], 20))
 
 
 class BartModelIntegrationTest(unittest.TestCase):

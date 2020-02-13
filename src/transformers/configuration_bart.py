@@ -54,9 +54,11 @@ class BartConfig(PretrainedConfig):
         max_position_embeddings=1024,
         init_std=0.02,
         classifier_dropout=0.0,
+        output_past=False,
         **common_kwargs
     ):
         super().__init__(**common_kwargs)
+        self.output_past = output_past
 
         self.vocab_size = vocab_size
         self.pad_token_id = pad_token_id
