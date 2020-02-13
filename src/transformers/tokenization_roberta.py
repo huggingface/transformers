@@ -208,8 +208,3 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         self.tokenizer._tokenizer.post_processor = RobertaProcessing(
             (sep_token, self.sep_token_id), (cls_token, self.cls_token_id)
         )
-
-        logger.warning(
-            "RobertaTokenizerFast has an issue when working on mask language modeling "
-            "where it introduces an extra encoded space before the mask token."
-        )
