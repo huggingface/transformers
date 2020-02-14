@@ -241,8 +241,8 @@ class BartHeadTests(unittest.TestCase):
             max_position_embeddings=48,
         )
         lm_model = BartForMaskedLM(config)
-        context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 82, 2],]).long()
-        summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 34, 26, 2],]).long()
+        context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long()
+        summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long()
         logits, enc_features = lm_model.forward(input_ids=context, decoder_input_ids=summary)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
@@ -264,11 +264,10 @@ class BartHeadTests(unittest.TestCase):
         lm_model = BartForMaskedLM(config)
         new_input_ids = lm_model.generate(input_ids)
         self.assertEqual(new_input_ids.shape, (input_ids.shape[0], 20))
-        # TODO(SS): fix the below in a separate PR
 
 
 class BartModelIntegrationTest(unittest.TestCase):
-    input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2],]).long()
+    input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]).long()
 
     @slow
     def test_inference_no_head(self):

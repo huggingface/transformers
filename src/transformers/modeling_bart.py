@@ -463,7 +463,12 @@ class DecoderLayer(nn.Module):
         # encoder_padding_mask = _combine_masks(encoder_padding_mask, )
         # combined_mask = _combine_masks(decoder_padding_mask, causal_lm_mask, new_shape)
         x, self_attn_weights = self.self_attn.forward(
-            query=x, key=y, value=y, past=past, need_weights=need_attn_weights, attn_mask=causal_lm_mask,
+            query=x,
+            key=y,
+            value=y,
+            past=past,
+            need_weights=need_attn_weights,
+            attn_mask=causal_lm_mask,
             key_padding_mask=decoder_padding_mask,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -478,7 +483,6 @@ class DecoderLayer(nn.Module):
             query=x,
             key=encoder_hidden_states,  # could be None
             value=encoder_hidden_states,
-
             key_padding_mask=encoder_padding_mask,
             past=past,
             static_kv=True,
