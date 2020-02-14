@@ -33,7 +33,7 @@ if is_torch_available():
         BartForSequenceClassification,
         BartConfig,
     )
-    from transformers.modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_MAP, shift_tokens_right, make_padding_mask
 
 
 @require_torch
@@ -265,6 +265,18 @@ class BartHeadTests(unittest.TestCase):
         new_input_ids = lm_model.generate(input_ids)
         self.assertEqual(new_input_ids.shape, (input_ids.shape[0], 20))
 
+    def test_shift_tokens_right(self):
+        input_ids = torch.Tensor(
+            [
+                [71, 82, 18, 33, 2, 1, 1],
+                [68, 34, 26, 58, 30, 82, 2],
+        ]).long()
+        shifted = shift_tokens_right(input_ids, 1)
+        n_pad_before = make_padding_mask(input_ids).float().sum()
+        n_pad_after = make_padding_mask(shifted).float().sum()
+        self.assertEqual(shifted.shape, input_ids.shape)
+        self.assertEqual(n_pad_after, n_pad_before-1)
+        self.assertTrue(torch.eq(shifted[:,0], 2).all())
 
 class BartModelIntegrationTest(unittest.TestCase):
     input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]).long()
