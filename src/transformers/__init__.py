@@ -101,6 +101,7 @@ from .pipelines import (
     PipelineDataFormat,
     QuestionAnsweringPipeline,
     TextClassificationPipeline,
+    TokenClassificationPipeline,
     pipeline,
 )
 from .tokenization_albert import AlbertTokenizer
