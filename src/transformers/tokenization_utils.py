@@ -941,6 +941,9 @@ class PreTrainedTokenizer(object):
             return_attention_mask: (optional) Set to False to avoid returning attention mask (default True)
             return_overflowing_tokens: (optional) Set to True to return overflowing token information (default False).
             return_special_tokens_mask: (optional) Set to True to return special tokens mask information (default False).
+            return_offsets_mapping: (optional) Set to True to return (char_start, char_end) for each token (default False).
+                If using Python's tokenizer, this method will raise NotImplementedError. This one is only available on
+                Rust-based tokenizers inheriting from PreTrainedTokenizerFast.
             **kwargs: passed to the `self.tokenize()` method
 
         Return:
@@ -979,7 +982,13 @@ class PreTrainedTokenizer(object):
                 )
 
         if return_offsets_mapping:
-            logger.warning("offset mapping is not available on Python tokenizers.")
+            raise NotImplementedError(
+                "return_offset_mapping is not available when using Python tokenizers."
+                "To use this feature, change your tokenizer to one deriving from "
+                "transformers.PreTrainedTokenizerFast."
+                "More information on available tokenizers at "
+                "https://github.com/huggingface/transformers/pull/2674"
+            )
 
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
@@ -1009,6 +1018,7 @@ class PreTrainedTokenizer(object):
         return_tensors=None,
         return_input_lengths=False,
         return_attention_masks=False,
+        return_offsets_mapping=False,
         **kwargs
     ):
         """
@@ -1033,8 +1043,21 @@ class PreTrainedTokenizer(object):
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
+            return_input_lengths: (optional) If set the resulting dictionary will include the length of each sample
+            return_attention_masks: (optional) Set to True to return the attention mask (default False)
+            return_offsets_mapping: (optional) Not available, should be set to False or it will throw NotImplementError
             **kwargs: passed to the `self.tokenize()` method
         """
+
+        if return_offsets_mapping:
+            raise NotImplementedError(
+                "return_offset_mapping is not available when using Python tokenizers."
+                "To use this feature, change your tokenizer to one deriving from "
+                "transformers.PreTrainedTokenizerFast."
+                "More information on available tokenizers at "
+                "https://github.com/huggingface/transformers/pull/2674"
+            )
+
         batch_outputs = {}
         for ids_or_pair_ids in batch_text_or_text_pairs:
             if isinstance(ids_or_pair_ids, (list, tuple)):
