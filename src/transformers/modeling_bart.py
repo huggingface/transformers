@@ -461,7 +461,7 @@ class DecoderLayer(nn.Module):
         src_len = encoder_hidden_states.size(0)
         new_shape = (bsz, tgt_len, src_len)
         # encoder_padding_mask = _combine_masks(encoder_padding_mask, )
-        combined_mask = _combine_masks(decoder_padding_mask, causal_lm_mask, new_shape)
+        # combined_mask = _combine_masks(decoder_padding_mask, causal_lm_mask, new_shape)
         x, self_attn_weights = self.self_attn.forward(
             query=x, key=y, value=y, past=past, need_weights=need_attn_weights, attn_mask=causal_lm_mask,
             key_padding_mask=decoder_padding_mask,

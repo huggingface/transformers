@@ -180,7 +180,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class BartHeadTests(unittest.TestCase):
-    batch_size = 13
+
     vocab_size = 99
     input_ids = torch.Tensor(
         [
@@ -199,8 +199,9 @@ class BartHeadTests(unittest.TestCase):
             [70, 70, 50, 9, 28, 0, 2],
         ]
     ).long()
+    batch_size = input_ids.shape[0]
 
-    def test_forward(self):
+    def test_lm_forward(self):
 
         decoder_lm_labels = ids_tensor([self.batch_size, self.input_ids.shape[1]], self.vocab_size)
 
@@ -222,10 +223,29 @@ class BartHeadTests(unittest.TestCase):
         self.assertEqual(logits.shape, expected_shape)
 
         lm_model = BartForMaskedLM(config)
-        loss, logits, enc_features = lm_model(input_ids=self.input_ids, lm_labels=decoder_lm_labels)
+        loss, logits, enc_features = lm_model.forward(input_ids=self.input_ids, lm_labels=decoder_lm_labels)
         expected_shape = (self.batch_size, self.input_ids.shape[1], config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
         self.assertIsInstance(loss.item(), float)
+
+    def test_lm_uneven_forward(self):
+        config = BartConfig(
+            vocab_size=self.vocab_size,
+            d_model=24,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_ffn_dim=32,
+            decoder_ffn_dim=32,
+            max_position_embeddings=48,
+        )
+        lm_model = BartForMaskedLM(config)
+        context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 82, 2],]).long()
+        summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 34, 26, 2],]).long()
+        logits, enc_features = lm_model.forward(input_ids=context, decoder_input_ids=summary)
+        expected_shape = (*summary.shape, config.vocab_size)
+        self.assertEqual(logits.shape, expected_shape)
 
     def test_generate(self):
         input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long()
