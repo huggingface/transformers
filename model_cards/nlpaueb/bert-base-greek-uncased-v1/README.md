@@ -1,3 +1,7 @@
+---
+language: greek
+---
+
 # GreekBERT
 
 A Greek version of BERT pre-trained language model.
@@ -17,6 +21,14 @@ Future release will also include:
 
 * The entire corpus of Greek legislation, as published by the [National Publication Office](http://www.et.gr),  
 * The entire corpus of EU legislation (Greek translation), as published in [Eur-Lex](https://eur-lex.europa.eu/homepage.html?locale=en).
+
+## Pre-training details
+
+* We trained BERT using the official code provided in Google BERT's github repository (https://github.com/google-research/bert). We then used [Hugging Face](https://huggingface.co)'s [Transformers](https://github.com/huggingface/transformers) conversion script to convert the TF checkpoint and vocabulary in the desirable format in order to be able to load the model in two lines of code for both PyTorch and TF2 users.
+* We released a model similar to the English `bert-base-uncased` model (12-layer, 768-hidden, 12-heads, 110M parameters).
+* We chose to follow the same training set-up: 1 million training steps with batches of 256 sequences of length 512 with an initial learning rate 1e-4.
+* We were able to use a single Google Cloud TPU v3-8 provided for free from [TensorFlow Research Cloud (TFRC)](https://www.tensorflow.org/tfrc), while also utilizing [GCP research credits](https://edu.google.com/programs/credits/research). Huge thanks to both Google programs for supporting us!
+
 
 ## Requirements
 
@@ -54,6 +66,10 @@ from transformers import AutoTokenizer, AutoModel
 tokenizer = AutoTokenizer.from_pretrained("nlpaueb/bert-base-greek-uncased-v1")
 model = AutoModel.from_pretrained("nlpaueb/bert-base-greek-uncased-v1")
 ```
+
+## Evaluation on downstream tasks
+
+TBA
 
 ## Author
 
