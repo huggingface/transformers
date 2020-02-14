@@ -1,5 +1,6 @@
 ---
 language: greek
+thumbnail: https://github.com/nlpaueb/GreekBERT/raw/master/greek-bert-logo.png
 ---
 
 # GreekBERT
