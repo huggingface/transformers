@@ -463,13 +463,8 @@ class DecoderLayer(nn.Module):
         # encoder_padding_mask = _combine_masks(encoder_padding_mask, )
         combined_mask = _combine_masks(decoder_padding_mask, causal_lm_mask, new_shape)
         x, self_attn_weights = self.self_attn.forward(
-            query=x,
-            key=y,
-            value=y,
+            query=x, key=y, value=y, past=past, need_weights=need_attn_weights, attn_mask=causal_lm_mask,
             key_padding_mask=decoder_padding_mask,
-            past=past,
-            need_weights=need_attn_weights,
-            attn_mask=combined_mask,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -479,11 +474,11 @@ class DecoderLayer(nn.Module):
         if prev_attn_state is not None:
             saved_state = prev_attn_state
             self.encoder_attn._update_layer_cache(past, saved_state)
-
         x, encoder_attn_weights = self.encoder_attn.forward(
             query=x,
             key=encoder_hidden_states,  # could be None
             value=encoder_hidden_states,
+
             key_padding_mask=encoder_padding_mask,
             past=past,
             static_kv=True,
@@ -633,9 +628,6 @@ class BartDecoder(nn.Module):
         return self._future_mask[:dim, :dim]
 
 
-
-
-
 class SelfAttention(nn.Module):
     """Multi-headed attention from "Attention Is All You Need"""
 
@@ -746,7 +738,7 @@ class SelfAttention(nn.Module):
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask.unsqueeze(1)
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
@@ -861,7 +853,7 @@ def _combine_masks(key_padding_mask, attn_mask, targ_size):
     if attn_mask is not None:  # (tgt_len, src_len) -> targ_size
         _check_shapes(attn_mask.shape, targ_size[-2:])
         b = attn_mask.unsqueeze(0).expand(*targ_size)
-    return a + b
+    return (a + b).unsqueeze(1)
 
 
 class BartClassificationHead(nn.Module):
