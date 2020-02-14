@@ -32,7 +32,7 @@ Future release will also include:
 
 ## Requirements
 
-We published `bert-base-greek-uncased-v1` as part of [Hugging Face](https://huggingface.co)'s [Transformers](https://github.com/huggingface/transformers) repository. So, you need to install transfomers library through pip along with PyTorch or Tensorflow 2.
+We published `bert-base-greek-uncased-v1` as part of [Hugging Face](https://huggingface.co)'s [Transformers](https://github.com/huggingface/transformers) repository. So, you need to install the transfomers library through pip along with PyTorch or Tensorflow 2.
 
 ```
 pip install transfomers
@@ -41,7 +41,7 @@ pip install (torch|tensorflow)
 
 ## Pre-process text (Deaccent - Lower)
 
-In order to use `bert-base-greek-uncased-v1`, you have to pre-process texts in order to lowercase letters and remove all Greek diacritics.
+In order to use `bert-base-greek-uncased-v1`, you have to pre-process texts to lowercase letters and remove all Greek diacritics.
 
 ```python
 
@@ -51,7 +51,7 @@ def strip_accents_and_lowercase(s):
    return ''.join(c for c in unicodedata.normalize('NFD', s)
                   if unicodedata.category(c) != 'Mn').lower()
 
-accented_string = "Αυτή είναι η Ελληνίκη έκδοση του BERT."
+accented_string = "Αυτή είναι η Ελληνική έκδοση του BERT."
 unaccented_string = strip_accents_and_lowercase(accented_string)
 
 print(unaccented_string) # αυτη ειναι η ελληνικη εκδοση του bert.
