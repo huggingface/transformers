@@ -279,6 +279,7 @@ class BartModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
+        # Forces 1.6GB download from S3 for each model
         for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys()):
             model = BartModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)

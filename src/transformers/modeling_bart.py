@@ -259,14 +259,12 @@ class EncoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNorm(self.embed_dim)
 
-    def forward(self, x, encoder_padding_mask, attention_mask=None):
+    def forward(self, x, encoder_padding_mask):
         """
         Args:
             x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_padding_mask (ByteTensor): binary ByteTensor of shape
                 `(batch, src_len)` where padding elements are indicated by ``1``.
-            attention_mask (ByteTensor): binary input_ids of shape (seq_len, seq_len)
-                attn_mask[t_tgt, t_src] = 1 means when calculating embedding
             for t_tgt, t_src is excluded (or masked out), =0 means it is
             included in attention
 
@@ -274,8 +272,6 @@ class EncoderLayer(nn.Module):
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
         residual = x
-        # anything in original attention_mask = 1, becomes -1e8
-        # anything in original attention_mask = 0, becomes 0
         x, attn_weights = self.self_attn.forward(
             query=x, key=x, value=x, key_padding_mask=encoder_padding_mask, need_weights=self.output_attentions,
         )
@@ -336,7 +332,6 @@ class BartEncoder(nn.Module):
     def forward(
         self,
         input_ids=None,
-        inputs_embeds=None,
         # token_type_ids=None, attention_mask=None,
         **unused
     ):  # TODO(SS): this will need more
@@ -356,11 +351,9 @@ class BartEncoder(nn.Module):
                   hidden states of shape `(src_len, batch, embed_dim)`.
                   Only populated if *return_all_hiddens* is True.
         """
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-            embed_pos = self.embed_positions(input_ids)
-        else:
-            embed_pos = self.embed_positions(inputs_embeds)
+
+        inputs_embeds = self.embed_tokens(input_ids)
+        embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -369,14 +362,12 @@ class BartEncoder(nn.Module):
         x = x.transpose(0, 1)
 
         # compute padding mask
-        encoder_padding_mask = input_ids.eq(self.padding_idx)
-        if not encoder_padding_mask.any():
-            encoder_padding_mask = None
+        encoder_padding_mask = make_padding_mask(input_ids, padding_idx=self.padding_idx)
 
         encoder_states, all_attentions = [], []
 
         # encoder layers
-        for layer in self.layers:
+        for encoder_layer in self.layers:
 
             if self.output_hidden_states:
                 encoder_states.append(x)
@@ -385,7 +376,7 @@ class BartEncoder(nn.Module):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 attn = None
             else:
-                x, attn = layer.forward(x, encoder_padding_mask)
+                x, attn = encoder_layer.forward(x, encoder_padding_mask)
 
             if self.output_attentions:
                 all_attentions.append(attn)
@@ -400,6 +391,13 @@ class BartEncoder(nn.Module):
             encoder_states=encoder_states,  # List[T x B x C]
             encoder_attn=all_attentions,  # TODO(SS): document types
         )
+
+
+def make_padding_mask(input_ids, padding_idx=1):
+    encoder_padding_mask = input_ids.eq(padding_idx)
+    if not encoder_padding_mask.any():
+        encoder_padding_mask = None
+    return encoder_padding_mask
 
 
 class DecoderLayer(nn.Module):
@@ -428,10 +426,10 @@ class DecoderLayer(nn.Module):
     def forward(
         self,
         x,
-        encoder_hidden_states=None,
+        encoder_hidden_states,
         encoder_padding_mask=None,
         past=None,
-        decoder_attn_mask=None,
+        causal_lm_mask=None,
         decoder_padding_mask=None,
         need_attn_weights=False,
     ):
@@ -451,8 +449,6 @@ class DecoderLayer(nn.Module):
             prev_self_attn_state, prev_attn_state = (None, None)
         else:
             prev_self_attn_state, prev_attn_state = past["self_attn"], past["encoder_decoder_attn"]
-
-        print(f"PAST {len(past) if past else 0}")
         if past is None:
             past = {}
         residual = x
@@ -461,6 +457,11 @@ class DecoderLayer(nn.Module):
             self.self_attn._update_layer_cache(past, saved_state)
 
         y = x  # TODO(SS): why
+        tgt_len, bsz = x.size()[:2]
+        src_len = encoder_hidden_states.size(0)
+        new_shape = (bsz, tgt_len, src_len)
+        # encoder_padding_mask = _combine_masks(encoder_padding_mask, )
+        combined_mask = _combine_masks(decoder_padding_mask, causal_lm_mask, new_shape)
         x, self_attn_weights = self.self_attn.forward(
             query=x,
             key=y,
@@ -468,7 +469,7 @@ class DecoderLayer(nn.Module):
             key_padding_mask=decoder_padding_mask,
             past=past,
             need_weights=need_attn_weights,
-            attn_mask=decoder_attn_mask,
+            attn_mask=combined_mask,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -560,7 +561,6 @@ class BartDecoder(nn.Module):
                 - hidden states
                 - attentions
         """
-
         # embed positions
         positions = self.embed_positions(input_ids)
         if past is not None:
@@ -579,16 +579,13 @@ class BartDecoder(nn.Module):
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
 
-        decoder_padding_mask = None
-        if input_ids.eq(self.padding_idx).any():
-            decoder_padding_mask = input_ids.eq(self.padding_idx)
-
+        decoder_padding_mask = make_padding_mask(input_ids, self.padding_idx)
         # decoder layers
         all_hidden_states = ()
         all_self_attns = ()
         present = []
-        for i, layer in enumerate(self.layers):
-            layer  # type: DecoderLayer
+        for i, decoder_layer in enumerate(self.layers):
+            decoder_layer  # type: DecoderLayer
 
             if past is None and not full_context_alignment:
                 causal_lm_mask = self.buffered_future_mask(x)  # shape is seq_len, seq_len
@@ -599,12 +596,12 @@ class BartDecoder(nn.Module):
             dropout_probability = random.uniform(0, 1)
 
             if not self.training or (dropout_probability > self.layerdrop):
-                x, layer_self_attn, layer_past = layer.forward(
+                x, layer_self_attn, layer_past = decoder_layer.forward(
                     x,
                     encoder_state,
                     encoder_padding_mask,
                     past=past[i] if past is not None else None,
-                    decoder_attn_mask=causal_lm_mask,
+                    causal_lm_mask=causal_lm_mask,
                     decoder_padding_mask=decoder_padding_mask,
                     need_attn_weights=self.output_attentions,
                 )
@@ -636,78 +633,7 @@ class BartDecoder(nn.Module):
         return self._future_mask[:dim, :dim]
 
 
-# Helper Modules
 
-
-class BartClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    # This can trivially be shared with RobertaClassificationHead
-
-    def __init__(
-        self, input_dim, inner_dim, num_classes, pooler_dropout,
-    ):
-        super().__init__()
-        self.dense = nn.Linear(input_dim, inner_dim)
-        self.dropout = nn.Dropout(p=pooler_dropout)
-        self.out_proj = nn.Linear(inner_dim, num_classes)
-
-    def forward(self, x, **unused):
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = torch.tanh(x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
-
-
-class LearnedPositionalEmbedding(nn.Embedding):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    Padding ids are ignored by either offsetting based on padding_idx
-    or by setting padding_idx to None and ensuring that the appropriate
-    position ids are passed to the forward function.
-    """
-
-    def __init__(
-        self, num_embeddings: int, embedding_dim: int, padding_idx: int,
-    ):
-        # if padding_idx is specified then offset the embedding ids by
-        # this index and adjust num_embeddings appropriately
-        assert padding_idx is not None
-        num_embeddings += padding_idx + 1  # WHY?
-        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
-
-    def forward(self, input, past=None):
-        """Input is expected to be of size [bsz x seqlen]."""
-        if past is not None:
-            # positions is the same for every token when decoding a single step
-            # Without the int() cast, it doesn't work in some cases when exporting to ONNX
-            positions = input.data.new(1, 1).fill_(int(self.padding_idx + input.size(1)))
-        else:
-            positions = self.make_positions(input, self.padding_idx)
-        return super().forward(positions)
-
-    @staticmethod
-    def make_positions(input_ids, padding_idx: int):
-        """Replace non-padding symbols with their position numbers.
-
-        Position numbers begin at padding_idx+1. Padding symbols are ignored.
-        """
-        # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-        mask = input_ids.ne(padding_idx).int()
-        return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
-
-
-def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
-    if torch.cuda.is_available():
-        try:
-            from apex.normalization import FusedLayerNorm
-
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-        except ImportError:
-            pass
-    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
 class SelfAttention(nn.Module):
@@ -820,8 +746,8 @@ class SelfAttention(nn.Module):
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
-            attn_mask = attn_mask.unsqueeze(0)
-            attn_weights += attn_mask
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask.unsqueeze(1)
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
@@ -830,9 +756,9 @@ class SelfAttention(nn.Module):
 
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.masked_fill(
-                key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool), float("-inf")
-            )
+
+            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool)
+            attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
         attn_weights_float = F.softmax(attn_weights, dim=-1, dtype=torch.float32)
         attn_weights = attn_weights_float.type_as(attn_weights)
@@ -915,6 +841,98 @@ class SelfAttention(nn.Module):
         self, layer_cache: Dict[str, Dict[str, Optional[Tensor]]], new_entry: Dict[str, Optional[Tensor]],
     ):
         layer_cache[self.attn_key] = new_entry
+
+
+# Helper Modules
+def _check_shapes(shape_1, shape2):
+    if shape_1 != shape2:
+        raise AssertionError("shape mismatch: {} != {}".format(shape_1, shape2))
+
+
+def _combine_masks(key_padding_mask, attn_mask, targ_size):
+    # targ_size = (bsz, tgt_len, src_len)
+    a = torch.zeros(targ_size)
+    b = torch.zeros(targ_size)
+    if key_padding_mask is not None:  # (bsz, tgt_len) -> targ_size
+        _check_shapes(key_padding_mask.shape, targ_size[:2])
+        reshaped = key_padding_mask.unsqueeze(2).expand(*targ_size)
+        a[reshaped] = 1e-8
+
+    if attn_mask is not None:  # (tgt_len, src_len) -> targ_size
+        _check_shapes(attn_mask.shape, targ_size[-2:])
+        b = attn_mask.unsqueeze(0).expand(*targ_size)
+    return a + b
+
+
+class BartClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    # This can trivially be shared with RobertaClassificationHead
+
+    def __init__(
+        self, input_dim, inner_dim, num_classes, pooler_dropout,
+    ):
+        super().__init__()
+        self.dense = nn.Linear(input_dim, inner_dim)
+        self.dropout = nn.Dropout(p=pooler_dropout)
+        self.out_proj = nn.Linear(inner_dim, num_classes)
+
+    def forward(self, x, **unused):
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = torch.tanh(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+        return x
+
+
+class LearnedPositionalEmbedding(nn.Embedding):
+    """
+    This module learns positional embeddings up to a fixed maximum size.
+    Padding ids are ignored by either offsetting based on padding_idx
+    or by setting padding_idx to None and ensuring that the appropriate
+    position ids are passed to the forward function.
+    """
+
+    def __init__(
+        self, num_embeddings: int, embedding_dim: int, padding_idx: int,
+    ):
+        # if padding_idx is specified then offset the embedding ids by
+        # this index and adjust num_embeddings appropriately
+        assert padding_idx is not None
+        num_embeddings += padding_idx + 1  # WHY?
+        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+
+    def forward(self, input, past=None):
+        """Input is expected to be of size [bsz x seqlen]."""
+        if past is not None:
+            # positions is the same for every token when decoding a single step
+            # Without the int() cast, it doesn't work in some cases when exporting to ONNX
+            positions = input.data.new(1, 1).fill_(int(self.padding_idx + input.size(1)))
+        else:
+            positions = self.make_positions(input, self.padding_idx)
+        return super().forward(positions)
+
+    @staticmethod
+    def make_positions(input_ids, padding_idx: int):
+        """Replace non-padding symbols with their position numbers.
+
+        Position numbers begin at padding_idx+1. Padding symbols are ignored.
+        """
+        # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
+        mask = input_ids.ne(padding_idx).int()
+        return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
+
+
+def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
+    if torch.cuda.is_available():
+        try:
+            from apex.normalization import FusedLayerNorm
+
+            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
+        except ImportError:
+            pass
+    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
 def fill_with_neg_inf(t):
