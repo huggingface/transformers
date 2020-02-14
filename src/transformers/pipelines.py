@@ -649,6 +649,9 @@ class NerPipeline(Pipeline):
         return answers
 
 
+TokenClassificationPipeline = NerPipeline
+
+
 class QuestionAnsweringArgumentHandler(ArgumentHandler):
     """
     QuestionAnsweringPipeline requires the user to provide multiple arguments (i.e. question & context) to be mapped
