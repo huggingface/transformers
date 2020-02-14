@@ -538,7 +538,7 @@ class BartDecoder(nn.Module):
         self.layernorm_embedding = LayerNorm(config.d_model)
 
     def forward(
-        self, input_ids, encoder_state, encoder_padding_mask, past=None, full_context_alignment=False, **unused
+        self, input_ids, encoder_state, encoder_padding_mask, past=None, no_causal_mask=False, **unused
     ):
         """
         Includes several features from "Jointly Learning to Align and
@@ -551,8 +551,7 @@ class BartDecoder(nn.Module):
             encoder_hidden_states (optional): output from the encoder, used for
                 encoder-side attention
             past (dict): dictionary used for storing state during generation
-            full_context_alignment (bool, optional): don't apply
-                auto-regressive mask to self-attention (default: False).
+            no_causal_mask (bool, default False): don't apply auto-regressive mask to self-attention (default: False)
 
         Returns:
             tuple:
@@ -586,7 +585,7 @@ class BartDecoder(nn.Module):
         for i, decoder_layer in enumerate(self.layers):
             decoder_layer  # type: DecoderLayer
 
-            if past is None and not full_context_alignment:
+            if past is None and not no_causal_mask:
                 causal_lm_mask = self.buffered_future_mask(x)  # shape is seq_len, seq_len
             else:
                 causal_lm_mask = None
