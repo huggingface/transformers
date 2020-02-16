@@ -33,7 +33,13 @@ if is_torch_available():
         BartForSequenceClassification,
         BartConfig,
     )
-    from transformers.modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_MAP, shift_tokens_right, make_padding_mask
+    from transformers.modeling_bart import (
+        BART_PRETRAINED_MODEL_ARCHIVE_MAP,
+        shift_tokens_right,
+        make_padding_mask,
+        prepare_bart_inputs,
+        prepare_barts_input_dict,
+    )
 
 
 @require_torch
@@ -68,7 +74,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             self.max_position_embeddings = 12
             torch.manual_seed(0)
 
-        def prepare_config_and_inputs(self):
+        def prepare_config_and_inputs(self, return_inputs_dict=False):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3,)
             input_ids[:, -1] = 2  # Eos Token
 
@@ -91,41 +97,35 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             token_labels = None
             choice_labels = None
             token_type_ids = None
+            attention_mask, decoder_input_ids, decoder_attn_mask = prepare_bart_inputs(config, input_ids)
             decoder_lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            return (
-                config,
-                input_ids,
-                token_type_ids,
-                input_mask,
-                sequence_labels,
-                token_labels,
-                choice_labels,
-                decoder_lm_labels,
-            )
+            inputs_dict = {
+                # "input_ids": input_ids,
+                "token_type_ids": token_type_ids,
+                "attention_mask": input_mask,
+                "input_ids": input_ids,
+                "decoder_input_ids": decoder_input_ids,
+                "decoder_attention_mask": decoder_attn_mask
+                # "lm_labels": decoder_lm_labels,
+            }
+            if return_inputs_dict:
+                return config, inputs_dict
+            else:
+                return (
+                    config,
+                    input_ids,
+                    token_type_ids,
+                    attention_mask,
+                    decoder_input_ids,
+                    decoder_attn_mask,
+                    sequence_labels,
+                    token_labels,
+                    choice_labels,
+                    decoder_lm_labels,
+                )
 
         def prepare_config_and_inputs_for_common(self):
-            config_and_inputs = self.prepare_config_and_inputs()
-            (
-                config,
-                input_ids,
-                token_type_ids,
-                input_mask,
-                sequence_labels,
-                token_labels,
-                choice_labels,
-                decoder_lm_labels,
-            ) = config_and_inputs
-            return (
-                config,
-                {
-                    # "input_ids": input_ids,
-                    "token_type_ids": token_type_ids,
-                    "attention_mask": input_mask,
-                    "input_ids": input_ids,
-                    # "decoder_input_ids": input_ids,
-                    # "lm_labels": decoder_lm_labels,
-                },
-            )
+            return self.prepare_config_and_inputs(return_inputs_dict=True)
 
         def check_loss_output(self, result):
             self.parent.assertListEqual(list(result["loss"].size()), [])
@@ -138,7 +138,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_model(self):
-        (config, input_ids, token_type_ids, input_mask, *unused) = self.model_tester.prepare_config_and_inputs()
+        # (config, input_ids, token_type_ids, input_mask, *unused) = \
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs(return_inputs_dict=True)
 
         model = BartModel(config)
         model.to(torch_device)
@@ -155,10 +156,11 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         _check_var(model.encoder.layers[0].fc1)
         _check_var(model.encoder.embed_positions)
 
-        decoder_features_with_mask, _ = model.forward(
-            input_ids=input_ids, attention_mask=input_mask
-        )  # check that attention_mask doesnt break or something
-        decoder_features, enc_features = model.forward(input_ids=input_ids)
+        decoder_features_with_mask = model.forward(**inputs_dict)[
+            0
+        ]  # check that attention_mask doesnt break or something
+        inputs_dict.pop("decoder_attention_mask")
+        decoder_features = model.forward(**inputs_dict)[0]
         self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
         self.assertEqual(
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
@@ -219,13 +221,15 @@ class BartHeadTests(unittest.TestCase):
             max_position_embeddings=48,
         )
         model = BartForSequenceClassification(config)
-        outputs = model(input_ids=self.input_ids)
+        outputs = model.forward(input_ids=self.input_ids, decoder_input_ids=self.input_ids)
         logits = outputs[0]
         expected_shape = torch.Size((self.batch_size, config.num_labels))
         self.assertEqual(logits.shape, expected_shape)
 
         lm_model = BartForMaskedLM(config)
-        loss, logits, enc_features = lm_model.forward(input_ids=self.input_ids, lm_labels=decoder_lm_labels)
+        loss, logits, enc_features = lm_model.forward(
+            input_ids=self.input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=self.input_ids
+        )
         expected_shape = (self.batch_size, self.input_ids.shape[1], config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
         self.assertIsInstance(loss.item(), float)
@@ -283,8 +287,9 @@ class BartModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = BartModel.from_pretrained("bart-large")
+        inputs_dict = prepare_barts_input_dict(model.config, self.input_ids)
         with torch.no_grad():
-            output = model.forward(input_ids=self.input_ids)[0]
+            output = model.forward(**inputs_dict)[0]
         expected_shape = torch.Size((1, 11, 1024))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.Tensor(
@@ -297,10 +302,12 @@ class BartModelIntegrationTest(unittest.TestCase):
 
         example_b = [0, 31414, 232, 328, 740, 1140, 69, 46078, 1588, 2, 1]
         input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2], example_b]).long()
+
         model = AutoModelForSequenceClassification.from_pretrained("bart-large-mnli")  # eval called in from_pre
+        inputs_dict = prepare_barts_input_dict(model.config, input_ids)
         # Test that model hasn't changed
         with torch.no_grad():
-            batch_of_logits = model.forward(input_ids=input_ids)[0]
+            batch_of_logits = model.forward(**inputs_dict)[0]
 
         expected_shape = torch.Size((2, 3))
         self.assertEqual(batch_of_logits.shape, expected_shape)
@@ -308,8 +315,9 @@ class BartModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(batch_of_logits[0], expected_slice, atol=1e-3))
         # Test that padding does not change results
         input_ids_no_pad = torch.Tensor([example_b[:-1]]).long()
+        inputs_dict = prepare_barts_input_dict(model.config, input_ids=input_ids_no_pad)
         with torch.no_grad():
-            logits2 = model.forward(input_ids=input_ids_no_pad)[0]
+            logits2 = model.forward(**inputs_dict)[0]
         self.assertTrue(torch.allclose(batch_of_logits[1], logits2, atol=1e-3))
 
     @slow
