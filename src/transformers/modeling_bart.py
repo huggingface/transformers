@@ -35,9 +35,7 @@ BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/pytorch_model.bin",
 }
 
-
-BART_START_DOCSTRING = r"""  TODO(SS): FIXME"""
-
+from .docs_bart import BART_START_DOCSTRING
 
 class PretrainedBartModel(PreTrainedModel):
     config_class = BartConfig
@@ -116,10 +114,11 @@ def shift_tokens_right(input_ids, pad_token_id):
 
 
 def make_padding_mask(input_ids, padding_idx=1):
-    encoder_padding_mask = input_ids.eq(padding_idx)
-    if not encoder_padding_mask.any():
-        encoder_padding_mask = None
-    return encoder_padding_mask
+    """True for pad tokens"""
+    padding_mask = input_ids.eq(padding_idx)
+    if not padding_mask.any():
+        padding_mask = None
+    return padding_mask
 
 
 # Helper Modules
@@ -789,6 +788,17 @@ class BartModel(PretrainedBartModel):
     def get_output_embeddings(self):
         return _make_linear_from_emb(self.shared)
 
+    def prepare_inputs(self, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attn_mask=None, ):
+        """Prepare masks that ignore padding tokens for both encoder and decoder and a causal lm mask for the decoder if none are provided.
+        This mimics the default behavior in fairseq. To override it pass correctly shaped masks full"""
+        if attention_mask is None:  # ignore pad tokens in input_ids
+            attention_mask = make_padding_mask(input_ids, padding_idx=self.config.pad_token_id)
+        decoder_input_ids, decoder_attn_mask = self.prepare_decoder_inputs(
+            input_ids, decoder_input_ids, decoder_attn_mask, self.config.pad_token_id
+        )
+        # decoder_attn_mask.shape =  (bsz, 1, tgt_len, tgt_len)
+        return attention_mask, decoder_input_ids, decoder_attn_mask
+
     def forward(
         self,
         input_ids,
@@ -813,19 +823,13 @@ class BartModel(PretrainedBartModel):
         Returns:
 
         """
-        if attention_mask is None:  # ignore pad tokens in input_ids
-            attention_mask = make_padding_mask(input_ids, padding_idx=self.config.pad_token_id)
-
+        attention_mask, decoder_input_ids, decoder_attn_mask = self.prepare_inputs(
+            input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, decoder_attn_mask=decoder_attn_mask)
         if encoder_outputs is None:
             # TODO(SS): make this caching more usable for generate workflow
             #   Currently requires a custom type and need to raise if config.output_attn
             encoder_outputs = self.encoder.forward(input_ids=input_ids, attention_mask=attention_mask)
         assert isinstance(encoder_outputs, tuple)
-
-        decoder_input_ids, decoder_attn_mask = self.prepare_decoder_inputs(
-            input_ids, decoder_input_ids, decoder_attn_mask
-        )
-        # decoder_attn_mask.shape =  (bsz, 1, tgt_len, tgt_len)
         # dec_features, past, dec_hidden, dec_attn
         decoder_outputs = self.decoder.forward(
             decoder_input_ids, encoder_outputs[0], attention_mask, decoder_attn_mask,
@@ -836,9 +840,9 @@ class BartModel(PretrainedBartModel):
         encoder_outputs: tuple = _filter_out_falsey_values(encoder_outputs)
         return decoder_outputs + encoder_outputs
 
-    def prepare_decoder_inputs(self, input_ids, decoder_input_ids, decoder_attn_mask):
+    def prepare_decoder_inputs(self, input_ids, decoder_input_ids, decoder_attn_mask, pad_token_id):
         if decoder_input_ids is None:
-            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
+            decoder_input_ids = shift_tokens_right(input_ids, pad_token_id)
         if decoder_attn_mask is None:
             decoder_attn_mask = self.decoder.make_attn_mask(decoder_input_ids, not self.config.output_past)
         return decoder_input_ids, decoder_attn_mask
