@@ -64,12 +64,12 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 
 CONFIG_MAPPING = OrderedDict(
     [
-        ("bart", BartConfig,),
         ("t5", T5Config,),
         ("distilbert", DistilBertConfig,),
         ("albert", AlbertConfig,),
         ("camembert", CamembertConfig,),
         ("xlm-roberta", XLMRobertaConfig,),
+        ("bart", BartConfig,),
         ("roberta", RobertaConfig,),
         ("flaubert", FlaubertConfig,),
         ("bert", BertConfig,),
