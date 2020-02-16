@@ -840,7 +840,7 @@ class PreTrainedTokenizer(object):
         **kwargs
     ):
         """
-        Returns a dictionary containing the encoded sequence or sequence pair and additional informations:
+        Returns a dictionary containing the encoded sequence or sequence pair and additional information:
         the mask for sequence classification and the overflowing elements if a ``max_length`` is specified.
 
         Args:
