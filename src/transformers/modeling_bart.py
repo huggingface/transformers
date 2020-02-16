@@ -58,8 +58,25 @@ class PretrainedBartModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    # TODO(SS): def prepare_inputs_for_generation(self, input_ids, **kwargs):
 
-# Public API
+    @property
+    def dummy_inputs(self):
+        pad_token = 1
+        input_ids = torch.Tensor(
+            [
+                [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2],
+                [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 2, pad_token],
+            ]
+        ).long()
+        decoder_attn_mask, decoder_input_ids = self.prepare_decoder_inputs(None, None, input_ids)
+        dummy_inputs = {
+            "decoder_input_ids": decoder_input_ids,
+            "attention_mask": make_padding_mask(input_ids, padding_idx=1),
+            "input_ids": input_ids,
+            "decoder_attention_mask": decoder_attn_mask,
+        }
+        return dummy_inputs
 
 
 def _make_linear_from_emb(emb):
@@ -69,172 +86,25 @@ def _make_linear_from_emb(emb):
     return lin_layer
 
 
-class BartForMaskedLM(PretrainedBartModel):
-    base_model_prefix = "model"
-
-    def __init__(self, config: BartConfig):
-        super().__init__(config)
-        self.model = BartModel(config)
-        self.lm_head = _make_linear_from_emb(self.model.shared)
-
-    def forward(
-        self,
-        input_ids,
-        attention_mask=None,
-        decoder_input_ids=None,
-        encoder_hidden_states=None,
-        lm_labels=None,
-        **unused
-    ):
-        decoder_outputs, encoder_outputs = self.model.forward(
-            input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            return_for_head=True,
-        )
-        lm_logits = self.lm_head.forward(decoder_outputs[0])
-        decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
-        if lm_labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), lm_labels.view(-1))
-            decoder_outputs = (masked_lm_loss,) + decoder_outputs
-
-        return decoder_outputs + encoder_outputs
-
-    @staticmethod
-    def prepare_inputs_for_generation(input_ids, past, **kwargs):
-        return {"input_ids": input_ids, "decoder_past": past}
-
-    def get_output_embeddings(self):
-        return self.lm_head
+# Helper Functions, mostly for making masks
+def _check_shapes(shape_1, shape2):
+    if shape_1 != shape2:
+        raise AssertionError("shape mismatch: {} != {}".format(shape_1, shape2))
 
 
-class BartForSequenceClassification(PretrainedBartModel):
-    eos_token = 2
+def _combine_masks(key_padding_mask, attn_mask, targ_size):
+    # targ_size = (bsz, tgt_len, src_len)
+    a = torch.zeros(targ_size)
+    b = torch.zeros(targ_size)
+    if key_padding_mask is not None:  # (bsz, tgt_len) -> targ_size
+        _check_shapes(key_padding_mask.shape, targ_size[:2])
+        reshaped = key_padding_mask.unsqueeze(2).expand(*targ_size)
+        a[reshaped] = 1e-8
 
-    def __init__(self, config: BartConfig, **kwargs):
-        super().__init__(config, **kwargs)
-        self.model = BartModel(config)
-        self.classification_head = BartClassificationHead(
-            config.d_model, config.d_model, config.num_labels, config.classif_dropout,
-        )
-        self.loss_fn = nn.CrossEntropyLoss()
-
-    def forward(
-        self, input_ids, attention_mask=None, decoder_input_ids=None, encoder_hidden_states=None, labels=None, **unused
-    ):
-        decoder_outputs, encoder_outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            encoder_hidden_states=encoder_hidden_states,
-            return_for_head=True,
-        )
-        x = decoder_outputs[0]  # last hidden state
-        eos_mask = input_ids.eq(self.eos_token)
-        if len(torch.unique(eos_mask.sum(1))) > 1:
-            raise ValueError("All examples must have the same number of <eos> tokens.")
-        sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
-        logits = self.classification_head(sentence_representation)
-        # Prepend logits
-        decoder_outputs = (logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
-        if labels is not None:  # prepend loss to output
-            loss = self.loss_fn(logits.view(-1, self.num_labels), labels.view(-1))
-            decoder_outputs = (loss,) + decoder_outputs
-
-        return decoder_outputs + encoder_outputs
-
-
-@add_start_docstrings(
-    "The bare BART Model model outputting raw hidden-states without any specific head on top.",
-    BART_START_DOCSTRING,
-    "FIXME(SS)",
-)
-class BartModel(PretrainedBartModel):
-    """FIXME(SS)"""
-
-    def __init__(self, config: BartConfig):  # should take config
-        super().__init__(config)
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
-
-        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
-
-        self.encoder = BartEncoder(config, self.shared)
-        self.decoder = BartDecoder(config, self.shared)
-
-        self.init_weights()
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, value):
-        self.shared = value
-
-    def get_output_embeddings(self):
-        return _make_linear_from_emb(self.shared)
-
-    def forward(
-        self,
-        input_ids,
-        attention_mask=None,
-        decoder_input_ids=None,
-        encoder_hidden_states=None,
-        decoder_attn_mask=None,
-        return_for_head=False,
-        **unused
-    ):
-        if encoder_hidden_states is None:
-            encoder_hidden_states: EncoderOut = self.encoder.forward(
-                input_ids=input_ids, attention_mask=attention_mask
-            )
-        if decoder_input_ids is None:
-            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
-        if decoder_attn_mask is None:
-            decoder_attn_mask = self.decoder.make_attn_mask(decoder_input_ids, not self.config.output_past)
-        dec_features, past, dec_hidden, dec_attn = self.decoder.forward(
-            decoder_input_ids,
-            encoder_hidden_states.encoder_hidden_states,
-            encoder_hidden_states.encoder_padding_mask,
-            decoder_attn_mask,
-        )
-        # Massage return types to conform to standard API
-        if return_for_head:  # split encoder and decoder outputs nicely
-            return (
-                _filter_out_nones(dec_features, past, dec_hidden, dec_attn),
-                _filter_out_nones(
-                    encoder_hidden_states.encoder_hidden_states,
-                    encoder_hidden_states.encoder_states,
-                    encoder_hidden_states.encoder_attn,
-                ),
-            )
-        if self.output_hidden_states and self.output_attentions:
-            return (
-                dec_features,
-                dec_hidden,
-                dec_attn,
-                encoder_hidden_states.encoder_hidden_states,
-                encoder_hidden_states.encoder_states,
-                encoder_hidden_states.encoder_attn,
-            )
-        elif self.output_hidden_states:
-            return (
-                dec_features,
-                dec_hidden,
-                encoder_hidden_states.encoder_hidden_states,
-                encoder_hidden_states.encoder_states,
-            )
-        elif self.output_attentions:
-            return (
-                dec_features,
-                dec_attn,
-                encoder_hidden_states.encoder_hidden_states,
-                encoder_hidden_states.encoder_attn,
-            )
-        else:
-            return (dec_features, encoder_hidden_states.encoder_hidden_states)
+    if attn_mask is not None:  # (tgt_len, src_len) -> targ_size
+        _check_shapes(attn_mask.shape, targ_size[-2:])
+        b = attn_mask.unsqueeze(0).expand(*targ_size)
+    return (a + b).unsqueeze(1)
 
 
 def shift_tokens_right(input_ids, pad_token_id):
@@ -246,7 +116,14 @@ def shift_tokens_right(input_ids, pad_token_id):
     return prev_output_tokens
 
 
-# Encoder and Decoder
+def make_padding_mask(input_ids, padding_idx=1):
+    encoder_padding_mask = input_ids.eq(padding_idx)
+    if not encoder_padding_mask.any():
+        encoder_padding_mask = None
+    return encoder_padding_mask
+
+
+# Helper Modules
 
 
 class EncoderLayer(nn.Module):
@@ -295,6 +172,7 @@ class EncoderLayer(nn.Module):
         return x, attn_weights
 
 
+# NamedTuple for manipulating encoder outputs
 EncoderOut = namedtuple(
     "TransformerEncoderOut",
     [
@@ -335,18 +213,12 @@ class BartEncoder(nn.Module):
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim)
 
-    def forward(
-        self,
-        input_ids=None,
-        # token_type_ids=None, attention_mask=None,
-        **unused
-    ):  # TODO(SS): this will need more
+    def forward(self, input_ids=None, encoder_padding_mask=None, **unused):  # TODO(SS): this will need more
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
                 `(batch, src_len)`
-            src_lengths (torch.LongTensor): lengths of each source sentence of
-                shape `(batch)`
+            encoder_padding_mask (torch.LongTensor):
         Returns:
             namedtuple:
                 - **encoder_hidden_states** (Tensor): the last encoder layer's output of
@@ -366,9 +238,6 @@ class BartEncoder(nn.Module):
 
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
-
-        # compute padding mask
-        encoder_padding_mask = make_padding_mask(input_ids, padding_idx=self.padding_idx)
 
         encoder_states, all_attentions = [], []
 
@@ -397,13 +266,6 @@ class BartEncoder(nn.Module):
             encoder_states=encoder_states,  # List[T x B x C]
             encoder_attn=all_attentions,  # TODO(SS): document types
         )
-
-
-def make_padding_mask(input_ids, padding_idx=1):
-    encoder_padding_mask = input_ids.eq(padding_idx)
-    if not encoder_padding_mask.any():
-        encoder_padding_mask = None
-    return encoder_padding_mask
 
 
 class DecoderLayer(nn.Module):
@@ -838,27 +700,6 @@ class SelfAttention(nn.Module):
         layer_cache[self.attn_key] = new_entry
 
 
-# Helper Modules
-def _check_shapes(shape_1, shape2):
-    if shape_1 != shape2:
-        raise AssertionError("shape mismatch: {} != {}".format(shape_1, shape2))
-
-
-def _combine_masks(key_padding_mask, attn_mask, targ_size):
-    # targ_size = (bsz, tgt_len, src_len)
-    a = torch.zeros(targ_size)
-    b = torch.zeros(targ_size)
-    if key_padding_mask is not None:  # (bsz, tgt_len) -> targ_size
-        _check_shapes(key_padding_mask.shape, targ_size[:2])
-        reshaped = key_padding_mask.unsqueeze(2).expand(*targ_size)
-        a[reshaped] = 1e-8
-
-    if attn_mask is not None:  # (tgt_len, src_len) -> targ_size
-        _check_shapes(attn_mask.shape, targ_size[-2:])
-        b = attn_mask.unsqueeze(0).expand(*targ_size)
-    return (a + b).unsqueeze(1)
-
-
 class BartClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -935,5 +776,168 @@ def fill_with_neg_inf(t):
     return t.float().fill_(float("-inf")).type_as(t)
 
 
-def _filter_out_nones(*tup):
-    return tuple(x for x in tup if isinstance(x, torch.Tensor) or x)
+def _filter_out_falsey_values(*tup):
+    vals_to_keep = [x for x in tup if isinstance(x, torch.Tensor) or x]  # TODO(SS): just make a tuple?
+    return tuple(vals_to_keep)
+
+
+# Public API
+
+
+@add_start_docstrings(
+    "The bare BART Model model outputting raw hidden-states without any specific head on top.",
+    BART_START_DOCSTRING,
+    "FIXME(SS)",
+)
+class BartModel(PretrainedBartModel):
+    """FIXME(SS)"""
+
+    def __init__(self, config: BartConfig):
+        super().__init__(config)
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
+
+        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
+        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+
+        self.encoder = BartEncoder(config, self.shared)
+        self.decoder = BartDecoder(config, self.shared)
+
+        self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, value):
+        self.shared = value
+
+    def get_output_embeddings(self):
+        return _make_linear_from_emb(self.shared)
+
+    def forward(
+        self,
+        input_ids,
+        attention_mask=None,
+        decoder_input_ids=None,
+        encoder_hidden_states=None,
+        decoder_attn_mask=None,
+        return_for_head=False,
+        **unused  # TODO(SS): does fairseq have an equivalent to token_type_ids?
+    ):
+        if encoder_hidden_states is None:
+            # TODO(SS): make this caching more usable for generate workflow
+            #   Currently requires a custom type and need to raise if config.output_attn
+            if attention_mask is None:
+                attention_mask = make_padding_mask(input_ids, padding_idx=self.config.pad_token_id)
+            encoder_hidden_states: EncoderOut = self.encoder.forward(
+                input_ids=input_ids, encoder_padding_mask=attention_mask
+            )
+        assert isinstance(encoder_hidden_states, EncoderOut)
+
+        decoder_input_ids, decoder_attn_mask = self.prepare_decoder_inputs(
+            input_ids, decoder_input_ids, decoder_attn_mask
+        )
+        # decoder_attn_mask.shape =  (bsz, 1, tgt_len, tgt_len)
+        # dec_features, past, dec_hidden, dec_attn
+        decoder_outputs = self.decoder.forward(
+            decoder_input_ids,
+            encoder_hidden_states.encoder_hidden_states,
+            encoder_hidden_states.encoder_padding_mask,
+            decoder_attn_mask,
+        )
+        # Attention and hidden_states will be [] or None if they aren't needed
+        decoder_outputs: tuple = _filter_out_falsey_values(*decoder_outputs)
+        assert isinstance(decoder_outputs[0], torch.Tensor)
+        encoder_outputs: tuple = _filter_out_falsey_values(
+            encoder_hidden_states.encoder_hidden_states,
+            encoder_hidden_states.encoder_states,
+            encoder_hidden_states.encoder_attn,
+        )
+        if return_for_head:  # split encoder and decoder outputs nicely
+            return decoder_outputs, encoder_outputs
+        else:
+            return decoder_outputs + encoder_outputs
+
+    def prepare_decoder_inputs(self, input_ids, decoder_input_ids, decoder_attn_mask):
+        if decoder_input_ids is None:
+            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
+        if decoder_attn_mask is None:
+            decoder_attn_mask = self.decoder.make_attn_mask(decoder_input_ids, not self.config.output_past)
+        return decoder_input_ids, decoder_attn_mask
+
+
+class BartForMaskedLM(PretrainedBartModel):
+    base_model_prefix = "model"
+
+    def __init__(self, config: BartConfig):
+        super().__init__(config)
+        self.model = BartModel(config)
+        self.lm_head = _make_linear_from_emb(self.model.shared)
+
+    def forward(
+        self,
+        input_ids,
+        attention_mask=None,
+        decoder_input_ids=None,
+        encoder_hidden_states=None,
+        lm_labels=None,
+        **unused
+    ):
+        decoder_outputs, encoder_outputs = self.model.forward(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_hidden_states=encoder_hidden_states,
+            return_for_head=True,
+        )
+        lm_logits = self.lm_head.forward(decoder_outputs[0])
+        decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
+        if lm_labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), lm_labels.view(-1))
+            decoder_outputs = (masked_lm_loss,) + decoder_outputs
+
+        return decoder_outputs + encoder_outputs
+
+    @staticmethod
+    def prepare_inputs_for_generation(input_ids, past, **kwargs):
+        return {"input_ids": input_ids, "decoder_past": past}
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+
+class BartForSequenceClassification(PretrainedBartModel):
+    eos_token = 2
+
+    def __init__(self, config: BartConfig, **kwargs):
+        super().__init__(config, **kwargs)
+        self.model = BartModel(config)
+        self.classification_head = BartClassificationHead(
+            config.d_model, config.d_model, config.num_labels, config.classif_dropout,
+        )
+        self.loss_fn = nn.CrossEntropyLoss()
+
+    def forward(
+        self, input_ids, attention_mask=None, decoder_input_ids=None, encoder_hidden_states=None, labels=None, **unused
+    ):
+        decoder_outputs, encoder_outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_hidden_states=encoder_hidden_states,
+            return_for_head=True,
+        )
+        x = decoder_outputs[0]  # last hidden state
+        eos_mask = input_ids.eq(self.eos_token)
+        if len(torch.unique(eos_mask.sum(1))) > 1:
+            raise ValueError("All examples must have the same number of <eos> tokens.")
+        sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
+        logits = self.classification_head(sentence_representation)
+        # Prepend logits
+        decoder_outputs = (logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
+        if labels is not None:  # prepend loss to output
+            loss = self.loss_fn(logits.view(-1, self.num_labels), labels.view(-1))
+            decoder_outputs = (loss,) + decoder_outputs
+
+        return decoder_outputs + encoder_outputs
