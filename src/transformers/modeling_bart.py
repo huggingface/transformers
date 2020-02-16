@@ -24,7 +24,7 @@ from torch import Tensor, nn
 
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings
-from .modeling_utils import PreTrainedModel
+from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 
 
 logger = logging.getLogger(__name__)
@@ -731,18 +731,8 @@ class LearnedPositionalEmbedding(nn.Embedding):
             # Without the int() cast, it doesn't work in some cases when exporting to ONNX
             positions = input.data.new(1, 1).fill_(int(self.padding_idx + input.size(1)))
         else:
-            positions = self.make_positions(input, self.padding_idx)
+            positions = create_position_ids_from_input_ids(input, self.padding_idx)
         return super().forward(positions)
-
-    @staticmethod
-    def make_positions(input_ids, padding_idx: int):
-        """Replace non-padding symbols with their position numbers.
-
-        Position numbers begin at padding_idx+1. Padding symbols are ignored.
-        """
-        # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-        mask = input_ids.ne(padding_idx).int()
-        return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
 
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
@@ -866,8 +856,9 @@ class BartForMaskedLM(PretrainedBartModel):
         self,
         input_ids,
         attention_mask=None,
-        decoder_input_ids=None,
         encoder_hidden_states=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
         lm_labels=None,
         **unused
     ):
@@ -896,8 +887,6 @@ class BartForMaskedLM(PretrainedBartModel):
 
 
 class BartForSequenceClassification(PretrainedBartModel):
-    eos_token = 2
-
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = BartModel(config)
@@ -922,7 +911,7 @@ class BartForSequenceClassification(PretrainedBartModel):
             encoder_outputs=encoder_hidden_states,
         )
         x = outputs[0]  # last hidden state
-        eos_mask = input_ids.eq(self.eos_token)
+        eos_mask = input_ids.eq(self.config.eos_token_id)
         if len(torch.unique(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
         sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]

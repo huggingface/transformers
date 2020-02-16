@@ -40,6 +40,7 @@ class BartConfig(PretrainedConfig):
         activation_dropout=0.0,
         vocab_size=50265,
         pad_token_id=1,
+        eos_token_id=2,
         d_model=1024,
         encoder_ffn_dim=4096,
         encoder_layers=12,
@@ -62,6 +63,7 @@ class BartConfig(PretrainedConfig):
 
         self.vocab_size = vocab_size
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
+        self.eos_token_id = eos_token_id
 
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = self.num_hidden_layers = encoder_layers
