@@ -39,7 +39,7 @@ if is_torch_available():
 @require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BartModel, BartForMaskedLM) if is_torch_available() else ()
+    all_model_classes = (BartModel, BartForMaskedLM, BartForSequenceClassification) if is_torch_available() else ()
     is_encoder_decoder = True
     # TODO(SS): fix the below in a separate PR
     test_pruning = False
@@ -69,7 +69,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             torch.manual_seed(0)
 
         def prepare_config_and_inputs(self):
-            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3,)
+            input_ids[:, -1] = 2  # Eos Token
+
             input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
             config = BartConfig(

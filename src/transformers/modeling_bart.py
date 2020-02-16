@@ -893,6 +893,8 @@ class BartForSequenceClassification(PretrainedBartModel):
         self.classification_head = BartClassificationHead(
             config.d_model, config.d_model, config.num_labels, config.classif_dropout,
         )
+        self.model._init_weights(self.classification_head.dense)
+        self.model._init_weights(self.classification_head.out_proj)
 
     def forward(
         self,
