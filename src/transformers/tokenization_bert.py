@@ -232,8 +232,9 @@ class BertTokenizer(PreTrainedTokenizer):
         except ImportError:
             logger.warning("You need to install SentencePiece to use AlbertTokenizer: https://github.com/google/sentencepiece"
                            "pip install sentencepiece")
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(self.vocab_file)
+        if hasattr(self, 'vocab_file'):
+            self.sp_model = spm.SentencePieceProcessor()
+            self.sp_model.Load(self.vocab_file)
 
     def _tokenize(self, text):
         if self.spm_tokenize:

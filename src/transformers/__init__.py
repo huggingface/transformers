@@ -73,6 +73,7 @@ from .file_utils import (
     WEIGHTS_NAME,
     add_end_docstrings,
     add_start_docstrings,
+    add_start_docstrings_to_callable,
     cached_path,
     is_tf_available,
     is_torch_available,
@@ -243,6 +244,7 @@ if is_torch_available():
         AlbertForMaskedLM,
         AlbertForSequenceClassification,
         AlbertForQuestionAnswering,
+        AlbertForTokenClassification,
         load_tf_weights_in_albert,
         ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
