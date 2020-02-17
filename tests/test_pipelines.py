@@ -94,7 +94,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         for key in output_keys:
             self.assertIn(key, mono_result[0])
 
-        multi_result = nlp(valid_inputs)
+        multi_result = [nlp(input) for input in valid_inputs]
         self.assertIsInstance(multi_result, list)
         self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -129,7 +129,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
         for tokenizer, model, config in TF_NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model, config=config, tokenizer=tokenizer)
+            nlp = pipeline(task="ner", model=model, config=config, tokenizer=tokenizer, framework="tf")
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
     @require_torch
@@ -147,7 +147,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
         for tokenizer, model, config in TF_TEXT_CLASSIF_FINETUNED_MODELS:
-            nlp = pipeline(task="sentiment-analysis", model=model, config=config, tokenizer=tokenizer)
+            nlp = pipeline(task="sentiment-analysis", model=model, config=config, tokenizer=tokenizer, framework="tf")
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
     @require_torch
@@ -163,7 +163,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
         for tokenizer, model, config in TF_FEATURE_EXTRACT_FINETUNED_MODELS:
-            nlp = pipeline(task="feature-extraction", model=model, config=config, tokenizer=tokenizer)
+            nlp = pipeline(task="feature-extraction", model=model, config=config, tokenizer=tokenizer, framework="tf")
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
 
     @require_torch
@@ -176,14 +176,18 @@ class MonoColumnInputTestCase(unittest.TestCase):
         invalid_inputs = [None]
         expected_multi_result = [
             [
-                {"score": 0.008698059245944023, "sequence": "<s>My name is John</s>", "token": 610},
-                {"score": 0.007750614080578089, "sequence": "<s>My name is Chris</s>", "token": 1573},
+                {"sequence": "<s> My name is:</s>", "score": 0.009954338893294334, "token": 35},
+                {"sequence": "<s> My name is John</s>", "score": 0.0080940006300807, "token": 610},
             ],
             [
-                {"score": 0.2721288502216339, "sequence": "<s>The largest city in France is Paris</s>", "token": 2201},
                 {
-                    "score": 0.19764970242977142,
-                    "sequence": "<s>The largest city in France is Lyon</s>",
+                    "sequence": "<s> The largest city in France is Paris</s>",
+                    "score": 0.3185044229030609,
+                    "token": 2201,
+                },
+                {
+                    "sequence": "<s> The largest city in France is Lyon</s>",
+                    "score": 0.21112334728240967,
                     "token": 12790,
                 },
             ],
@@ -209,20 +213,24 @@ class MonoColumnInputTestCase(unittest.TestCase):
         invalid_inputs = [None]
         expected_multi_result = [
             [
-                {"score": 0.008698059245944023, "sequence": "<s>My name is John</s>", "token": 610},
-                {"score": 0.007750614080578089, "sequence": "<s>My name is Chris</s>", "token": 1573},
+                {"sequence": "<s> My name is:</s>", "score": 0.009954338893294334, "token": 35},
+                {"sequence": "<s> My name is John</s>", "score": 0.0080940006300807, "token": 610},
             ],
             [
-                {"score": 0.2721288502216339, "sequence": "<s>The largest city in France is Paris</s>", "token": 2201},
                 {
-                    "score": 0.19764970242977142,
-                    "sequence": "<s>The largest city in France is Lyon</s>",
+                    "sequence": "<s> The largest city in France is Paris</s>",
+                    "score": 0.3185044229030609,
+                    "token": 2201,
+                },
+                {
+                    "sequence": "<s> The largest city in France is Lyon</s>",
+                    "score": 0.21112334728240967,
                     "token": 12790,
                 },
             ],
         ]
         for tokenizer, model, config in TF_FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model, config=config, tokenizer=tokenizer, topk=2)
+            nlp = pipeline(task="fill-mask", model=model, config=config, tokenizer=tokenizer, framework="tf", topk=2)
             self._test_mono_column_pipeline(
                 nlp,
                 valid_inputs,
@@ -293,5 +301,5 @@ class MultiColumnInputTestCase(unittest.TestCase):
         ]
 
         for tokenizer, model, config in TF_QA_FINETUNED_MODELS:
-            nlp = pipeline(task="question-answering", model=model, config=config, tokenizer=tokenizer)
+            nlp = pipeline(task="question-answering", model=model, config=config, tokenizer=tokenizer, framework="tf")
             self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
