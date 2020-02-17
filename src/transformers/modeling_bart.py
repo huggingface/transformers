@@ -842,7 +842,7 @@ class BartModel(PretrainedBartModel):
             decoder_input_ids, encoder_outputs[0], attention_mask, decoder_attention_mask, past=past,
         )
         # Attention and hidden_states will be [] or None if they aren't needed
-        decoder_outputs: tuple = _filter_out_falsey_values(decoder_outputs)
+        decoder_outputs = _filter_out_falsey_values(decoder_outputs)  # type: tuple
         assert isinstance(decoder_outputs[0], torch.Tensor)
         encoder_outputs: tuple = _filter_out_falsey_values(encoder_outputs)
         return decoder_outputs + encoder_outputs

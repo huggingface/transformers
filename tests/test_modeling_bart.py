@@ -159,13 +159,14 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         decoder_features_with_mask = model.forward(**inputs_dict)[
             0
         ]  # check that attention_mask doesnt break or something
-        inputs_dict.pop("decoder_attention_mask")
+        mask = inputs_dict.pop("decoder_attention_mask")
         decoder_features = model.forward(**inputs_dict)[0]
         self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
         self.assertEqual(
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
         )
-        # self.assertTrue((decoder_features_with_mask == decoder_features).all().item())  # TODO(SS): BUG?
+        if mask.min().item() < -1e3:  # some tokens were masked
+            self.assertFalse((decoder_features_with_mask == decoder_features).all().item())
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -186,28 +187,27 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 class BartHeadTests(unittest.TestCase):
 
     vocab_size = 99
-    input_ids = torch.Tensor(
-        [
-            [71, 82, 18, 33, 46, 91, 2],
-            [68, 34, 26, 58, 30, 82, 2],
-            [5, 97, 17, 39, 94, 40, 2],
-            [76, 83, 94, 25, 70, 78, 2],
-            [87, 59, 41, 35, 48, 66, 2],
-            [55, 13, 16, 58, 5, 2, 1],  # note padding
-            [64, 27, 31, 51, 12, 75, 2],
-            [52, 64, 86, 17, 83, 39, 2],
-            [48, 61, 9, 24, 71, 82, 2],
-            [26, 1, 60, 48, 22, 13, 2],
-            [21, 5, 62, 28, 14, 76, 2],
-            [45, 98, 37, 86, 59, 48, 2],
-            [70, 70, 50, 9, 28, 0, 2],
-        ]
-    ).long()
-    batch_size = input_ids.shape[0]
 
     def test_lm_forward(self):
-
-        decoder_lm_labels = ids_tensor([self.batch_size, self.input_ids.shape[1]], self.vocab_size)
+        input_ids = torch.Tensor(
+            [
+                [71, 82, 18, 33, 46, 91, 2],
+                [68, 34, 26, 58, 30, 82, 2],
+                [5, 97, 17, 39, 94, 40, 2],
+                [76, 83, 94, 25, 70, 78, 2],
+                [87, 59, 41, 35, 48, 66, 2],
+                [55, 13, 16, 58, 5, 2, 1],  # note padding
+                [64, 27, 31, 51, 12, 75, 2],
+                [52, 64, 86, 17, 83, 39, 2],
+                [48, 61, 9, 24, 71, 82, 2],
+                [26, 1, 60, 48, 22, 13, 2],
+                [21, 5, 62, 28, 14, 76, 2],
+                [45, 98, 37, 86, 59, 48, 2],
+                [70, 70, 50, 9, 28, 0, 2],
+            ]
+        ).long()
+        batch_size = input_ids.shape[0]
+        decoder_lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size)
 
         config = BartConfig(
             vocab_size=self.vocab_size,
@@ -221,16 +221,16 @@ class BartHeadTests(unittest.TestCase):
             max_position_embeddings=48,
         )
         model = BartForSequenceClassification(config)
-        outputs = model.forward(input_ids=self.input_ids, decoder_input_ids=self.input_ids)
+        outputs = model.forward(input_ids=input_ids, decoder_input_ids=input_ids)
         logits = outputs[0]
-        expected_shape = torch.Size((self.batch_size, config.num_labels))
+        expected_shape = torch.Size((batch_size, config.num_labels))
         self.assertEqual(logits.shape, expected_shape)
 
         lm_model = BartForMaskedLM(config)
         loss, logits, enc_features = lm_model.forward(
-            input_ids=self.input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=self.input_ids
+            input_ids=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids
         )
-        expected_shape = (self.batch_size, self.input_ids.shape[1], config.vocab_size)
+        expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
         self.assertIsInstance(loss.item(), float)
 
