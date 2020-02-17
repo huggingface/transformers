@@ -1748,7 +1748,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             if return_tensors == "tf":
                 stack = tf.concat(stack, axis=0)
             elif return_tensors == "pt":
-                stack = torch.cat(stack, dim=0)
+                stack = torch.stack(stack, dim=0)
             elif not return_tensors and len(stack) == 1:
                 stack = stack[0]
 
