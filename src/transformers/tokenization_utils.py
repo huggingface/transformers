@@ -1691,6 +1691,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_offsets_mapping=False,
         **kwargs
     ):
+        # Needed if we have to return a tensor
+        pad_to_max_length = pad_to_max_length or (return_tensors is not None)
+
+        # Throw an error if we can pad because there is no padding token
+        if pad_to_max_length and self.pad_token_id is None:
+            raise ValueError("Unable to set proper padding strategy as the tokenizer does have padding token")
 
         # Set the truncation and padding strategy and restore the initial configuration
         with truncate_and_pad(
@@ -1698,8 +1704,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             max_length=max_length,
             stride=stride,
             strategy=truncation_strategy,
-            pad_to_max_length=pad_to_max_length
-            or return_tensors,  # Need to pad to the max seq length if creating tensors
+            pad_to_max_length=pad_to_max_length,
             padding_side=self.padding_side,
             pad_token_id=self.pad_token_id,
             pad_token_type_id=self.pad_token_type_id,
@@ -1779,6 +1784,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
+            pad_to_max_length=return_tensors is not None,
             **kwargs,
         )
 

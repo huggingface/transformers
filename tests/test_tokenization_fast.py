@@ -12,6 +12,7 @@ from transformers import (
     OpenAIGPTTokenizer,
     RobertaTokenizer,
     TransfoXLTokenizer,
+    PreTrainedTokenizer,
 )
 from transformers.tokenization_distilbert import DistilBertTokenizerFast
 from transformers.tokenization_openai import OpenAIGPTTokenizerFast
@@ -61,8 +62,8 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             self.assert_sequence_almost_equals(input_pairs_p[key], input_pairs_r[key], threshold)
 
         # Ensure truncation match
-        input_p = tokenizer_p.encode_plus(self._data, max_length=512, pad_to_max_length=True)
-        input_r = tokenizer_r.encode_plus(self._data, max_length=512, pad_to_max_length=True)
+        input_p = tokenizer_p.encode_plus(self._data, max_length=512)
+        input_r = tokenizer_r.encode_plus(self._data, max_length=512)
 
         self.assertSequenceEqual(input_p["input_ids"], input_r["input_ids"])
         self.assertSequenceEqual(input_p["token_type_ids"], input_r["token_type_ids"])
@@ -123,6 +124,60 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         self.assertEqual(sum([0 if x else 1 for x in offsets]), added_tokens)
         self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
+    def assert_batch_encode_dynamic_overflowing(self, tokenizer: PreTrainedTokenizer):
+        """
+        When calling batch_encode with multiple sequence it can returns different number of
+        overflowing encoding for each sequence:
+        [
+          Sequence 1: [Encoding 1, Encoding 2],
+          Sequence 2: [Encoding 1],
+          Sequence 3: [Encoding 1, Encoding 2, ... Encoding N]
+        ]
+        This needs to be padded so that it can represented as a tensor
+        """
+        tokens = tokenizer.encode_plus(
+            "HuggingFace is solving NLP one commit at a time",
+            max_length=6,
+            return_tensors="pt",
+            return_overflowing_tokens=True,
+        )
+
+        for key in tokens.keys():
+            self.assertEqual(len(tokens[key].shape), 3)
+
+        # Mono sample
+        tokens = tokenizer.batch_encode_plus(
+            ["HuggingFace is solving NLP one commit at a time"],
+            max_length=6,
+            pad_to_max_len=True,
+            return_tensors="pt",
+            return_overflowing_tokens=True,
+        )
+
+        for key in tokens.keys():
+            self.assertEqual(len(tokens[key].shape), 3)
+            self.assertEqual(tokens[key].shape[0], 1)
+
+        # Multi sample
+        tokens = tokenizer.batch_encode_plus(
+            ["HuggingFace is solving NLP one commit at a time", "HuggingFace is solving NLP one commit at a time"],
+            max_length=6,
+            pad_to_max_len=True,
+            return_tensors="pt",
+        )
+
+        for key in tokens.keys():
+            self.assertEqual(len(tokens[key].shape), 3)
+            self.assertEqual(tokens[key].shape[0], 2)
+
+        # tokens = tokenizer.batch_encode_plus(
+        #     ["HuggingFace is solving NLP one commit at a time", "Very tiny input"],
+        #     max_length=5,
+        #     return_tensors="pt",
+        #     return_overflowing_tokens=True,
+        #     pad_to_max_length=True
+        # )
+
     def test_bert(self):
         for tokenizer_name in BertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = BertTokenizer.from_pretrained(tokenizer_name)
@@ -151,6 +206,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Check for offsets mapping
             self.assert_offsets_mapping(tokenizer_r)
+
+            # Check for dynamic encoding sequence handling in batch_encode_plus
+            self.assert_batch_encode_dynamic_overflowing(tokenizer_r)
 
     @require_torch
     def test_transfoxl(self):
@@ -182,6 +240,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Check for offsets mapping
             self.assert_offsets_mapping(tokenizer_r)
 
+            # Check for dynamic encoding sequence handling in batch_encode_plus
+            self.assertRaises(ValueError, self.assert_batch_encode_dynamic_overflowing, tokenizer_r)
+
     def test_distilbert(self):
         for tokenizer_name in DistilBertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = DistilBertTokenizer.from_pretrained(tokenizer_name)
@@ -212,6 +273,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Check for offsets mapping
             self.assert_offsets_mapping(tokenizer_r)
 
+            # Check for dynamic encoding sequence handling in batch_encode_plus
+            self.assert_batch_encode_dynamic_overflowing(tokenizer_r)
+
     def test_gpt2(self):
         for tokenizer_name in GPT2Tokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = GPT2Tokenizer.from_pretrained(tokenizer_name)
@@ -240,6 +304,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Check for offsets mapping
             self.assert_offsets_mapping(tokenizer_r)
+
+            # Check for dynamic encoding sequence handling in batch_encode_plus
+            self.assert_batch_encode_dynamic_overflowing(tokenizer_r)
 
     def test_roberta(self):
         for tokenizer_name in RobertaTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
@@ -270,6 +337,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Check for offsets mapping
             self.assert_offsets_mapping(tokenizer_r)
 
+            # Check for dynamic encoding sequence handling in batch_encode_plus
+            self.assert_batch_encode_dynamic_overflowing(tokenizer_r)
+
     def test_openai(self):
         for tokenizer_name in OpenAIGPTTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = OpenAIGPTTokenizer.from_pretrained(tokenizer_name)
@@ -298,6 +368,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Check for offsets mapping
             self.assert_offsets_mapping(tokenizer_r)
+
+            # Check for dynamic encoding sequence handling in batch_encode_plus
+            self.assertRaises(ValueError, self.assert_batch_encode_dynamic_overflowing, tokenizer_r)
 
 
 if __name__ == "__main__":
