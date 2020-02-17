@@ -13,7 +13,7 @@ from transformers import (
     RobertaTokenizer,
     TransfoXLTokenizer,
     PreTrainedTokenizer,
-)
+    is_torch_available)
 from transformers.tokenization_distilbert import DistilBertTokenizerFast
 from transformers.tokenization_openai import OpenAIGPTTokenizerFast
 from transformers.tokenization_roberta import RobertaTokenizerFast
@@ -135,10 +135,12 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         ]
         This needs to be padded so that it can represented as a tensor
         """
+        returned_tensor = "pt" if is_torch_available() else "tf"
+
         tokens = tokenizer.encode_plus(
             "HuggingFace is solving NLP one commit at a time",
             max_length=6,
-            return_tensors="pt",
+            return_tensors=returned_tensor,
             return_overflowing_tokens=True,
         )
 
@@ -150,7 +152,7 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             ["HuggingFace is solving NLP one commit at a time"],
             max_length=6,
             pad_to_max_len=True,
-            return_tensors="pt",
+            return_tensors=returned_tensor,
             return_overflowing_tokens=True,
         )
 
@@ -163,7 +165,7 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             ["HuggingFace is solving NLP one commit at a time", "HuggingFace is solving NLP one commit at a time"],
             max_length=6,
             pad_to_max_len=True,
-            return_tensors="pt",
+            return_tensors=returned_tensor,
         )
 
         for key in tokens.keys():
