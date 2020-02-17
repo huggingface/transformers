@@ -62,6 +62,9 @@ class TFTrainer(object):
             self.loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         elif self.loss_name == "sparse_categorical_crossentropy":
             self.loss = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE, from_logits=True)
+            self.train_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
+            self.test_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='test_accuracy')
+            self.test_loss_metric = tf.keras.metrics.Mean(name='test_loss')
     
     def create_summary_writer(self, log_path):
         """
@@ -84,6 +87,8 @@ class TFTrainer(object):
         self.training_data = self.training_data.shuffle(128).batch(self.batch_size).repeat(-1)
         self.training_data = self.strategy.experimental_distribute_dataset(self.training_data)
         self.validation_data = glue_convert_examples_to_features(self.validation_data, tokenizer, 128, "mrpc")
+        self.validation_steps = self.validation_data.reduce(0, lambda x, _: x + 1) // self.eval_batch_size
+        self.validation_steps = self.validation_steps.numpy()
         self.validation_data = self.validation_data.batch(self.eval_batch_size)
 
     def create_optimizer(self):
@@ -164,8 +169,8 @@ class TFTrainer(object):
                             tf.summary.trace_export(name="training", step=step, profiler_outdir=self.log_path)
 
                     if step % 10 == 0:
-                        print("Epoch {} Step {} Loss {:.4f}".format(epoch, step.numpy(), total_loss.numpy() / num_batches))
-                        logger.info("Epoch {} Step {} Loss {:.4f}".format(epoch, step.numpy(), total_loss.numpy()))
+                        print("Epoch {} Step {} Loss {:.4f} Train Accuracy {:.4f}".format(epoch, step.numpy(), total_loss.numpy() / num_batches, self.train_acc_metric.result()))
+                        logger.info("Epoch {} Step {} Loss {:.4f} Train Accuracy {:.4f}".format(epoch, step.numpy(), total_loss.numpy(), self.train_acc_metric.result()))
 
                     if step % 100 == 0:
                         ckpt_save_path = self.model.ckpt_manager.save()
@@ -178,19 +183,58 @@ class TFTrainer(object):
                     step += 1
 
                 train_loss = total_loss / num_batches
+                total_loss = 0.0
+                num_batches = 0
+                test_step = 1
 
-            logger.info("Epoch {} Step {} Loss {:.4f}".format(epoch, step.numpy() - 1, train_loss.numpy()))
-            print("Epoch {} Step {} Loss {:.4f}".format(epoch, step.numpy() - 1, train_loss.numpy()))
+                for batch in self.validation_data:
+                    test_step = tf.convert_to_tensor(test_step, dtype=tf.int64)
+                    self.distributed_test_step(batch)
+                    num_batches += 1
+                    
+                    with self.test_writer.as_default():
+                        tf.summary.scalar("loss", self.test_loss_metric.result(), step=test_step)
+                    
+                    if test_step % self.validation_steps == 0:
+                        break
+
+                    test_step += 1
+
+                logger.info("Epoch {} Step {} Train Loss {:.4f} Train Accuracy {:.4f}".format(epoch, step.numpy() - 1, train_loss.numpy(), self.train_acc_metric.result()))
+                print("Epoch {} Step {} Loss {:.4f}, Train Accuracy {:.4f}".format(epoch, step.numpy() - 1, train_loss.numpy(), self.train_acc_metric.result()))
+                logger.info("Epoch {} Validation Loss {:.4f} Validation Accuracy {:.4f}".format(epoch, self.test_loss_metric.result(), self.test_acc_metric.result()))
+                print("Epoch {} Validation Loss {:.4f} Validation Accuracy {:.4f}".format(epoch, self.test_loss_metric.result(), self.test_acc_metric.result()))
+
+            if epoch != self.epochs:
+                self.train_acc_metric.reset_states()
+                self.test_acc_metric.reset_states()
+
+    @tf.function
+    def distributed_test_step(self, dist_inputs):
+        """
+        Method that represents a custom test step in distributed mode
+
+        Args:
+          dist_inputs: the features batch of the test data 
+        """
+        def step_fn(inputs):
+            features, labels = inputs
+            logits = self.model(features, training=False)[0]
+            loss = self.loss(labels, logits) + sum(self.model.losses)
+
+            self.test_acc_metric(labels, logits)
+            self.test_loss_metric(loss)
+
+        self.strategy.experimental_run_v2(step_fn, args=(dist_inputs,))
 
             
     @tf.function
     def distributed_train_step(self, dist_inputs):
         """
-        Method that represents a custom training step in distributed training mode.
+        Method that represents a custom training step in distributed mode.
 
         Args:
           dist_inputs: the features batch of the training data
-          step: training step number 
         """
         def step_fn(inputs):
             features, labels = inputs
@@ -204,6 +248,7 @@ class TFTrainer(object):
             gradients = [(tf.clip_by_value(grad, -1.0, 1.0)) for grad in gradients]
 
             self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
+            self.train_acc_metric(labels, logits)
 
             return loss
 
