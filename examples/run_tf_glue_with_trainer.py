@@ -43,7 +43,7 @@ kwargs = {
     "validation_data": data["validation"],
     "batch_size": BATCH_SIZE,
     "eval_batch_size": EVAL_BATCH_SIZE,
-    "distributed": True,
+    "distributed": False,
     "epochs": EPOCHS
 }
 

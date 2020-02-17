@@ -49,7 +49,6 @@ class TFTrainer(object):
 
         with self.strategy.scope():
             self.model = TFAutoModelForSequenceClassification.from_pretrained(self.pretrained_model_name_or_path, config=config)
-            self.model.get_layer("classifier").activation = tf.keras.activations.softmax
             self.create_optimizer()
             self.get_loss()
             self.create_checkpoint_manager(checkpoint_path)
@@ -62,7 +61,7 @@ class TFTrainer(object):
         if self.loss_name == "mean_squared_error":
             self.loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         elif self.loss_name == "sparse_categorical_crossentropy":
-            self.loss = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
+            self.loss = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE, from_logits=True)
     
     def create_summary_writer(self, log_path):
         """
@@ -154,7 +153,7 @@ class TFTrainer(object):
 
                 for batch in self.training_data:
                     step = tf.convert_to_tensor(step, dtype=tf.int64)
-                    total_loss += self.distributed_train_step(batch, step)
+                    total_loss += self.distributed_train_step(batch)
                     num_batches += 1
 
                     with self.train_writer.as_default():
@@ -185,7 +184,7 @@ class TFTrainer(object):
 
             
     @tf.function
-    def distributed_train_step(self, dist_inputs, step):
+    def distributed_train_step(self, dist_inputs):
         """
         Method that represents a custom training step in distributed training mode.
 
@@ -198,8 +197,8 @@ class TFTrainer(object):
 
             with tf.GradientTape() as tape:
                 logits = self.model(features, training=True)[0]
-                cross_entropy = self.loss(labels, logits)
-                loss = tf.nn.compute_average_loss(cross_entropy, global_batch_size=self.batch_size)
+                per_example_loss = self.loss(labels, logits)
+                loss = tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.batch_size)
 
             gradients = tape.gradient(loss, self.model.trainable_variables)
             gradients = [(tf.clip_by_value(grad, -1.0, 1.0)) for grad in gradients]
