@@ -772,7 +772,7 @@ export HANS_DIR=path-to-hans
 export MODEL_TYPE=type-of-the-model-e.g.-bert-roberta-xlnet-etc
 export MODEL_PATH=path-to-the-model-directory-that-is-trained-on-NLI-e.g.-by-using-run_glue.py
 
-python examples/test_hans.py \
+python examples/hans/test_hans.py \
         --task_name hans \
         --model_type $MODEL_TYPE \
         --do_eval \
@@ -780,7 +780,7 @@ python examples/test_hans.py \
         --data_dir $HANS_DIR \
         --model_name_or_path $MODEL_PATH \
         --max_seq_length 128 \
-        -output_dir $MODEL_PATH \
+        --output_dir $MODEL_PATH \
 ```
 
 This will create the hans_predictions.txt file in MODEL_PATH, which can then be evaluated using hans/evaluate_heur_output.py from the HANS dataset.
