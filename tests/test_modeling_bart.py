@@ -281,6 +281,7 @@ class BartHeadTests(unittest.TestCase):
         self.assertTrue(torch.eq(shifted[:, 0], 2).all())
 
 
+@require_torch
 class BartModelIntegrationTest(unittest.TestCase):
     input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]).long()
 
