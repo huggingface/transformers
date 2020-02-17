@@ -714,7 +714,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
         assert input_ids is not None or (isinstance(bos_token_id, int) and bos_token_id >= 0), "`bos_token_id` should be a positive integer."
-#        assert (eos_token_ids is None) or (isinstance(pad_token_id, int) and pad_token_id >= 0), "`pad_token_id` should be a positive integer."
         assert (pad_token_id is None) or (isinstance(pad_token_id, int) and pad_token_id >= 0), "`pad_token_id` should be a positive integer."
         assert (eos_token_ids is None) or (isinstance(eos_token_ids, (list, tuple)) and (
             (isinstance(e, int) and e >= 0) for e in eos_token_ids
@@ -803,12 +802,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         """
         # current position / max lengths / length of generated sentences / unfinished sentences
         unfinished_sents = input_ids.new(batch_size).fill_(1)
-        sents_lens = input_ids.new(batch_size).fill_(max_length)
+        tgt_len = input_ids.new(batch_size).fill_(max_length)
 
         past = None
 
         while cur_len < max_length:
-        for token_pos in range(cur_len, max_length):
             model_inputs = self.prepare_inputs_for_generation(input_ids, past=past)
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
@@ -841,16 +839,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             # update generations and finished sentences
             if eos_token_ids is not None:
-                tokens_to_add = next_token * unfinished_sents + pad_token_id * (1 - unfinished_sents)
+                # if pad_token_id is undefined, use first eos_token_id since sentence will be filled with -1 anyways
+                tokens_to_add = next_token * unfinished_sents + (pad_token_id if pad_token_id is not None else eos_token_ids[0]) * (1 - unfinished_sents)
             else:
                 tokens_to_add = next_token
+
             input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
+
             if eos_token_ids is not None:
                 for eos_token_id in eos_token_ids:
-                    eos_in_sents =  
-                    unfinished_sents.mul_(tokens_to_add.ne(eos_token_id).long())
-
-                    sets_lens.masked_fill_(unfinished_sents
+                    eos_in_sents = (tokens_to_add == eos_token_id)
+                    # tgt_len is updated only the first time eos_token is in the sentences (unfinished_sents == 1 and eos_in_sents == 1)
+                    tgt_len.masked_fill_(unfinished_sents.mul(eos_in_sents.long()).bool(), cur_len + 1)
+                    # unfinished_sents is set to zero if eos in sentence
+                    unfinished_sents.mul_((~eos_in_sents).long())
 
             cur_len = cur_len + 1
 
@@ -859,12 +861,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 break
 
         # add the first eos_token_ids to unfinished sentences <= TODO should we do that?
-        # COMMENT patrick: I would not do it because if we stop because the cur_len hits max_length, then 
+        # COMMENT patrick: I would not do it because if we stop because the cur_len hits max_length, then
         # the sentence is not finished, so no need for a eos_token_ids as the last token
 #        if cur_len == max_length and eos_token_ids is not None:
 #            input_ids[:, -1].masked_fill_(unfinished_sents.to(dtype=torch.bool), eos_token_ids[0])
 
-        return input_ids
+        # finished sents are filled with pad_token_
+        decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id if pad_token_id is not None else -1)
+
+        for hypo_idx, hypo in enumerate(input_ids):
+            decoded[hypo_idx, :tgt_len[hypo_idx]] = hypo[:tgt_len[hypo_idx]]
+
+        ipdb.set_trace()
+        return decoded
 
     def _generate_beam_search(
         self,
@@ -1036,8 +1045,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         # generate target batch
         decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id if pad_token_id is not None else -1)
-        
-        ipdb.set_trace()
 
         for i, hypo in enumerate(best):
             decoded[i, : tgt_len[i] - 1] = hypo
