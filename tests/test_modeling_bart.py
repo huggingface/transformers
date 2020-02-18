@@ -36,8 +36,8 @@ if is_torch_available():
     from transformers.modeling_bart import (
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
         shift_tokens_right,
-        make_padding_mask,
-        prepare_barts_input_dict,
+        prepare_bart_inputs_dict,
+        LARGE_NEGATIVE,
     )
 
 
@@ -79,7 +79,7 @@ class ModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
         )
-        inputs_dict = prepare_barts_input_dict(config, input_ids)
+        inputs_dict = prepare_bart_inputs_dict(config, input_ids)
         return config, inputs_dict
 
 
@@ -142,7 +142,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
-    @unittest.skip("Passing embeddings not yet implemented for Bart.")
+    @unittest.skip("Passing inputs_embeds not implemented for Bart.")
     def test_inputs_embeds(self):
         pass
 
@@ -238,11 +238,36 @@ class BartHeadTests(unittest.TestCase):
     def test_shift_tokens_right(self):
         input_ids = torch.Tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]]).long()
         shifted = shift_tokens_right(input_ids, 1)
-        n_pad_before = make_padding_mask(input_ids).float().sum()
-        n_pad_after = make_padding_mask(shifted).float().sum()
+        n_pad_before = input_ids.eq(1).float().sum()
+        n_pad_after = shifted.eq(1).float().sum()
         self.assertEqual(shifted.shape, input_ids.shape)
         self.assertEqual(n_pad_after, n_pad_before - 1)
         self.assertTrue(torch.eq(shifted[:, 0], 2).all())
+
+    def test_input_preparation(self):
+        example_no_pad = [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]
+        example_b = [0, 31414, 232, 328, 740, 1140, 69, 46078, 1588, 2, 1]
+
+        input_ids_w_padding = torch.Tensor([example_no_pad, example_b]).long()  # has padding
+
+        for ids in [input_ids_w_padding, torch.Tensor([example_no_pad]).long()]:
+            inputs_dict = prepare_bart_inputs_dict(BartConfig(), ids)
+            self.assertEqual(inputs_dict["decoder_attention_mask"].min().item(), LARGE_NEGATIVE)
+            legacy_attention_mask = 1 - ids.eq(1).int()
+            inputs_with_passed_attn = prepare_bart_inputs_dict(BartConfig(), ids, attention_mask=legacy_attention_mask)
+            with self.assertRaises(Exception):  # TODO(SS): fix passing in attention_mask
+                _assert_tensors_equal(inputs_dict["attention_mask"], inputs_with_passed_attn["attention_mask"])
+
+
+def _assert_tensors_equal(a, b, atol=1e-12):
+    if a is None:
+        assert b is None
+        return True
+    elif torch.allclose(a, b, atol=atol):
+        return True
+    else:
+        msg = "{} != {}".format(a, b)
+        raise AssertionError(msg)
 
 
 @require_torch
@@ -251,8 +276,7 @@ class BartModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
         model = BartModel.from_pretrained("bart-large")
         input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]).long()
-        inputs_dict = prepare_barts_input_dict(model.config, input_ids)
-
+        inputs_dict = prepare_bart_inputs_dict(model.config, input_ids)
         with torch.no_grad():
             output = model.forward(**inputs_dict)[0]
         expected_shape = torch.Size((1, 11, 1024))
@@ -269,24 +293,24 @@ class BartModelIntegrationTest(unittest.TestCase):
         input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2], example_b]).long()
 
         model = AutoModelForSequenceClassification.from_pretrained("bart-large-mnli")  # eval called in from_pre
-        inputs_dict = prepare_barts_input_dict(model.config, input_ids)
-        #self.assertEqual(inputs_dict['attention_mask'].min().item(),float('inf'))
-        self.assertEqual(inputs_dict['decoder_attention_mask'].min().item(), float('-inf'))
-
+        inputs_dict = prepare_bart_inputs_dict(model.config, input_ids)
         # Test that model hasn't changed
         with torch.no_grad():
-            batch_of_logits = model.forward(**inputs_dict)[0]
-
+            batched_logits, features = model.forward(**inputs_dict)
         expected_shape = torch.Size((2, 3))
-        self.assertEqual(batch_of_logits.shape, expected_shape)
+        self.assertEqual(batched_logits.shape, expected_shape)
         expected_slice = torch.Tensor([[0.1907, 1.4342, -1.0289]])
-        self.assertTrue(torch.allclose(batch_of_logits[0], expected_slice, atol=1e-3))
+        logits_arr = batched_logits[0].detach()
+
         # Test that padding does not change results
         input_ids_no_pad = torch.Tensor([example_b[:-1]]).long()
-        inputs_dict = prepare_barts_input_dict(model.config, input_ids=input_ids_no_pad)
+
+        inputs_dict = prepare_bart_inputs_dict(model.config, input_ids=input_ids_no_pad)
         with torch.no_grad():
             logits2 = model.forward(**inputs_dict)[0]
-        self.assertTrue(torch.allclose(batch_of_logits[1], logits2, atol=1e-3))
+            # logits2 = model.forward(**inputs_dict)[0]
+        _assert_tensors_equal(batched_logits[1], logits2, atol=1e-3)
+        _assert_tensors_equal(expected_slice, logits_arr, atol=1e-3)
 
     @unittest.skip("This is just too slow")
     def test_model_from_pretrained(self):

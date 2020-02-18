@@ -81,6 +81,7 @@ BART_INPUTS_DOCSTRING = r"""
     read `prepare_bart_inputs` for more information on the default behavior.
 
 """
+LARGE_NEGATIVE = -1e4
 
 
 def _prepare_bart_inputs(
@@ -96,10 +97,8 @@ def _prepare_bart_inputs(
     if decoder_input_ids is None:
         decoder_input_ids = shift_tokens_right(input_ids, pad_token_id)
     if decoder_attn_mask is None:
-
-        bsz, tgt_len = input_ids.size()[:2]
-        decoder_padding_mask = make_padding_mask(input_ids, pad_token_id)
-        tgt_len = input_ids.shape[1]
+        bsz, tgt_len = decoder_input_ids.size()[:2]
+        decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
         if need_causal_mask:
             causal_lm_mask = torch.triu(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1)
         else:
@@ -110,7 +109,7 @@ def _prepare_bart_inputs(
     return attention_mask, decoder_input_ids, decoder_attn_mask
 
 
-def prepare_barts_input_dict(
+def prepare_bart_inputs_dict(
     config, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attn_mask=None,
 ):
     """Prepare masks that ignore padding tokens for both encoder and decoder and a causal lm mask for the decoder if
@@ -196,7 +195,7 @@ def _combine_masks(key_padding_mask, attn_mask, targ_size):
     if attn_mask is not None:  # (tgt_len, src_len) -> targ_size
         _check_shapes(attn_mask.shape, targ_size[-2:])
         b = attn_mask.unsqueeze(0).expand(*targ_size)
-    return (a + b).unsqueeze(1)
+    return (a + b).unsqueeze(1).clamp(LARGE_NEGATIVE,)
 
 
 def shift_tokens_right(input_ids, pad_token_id):
