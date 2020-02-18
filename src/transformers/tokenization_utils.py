@@ -1739,7 +1739,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         sanitized = {}
         for key in tokens[0].keys():
             stack = [item[key] for item in tokens]
-
+            stack = [e for item in stack for e in item]
             if return_tensors == "tf":
                 stack = tf.concat(stack, axis=0)
             elif return_tensors == "pt":
@@ -1785,7 +1785,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
         # Return tensor is None, then we can remove the leading batch axis
         if not return_tensors:
-            return {key: value[0] for key, value in batched_output.items()}
+            return {key: value[0] if isinstance(value[0], list) else value for key, value in batched_output.items()}
         else:
             return batched_output
 

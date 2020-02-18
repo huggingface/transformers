@@ -13,7 +13,8 @@ from transformers import (
     RobertaTokenizer,
     TransfoXLTokenizer,
     PreTrainedTokenizer,
-    is_torch_available)
+    is_torch_available,
+)
 from transformers.tokenization_distilbert import DistilBertTokenizerFast
 from transformers.tokenization_openai import OpenAIGPTTokenizerFast
 from transformers.tokenization_roberta import RobertaTokenizerFast
@@ -145,7 +146,7 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         )
 
         for key in tokens.keys():
-            self.assertEqual(len(tokens[key].shape), 3)
+            self.assertEqual(len(tokens[key].shape), 2)
 
         # Mono sample
         tokens = tokenizer.batch_encode_plus(
@@ -157,28 +158,21 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         )
 
         for key in tokens.keys():
-            self.assertEqual(len(tokens[key].shape), 3)
-            self.assertEqual(tokens[key].shape[0], 1)
+            self.assertEqual(len(tokens[key].shape), 2)
+            self.assertEqual(tokens[key].shape[-1], 6)
 
         # Multi sample
         tokens = tokenizer.batch_encode_plus(
-            ["HuggingFace is solving NLP one commit at a time", "HuggingFace is solving NLP one commit at a time"],
+            ["HuggingFace is solving NLP one commit at a time", "Very tiny input"],
             max_length=6,
             pad_to_max_len=True,
             return_tensors=returned_tensor,
+            return_overflowing_tokens=True,
         )
 
         for key in tokens.keys():
-            self.assertEqual(len(tokens[key].shape), 3)
-            self.assertEqual(tokens[key].shape[0], 2)
-
-        # tokens = tokenizer.batch_encode_plus(
-        #     ["HuggingFace is solving NLP one commit at a time", "Very tiny input"],
-        #     max_length=5,
-        #     return_tensors="pt",
-        #     return_overflowing_tokens=True,
-        #     pad_to_max_length=True
-        # )
+            self.assertEqual(len(tokens[key].shape), 2)
+            self.assertEqual(tokens[key].shape[-1], 6)
 
     def test_bert(self):
         for tokenizer_name in BertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
@@ -308,7 +302,7 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             self.assert_offsets_mapping(tokenizer_r)
 
             # Check for dynamic encoding sequence handling in batch_encode_plus
-            self.assert_batch_encode_dynamic_overflowing(tokenizer_r)
+            self.assertRaises(ValueError, self.assert_batch_encode_dynamic_overflowing, tokenizer_r)
 
     def test_roberta(self):
         for tokenizer_name in RobertaTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
