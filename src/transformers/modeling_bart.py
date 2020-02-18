@@ -23,7 +23,6 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from .configuration_bart import BartConfig
-from .docs_bart import BART_START_DOCSTRING
 from .file_utils import add_start_docstrings
 from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 
@@ -67,16 +66,17 @@ BART_INPUTS_DOCSTRING = r"""
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         **decoder_input_ids**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
-            only use for translation and summarization. Otherwise use the default which shifts the encoder's 
+            only use for translation and summarization. Otherwise use the default which shifts the encoder's
             input_ids right
 
         **decoder_attention_mask**  `optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
            default behavior ignore pad tokens and future tokens.
              See diagram 1 in the paper for more info on the default strategy
-             
-    see `prepare_bart_inputs` for more information on the default behavior.
+
+    read `prepare_bart_inputs` for more information on the default behavior.
 
 """
+
 
 def prepare_bart_inputs(
     config, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attn_mask=None,
@@ -934,7 +934,6 @@ class BartForMaskedLM(PretrainedBartModel):
     """
     base_model_prefix = "model"
 
-
     def __init__(self, config: BartConfig):
         super().__init__(config)
         self.model = BartModel(config)
@@ -975,10 +974,13 @@ class BartForMaskedLM(PretrainedBartModel):
     def get_output_embeddings(self):
         return self.lm_head
 
+
 @add_start_docstrings(
     """Bart model with a sequence classification/regression head on top (a linear layer
     on top of the pooled output) e.g. for GLUE tasks. """,
-    BART_START_DOCSTRING, BART_INPUTS_DOCSTRING)
+    BART_START_DOCSTRING,
+    BART_INPUTS_DOCSTRING,
+)
 class BartForSequenceClassification(PretrainedBartModel):
     r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
