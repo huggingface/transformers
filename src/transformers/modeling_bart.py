@@ -373,7 +373,7 @@ class DecoderLayer(nn.Module):
         x,
         encoder_hidden_states,
         encoder_attn_mask=None,
-        cached_states=None,
+        decoder_cached_states=None,
         attention_mask=None,
         need_attn_weights=False,
     ):
@@ -389,23 +389,23 @@ class DecoderLayer(nn.Module):
         Returns:
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
-        if cached_states is None:
+        if decoder_cached_states is None:
             prev_self_attn_state, prev_attn_state = (None, None)
-            cached_states = {}
+            decoder_cached_states = {}
         else:
-            prev_self_attn_state, prev_attn_state = cached_states["self_attn"], cached_states["encoder_decoder_attn"]
+            prev_self_attn_state, prev_attn_state = decoder_cached_states["self_attn"], decoder_cached_states["encoder_decoder_attn"]
 
         residual = x
         if prev_self_attn_state is not None:
             saved_state = prev_self_attn_state
-            self.self_attn._update_layer_cache(cached_states, saved_state)
+            self.self_attn._update_layer_cache(decoder_cached_states, saved_state)
         y = x  # TODO(SS): figure out why fairseq did this, then hopefully delete it
 
         x, self_attn_weights = self.self_attn.forward(
             query=x,
             key=y,
             value=y,
-            cached_states=cached_states,
+            decoder_cached_states=decoder_cached_states,
             need_weights=need_attn_weights,
             attn_mask=attention_mask,
         )
@@ -416,13 +416,13 @@ class DecoderLayer(nn.Module):
         assert self.encoder_attn.attn_key != self.self_attn.attn_key
         if prev_attn_state is not None:
             saved_state = prev_attn_state
-            self.encoder_attn._update_layer_cache(cached_states, saved_state)
+            self.encoder_attn._update_layer_cache(decoder_cached_states, saved_state)
         x, encoder_attn_weights = self.encoder_attn.forward(
             query=x,
             key=encoder_hidden_states,  # could be None
             value=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
-            cached_states=cached_states,
+            decoder_cached_states=decoder_cached_states,
             static_kv=True,
             need_weights=False,  # not returning it so why compute it
         )
@@ -441,7 +441,7 @@ class DecoderLayer(nn.Module):
         return (
             x,
             self_attn_weights,
-            cached_states,
+            decoder_cached_states,
         )  # just self_attn weights for now, following t5, decoder_cached_states = cache for decoding
 
     def _past_to_dict(self, prev_attn_state):
@@ -536,7 +536,7 @@ class BartDecoder(nn.Module):
                 x,
                 encoder_hidden_states,
                 encoder_padding_mask,
-                cached_states=layer_state,
+                decoder_cached_states=layer_state,
                 attention_mask=combined_mask,
                 need_attn_weights=self.output_attentions,
             )
@@ -599,14 +599,15 @@ class SelfAttention(nn.Module):
         key: Optional[Tensor],
         value: Optional[Tensor],
         key_padding_mask: Optional[Tensor] = None,
-        cached_states: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
+        decoder_cached_states: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
         need_weights: bool = False,
         static_kv: bool = False,
         attn_mask: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor]]:
-        """Input shape: Time x Batch x Channel
+        """Input shape: Time(SeqLen) x Batch x Channel
 
         Args:
+
             key_padding_mask (ByteTensor, optional): mask to exclude
                 keys that are pads, of shape `(batch, src_len)`, where
                 padding elements are indicated by 1s.
@@ -620,8 +621,8 @@ class SelfAttention(nn.Module):
         assert embed_dim == self.embed_dim
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
         # get here for encoder decoder cause of static_kv
-        if cached_states is not None:  # get the last k,v and mask for reuse
-            saved_state = cached_states.get(self.attn_key, {})
+        if decoder_cached_states is not None:  # get the last k,v and mask for reuse
+            saved_state = decoder_cached_states.get(self.attn_key, {})
             if "prev_key" in saved_state:
                 # previous time steps are cached - no need to recompute key and value if they are static
                 if static_kv:
@@ -650,7 +651,7 @@ class SelfAttention(nn.Module):
 
         if saved_state is not None:
             k, v, key_padding_mask = self._use_and_update_saved_state(
-                k, v, saved_state, key_padding_mask, cached_states, static_kv, bsz
+                k, v, saved_state, key_padding_mask, decoder_cached_states, static_kv, bsz
             )
             # new_entry = {"prev_key": k.view(bsz, self.num_heads, -1, self.head_dim),
             #              "prev_value": v.view(bsz, self.num_heads, -1, self.head_dim),
