@@ -19,7 +19,6 @@
 import logging
 import os
 import typing
-import ipdb
 
 import torch
 from torch import nn
@@ -713,11 +712,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
         assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
-        assert input_ids is not None or (isinstance(bos_token_id, int) and bos_token_id >= 0), "`bos_token_id` should be a positive integer."
-        assert (pad_token_id is None) or (isinstance(pad_token_id, int) and pad_token_id >= 0), "`pad_token_id` should be a positive integer."
-        assert (eos_token_ids is None) or (isinstance(eos_token_ids, (list, tuple)) and (
-            (isinstance(e, int) and e >= 0) for e in eos_token_ids
-        )), "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
+        assert input_ids is not None or (
+            isinstance(bos_token_id, int) and bos_token_id >= 0
+        ), "`bos_token_id` should be a positive integer."
+        assert (pad_token_id is None) or (
+            isinstance(pad_token_id, int) and pad_token_id >= 0
+        ), "`pad_token_id` should be a positive integer."
+        assert (eos_token_ids is None) or (
+            isinstance(eos_token_ids, (list, tuple)) and ((isinstance(e, int) and e >= 0) for e in eos_token_ids)
+        ), "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
         assert length_penalty > 0, "`length_penalty` should be strictely positive."
         assert (
             isinstance(num_return_sequences, int) and num_return_sequences > 0
@@ -726,7 +729,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         if input_ids is None:
             assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
                 "you should either supply a context to complete as `input_ids` input "
-                "or a `bos_token_id` (integer >= 0) as a first token to start the generation.")
+                "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
+            )
             input_ids = torch.full(
                 (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device
             )
@@ -840,7 +844,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             # update generations and finished sentences
             if eos_token_ids is not None:
                 # if pad_token_id is undefined, use first eos_token_id since sentence will be filled with -1 anyways
-                tokens_to_add = next_token * unfinished_sents + (pad_token_id if pad_token_id is not None else eos_token_ids[0]) * (1 - unfinished_sents)
+                tokens_to_add = next_token * unfinished_sents + (
+                    pad_token_id if pad_token_id is not None else eos_token_ids[0]
+                ) * (1 - unfinished_sents)
             else:
                 tokens_to_add = next_token
 
@@ -848,7 +854,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             if eos_token_ids is not None:
                 for eos_token_id in eos_token_ids:
-                    eos_in_sents = (tokens_to_add == eos_token_id)
+                    eos_in_sents = tokens_to_add == eos_token_id
                     # tgt_len is updated only the first time eos_token is in the sentences (unfinished_sents == 1 and eos_in_sents == 1)
                     tgt_len.masked_fill_(unfinished_sents.mul(eos_in_sents.long()).bool(), cur_len + 1)
                     # unfinished_sents is set to zero if eos in sentence
@@ -863,16 +869,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # add the first eos_token_ids to unfinished sentences <= TODO should we do that?
         # COMMENT patrick: I would not do it because if we stop because the cur_len hits max_length, then
         # the sentence is not finished, so no need for a eos_token_ids as the last token
-#        if cur_len == max_length and eos_token_ids is not None:
-#            input_ids[:, -1].masked_fill_(unfinished_sents.to(dtype=torch.bool), eos_token_ids[0])
+        #        if cur_len == max_length and eos_token_ids is not None:
+        #            input_ids[:, -1].masked_fill_(unfinished_sents.to(dtype=torch.bool), eos_token_ids[0])
 
         # finished sents are filled with pad_token_
-        decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id if pad_token_id is not None else -1)
+        decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(
+            pad_token_id if pad_token_id is not None else -1
+        )
 
         for hypo_idx, hypo in enumerate(input_ids):
-            decoded[hypo_idx, :tgt_len[hypo_idx]] = hypo[:tgt_len[hypo_idx]]
+            decoded[hypo_idx, : tgt_len[hypo_idx]] = hypo[: tgt_len[hypo_idx]]
 
-        ipdb.set_trace()
         return decoded
 
     def _generate_beam_search(
@@ -1044,7 +1051,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             best.append(best_hyp)
 
         # generate target batch
-        decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id if pad_token_id is not None else -1)
+        decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(
+            pad_token_id if pad_token_id is not None else -1
+        )
 
         for i, hypo in enumerate(best):
             decoded[i, : tgt_len[i] - 1] = hypo
