@@ -35,8 +35,8 @@ BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/pytorch_model.bin",
 }
 
-BART_START_DOCSTRING = r"""  Ported from https://github.com/pytorch/fairseq/tree/master/examples/bart
-    An encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
+BART_START_DOCSTRING = r"""
+ "BART is a sequence to sequence model which uses a standard Transformer based Translation architecture.
 
     This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matter related to general usage and behavior.
@@ -46,6 +46,12 @@ BART_START_DOCSTRING = r"""  Ported from https://github.com/pytorch/fairseq/tree
 
     .. _`torch.nn.Module`:
         https://pytorch.org/docs/stable/nn.html#module
+ Paper: BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension
+    https://arxiv.org/abs/1910.13461
+ Authors: Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov, Luke Zettlemoyer
+ (Submitted on 29 Oct 2019)
+ Code Ported from https://github.com/pytorch/fairseq/tree/master/examples/bart
+    An encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
 
     Parameters:
         config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
@@ -68,7 +74,6 @@ BART_INPUTS_DOCSTRING = r"""
         **decoder_input_ids**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
             only use for translation and summarization. Otherwise use the default which shifts the encoder's
             input_ids right
-
         **decoder_attention_mask**  `optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
            default behavior ignore pad tokens and future tokens.
              See diagram 1 in the paper for more info on the default strategy
@@ -78,12 +83,12 @@ BART_INPUTS_DOCSTRING = r"""
 """
 
 
-def prepare_bart_inputs(
+def _prepare_bart_inputs(
     config, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attn_mask=None,
 ):
     """Prepare masks that ignore padding tokens for both encoder and decoder and a causal lm mask for the decoder if
-    none are provided.
-    This mimics the default behavior in fairseq. To override it pass in masks."""
+    none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
+    """
     pad_token_id = config.pad_token_id
     need_causal_mask = not config.output_past
     if attention_mask is None:  # ignore pad tokens in input_ids
@@ -105,8 +110,20 @@ def prepare_bart_inputs(
     return attention_mask, decoder_input_ids, decoder_attn_mask
 
 
-def prepare_barts_input_dict(config, input_ids, **kwargs):
-    attention_mask, decoder_input_ids, decoder_attn_mask = prepare_bart_inputs(config, input_ids, **kwargs)
+def prepare_barts_input_dict(
+    config, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attn_mask=None,
+):
+    """Prepare masks that ignore padding tokens for both encoder and decoder and a causal lm mask for the decoder if
+    none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
+
+    """
+    attention_mask, decoder_input_ids, decoder_attn_mask = _prepare_bart_inputs(
+        config,
+        input_ids,
+        attention_mask=attention_mask,
+        decoder_input_ids=decoder_input_ids,
+        decoder_attn_mask=decoder_attn_mask,
+    )
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
@@ -144,7 +161,7 @@ class PretrainedBartModel(PreTrainedModel):
                 [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 2, pad_token],
             ]
         ).long()
-        attention_mask, decoder_input_ids, decoder_attn_mask = prepare_bart_inputs(
+        attention_mask, decoder_input_ids, decoder_attn_mask = _prepare_bart_inputs(
             self.config, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attn_mask=None
         )
         dummy_inputs = {
@@ -878,7 +895,7 @@ class BartModel(PretrainedBartModel):
 
         """
         # make masks if user doesn't supply
-        attention_mask, decoder_input_ids, decoder_attn_mask = prepare_bart_inputs(
+        attention_mask, decoder_input_ids, decoder_attn_mask = _prepare_bart_inputs(
             self.config,
             input_ids,
             attention_mask=attention_mask,
