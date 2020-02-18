@@ -40,6 +40,7 @@ if is_torch_available():
         prepare_barts_input_dict,
     )
 
+
 @require_torch
 class ModelTester:
     def __init__(

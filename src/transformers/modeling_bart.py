@@ -349,7 +349,12 @@ class DecoderLayer(nn.Module):
         y = x  # TODO(SS): figure out why fairseq did this, then hopefully delete it
 
         x, self_attn_weights = self.self_attn.forward(
-            query=x, key=y, value=y, cached_states=cached_states, need_weights=need_attn_weights, attn_mask=attention_mask,
+            query=x,
+            key=y,
+            value=y,
+            cached_states=cached_states,
+            need_weights=need_attn_weights,
+            attn_mask=attention_mask,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -380,7 +385,11 @@ class DecoderLayer(nn.Module):
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.final_layer_norm(x)
-        return x, self_attn_weights, cached_states  # just self_attn weights for now, following t5, cached_states = cache for decoding
+        return (
+            x,
+            self_attn_weights,
+            cached_states,
+        )  # just self_attn weights for now, following t5, cached_states = cache for decoding
 
     def _past_to_dict(self, prev_attn_state):
         prev_key, prev_value = prev_attn_state[:2]
@@ -417,7 +426,9 @@ class BartDecoder(nn.Module):
         )  # type: List[DecoderLayer]
         self.layernorm_embedding = LayerNorm(config.d_model)
 
-    def forward(self, input_ids, encoder_hidden_states, encoder_padding_mask, combined_mask, cached_states=None, **unused):
+    def forward(
+        self, input_ids, encoder_hidden_states, encoder_padding_mask, combined_mask, cached_states=None, **unused
+    ):
         """
         Includes several features from "Jointly Learning to Align and
         Translate with Transformer Models" (Garg et al., EMNLP 2019).
@@ -827,12 +838,16 @@ class BartModel(PretrainedBartModel):
 
         """
         # make masks if user doesn't supply
-        attention_mask, decoder_input_ids, decoder_attn_mask = prepare_bart_inputs(self.config, input_ids, attention_mask=attention_mask,
-                                                                                   decoder_input_ids=decoder_input_ids, decoder_attn_mask=decoder_attention_mask)
+        attention_mask, decoder_input_ids, decoder_attn_mask = prepare_bart_inputs(
+            self.config,
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attn_mask=decoder_attention_mask,
+        )
         assert decoder_input_ids is not None
         if encoder_outputs is None:
-            # TODO(SS): make this caching more usable for generate workflow
-            #   Currently requires a (features, attention_mask) tuple (raise or ignore if config.output_attn?)
+            # TODO(SS): make this caching more usable when overwrite generate
             encoder_outputs = self.encoder.forward(input_ids=input_ids, attention_mask=attention_mask)
         assert isinstance(encoder_outputs, tuple)
         # dec_features, cached_states, dec_hidden, dec_attn
