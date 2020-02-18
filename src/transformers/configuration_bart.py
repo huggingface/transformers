@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Fairseq Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2020 The Fairseq Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,6 +58,12 @@ class BartConfig(PretrainedConfig):
         num_labels=3,
         **common_kwargs
     ):
+        r"""
+            :class:`~transformers.BartConfig` is the configuration class for `BartModel`.
+            Examples:
+                config = BartConfig.from_pretrained('bart-large')
+                model = BartModel(config)
+        """
         super().__init__(num_labels=num_labels, output_past=output_past, pad_token_id=pad_token_id, **common_kwargs)
 
         self.vocab_size = vocab_size

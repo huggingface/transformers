@@ -824,7 +824,7 @@ def _filter_out_falsey_values(tup) -> Tuple:
 
 
 @add_start_docstrings(
-    "The bare BART Model model outputting raw hidden-states without any specific head on top.",
+    "The bare BART Model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
     BART_INPUTS_DOCSTRING,
 )
@@ -890,6 +890,9 @@ class BartModel(PretrainedBartModel):
         return decoder_outputs + encoder_outputs
 
 
+@add_start_docstrings(
+    "The bare BART Model with a language modeling head", BART_START_DOCSTRING, BART_INPUTS_DOCSTRING,
+)
 class BartForMaskedLM(PretrainedBartModel):
     r"""
         **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
@@ -965,8 +968,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
 
 @add_start_docstrings(
-    """Bart model with a sequence classification/regression head on top (a linear layer
-    on top of the pooled output) e.g. for GLUE tasks. """,
+    """Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE tasks. """,
     BART_START_DOCSTRING,
     BART_INPUTS_DOCSTRING,
 )
