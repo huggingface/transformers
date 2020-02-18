@@ -86,7 +86,10 @@ def truncate_and_pad(
         )
     else:
         logger.warning(
-            "Disabled padding. No padding token set (pad_token: {}, pad_token_id: {})".format(pad_token, pad_token_id)
+            "Disabled padding because no padding token set (pad_token: {}, pad_token_id: {}).\n"
+            "To remove this error, you can add a new pad token and then resize model embedding:\n"
+            "\ttokenizer.pad_token = '<PAD>'\n\tmodel.resize_token_embeddings(len(tokenizer))"
+                .format(pad_token, pad_token_id)
         )
 
     yield
