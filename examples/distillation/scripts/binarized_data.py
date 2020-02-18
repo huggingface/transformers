@@ -75,13 +75,17 @@ def main():
         iter += 1
         if iter % interval == 0:
             end = time.time()
-            logger.info(f"{iter} examples processed. - {(end-start)/interval:.2f}s/expl")
+            logger.info(f"{iter} examples processed. - {(end-start):.2f}s/{interval}expl")
             start = time.time()
     logger.info("Finished binarization")
     logger.info(f"{len(data)} examples processed.")
 
     dp_file = f"{args.dump_file}.{args.tokenizer_name}.pickle"
-    rslt_ = [np.uint16(d) for d in rslt]
+    vocab_size = tokenizer.vocab_size
+    if vocab_size < (1 << 16):
+        rslt_ = [np.uint16(d) for d in rslt]
+    else:
+        rslt_ = [np.int32(d) for d in rslt]
     random.shuffle(rslt_)
     logger.info(f"Dump to {dp_file}")
     with open(dp_file, "wb") as handle:
