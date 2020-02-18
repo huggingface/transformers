@@ -31,6 +31,7 @@ class NERTransformer(BaseTransformer):
 
     def training_step(self, batch, batch_num):
         "Compute loss"
+        logger.info("train start")
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
@@ -55,6 +56,8 @@ class NERTransformer(BaseTransformer):
         return dataloader
 
     def validation_step(self, batch, batch_nb):
+        logger.info("valid start")
+
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
@@ -70,6 +73,8 @@ class NERTransformer(BaseTransformer):
 
     def _eval_end(self, outputs):
         "Task specific validation"
+        logger.info("evalid start")
+
         val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean()
         preds = np.concatenate([x["pred"] for x in outputs], axis=0)
         preds = np.argmax(preds, axis=2)
@@ -97,6 +102,7 @@ class NERTransformer(BaseTransformer):
             logger.info("***** Eval results *****")
             for key in sorted(results.keys()):
                 logger.info("  %s = %s", key, str(results[key]))
+        logger.info("evalid end")
 
         tensorboard_logs = results
         ret = {k: v for k, v in results.items()}
