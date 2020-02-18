@@ -277,7 +277,7 @@ def generic_train(model, args):
         d["distributed_backend"]= "ddp"
 
     if args.n_tpu > 0:
-        d["n_tpu_cores"] = args.n_tpu
+        d["num_tpu_cores"] = args.n_tpu
         d["gpus"] = 0
 
     if args.fp16:
