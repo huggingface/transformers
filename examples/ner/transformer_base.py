@@ -81,10 +81,12 @@ class BaseTransformer(pl.LightningModule):
         )
         self.config, self.tokenizer, self.model = config, tokenizer, model
         self.proc_rank = -1
+        self.is_tpu = False
         if self.hparams.n_tpu > 0:
             global xm
             import torch_xla.core.xla_model as xm
             self.proc_rank = xm.get_ordinal()
+            self.is_tpu = True
 
     def is_logger(self):
         return self.proc_rank <= 0

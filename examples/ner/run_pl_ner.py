@@ -140,7 +140,7 @@ class NERTransformer(BaseTransformer):
     def load_and_cache_examples(self, labels, pad_token_label_id, mode):
         args = self.hparams
         tokenizer = self.tokenizer
-        if self.proc_rank not in [-1, 0] and mode == "train":
+        if not self.is_tpu and self.proc_rank not in [-1, 0] and mode == "train":
             torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
         # Load data features from cache or dataset file
@@ -175,7 +175,7 @@ class NERTransformer(BaseTransformer):
                 logger.info("Saving features into cached file %s", cached_features_file)
                 torch.save(features, cached_features_file)
 
-        if self.proc_rank == 0 and mode == "train":
+        if not self.is_tpu and self.proc_rank == 0 and mode == "train":
             torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
         # Convert to Tensors and build dataset
