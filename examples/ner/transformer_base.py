@@ -155,7 +155,7 @@ class BaseTransformer(pl.LightningModule):
         super(BaseTransformer, self).init_ddp_connection(proc_rank, world_size)
 
     def train_sampler(self, dataset):
-        if self.hparams.n_tpu > 1:
+        if self.hparams.n_tpu >= 1:
             return DistributedSampler(dataset,
                 num_replicas=xm.xrt_world_size(),
                 rank=xm.get_ordinal(),
