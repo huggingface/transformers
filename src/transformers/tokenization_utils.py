@@ -1665,12 +1665,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return added
 
     def num_added_tokens(self, pair=False):
-        # TODO: Need to expose PostProcessor.added_tokens, but it needs some refactoring on Rust side.
-        # Let's encode a special token so that it cant be truncated and just get the length - 1 or - 2 (pairs)
-        if pair:
-            return max(0, len(self.encode(self.mask_token or "", self.mask_token or "")) - 2)
-        else:
-            return max(0, len(self.encode(self.mask_token or "")) - 1)
+        return self.tokenizer.num_special_tokens_to_add(pair)
 
     def tokenize(self, text, **kwargs):
         return self.tokenizer.encode(text).tokens
@@ -1784,7 +1779,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
-            pad_to_max_length=return_tensors is not None,
+            pad_to_max_length=False,
             **kwargs,
         )
 
