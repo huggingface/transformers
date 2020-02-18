@@ -3,19 +3,18 @@ import glob
 import logging
 import os
 import random
-import sys
 
-sys.path.append("..")
 import numpy as np
+import pytorch_lightning as pl
 import torch
 from seqeval.metrics import f1_score, precision_score, recall_score
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 
-from transformer_base import BaseTransformer, set_seed, add_generic_args, generic_train
+from transformer_base import BaseTransformer, add_generic_args, generic_train, set_seed
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
-import pytorch_lightning as pl
+
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +49,12 @@ class NERTransformer(BaseTransformer):
     def load_dataset(self, mode, batch_size):
         labels = get_labels(self.hparams.labels)
         self.pad_token_label_id = CrossEntropyLoss().ignore_index
-        dataset = load_and_cache_examples(args, self.tokenizer, labels, self.pad_token_label_id, mode=mode)
+        dataset = self.load_and_cache_examples(labels, self.pad_token_label_id, mode)
         if mode == "train":
-            sampler = RandomSampler(dataset)
+            if self.hparams.n_gpu > 1:
+                sampler = DistributedSampler(dataset)
+            else:
+                sampler = RandomSampler(dataset)
         else:
             sampler = SequentialSampler(dataset)
         dataloader = DataLoader(dataset, sampler=sampler, batch_size=batch_size)
@@ -95,9 +97,11 @@ class NERTransformer(BaseTransformer):
             "f1": f1_score(out_label_list, preds_list),
         }
 
-        logger.info("***** Eval results *****")
-        for key in sorted(results.keys()):
-            logger.info("  %s = %s", key, str(results[key]))
+        if self.is_logger():
+            logger.info(self.proc_rank)
+            logger.info("***** Eval results *****")
+            for key in sorted(results.keys()):
+                logger.info("  %s = %s", key, str(results[key]))
 
         tensorboard_logs = results
         ret = {k: v for k, v in results.items()}
@@ -111,29 +115,80 @@ class NERTransformer(BaseTransformer):
     def test_end(self, outputs):
         ret, predictions, targets = self._eval_end(outputs)
 
-        # Write output to a file:
-        # Save results
-        output_test_results_file = os.path.join(self.hparams.output_dir, "test_results.txt")
-        with open(output_test_results_file, "w") as writer:
-            for key in sorted(ret.keys()):
-                if key != "log":
-                    writer.write("{} = {}\n".format(key, str(ret[key])))
-        # Save predictions
-        output_test_predictions_file = os.path.join(self.hparams.output_dir, "test_predictions.txt")
-        with open(output_test_predictions_file, "w") as writer:
-            with open(os.path.join(self.hparams.data_dir, "test.txt"), "r") as f:
-                example_id = 0
-                for line in f:
-                    if line.startswith("-DOCSTART-") or line == "" or line == "\n":
-                        writer.write(line)
-                        if not predictions[example_id]:
-                            example_id += 1
-                    elif predictions[example_id]:
-                        output_line = line.split()[0] + " " + predictions[example_id].pop(0) + "\n"
-                        writer.write(output_line)
-                    else:
-                        logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
+        if self.is_logger():
+            # Write output to a file:
+            # Save results
+            output_test_results_file = os.path.join(self.hparams.output_dir, "test_results.txt")
+            with open(output_test_results_file, "w") as writer:
+                for key in sorted(ret.keys()):
+                    if key != "log":
+                        writer.write("{} = {}\n".format(key, str(ret[key])))
+            # Save predictions
+            output_test_predictions_file = os.path.join(self.hparams.output_dir, "test_predictions.txt")
+            with open(output_test_predictions_file, "w") as writer:
+                with open(os.path.join(self.hparams.data_dir, "test.txt"), "r") as f:
+                    example_id = 0
+                    for line in f:
+                        if line.startswith("-DOCSTART-") or line == "" or line == "\n":
+                            writer.write(line)
+                            if not predictions[example_id]:
+                                example_id += 1
+                        elif predictions[example_id]:
+                            output_line = line.split()[0] + " " + predictions[example_id].pop(0) + "\n"
+                            writer.write(output_line)
+                        else:
+                            logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
         return ret
+
+    def load_and_cache_examples(self, labels, pad_token_label_id, mode):
+        args = self.hparams
+        tokenizer = self.tokenizer
+        if self.proc_rank not in [-1, 0] and mode == "train":
+            torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+
+        # Load data features from cache or dataset file
+        cached_features_file = os.path.join(
+            args.data_dir,
+            "cached_{}_{}_{}".format(
+                mode, list(filter(None, args.model_name_or_path.split("/"))).pop(), str(args.max_seq_length)
+            ),
+        )
+        if os.path.exists(cached_features_file) and not args.overwrite_cache:
+            logger.info("Loading features from cached file %s", cached_features_file)
+            features = torch.load(cached_features_file)
+        else:
+            logger.info("Creating features from dataset file at %s", args.data_dir)
+            examples = read_examples_from_file(args.data_dir, mode)
+            features = convert_examples_to_features(
+                examples,
+                labels,
+                args.max_seq_length,
+                tokenizer,
+                cls_token_at_end=bool(args.model_type in ["xlnet"]),
+                cls_token=tokenizer.cls_token,
+                cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
+                sep_token=tokenizer.sep_token,
+                sep_token_extra=bool(args.model_type in ["roberta"]),
+                pad_on_left=bool(args.model_type in ["xlnet"]),
+                pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
+                pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
+                pad_token_label_id=pad_token_label_id,
+            )
+            if self.proc_rank in [-1, 0]:
+                logger.info("Saving features into cached file %s", cached_features_file)
+                torch.save(features, cached_features_file)
+
+        if self.proc_rank == 0 and mode == "train":
+            torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+
+        # Convert to Tensors and build dataset
+        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
+        all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+        all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
+
+        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+        return dataset
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
@@ -169,62 +224,12 @@ class NERTransformer(BaseTransformer):
         return parser
 
 
-def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
-    if args.local_rank not in [-1, 0] and not evaluate:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
-    # Load data features from cache or dataset file
-    cached_features_file = os.path.join(
-        args.data_dir,
-        "cached_{}_{}_{}".format(
-            mode, list(filter(None, args.model_name_or_path.split("/"))).pop(), str(args.max_seq_length)
-        ),
-    )
-    if os.path.exists(cached_features_file) and not args.overwrite_cache:
-        logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
-    else:
-        logger.info("Creating features from dataset file at %s", args.data_dir)
-        examples = read_examples_from_file(args.data_dir, mode)
-        features = convert_examples_to_features(
-            examples,
-            labels,
-            args.max_seq_length,
-            tokenizer,
-            cls_token_at_end=bool(args.model_type in ["xlnet"]),
-            cls_token=tokenizer.cls_token,
-            cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
-            sep_token=tokenizer.sep_token,
-            sep_token_extra=bool(args.model_type in ["roberta"]),
-            pad_on_left=bool(args.model_type in ["xlnet"]),
-            pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-            pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
-            pad_token_label_id=pad_token_label_id,
-        )
-        if args.local_rank in [-1, 0]:
-            logger.info("Saving features into cached file %s", cached_features_file)
-            torch.save(features, cached_features_file)
-
-    if args.local_rank == 0 and not evaluate:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
-    # Convert to Tensors and build dataset
-    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-    all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-    all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
-    all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
-
-    dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-    return dataset
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
     parser = NERTransformer.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
     model = NERTransformer(args)
-
     trainer = generic_train(model, args)
 
     if args.do_predict:

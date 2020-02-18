@@ -3,11 +3,13 @@ import glob
 import logging
 import os
 import random
+
+import numpy as np
 import pytorch_lightning as pl
+import torch
 
 from transformers import *
-import numpy as np
-import torch
+
 
 ALL_MODELS = sum(
     (
@@ -24,6 +26,7 @@ MODEL_CLASSES = {
     "camembert": (CamembertConfig, CamembertForTokenClassification, CamembertTokenizer),
     "xlmroberta": (XLMRobertaConfig, XLMRobertaForTokenClassification, XLMRobertaTokenizer),
 }
+
 
 def set_seed(args):
     random.seed(args.seed)
@@ -59,38 +62,39 @@ class BaseTransformer(pl.LightningModule):
             cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
         )
         self.config, self.tokenizer, self.model = config, tokenizer, model
+        self.proc_rank = -1
 
+    def is_logger(self):
+        return self.proc_rank <= 0
 
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
         model = self.model
 
-        t_total = len(self.train_dataloader()) // self.hparams.gradient_accumulation_steps * float(self.hparams.num_train_epochs)
+        t_total = (
+            len(self.train_dataloader())
+            // self.hparams.gradient_accumulation_steps
+            * float(self.hparams.num_train_epochs)
+        )
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
-                "params": [p for n, p in model.named_parameters()
-                           if not any(nd in n for nd in no_decay)],
+                "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
                 "weight_decay": self.hparams.weight_decay,
             },
-            {"params": [p for n, p in model.named_parameters()
-                        if any(nd in n for nd in no_decay)],
-             "weight_decay": 0.0},
+            {
+                "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+                "weight_decay": 0.0,
+            },
         ]
-        optimizer = AdamW(optimizer_grouped_parameters,
-                          lr=self.hparams.learning_rate,
-                          eps=self.hparams.adam_epsilon)
+        optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
         scheduler = get_linear_schedule_with_warmup(
-            optimizer,
-            num_warmup_steps=self.hparams.warmup_steps,
-            num_training_steps=t_total
+            optimizer, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
         )
         self.lr_scheduler = scheduler
         return [optimizer]
 
-
-    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx,
-                       second_order_closure=None):
+    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx, second_order_closure=None):
 
         # Step each time.
         optimizer.step()
@@ -98,10 +102,7 @@ class BaseTransformer(pl.LightningModule):
         self.lr_scheduler.step()
 
     def get_tqdm_dict(self):
-        tqdm_dict = {
-            'loss': '{:.3f}'.format(self.trainer.avg_loss),
-            'lr' : self.lr_scheduler.get_last_lr()[-1]
-        }
+        tqdm_dict = {"loss": "{:.3f}".format(self.trainer.avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
 
         return tqdm_dict
 
@@ -122,6 +123,10 @@ class BaseTransformer(pl.LightningModule):
     @pl.data_loader
     def test_dataloader(self):
         return self.load_dataset("test", self.hparams.eval_batch_size)
+
+    def init_ddp_connection(self, proc_rank, world_size):
+        self.proc_rank = proc_rank
+        super(BaseTransformer, self).init_ddp_connection(proc_rank, world_size)
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
@@ -165,25 +170,18 @@ class BaseTransformer(pl.LightningModule):
             "--num_train_epochs", default=3, type=int, help="Total number of training epochs to perform."
         )
 
-        parser.add_argument(
-            "--train_batch_size",
-            default=32,
-            type=int
-        )
-        parser.add_argument(
-            "--eval_batch_size",
-            default=32,
-            type=int
-        )
+        parser.add_argument("--train_batch_size", default=32, type=int)
+        parser.add_argument("--eval_batch_size", default=32, type=int)
+
 
 def add_generic_args(parser, root_dir):
     parser.add_argument(
-            "--output_dir",
-            default=None,
-            type=str,
-            required=True,
-            help="The output directory where the model predictions and checkpoints will be written.",
-        )
+        "--output_dir",
+        default=None,
+        type=str,
+        required=True,
+        help="The output directory where the model predictions and checkpoints will be written.",
+    )
 
     parser.add_argument(
         "--fp16",
@@ -191,19 +189,17 @@ def add_generic_args(parser, root_dir):
         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
     )
 
-
     parser.add_argument(
-        "--overwrite_output_dir", action="store_true", help="Overwrite the content of the output directory"
+        "--fp16_opt_level",
+        type=str,
+        default="O1",
+        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+        "See details at https://nvidia.github.io/apex/amp.html",
     )
 
-    parser.add_argument(
-        "--n_gpu",
-        type=int, default=1
-    )
+    parser.add_argument("--n_gpu", type=int, default=1)
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
-    # add model specific args
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
-    # parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
     parser.add_argument("--do_predict", action="store_true", help="Whether to run predictions on the test set.")
     parser.add_argument(
         "--gradient_accumulation_steps",
@@ -212,24 +208,10 @@ def add_generic_args(parser, root_dir):
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
 
-    parser.add_argument(
-        "--evaluate_during_training",
-        action="store_true",
-        help="Whether to run evaluation during training at each logging step.",
-    )
-
-    parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
-    parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
-    parser.add_argument(
-        "--eval_all_checkpoints",
-        action="store_true",
-        help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number",
-    )
-
-    parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
+
 
 def generic_train(model, args):
     # init model
@@ -244,30 +226,22 @@ def generic_train(model, args):
         ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
         ptvsd.wait_for_attach()
 
-
-    if (os.path.exists(args.output_dir)
-        and os.listdir(args.output_dir)
-        and args.do_train
-    ):
-        raise ValueError(
-            "Output directory ({}) already exists and is not empty.".format(
-                args.output_dir
-            )
-        )
+    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
+        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        filepath=args.output_dir,
-        prefix="checkpoint",
-        monitor="val_loss",
-        mode="min",
-        save_top_k=5)
+        filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5
+    )
 
-    trainer = pl.Trainer(accumulate_grad_batches=args.gradient_accumulation_steps,
-                         gpus=args.n_gpu,
-                         max_epochs=args.num_train_epochs,
-                         use_amp=args.fp16,
-                         gradient_clip_val=args.max_grad_norm,
-                         checkpoint_callback=checkpoint_callback,
+    trainer = pl.Trainer(
+        accumulate_grad_batches=args.gradient_accumulation_steps,
+        gpus=args.n_gpu,
+        max_epochs=args.num_train_epochs,
+        use_amp=args.fp16,
+        amp_level=args.fp16_opt_level,
+        distributed_backend="ddp",
+        gradient_clip_val=args.max_grad_norm,
+        checkpoint_callback=checkpoint_callback,
     )
     if args.do_train:
         trainer.fit(model)
