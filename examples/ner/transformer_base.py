@@ -82,6 +82,8 @@ class BaseTransformer(pl.LightningModule):
         self.config, self.tokenizer, self.model = config, tokenizer, model
         self.proc_rank = -1
         if self.hparams.n_tpu > 0:
+            global xm
+            import torch_xla.core.xla_model as xm
             self.proc_rank = xm.get_ordinal()
 
     def is_logger(self):
@@ -248,10 +250,6 @@ def add_generic_args(parser, root_dir):
 def generic_train(model, args):
     # init model
     set_seed(args)
-
-    if args.n_tpu > 0:
-        global xm
-        import torch_xla.core.xla_model as xm
 
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:
