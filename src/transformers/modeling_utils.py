@@ -851,7 +851,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     past = outputs[1]
 
             # TODO: Another idea would be to use a postprocess_outputs_for_generation fn for all models then the 'self._do_output_past is also not needed anymore, whereas past and encoder_outputs would just always be set to None by all not seq-to-seq models. Something like:
-#            next_token_logits, past, encoder_outputs = self.postprocess_outputs_for_generation(ouputs)
+            #            next_token_logits, past, encoder_outputs = self.postprocess_outputs_for_generation(ouputs)
 
             # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
