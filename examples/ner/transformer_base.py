@@ -81,6 +81,8 @@ class BaseTransformer(pl.LightningModule):
         )
         self.config, self.tokenizer, self.model = config, tokenizer, model
         self.proc_rank = -1
+        if self.hparams.n_tpu > 0:
+            self.proc_rank = xm.get_ordinal()
 
     def is_logger(self):
         return self.proc_rank <= 0
@@ -148,7 +150,7 @@ class BaseTransformer(pl.LightningModule):
 
     def train_sampler(self, dataset):
         if self.hparams.n_tpu > 1:
-            return xm.DistributedSampler(
+            return DistributedSampler(
                 num_replicas=xm.xrt_world_size(),
                 rank=xm.get_ordinal(),
                 shuffle=True)
