@@ -808,15 +808,12 @@ class BartModel(PretrainedBartModel):
         input_ids,
         attention_mask=None,
         decoder_input_ids=None,
-        encoder_outputs=None,  # Tuple
+        encoder_outputs=None,  # type: Tuple
         decoder_attention_mask=None,
         cached_states=None,
         **unused  # TODO(SS): does fairseq have an equivalent to token_type_ids?
     ):
         """
-
-
-
         Args:
             input_ids:
             attention_mask: Ignore pad tokens in the input_ids
@@ -829,11 +826,13 @@ class BartModel(PretrainedBartModel):
         Returns:
 
         """
-        # TODO(SS): is decoder_input_ids really optional anymore?
+        # make masks if user doesn't supply
+        attention_mask, decoder_input_ids, decoder_attn_mask = prepare_bart_inputs(self.config, input_ids, attention_mask=attention_mask,
+                                                                                   decoder_input_ids=decoder_input_ids, decoder_attn_mask=decoder_attention_mask)
         assert decoder_input_ids is not None
         if encoder_outputs is None:
             # TODO(SS): make this caching more usable for generate workflow
-            #   Currently requires a custom type and need to raise if config.output_attn
+            #   Currently requires a (features, attention_mask) tuple (raise or ignore if config.output_attn?)
             encoder_outputs = self.encoder.forward(input_ids=input_ids, attention_mask=attention_mask)
         assert isinstance(encoder_outputs, tuple)
         # dec_features, cached_states, dec_hidden, dec_attn
