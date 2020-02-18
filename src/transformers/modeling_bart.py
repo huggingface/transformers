@@ -391,17 +391,18 @@ class DecoderLayer(nn.Module):
         """
         if decoder_cached_states is None:
             prev_self_attn_state, prev_attn_state = (None, None)
-            decoder_cached_states = {}
         else:
+            assert len(decoder_cached_states) == 3
             prev_self_attn_state, prev_attn_state = (
-                decoder_cached_states["self_attn"],
-                decoder_cached_states["encoder_decoder_attn"],
+                decoder_cached_states["self"],
+                decoder_cached_states["encoder_decoder"],
             )
 
         residual = x
         if prev_self_attn_state is not None:
             saved_state = prev_self_attn_state
-            self.self_attn._update_layer_cache(decoder_cached_states, saved_state)
+            decoder_cached_states["self"] = saved_state
+            # self.self_attn._update_layer_cache(decoder_cached_states, saved_state)
         y = x  # TODO(SS): figure out why fairseq did this, then hopefully delete it
 
         x, self_attn_weights = self.self_attn.forward(
@@ -416,10 +417,10 @@ class DecoderLayer(nn.Module):
         x = residual + x
         x = self.self_attn_layer_norm(x)
         residual = x
-        assert self.encoder_attn.attn_key != self.self_attn.attn_key
+        assert self.encoder_attn.cache_key != self.self_attn.cache_key
         if prev_attn_state is not None:
             saved_state = prev_attn_state
-            self.encoder_attn._update_layer_cache(decoder_cached_states, saved_state)
+            decoder_cached_states["encoder_decoder"] = saved_state
         x, encoder_attn_weights = self.encoder_attn.forward(
             query=x,
             key=encoder_hidden_states,  # could be None
@@ -591,7 +592,7 @@ class SelfAttention(nn.Module):
         self.v_proj = nn.Linear(self.vdim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.attn_key = "{}_attn".format("encoder_decoder" if self.encoder_decoder_attention else "self")
+        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
 
     def _shape(self, tensor, dim_0, bsz):
         return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
@@ -625,7 +626,7 @@ class SelfAttention(nn.Module):
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
         # get here for encoder decoder cause of static_kv
         if decoder_cached_states is not None:  # get the last k,v and mask for reuse
-            saved_state = decoder_cached_states.get(self.attn_key, {})
+            saved_state = decoder_cached_states.get(self.cache_key, {})
             if "prev_key" in saved_state:
                 # previous time steps are cached - no need to recompute key and value if they are static
                 if static_kv:
@@ -646,23 +647,26 @@ class SelfAttention(nn.Module):
             k = self.k_proj(query)
             v = self.v_proj(query)
 
-        q = self._shape(q, tgt_len, bsz)  # .view(tgt_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        q = self._shape(q, tgt_len, bsz)
         if k is not None:
             k = self._shape(k, -1, bsz)
         if v is not None:
             v = self._shape(v, -1, bsz)
 
         if saved_state is not None:
-            k, v, key_padding_mask = self._use_and_update_saved_state(
-                k, v, saved_state, key_padding_mask, decoder_cached_states, static_kv, bsz
+            k, v, key_padding_mask, new_state = self._use_and_update_saved_state(
+                k, v, saved_state, key_padding_mask, static_kv, bsz
             )
-            # new_entry = {"prev_key": k.view(bsz, self.num_heads, -1, self.head_dim),
-            #              "prev_value": v.view(bsz, self.num_heads, -1, self.head_dim),
-            #              "prev_key_padding_mask": key_padding_mask}
-            # self._update_layer_cache(decoder_cached_states, new_entry)
+            saved_state.update(
+                {
+                    "prev_key": k.view(bsz, self.num_heads, -1, self.head_dim),
+                    "prev_value": v.view(bsz, self.num_heads, -1, self.head_dim),
+                    "prev_key_padding_mask": key_padding_mask,
+                }
+            )
+            decoder_cached_states[self.cache_key] = saved_state  # Update cache
         assert k is not None
         src_len = k.size(1)
-
         attn_weights = torch.bmm(q, k.transpose(1, 2))
 
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
@@ -678,7 +682,6 @@ class SelfAttention(nn.Module):
 
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-
             reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool)
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
@@ -693,7 +696,7 @@ class SelfAttention(nn.Module):
         attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
         return attn_output, attn_weights
 
-    def _use_and_update_saved_state(self, k, v, saved_state, key_padding_mask, decoder_cached_states, static_kv, bsz):
+    def _use_and_update_saved_state(self, k, v, saved_state, key_padding_mask, static_kv, bsz):
         # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
         if "prev_key" in saved_state:
             _prev_key = saved_state["prev_key"]
@@ -713,19 +716,12 @@ class SelfAttention(nn.Module):
             else:
                 assert v is not None
                 v = torch.cat([prev_value, v], dim=1)
-
-        prev_key_padding_mask = saved_state.get("prev_key_padding_mask", None) # type: Optional[Tensor]
         assert k is not None and v is not None
+        prev_key_padding_mask = saved_state.get("prev_key_padding_mask", None)  # type: Optional[Tensor]
         key_padding_mask = self._cat_prev_key_padding_mask(
             key_padding_mask, prev_key_padding_mask, bsz, k.size(1), static_kv
         )
-        saved_state["prev_key"] = k.view(bsz, self.num_heads, -1, self.head_dim)
-        saved_state["prev_value"] = v.view(bsz, self.num_heads, -1, self.head_dim)
-        saved_state["prev_key_padding_mask"] = key_padding_mask
-        # In this branch decoder_cached_states is never None
-        assert decoder_cached_states is not None
-        self._update_layer_cache(decoder_cached_states, saved_state)
-        return k, v, key_padding_mask
+        return k, v, key_padding_mask, saved_state
 
     @staticmethod
     def _cat_prev_key_padding_mask(
@@ -741,8 +737,7 @@ class SelfAttention(nn.Module):
         elif prev_key_padding_mask is not None and key_padding_mask is not None:
             new_key_padding_mask = torch.cat([prev_key_padding_mask.float(), key_padding_mask.float()], dim=1)
         # During incremental decoding, as the padding token enters and
-        # leaves the frame, there will be a time when prev or current
-        # is None
+        # leaves the frame, there will be a time when prev or current is None
         elif prev_key_padding_mask is not None:
 
             filler = torch.zeros(batch_size, src_len - prev_key_padding_mask.size(1))
@@ -757,11 +752,6 @@ class SelfAttention(nn.Module):
         else:
             new_key_padding_mask = prev_key_padding_mask
         return new_key_padding_mask
-
-    def _update_layer_cache(
-        self, layer_cache: Dict[str, Dict[str, Optional[Tensor]]], new_entry: Dict[str, Optional[Tensor]],
-    ):
-        layer_cache[self.attn_key] = new_entry
 
 
 class BartClassificationHead(nn.Module):
