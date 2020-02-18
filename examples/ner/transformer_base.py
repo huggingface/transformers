@@ -248,6 +248,7 @@ def generic_train(model, args):
     set_seed(args)
 
     if args.n_tpu > 0:
+        global xm
         import torch_xla.core.xla_model as xm
 
     # Setup distant debugging if needed
