@@ -240,9 +240,6 @@ def main():
         print("=== GENERATED SEQUENCE {} ===".format(generated_sequence_idx + 1))
         generated_sequence = generated_sequence.tolist()
 
-        # Remove "-1" tokens which are used for padding
-        generated_sequence = [token for token in generated_sequence if token != -1]
-
         # Decode text
         text = tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
 
