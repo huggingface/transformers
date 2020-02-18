@@ -39,7 +39,7 @@ class NERTransformer(BaseTransformer):
             )  # XLM and RoBERTa don"t use segment_ids
 
         outputs = self.forward(**inputs)
-        loss = outputs[0].detach().cpu()
+        loss = outputs[0]
 
         tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
         return {"loss": loss, "log": tensorboard_logs}
