@@ -37,9 +37,49 @@ if is_torch_available():
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
         shift_tokens_right,
         make_padding_mask,
-        prepare_bart_inputs,
         prepare_barts_input_dict,
     )
+
+@require_torch
+class ModelTester:
+    def __init__(
+        self, parent,
+    ):
+        self.parent = parent
+        self.batch_size = 13
+        self.seq_length = 7
+        self.is_training = True
+        self.use_labels = False
+        self.vocab_size = 99
+        self.hidden_size = 32
+        self.num_hidden_layers = 5
+        self.num_attention_heads = 4
+        self.intermediate_size = 37
+        self.hidden_act = "gelu"
+        self.hidden_dropout_prob = 0.1
+        self.attention_probs_dropout_prob = 0.1
+        self.max_position_embeddings = 12
+        torch.manual_seed(0)
+
+    def prepare_config_and_inputs_for_common(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3,)
+        input_ids[:, -1] = 2  # Eos Token
+
+        config = BartConfig(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            encoder_ffn_dim=self.intermediate_size,
+            decoder_ffn_dim=self.intermediate_size,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+        )
+        inputs_dict = prepare_barts_input_dict(config, input_ids)
+        return config, inputs_dict
 
 
 @require_torch
@@ -53,85 +93,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_resize_embeddings = False  # This requires inputs_dict['input_ids']
 
-    class ModelTester(object):
-        def __init__(
-            self, parent,
-        ):
-            self.parent = parent
-            self.batch_size = 13
-            self.seq_length = 7
-            self.is_training = True
-            # self.use_token_type_ids = False
-            self.use_labels = False
-            self.vocab_size = 99
-            self.hidden_size = 32
-            self.num_hidden_layers = 5
-            self.num_attention_heads = 4
-            self.intermediate_size = 37
-            self.hidden_act = "gelu"
-            self.hidden_dropout_prob = 0.1
-            self.attention_probs_dropout_prob = 0.1
-            self.max_position_embeddings = 12
-            torch.manual_seed(0)
-
-        def prepare_config_and_inputs(self, return_inputs_dict=False):
-            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3,)
-            input_ids[:, -1] = 2  # Eos Token
-
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-            config = BartConfig(
-                vocab_size=self.vocab_size,
-                d_model=self.hidden_size,
-                encoder_layers=self.num_hidden_layers,
-                decoder_layers=self.num_hidden_layers,
-                encoder_attention_heads=self.num_attention_heads,
-                decoder_attention_heads=self.num_attention_heads,
-                encoder_ffn_dim=self.intermediate_size,
-                decoder_ffn_dim=self.intermediate_size,
-                dropout=self.hidden_dropout_prob,
-                attention_dropout=self.attention_probs_dropout_prob,
-                max_position_embeddings=self.max_position_embeddings,
-            )
-            sequence_labels = None
-            token_labels = None
-            choice_labels = None
-            token_type_ids = None
-            attention_mask, decoder_input_ids, decoder_attn_mask = prepare_bart_inputs(config, input_ids)
-            decoder_lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            inputs_dict = {
-                # "input_ids": input_ids,
-                "token_type_ids": token_type_ids,
-                "attention_mask": input_mask,
-                "input_ids": input_ids,
-                "decoder_input_ids": decoder_input_ids,
-                "decoder_attention_mask": decoder_attn_mask
-                # "lm_labels": decoder_lm_labels,
-            }
-            if return_inputs_dict:
-                return config, inputs_dict
-            else:
-                return (
-                    config,
-                    input_ids,
-                    token_type_ids,
-                    attention_mask,
-                    decoder_input_ids,
-                    decoder_attn_mask,
-                    sequence_labels,
-                    token_labels,
-                    choice_labels,
-                    decoder_lm_labels,
-                )
-
-        def prepare_config_and_inputs_for_common(self):
-            return self.prepare_config_and_inputs(return_inputs_dict=True)
-
-        def check_loss_output(self, result):
-            self.parent.assertListEqual(list(result["loss"].size()), [])
-
     def setUp(self):
-        self.model_tester = BARTModelTest.ModelTester(self)
+        self.model_tester = ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BartConfig)
 
     def test_config(self):
@@ -139,7 +102,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_model(self):
         # (config, input_ids, token_type_ids, input_mask, *unused) = \
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs(return_inputs_dict=True)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         model = BartModel(config)
         model.to(torch_device)
