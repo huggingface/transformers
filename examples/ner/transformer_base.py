@@ -98,8 +98,8 @@ class BaseTransformer(pl.LightningModule):
 
         # Step each time.
         optimizer.step()
-        optimizer.zero_grad()
         self.lr_scheduler.step()
+        optimizer.zero_grad()
 
     def get_tqdm_dict(self):
         tqdm_dict = {"loss": "{:.3f}".format(self.trainer.avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
