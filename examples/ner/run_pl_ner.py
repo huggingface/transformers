@@ -233,8 +233,43 @@ class NERTransformer(BaseTransformer):
 
 
 if __name__ == "__main__":
+
+
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
+
+
+    if args.n_tpu > 0:
+        import collections
+        from datetime import datetime, timedelta
+        import os
+        import requests
+        import threading
+
+        _VersionConfig = collections.namedtuple('_VersionConfig', 'wheels,server')
+        VERSION = "xrt==1.15.0"  #@param ["xrt==1.15.0", "torch_xla==nightly"]
+        CONFIG = {
+            'xrt==1.15.0': _VersionConfig('1.15', '1.15.0'),
+            'torch_xla==nightly': _VersionConfig('nightly', 'XRT-dev{}'.format(
+                (datetime.today() - timedelta(1)).strftime('%Y%m%d'))),
+        }[VERSION]
+        DIST_BUCKET = 'gs://tpu-pytorch/wheels'
+        TORCH_WHEEL = 'torch-{}-cp36-cp36m-linux_x86_64.whl'.format(CONFIG.wheels)
+        TORCH_XLA_WHEEL = 'torch_xla-{}-cp36-cp36m-linux_x86_64.whl'.format(CONFIG.wheels)
+        TORCHVISION_WHEEL = 'torchvision-{}-cp36-cp36m-linux_x86_64.whl'.format(CONFIG.wheels)
+
+        # Update TPU XRT version
+        def update_server_xrt():
+          print('Updating server-side XRT to {} ...'.format(CONFIG.server))
+          url = 'http://{TPU_ADDRESS}:8475/requestversion/{XRT_VERSION}'.format(
+              TPU_ADDRESS=os.environ['COLAB_TPU_ADDR'].split(':')[0],
+              XRT_VERSION=CONFIG.server,
+          )
+          print('Done updating server-side XRT: {}'.format(requests.post(url)))
+
+        update = threading.Thread(target=update_server_xrt)
+        update.start()
+
     parser = NERTransformer.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
     model = NERTransformer(args)
