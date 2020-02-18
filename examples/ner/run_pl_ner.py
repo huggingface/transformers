@@ -63,10 +63,11 @@ class NERTransformer(BaseTransformer):
                 batch[2] if self.hparams.model_type in ["bert", "xlnet"] else None
             )  # XLM and RoBERTa don"t use segment_ids
         outputs = self.forward(**inputs)
+        logger.info("valid mid")
         tmp_eval_loss, logits = outputs[:2]
         preds = logits.detach().cpu().numpy()
         out_label_ids = inputs["labels"].detach().cpu().numpy()
-
+        logger.info("valid ret")
         return {"val_loss": tmp_eval_loss.detach().cpu(),
                 "pred": preds, "target": out_label_ids}
 
