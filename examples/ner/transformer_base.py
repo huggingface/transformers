@@ -4,6 +4,7 @@ import random
 import numpy as np
 import pytorch_lightning as pl
 import torch
+import logging
 
 from torch.utils.data import RandomSampler
 from torch.utils.data.distributed import DistributedSampler
@@ -28,7 +29,7 @@ from transformers import (
 )
 
 
-
+logger = logging.getLogger(__name__)
 
 
 ALL_MODELS = sum(
