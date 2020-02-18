@@ -155,7 +155,7 @@ class BaseTransformer(pl.LightningModule):
 
     def train_sampler(self, dataset):
         if self.hparams.n_tpu > 1:
-            return DistributedSampler(
+            return DistributedSampler(dataset,
                 num_replicas=xm.xrt_world_size(),
                 rank=xm.get_ordinal(),
                 shuffle=True)
