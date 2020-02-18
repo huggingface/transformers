@@ -925,14 +925,15 @@ class BartForMaskedLM(PretrainedBartModel):
 
     Examples::
 
-        tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5WithLMHeadModel.from_pretrained('t5-small')
+        tokenizer = BartTokenizer.from_pretrained('bart-large')
+        model = BartForMaskedLM.from_pretrained('bart-large')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids=input_ids, lm_labels=input_ids)
         loss, prediction_scores = outputs[:2]
 
     """
     base_model_prefix = "model"
+
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
@@ -974,8 +975,50 @@ class BartForMaskedLM(PretrainedBartModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-
+@add_start_docstrings(
+    """Bart model with a sequence classification/regression head on top (a linear layer
+    on top of the pooled output) e.g. for GLUE tasks. """,
+    BART_START_DOCSTRING, BART_INPUTS_DOCSTRING)
 class BartForSequenceClassification(PretrainedBartModel):
+    r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BartConfig`) and inputs:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
+
+        from transformers import BartTokenizer, BartForSequenceClassification
+        import torch
+
+        tokenizer = BartTokenizer.from_pretrained('bart-large')
+        model = BartForSequenceClassification.from_pretrained('bart-large')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, logits = outputs[:2]
+
+    """
+
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = BartModel(config)
