@@ -19,6 +19,7 @@
 import logging
 import os
 import typing
+import ipdb
 
 import torch
 from torch import nn
@@ -713,9 +714,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
         assert input_ids is not None or (isinstance(bos_token_id, int) and bos_token_id >= 0), "`bos_token_id` should be a positive integer."
-        assert (eos_token_ids is None) or (isinstance(pad_token_id, int) and pad_token_id >= 0), "`pad_token_id` should be a positive integer."
+#        assert (eos_token_ids is None) or (isinstance(pad_token_id, int) and pad_token_id >= 0), "`pad_token_id` should be a positive integer."
+        assert (pad_token_id is None) or (isinstance(pad_token_id, int) and pad_token_id >= 0), "`pad_token_id` should be a positive integer."
         assert (eos_token_ids is None) or (isinstance(eos_token_ids, (list, tuple)) and (
-            e >= 0 for e in eos_token_ids
+            (isinstance(e, int) and e >= 0) for e in eos_token_ids
         )), "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
         assert length_penalty > 0, "`length_penalty` should be strictely positive."
         assert (
@@ -723,7 +725,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         ), "`num_return_sequences` should be a strictely positive integer."
 
         if input_ids is None:
-            assert (isinstance(bos_token_id, int) and bos_token_id >= 0,
+            assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
                 "you should either supply a context to complete as `input_ids` input "
                 "or a `bos_token_id` (integer >= 0) as a first token to start the generation.")
             input_ids = torch.full(
@@ -801,10 +803,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         """
         # current position / max lengths / length of generated sentences / unfinished sentences
         unfinished_sents = input_ids.new(batch_size).fill_(1)
+        sents_lens = input_ids.new(batch_size).fill_(max_length)
 
         past = None
 
         while cur_len < max_length:
+        for token_pos in range(cur_len, max_length):
             model_inputs = self.prepare_inputs_for_generation(input_ids, past=past)
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
@@ -843,7 +847,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
             if eos_token_ids is not None:
                 for eos_token_id in eos_token_ids:
+                    eos_in_sents =  
                     unfinished_sents.mul_(tokens_to_add.ne(eos_token_id).long())
+
+                    sets_lens.masked_fill_(unfinished_sents
+
             cur_len = cur_len + 1
 
             # stop when there is a </s> in each sentence, or if we exceed the maximul length
@@ -851,8 +859,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 break
 
         # add the first eos_token_ids to unfinished sentences <= TODO should we do that?
-        if cur_len == max_length and eos_token_ids is not None:
-            input_ids[:, -1].masked_fill_(unfinished_sents.to(dtype=torch.bool), eos_token_ids[0])
+        # COMMENT patrick: I would not do it because if we stop because the cur_len hits max_length, then 
+        # the sentence is not finished, so no need for a eos_token_ids as the last token
+#        if cur_len == max_length and eos_token_ids is not None:
+#            input_ids[:, -1].masked_fill_(unfinished_sents.to(dtype=torch.bool), eos_token_ids[0])
 
         return input_ids
 
@@ -1026,6 +1036,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         # generate target batch
         decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id if pad_token_id is not None else -1)
+        
+        ipdb.set_trace()
+
         for i, hypo in enumerate(best):
             decoded[i, : tgt_len[i] - 1] = hypo
             if eos_token_ids is not None:
