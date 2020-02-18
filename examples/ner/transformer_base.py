@@ -5,6 +5,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 
+from torch.utils.data.distributed import DistributedSampler
 from transformers import (
     AdamW,
     BertConfig,
