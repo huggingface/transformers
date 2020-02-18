@@ -36,13 +36,54 @@ BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/pytorch_model.bin",
 }
 
+BART_START_DOCSTRING = r"""  Ported from https://github.com/pytorch/fairseq/tree/master/examples/bart
+    An encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
+
+    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
+    refer to the PyTorch documentation for all matter related to general usage and behavior.
+
+    .. _`Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer`:
+        https://arxiv.org/abs/1910.10683
+
+    .. _`torch.nn.Module`:
+        https://pytorch.org/docs/stable/nn.html#module
+
+    Parameters:
+        config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+"""
+
+BART_INPUTS_DOCSTRING = r"""
+    Inputs:
+        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Indices of input sequence tokens in the vocabulary. Use BartTokenizer.encode to produce them.
+            Padding will be ignored by default should you provide it.
+            Indices can be obtained using :class:`transformers.BartTokenizer.encode(text)`.
+            Also see :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+            Mask to avoid performing attention on padding token indices in the encoder inputs.
+            Default: a mask will be created that ignore config.pad_token_id
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        **decoder_input_ids**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+            only use for translation and summarization. Otherwise use the default which shifts the encoder's 
+            input_ids right
+
+        **decoder_attention_mask**  `optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+           default behavior ignore pad tokens and future tokens.
+             See diagram 1 in the paper for more info on the default strategy
+             
+    see `prepare_bart_inputs` for more information on the default behavior.
+
+"""
 
 def prepare_bart_inputs(
     config, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attn_mask=None,
 ):
     """Prepare masks that ignore padding tokens for both encoder and decoder and a causal lm mask for the decoder if
     none are provided.
-    This mimics the default behavior in fairseq. To override it pass correctly shaped masks full"""
+    This mimics the default behavior in fairseq. To override it pass in masks."""
     pad_token_id = config.pad_token_id
     need_causal_mask = not config.output_past
     if attention_mask is None:  # ignore pad tokens in input_ids
@@ -787,10 +828,10 @@ def _filter_out_falsey_values(tup) -> Tuple:
 @add_start_docstrings(
     "The bare BART Model model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
-    "FIXME(SS)",
+    BART_INPUTS_DOCSTRING,
 )
 class BartModel(PretrainedBartModel):
-    """FIXME(SS)"""
+    """"""
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
@@ -862,6 +903,35 @@ class BartModel(PretrainedBartModel):
 
 
 class BartForMaskedLM(PretrainedBartModel):
+    r"""
+        **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+            Labels for computing the masked language modeling loss.
+            Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``.
+
+    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+        **loss**: (`optional`, returned when ``lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Masked language modeling loss.
+        **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+            of shape ``(batch_size, sequence_length, hidden_size)``:
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        model = T5WithLMHeadModel.from_pretrained('t5-small')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids=input_ids, lm_labels=input_ids)
+        loss, prediction_scores = outputs[:2]
+
+    """
     base_model_prefix = "model"
 
     def __init__(self, config: BartConfig):
