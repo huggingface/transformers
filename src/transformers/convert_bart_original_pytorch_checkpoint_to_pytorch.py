@@ -23,8 +23,7 @@ import fairseq
 import torch
 from packaging import version
 
-from transformers.configuration_bart import BartConfig
-from transformers.modeling_bart import BartForSequenceClassification, BartModel
+from transformers import BartConfig, BartForSequenceClassification, BartModel, BartTokenizer
 
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
@@ -59,7 +58,8 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     b2.model.upgrade_state_dict(b2.model.state_dict())
     config = BartConfig()
     tokens = b2.encode(SAMPLE_TEXT).unsqueeze(0)
-    # TODO(SS): test BartTokenizer Equality
+    tokens2 = BartTokenizer.from_pretrained("bart-large").encode(SAMPLE_TEXT).unsqueeze(0)
+    assert torch.eq(tokens, tokens2).all()
 
     # assert their_output.size() == (1, 11, 1024)
 

@@ -150,8 +150,6 @@ class PretrainedBartModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    # TODO(SS): def prepare_inputs_for_generation(self, input_ids, **kwargs):
-
     @property
     def dummy_inputs(self):
         pad_token = 1
@@ -269,13 +267,11 @@ class EncoderLayer(nn.Module):
 
 class BartEncoder(nn.Module):
     """
-    Transformer encoder consisting of *config.encoder_layers* layers. Each layer
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
     is a :class:`EncoderLayer`.
 
     Args:
-        config (argparse.Namespace): parsed command-line arguments
-        dictionary (~fairseq.data.Dictionary): encoding dictionary
-        embed_tokens (torch.nn.Embedding): input embedding
+        config: BartConfig
     """
 
     def __init__(self, config: BartConfig, embed_tokens):
@@ -296,23 +292,25 @@ class BartEncoder(nn.Module):
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim)
 
-    def forward(self, input_ids=None, attention_mask=None, **unused):  # TODO(SS): this will need more
+    def forward(
+        self, input_ids=None, attention_mask=None,
+    ):
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
                 `(batch, src_len)`
-            attention_mask (torch.LongTensor):
+            attention_mask (torch.LongTensor): indicating which indices are padding tokens.
         Returns:
             namedtuple:
-                - **encoder_hidden_states** (Tensor): the last encoder layer's output of
+                - **x** (Tensor): the last encoder layer's output of
                   shape `(src_len, batch, embed_dim)`
-                - **encoder_attn_mask** (ByteTensor): the positions of
-                  padding elements of shape `(batch, src_len)`
+
                 - **encoder_states** (List[Tensor]): all intermediate
                   hidden states of shape `(src_len, batch, embed_dim)`.
                   Only populated if *return_all_hiddens* is True.
+                - **all_attentions** (List[Tensor]): Attention weights for each layer.
+                During training might not be of length n_layers because of layer dropout.
         """
-
         inputs_embeds = self.embed_tokens(input_ids)
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
@@ -341,8 +339,6 @@ class BartEncoder(nn.Module):
 
         if self.output_hidden_states:
             encoder_states.append(x)
-        if self.output_attentions:
-            assert len(all_attentions) == len(self.layers)  # TODO(DELETEME)
 
         encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
 
@@ -780,7 +776,7 @@ class BartClassificationHead(nn.Module):
         self.dropout = nn.Dropout(p=pooler_dropout)
         self.out_proj = nn.Linear(inner_dim, num_classes)
 
-    def forward(self, x, **unused):
+    def forward(self, x):
         x = self.dropout(x)
         x = self.dense(x)
         x = torch.tanh(x)
@@ -879,21 +875,7 @@ class BartModel(PretrainedBartModel):
         encoder_outputs=None,  # type: Tuple
         decoder_attention_mask=None,
         cached_states=None,
-        **unused  # TODO(SS): does fairseq have an equivalent to token_type_ids?
     ):
-        """
-        Args:
-            input_ids:
-            attention_mask: Ignore pad tokens in the input_ids
-            decoder_input_ids:
-            encoder_outputs: None or Tuple. If a tuple is passed, its first entry is assumed to be the features. If
-            none is passed, we call the encoder.
-            decoder_attention_mask:
-            **unused:
-
-        Returns:
-
-        """
         # make masks if user doesn't supply
         attention_mask, decoder_input_ids, decoder_attn_mask = _prepare_bart_inputs(
             self.config,
@@ -959,7 +941,7 @@ class BartForMaskedLM(PretrainedBartModel):
         self,
         input_ids,
         attention_mask=None,
-        encoder_hidden_states=None,
+        encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         cached_states=None,
@@ -970,7 +952,7 @@ class BartForMaskedLM(PretrainedBartModel):
             input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
-            encoder_hidden_states=encoder_hidden_states,
+            encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
             cached_states=cached_states,
         )
@@ -978,6 +960,7 @@ class BartForMaskedLM(PretrainedBartModel):
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
         if lm_labels is not None:
             loss_fct = nn.CrossEntropyLoss()
+            # TODO(SS): do we need to ignore pad tokens in lm_labels?
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), lm_labels.view(-1))
             outputs = (masked_lm_loss,) + outputs
 
@@ -1050,18 +1033,17 @@ class BartForSequenceClassification(PretrainedBartModel):
         self,
         input_ids,
         attention_mask=None,
-        encoder_hidden_states=None,
+        encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         labels=None,
-        **unused
     ):
         outputs = self.model.forward(
             input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_hidden_states,
+            encoder_outputs=encoder_outputs,
         )
         x = outputs[0]  # last hidden state
         eos_mask = input_ids.eq(self.config.eos_token_id)
@@ -1072,7 +1054,6 @@ class BartForSequenceClassification(PretrainedBartModel):
         # Prepend logits
         outputs = (logits,) + outputs[1:]  # Add hidden states and attention if they are here
         if labels is not None:  # prepend loss to output,
-            # TODO(SS): do we need to ignore pad tokens?
             loss = F.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
             outputs = (loss,) + outputs
 
