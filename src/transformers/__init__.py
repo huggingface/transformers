@@ -251,6 +251,7 @@ if is_torch_available():
         AlbertForMaskedLM,
         AlbertForSequenceClassification,
         AlbertForQuestionAnswering,
+        AlbertMLMHead,
         load_tf_weights_in_albert,
         ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
@@ -408,6 +409,7 @@ if is_tf_available():
         TFAlbertModel,
         TFAlbertForMaskedLM,
         TFAlbertForSequenceClassification,
+        TFAlbertMLMHead,
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
