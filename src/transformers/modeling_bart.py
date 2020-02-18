@@ -442,7 +442,7 @@ class DecoderLayer(nn.Module):
             x,
             self_attn_weights,
             cached_states,
-        )  # just self_attn weights for now, following t5, cached_states = cache for decoding
+        )  # just self_attn weights for now, following t5, decoder_cached_states = cache for decoding
 
     def _past_to_dict(self, prev_attn_state):
         prev_key, prev_value = prev_attn_state[:2]
@@ -480,7 +480,13 @@ class BartDecoder(nn.Module):
         self.layernorm_embedding = LayerNorm(config.d_model)
 
     def forward(
-        self, input_ids, encoder_hidden_states, encoder_padding_mask, combined_mask, cached_states=None, **unused
+        self,
+        input_ids,
+        encoder_hidden_states,
+        encoder_padding_mask,
+        combined_mask,
+        decoder_cached_states=None,
+        **unused
     ):
         """
         Includes several features from "Jointly Learning to Align and
@@ -492,7 +498,7 @@ class BartDecoder(nn.Module):
             encoder_hidden_states: output from the encoder, used for
                 encoder-side attention
             encoder_padding_mask: for ignoring pad tokens
-            cached_states (dict or None): dictionary used for storing state during generation
+            decoder_cached_states (dict or None): dictionary used for storing state during generation
 
         Returns:
             tuple:
@@ -501,13 +507,11 @@ class BartDecoder(nn.Module):
                 - attentions
         """
         # embed positions
-        positions = self.embed_positions(input_ids, cached_states=cached_states)
+        positions = self.embed_positions(input_ids)
 
-        if cached_states is not None:
+        if decoder_cached_states is not None:
             input_ids = input_ids[:, -1:]
             positions = positions[:, -1:]
-
-        # embed tokens and positions
         x = self.embed_tokens(input_ids)
 
         if positions is not None:
@@ -515,45 +519,39 @@ class BartDecoder(nn.Module):
 
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
-
-        # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
+        x = x.transpose(0, 1)  # (seq_len, BS, model_dim)
         # decoder layers
         all_hidden_states = ()
         all_self_attns = ()
-        present = []
+        next_decoder_cache = []
 
         for i, decoder_layer in enumerate(self.layers):
             decoder_layer  # type: DecoderLayer
-
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
+            if self.training and (dropout_probability > self.layerdrop):
+                continue
+            layer_state = decoder_cached_states[i] if decoder_cached_states is not None else None
+            x, layer_self_attn, layer_past = decoder_layer.forward(
+                x,
+                encoder_hidden_states,
+                encoder_padding_mask,
+                cached_states=layer_state,
+                attention_mask=combined_mask,
+                need_attn_weights=self.output_attentions,
+            )
+            if self.output_past:
+                next_decoder_cache.append(layer_past)
+            if self.output_hidden_states:
+                all_hidden_states += (x,)
+            if self.output_attentions:
+                all_self_attns += (layer_self_attn,)
 
-            if not self.training or (dropout_probability > self.layerdrop):
-                x, layer_self_attn, layer_past = decoder_layer.forward(
-                    x,
-                    encoder_hidden_states,
-                    encoder_padding_mask,
-                    cached_states=cached_states[i] if cached_states is not None else None,
-                    attention_mask=combined_mask,
-                    # causal_lm_mask=causal_lm_mask,
-                    # decoder_padding_mask=decoder_padding_mask,
-                    need_attn_weights=self.output_attentions,
-                )
-                if self.output_past:
-                    present.append(layer_past)
-                if self.output_hidden_states:
-                    all_hidden_states += (x,)
-                if self.output_attentions:
-                    all_self_attns += (layer_self_attn,)  # .float?
-                # if layer_self_attn is not None and i == alignment_layer:
-                #    attn = layer_self_attn.float()
-
-        # T x B x C -> B x T x C
+        # Convert shapes from (seq_len, BS, model_dim) to (BS, seq_len, model_dim)
         all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
         x = x.transpose(0, 1)
 
-        return x, present, all_hidden_states, list(all_self_attns)
+        return x, next_decoder_cache, all_hidden_states, list(all_self_attns)
 
 
 class SelfAttention(nn.Module):
@@ -657,7 +655,7 @@ class SelfAttention(nn.Module):
             # new_entry = {"prev_key": k.view(bsz, self.num_heads, -1, self.head_dim),
             #              "prev_value": v.view(bsz, self.num_heads, -1, self.head_dim),
             #              "prev_key_padding_mask": key_padding_mask}
-            # self._update_layer_cache(cached_states, new_entry)
+            # self._update_layer_cache(decoder_cached_states, new_entry)
         assert k is not None
         src_len = k.size(1)
 
@@ -721,7 +719,7 @@ class SelfAttention(nn.Module):
         saved_state["prev_key"] = k.view(bsz, self.num_heads, -1, self.head_dim)
         saved_state["prev_value"] = v.view(bsz, self.num_heads, -1, self.head_dim)
         saved_state["prev_key_padding_mask"] = key_padding_mask
-        # In this branch cached_states is never None
+        # In this branch decoder_cached_states is never None
         assert incremental_state is not None
         self._update_layer_cache(incremental_state, saved_state)
         return k, v, key_padding_mask
@@ -802,14 +800,9 @@ class LearnedPositionalEmbedding(nn.Embedding):
         num_embeddings += padding_idx + 1  # WHY?
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
 
-    def forward(self, input, cached_states=None):
+    def forward(self, input):
         """Input is expected to be of size [bsz x seqlen]."""
-        if cached_states is not None:
-            # positions is the same for every token when decoding a single step
-            # Without the int() cast, it doesn't work in some cases when exporting to ONNX
-            positions = input.data.new(1, 1).fill_(int(self.padding_idx + input.size(1)))
-        else:
-            positions = create_position_ids_from_input_ids(input, self.padding_idx)
+        positions = create_position_ids_from_input_ids(input, self.padding_idx)
         return super().forward(positions)
 
 
@@ -874,7 +867,7 @@ class BartModel(PretrainedBartModel):
         decoder_input_ids=None,
         encoder_outputs=None,  # type: Tuple
         decoder_attention_mask=None,
-        cached_states=None,
+        decoder_cached_states=None,
     ):
         # make masks if user doesn't supply
         attention_mask, decoder_input_ids, decoder_attn_mask = _prepare_bart_inputs(
@@ -889,9 +882,13 @@ class BartModel(PretrainedBartModel):
             # TODO(SS): make this caching more usable when overwrite generate
             encoder_outputs = self.encoder.forward(input_ids=input_ids, attention_mask=attention_mask)
         assert isinstance(encoder_outputs, tuple)
-        # dec_features, cached_states, dec_hidden, dec_attn
+        # dec_features, decoder_cached_states, dec_hidden, dec_attn
         decoder_outputs = self.decoder.forward(
-            decoder_input_ids, encoder_outputs[0], attention_mask, decoder_attention_mask, cached_states=cached_states,
+            decoder_input_ids,
+            encoder_outputs[0],
+            attention_mask,
+            decoder_attention_mask,
+            decoder_cached_states=decoder_cached_states,
         )
         # Attention and hidden_states will be [] or None if they aren't needed
         decoder_outputs = _filter_out_falsey_values(decoder_outputs)  # type: tuple
@@ -944,7 +941,7 @@ class BartForMaskedLM(PretrainedBartModel):
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        cached_states=None,
+        decoder_cached_states=None,
         lm_labels=None,
         **unused
     ):
@@ -954,7 +951,7 @@ class BartForMaskedLM(PretrainedBartModel):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            cached_states=cached_states,
+            decoder_cached_states=decoder_cached_states,
         )
         lm_logits = self.lm_head.forward(outputs[0])
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
@@ -968,7 +965,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
     @staticmethod
     def prepare_inputs_for_generation(input_ids, past, **kwargs):
-        return {"input_ids": input_ids, "cached_states": past, "decoder_input_ids": input_ids}
+        return {"input_ids": input_ids, "decoder_cached_states": past, "decoder_input_ids": input_ids}
 
     def get_output_embeddings(self):
         return self.lm_head
