@@ -26,6 +26,9 @@ from transformers import (
 )
 
 
+
+
+
 ALL_MODELS = sum(
     (
         tuple(conf.pretrained_config_archive_map.keys())
@@ -143,6 +146,17 @@ class BaseTransformer(pl.LightningModule):
         self.proc_rank = proc_rank
         super(BaseTransformer, self).init_ddp_connection(proc_rank, world_size)
 
+    def train_sampler(self, dataset):
+        if self.hparams.n_tpu > 1:
+            return xm.DistributedSampler(
+                num_replicas=xm.xrt_world_size(),
+                rank=xm.get_ordinal(),
+                shuffle=True)
+        elif self.hparams.n_gpu > 1:
+            return DistributedSampler(dataset)
+        else:
+            return RandomSampler(dataset)
+
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         parser.add_argument(
@@ -213,6 +227,7 @@ def add_generic_args(parser, root_dir):
     )
 
     parser.add_argument("--n_gpu", type=int, default=1)
+    parser.add_argument("--n_tpu", type=int, default=0)
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_predict", action="store_true", help="Whether to run predictions on the test set.")
@@ -232,6 +247,9 @@ def generic_train(model, args):
     # init model
     set_seed(args)
 
+    if args.n_tpu > 0:
+        import torch_xla.core.xla_model as xm
+
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:
         # Distant debugging - see https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
@@ -247,17 +265,27 @@ def generic_train(model, args):
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5
     )
-
-    trainer = pl.Trainer(
+    d = dict(
         accumulate_grad_batches=args.gradient_accumulation_steps,
         gpus=args.n_gpu,
         max_epochs=args.num_train_epochs,
-        use_amp=args.fp16,
-        amp_level=args.fp16_opt_level,
-        distributed_backend="ddp",
         gradient_clip_val=args.max_grad_norm,
         checkpoint_callback=checkpoint_callback,
     )
+
+    if args.n_gpu > 1:
+        d["distributed_backend"]= "ddp"
+
+    if args.n_tpu > 0:
+        d["n_tpu_cores"] = args.n_tpu
+        d["gpus"] = 0
+
+    if args.fp16:
+        d["use_amp"]=args.fp16,
+        d["amp_level"]=args.fp16_opt_level,
+
+
+    trainer = pl.Trainer(**d)
     if args.do_train:
         trainer.fit(model)
 

@@ -49,10 +49,7 @@ class NERTransformer(BaseTransformer):
         self.pad_token_label_id = CrossEntropyLoss().ignore_index
         dataset = self.load_and_cache_examples(labels, self.pad_token_label_id, mode)
         if mode == "train":
-            if self.hparams.n_gpu > 1:
-                sampler = DistributedSampler(dataset)
-            else:
-                sampler = RandomSampler(dataset)
+            sampler = self.train_sampler(dataset)
         else:
             sampler = SequentialSampler(dataset)
         dataloader = DataLoader(dataset, sampler=sampler, batch_size=batch_size)
