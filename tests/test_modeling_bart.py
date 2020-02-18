@@ -247,12 +247,12 @@ class BartHeadTests(unittest.TestCase):
 
 @require_torch
 class BartModelIntegrationTest(unittest.TestCase):
-    input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]).long()
 
     @slow
     def test_inference_no_head(self):
         model = BartModel.from_pretrained("bart-large")
-        inputs_dict = prepare_barts_input_dict(model.config, self.input_ids)
+        input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]).long()
+        inputs_dict = prepare_barts_input_dict(model.config, input_ids)
         with torch.no_grad():
             output = model.forward(**inputs_dict)[0]
         expected_shape = torch.Size((1, 11, 1024))
@@ -285,7 +285,7 @@ class BartModelIntegrationTest(unittest.TestCase):
             logits2 = model.forward(**inputs_dict)[0]
         self.assertTrue(torch.allclose(batch_of_logits[1], logits2, atol=1e-3))
 
-    @slow
+    @unittest.skip('This is just too slow')
     def test_model_from_pretrained(self):
         # Forces 1.6GB download from S3 for each model
         for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys()):
