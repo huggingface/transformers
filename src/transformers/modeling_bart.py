@@ -393,7 +393,10 @@ class DecoderLayer(nn.Module):
             prev_self_attn_state, prev_attn_state = (None, None)
             decoder_cached_states = {}
         else:
-            prev_self_attn_state, prev_attn_state = decoder_cached_states["self_attn"], decoder_cached_states["encoder_decoder_attn"]
+            prev_self_attn_state, prev_attn_state = (
+                decoder_cached_states["self_attn"],
+                decoder_cached_states["encoder_decoder_attn"],
+            )
 
         residual = x
         if prev_self_attn_state is not None:
