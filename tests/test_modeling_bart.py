@@ -252,6 +252,7 @@ class BartModelIntegrationTest(unittest.TestCase):
         model = BartModel.from_pretrained("bart-large")
         input_ids = torch.Tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]]).long()
         inputs_dict = prepare_barts_input_dict(model.config, input_ids)
+
         with torch.no_grad():
             output = model.forward(**inputs_dict)[0]
         expected_shape = torch.Size((1, 11, 1024))
@@ -269,6 +270,9 @@ class BartModelIntegrationTest(unittest.TestCase):
 
         model = AutoModelForSequenceClassification.from_pretrained("bart-large-mnli")  # eval called in from_pre
         inputs_dict = prepare_barts_input_dict(model.config, input_ids)
+        #self.assertEqual(inputs_dict['attention_mask'].min().item(),float('inf'))
+        self.assertEqual(inputs_dict['decoder_attention_mask'].min().item(), float('-inf'))
+
         # Test that model hasn't changed
         with torch.no_grad():
             batch_of_logits = model.forward(**inputs_dict)[0]
