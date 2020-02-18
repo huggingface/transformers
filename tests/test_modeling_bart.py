@@ -308,7 +308,6 @@ class BartModelIntegrationTest(unittest.TestCase):
         inputs_dict = prepare_bart_inputs_dict(model.config, input_ids=input_ids_no_pad)
         with torch.no_grad():
             logits2 = model.forward(**inputs_dict)[0]
-            # logits2 = model.forward(**inputs_dict)[0]
         _assert_tensors_equal(batched_logits[1], logits2, atol=1e-3)
         _assert_tensors_equal(expected_slice, logits_arr, atol=1e-3)
 
