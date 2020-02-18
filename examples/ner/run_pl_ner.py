@@ -57,7 +57,6 @@ class NERTransformer(BaseTransformer):
 
     def validation_step(self, batch, batch_nb):
         logger.info("valid start")
-
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
@@ -159,6 +158,7 @@ class NERTransformer(BaseTransformer):
         if os.path.exists(cached_features_file) and not args.overwrite_cache:
             logger.info("Loading features from cached file %s", cached_features_file)
             features = torch.load(cached_features_file)
+            logger.info("Done load")
         else:
             logger.info("Creating features from dataset file at %s", args.data_dir)
             examples = read_examples_from_file(args.data_dir, mode)
@@ -184,13 +184,18 @@ class NERTransformer(BaseTransformer):
         if not self.is_tpu and self.proc_rank == 0 and mode == "train":
             torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
+        logger.info("making datest")
+
         # Convert to Tensors and build dataset
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
         all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
 
+        logger.info("finishing dataset")
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
+        logger.info("finished data")
+
         return dataset
 
     @staticmethod
