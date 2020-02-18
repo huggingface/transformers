@@ -649,14 +649,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
-            outputs = model.generate(max_length=40, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id)  # do greedy decoding without beam search
+            outputs = model.generate(max_length=40, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id, do_sample=False)  # do greedy decoding without beam search
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
             input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
-            outputs = model.generate(input_ids=input_ids, do_sample=True, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
+            outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[0][i], skip_special_tokens=True)))
 
@@ -664,14 +664,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
             input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id, num_beams=3)  # generate sequences using greedy beam search decoding (3 beams)
+            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, bos_token_id=tokenizer.bos_token_id, pad_token_id=tokenizer.pad_token_id, eos_token_ids=tokenizer.eos_token_id, num_return_sequences=3)  # generate sequences using by sampling
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
             input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
             input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences using using greedy search
+            outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2, do_sample=False)  # generate sequences using using greedy search
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
         """
@@ -715,8 +715,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert input_ids is not None or (
             isinstance(bos_token_id, int) and bos_token_id >= 0
         ), "`bos_token_id` should be a positive integer."
-        assert (pad_token_id is None) or (
-            isinstance(pad_token_id, int) and pad_token_id >= 0
+        assert pad_token_id is None or (
+            isinstance(pad_token_id, int) and (pad_token_id >= 0)
         ), "`pad_token_id` should be a positive integer."
         assert (eos_token_ids is None) or (
             isinstance(eos_token_ids, (list, tuple)) and ((isinstance(e, int) and e >= 0) for e in eos_token_ids)
@@ -736,6 +736,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             )
         else:
             assert input_ids.dim() == 2, "Input prompt should be of shape (batch_size, sequence length)."
+
+        if pad_token_id is None and eos_token_ids is not None:
+            logger.warning(
+                "Set `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_ids[0])
+            )
+            pad_token_id = eos_token_ids[0]
 
         # current position and vocab size
         cur_len = input_ids.shape[1]
@@ -866,16 +872,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if unfinished_sents.max() == 0:
                 break
 
-        # add the first eos_token_ids to unfinished sentences <= TODO should we do that?
-        # COMMENT patrick: I would not do it because if we stop because the cur_len hits max_length, then
-        # the sentence is not finished, so no need for a eos_token_ids as the last token
-        #        if cur_len == max_length and eos_token_ids is not None:
-        #            input_ids[:, -1].masked_fill_(unfinished_sents.to(dtype=torch.bool), eos_token_ids[0])
-
-        # finished sents are filled with pad_token_
-        decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(
-            pad_token_id if pad_token_id is not None else -1
-        )
+        # if some batches have to be padded, the pad_token_id has to be defined
+        if tgt_len.min().item() != tgt_len.max().item():
+            assert pad_token_id is not None, "`Pad_token_id` has to be defined if `eos_token_ids`"
+            # finished sents are filled with pad_token
+            decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id)
+        else:
+            decoded = input_ids
 
         for hypo_idx, hypo in enumerate(input_ids):
             decoded[hypo_idx, : tgt_len[hypo_idx]] = hypo[: tgt_len[hypo_idx]]
@@ -1051,9 +1054,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             best.append(best_hyp)
 
         # generate target batch
-        decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(
-            pad_token_id if pad_token_id is not None else -1
-        )
+        decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id)
 
         for i, hypo in enumerate(best):
             decoded[i, : tgt_len[i] - 1] = hypo
