@@ -38,7 +38,7 @@ class NERTransformer(BaseTransformer):
             )  # XLM and RoBERTa don"t use segment_ids
 
         outputs = self.forward(**inputs)
-        loss = outputs[0]
+        loss = outputs[0].detach().cpu()
 
         tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
         return {"loss": loss, "log": tensorboard_logs}
@@ -65,7 +65,8 @@ class NERTransformer(BaseTransformer):
         preds = logits.detach().cpu().numpy()
         out_label_ids = inputs["labels"].detach().cpu().numpy()
 
-        return {"val_loss": tmp_eval_loss, "pred": preds, "target": out_label_ids}
+        return {"val_loss": tmp_eval_loss.detach().cpu(),
+                "pred": preds, "target": out_label_ids}
 
     def _eval_end(self, outputs):
         "Task specific validation"
