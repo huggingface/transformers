@@ -693,7 +693,7 @@ class SelfAttention(nn.Module):
         attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
         return attn_output, attn_weights
 
-    def _use_and_update_saved_state(self, k, v, saved_state, key_padding_mask, incremental_state, static_kv, bsz):
+    def _use_and_update_saved_state(self, k, v, saved_state, key_padding_mask, decoder_cached_states, static_kv, bsz):
         # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
         if "prev_key" in saved_state:
             _prev_key = saved_state["prev_key"]
@@ -713,9 +713,8 @@ class SelfAttention(nn.Module):
             else:
                 assert v is not None
                 v = torch.cat([prev_value, v], dim=1)
-        prev_key_padding_mask = None  # type: Optional[Tensor]
-        if "prev_key_padding_mask" in saved_state:
-            prev_key_padding_mask = saved_state["prev_key_padding_mask"]
+
+        prev_key_padding_mask = saved_state.get("prev_key_padding_mask", None) # type: Optional[Tensor]
         assert k is not None and v is not None
         key_padding_mask = self._cat_prev_key_padding_mask(
             key_padding_mask, prev_key_padding_mask, bsz, k.size(1), static_kv
@@ -724,8 +723,8 @@ class SelfAttention(nn.Module):
         saved_state["prev_value"] = v.view(bsz, self.num_heads, -1, self.head_dim)
         saved_state["prev_key_padding_mask"] = key_padding_mask
         # In this branch decoder_cached_states is never None
-        assert incremental_state is not None
-        self._update_layer_cache(incremental_state, saved_state)
+        assert decoder_cached_states is not None
+        self._update_layer_cache(decoder_cached_states, saved_state)
         return k, v, key_padding_mask
 
     @staticmethod
