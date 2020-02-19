@@ -413,5 +413,6 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Check alignment for build_inputs_with_special_tokens
             self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
 
+
 if __name__ == "__main__":
     unittest.main()
