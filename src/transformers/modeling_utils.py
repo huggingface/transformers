@@ -978,10 +978,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             for batch_idx in range(batch_size):
 
                 # if we are done with this sentence
-                done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(next_scores[batch_idx].max().item())
+                done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
+                    next_scores[batch_idx].max().item()
+                )
                 if done[batch_idx]:
-                    assert len(generated_hyps[batch_idx]) >= num_beams, 'Batch can only be done if at least {} beams have been generated'.format(num_beams)
-                    assert eos_token_ids is not None and pad_token_id is not None, 'generated beams >= num_beams -> eos_token_id and pad_token have to be defined'
+                    assert (
+                        len(generated_hyps[batch_idx]) >= num_beams
+                    ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
+                    assert (
+                        eos_token_ids is not None and pad_token_id is not None
+                    ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
                     next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
                     continue
 
@@ -996,7 +1002,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     word_id = idx % vocab_size
 
                     # add to generated hypotheses if end of sentence or last iteration
-                    if (eos_token_ids is not None and word_id.item() in eos_token_ids):
+                    if eos_token_ids is not None and word_id.item() in eos_token_ids:
                         generated_hyps[batch_idx].add(
                             input_ids[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item()
                         )
