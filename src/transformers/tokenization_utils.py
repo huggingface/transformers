@@ -1822,4 +1822,5 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             folder, file = save_directory, self.vocab_files_names["vocab_file"]
         else:
             folder, file = os.path.split(os.path.abspath(save_directory))
-        self._tokenizer.save(folder, file)
+
+        return tuple(self._tokenizer.save(folder, file))

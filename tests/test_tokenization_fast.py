@@ -236,6 +236,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Check alignment for build_inputs_with_special_tokens
             self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
 
+            # Check the number of returned files for save_vocabulary
+            self.assertEqual(len(tokenizer_r.save_vocabulary(".")), len(tokenizer_p.save_vocabulary(".")))
+
     @require_torch
     def test_transfoxl(self):
         for tokenizer_name in TransfoXLTokenizer.pretrained_vocab_files_map["pretrained_vocab_file"].keys():
@@ -271,6 +274,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Check alignment for build_inputs_with_special_tokens
             self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
+
+            # Check the number of returned files for save_vocabulary
+            self.assertEqual(len(tokenizer_r.save_vocabulary(".")), len(tokenizer_p.save_vocabulary(".")))
 
     def test_distilbert(self):
         for tokenizer_name in DistilBertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
@@ -308,6 +314,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Check alignment for build_inputs_with_special_tokens
             self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
 
+            # Check the number of returned files for save_vocabulary
+            self.assertEqual(len(tokenizer_r.save_vocabulary(".")), len(tokenizer_p.save_vocabulary(".")))
+
     def test_gpt2(self):
         for tokenizer_name in GPT2Tokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = GPT2Tokenizer.from_pretrained(tokenizer_name)
@@ -342,6 +351,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Check alignment for build_inputs_with_special_tokens
             self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
+
+            # Check the number of returned files for save_vocabulary
+            self.assertEqual(len(tokenizer_r.save_vocabulary(".")), len(tokenizer_p.save_vocabulary(".")))
 
     def test_roberta(self):
         for tokenizer_name in RobertaTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
@@ -378,6 +390,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Check alignment for build_inputs_with_special_tokens
             self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
 
+            # Check the number of returned files for save_vocabulary
+            self.assertEqual(len(tokenizer_r.save_vocabulary(".")), len(tokenizer_p.save_vocabulary(".")))
+
     def test_openai(self):
         for tokenizer_name in OpenAIGPTTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = OpenAIGPTTokenizer.from_pretrained(tokenizer_name)
@@ -412,6 +427,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Check alignment for build_inputs_with_special_tokens
             self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
+
+            # Check the number of returned files for save_vocabulary
+            self.assertEqual(len(tokenizer_r.save_vocabulary(".")), len(tokenizer_p.save_vocabulary(".")))
 
 
 if __name__ == "__main__":
