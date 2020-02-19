@@ -1757,10 +1757,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         # from the batch idx to the original sample
         if return_overflowing_tokens:
             overflow_to_sample_mapping = [
-                i if len(item['input_ids']) == 1 else [i] * len(item['input_ids'])
-                for i, item in enumerate(tokens)
+                i if len(item["input_ids"]) == 1 else [i] * len(item["input_ids"]) for i, item in enumerate(tokens)
             ]
-            sanitized['overflow_to_sample_mapping'] = overflow_to_sample_mapping
+            sanitized["overflow_to_sample_mapping"] = overflow_to_sample_mapping
         return sanitized
 
     def encode_plus(

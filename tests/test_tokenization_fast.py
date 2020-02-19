@@ -10,9 +10,9 @@ from transformers import (
     GPT2Tokenizer,
     GPT2TokenizerFast,
     OpenAIGPTTokenizer,
+    PreTrainedTokenizer,
     RobertaTokenizer,
     TransfoXLTokenizer,
-    PreTrainedTokenizer,
     is_torch_available,
 )
 from transformers.tokenization_distilbert import DistilBertTokenizerFast
