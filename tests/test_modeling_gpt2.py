@@ -64,7 +64,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             num_labels=3,
             num_choices=4,
             scope=None,
-            num_return_sequences=3
+            num_return_sequences=3,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -130,7 +130,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 # type_vocab_size=self.type_vocab_size,
                 # initializer_range=self.initializer_range
                 bos_token_id=self.bos_token_id,
-                eos_token_ids=self.eos_token_ids
+                eos_token_ids=self.eos_token_ids,
             )
 
             head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
@@ -182,7 +182,9 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
             )
 
-        def create_and_check_generate_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+        def create_and_check_generate_lm_head_model(
+            self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+        ):
             model = GPT2LMHeadModel(config)
             model.to(torch_device)
             model.eval()
