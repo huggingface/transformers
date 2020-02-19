@@ -16,8 +16,6 @@
 
 import unittest
 
-import ipdb
-
 from transformers import is_torch_available
 
 from .utils import CACHE_DIR, require_torch, slow, torch_device
@@ -87,7 +85,6 @@ class LMGenerationTest(unittest.TestCase):
                         num_return_sequences=self.num_return_sequences,
                         num_beams=self.num_beams,
                     )
-                    ipdb.set_trace()
                     self.parent.assertListEqual(list(output_ids[0]), expected_output_ids)
 
     def setUp(self):
