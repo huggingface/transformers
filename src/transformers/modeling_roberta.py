@@ -20,7 +20,7 @@ import logging
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import functional as F, CrossEntropyLoss, MSELoss
 
 from .configuration_roberta import RobertaConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
@@ -179,12 +179,9 @@ class RobertaForMaskedLM(BertPreTrainedModel):
         super().__init__(config)
 
         self.roberta = RobertaModel(config)
-        self.lm_head = RobertaLMHead(config)
+        self.lm_head = RobertaLMHead(config, self.roberta.embeddings.word_embeddings.weight)
 
         self.init_weights()
-
-    def get_output_embeddings(self):
-        return self.lm_head.decoder
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
     def forward(
@@ -258,16 +255,14 @@ class RobertaForMaskedLM(BertPreTrainedModel):
 class RobertaLMHead(nn.Module):
     """Roberta Head for masked language modeling."""
 
-    def __init__(self, config):
+    def __init__(self, config, weight=None):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        if weight is None:
+            weight = nn.Linear(config.hidden_size, config.vocab_size, bias=False).weight
+        self.weight = weight
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
 
     def forward(self, features, **kwargs):
         x = self.dense(features)
@@ -275,7 +270,7 @@ class RobertaLMHead(nn.Module):
         x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
-        x = self.decoder(x) + self.bias
+        x = F.linear(x, self.weight) + self.bias
 
         return x
 
