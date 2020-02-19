@@ -210,3 +210,10 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         # We need to recompute max_len according to the newly register post_processor to get real values.
         self.max_len_single_sentence = self.max_len - self.num_added_tokens(False)  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - self.num_added_tokens(True)  # take into account special tokens
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
+        if token_ids_1 is None:
+            return output
+
+        return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
