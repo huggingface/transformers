@@ -34,6 +34,9 @@ To create the package for pypi.
 
 7. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
+8. Update the documentation commit in .circleci/deploy.sh for the accurate documentation to be displayed
+
+9. Update README.md to redirect to correct documentation.
 """
 
 import shutil
