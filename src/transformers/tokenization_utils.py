@@ -1824,4 +1824,3 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             folder, file = os.path.split(os.path.abspath(save_directory))
 
         return tuple(self._tokenizer.save(folder, file))
-
