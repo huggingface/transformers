@@ -812,7 +812,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         """
         # current position / max lengths / length of generated sentences / unfinished sentences
         unfinished_sents = input_ids.new(batch_size).fill_(1)
-        tgt_len = input_ids.new(batch_size).fill_(max_length)
+        batches_len = input_ids.new(batch_size).fill_(max_length)
 
         past = None
 
@@ -850,9 +850,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             # update generations and finished sentences
             if eos_token_ids is not None:
                 # if pad_token_id is undefined, use first eos_token_id since sentence will be filled with -1 anyways
-                tokens_to_add = next_token * unfinished_sents + (
-                    pad_token_id if pad_token_id is not None else eos_token_ids[0]
-                ) * (1 - unfinished_sents)
+                tokens_to_add = next_token * unfinished_sents + (pad_token_id) * (1 - unfinished_sents)
             else:
                 tokens_to_add = next_token
 
@@ -861,8 +859,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if eos_token_ids is not None:
                 for eos_token_id in eos_token_ids:
                     eos_in_sents = tokens_to_add == eos_token_id
-                    # tgt_len is updated only the first time eos_token is in the sentences (unfinished_sents == 1 and eos_in_sents == 1)
-                    tgt_len.masked_fill_(unfinished_sents.mul(eos_in_sents.long()).bool(), cur_len + 1)
+                    # batches_len is updated only the first time eos_token is in the sentences (unfinished_sents == 1 and eos_in_sents == 1)
+                    batches_len.masked_fill_(unfinished_sents.mul(eos_in_sents.long()).bool(), cur_len + 1)
                     # unfinished_sents is set to zero if eos in sentence
                     unfinished_sents.mul_((~eos_in_sents).long())
 
@@ -873,15 +871,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 break
 
         # if some batches have to be padded, the pad_token_id has to be defined
-        if tgt_len.min().item() != tgt_len.max().item():
+        if batches_len.min().item() != batches_len.max().item():
             assert pad_token_id is not None, "`Pad_token_id` has to be defined if `eos_token_ids`"
             # finished sents are filled with pad_token
-            decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id)
+            decoded = input_ids.new(batch_size, batches_len.max().item()).fill_(pad_token_id)
         else:
             decoded = input_ids
 
         for hypo_idx, hypo in enumerate(input_ids):
-            decoded[hypo_idx, : tgt_len[hypo_idx]] = hypo[: tgt_len[hypo_idx]]
+            decoded[hypo_idx, : batches_len[hypo_idx]] = hypo[: batches_len[hypo_idx]]
 
         return decoded
 
@@ -1058,25 +1056,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     )
 
         # select the best hypotheses
-        tgt_len = input_ids.new(batch_size)
+        batches_len = input_ids.new(batch_size)
         best = []
 
         for i, hypotheses in enumerate(generated_hyps):
             best_hyp = max(hypotheses.hyp, key=lambda x: x[0])[1]
-            tgt_len[i] = len(best_hyp)
+            batches_len[i] = len(best_hyp)
             best.append(best_hyp)
 
         # shorter batches are filled with pad_token
-        if tgt_len.min().item() != tgt_len.max().item():
+        if batches_len.min().item() != batches_len.max().item():
             assert pad_token_id is not None, "`Pad_token_id` has to be defined"
-            tgt_max_len = min(tgt_len.max().item() + 1, max_length)
+            tgt_max_len = min(batches_len.max().item() + 1, max_length)
             decoded = input_ids.new(batch_size, tgt_max_len).fill_(pad_token_id)
 
             # fill with hypothesis and eos_token_id if necessary
             for i, hypo in enumerate(best):
-                decoded[i, : tgt_len[i]] = hypo
-                if tgt_len[i] < max_length:
-                    decoded[i, tgt_len[i]] = eos_token_ids[0]
+                decoded[i, : batches_len[i]] = hypo
+                if batches_len[i] < max_length:
+                    decoded[i, batches_len[i]] = eos_token_ids[0]
         else:
             # none of the hypotheses have an eos_token
             assert (len(hypo) == max_length for hypo in best)
