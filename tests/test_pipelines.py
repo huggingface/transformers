@@ -7,17 +7,17 @@ from transformers.pipelines import Pipeline
 from .utils import require_tf, require_torch
 
 
-QA_FINETUNED_MODELS = {
-    ("bert-base-uncased", "bert-large-uncased-whole-word-masking-finetuned-squad", None),
-    ("bert-base-cased", "bert-large-cased-whole-word-masking-finetuned-squad", None),
-    ("bert-base-cased", "distilbert-base-cased-distilled-squad", None),
-}
+QA_FINETUNED_MODELS = [
+    (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
+    (("bert-base-cased", {"use_fast": False}), "bert-large-cased-whole-word-masking-finetuned-squad", None),
+    (("bert-base-cased", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
+]
 
-TF_QA_FINETUNED_MODELS = {
-    ("bert-base-uncased", "bert-large-uncased-whole-word-masking-finetuned-squad", None),
-    ("bert-base-cased", "bert-large-cased-whole-word-masking-finetuned-squad", None),
-    ("bert-base-cased", "distilbert-base-cased-distilled-squad", None),
-}
+TF_QA_FINETUNED_MODELS = [
+    (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
+    (("bert-base-cased", {"use_fast": False}), "bert-large-cased-whole-word-masking-finetuned-squad", None),
+    (("bert-base-cased", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
+]
 
 TF_NER_FINETUNED_MODELS = {
     (
@@ -63,13 +63,13 @@ TEXT_CLASSIF_FINETUNED_MODELS = {
     )
 }
 
-FILL_MASK_FINETUNED_MODELS = {
-    ("distilroberta-base", "distilroberta-base", None),
-}
+FILL_MASK_FINETUNED_MODELS = [
+    (("distilroberta-base", {"use_fast": False}), "distilroberta-base", None),
+]
 
-TF_FILL_MASK_FINETUNED_MODELS = {
-    ("distilroberta-base", "distilroberta-base", None),
-}
+TF_FILL_MASK_FINETUNED_MODELS = [
+    (("distilroberta-base", {"use_fast": False}), "distilroberta-base", None),
+]
 
 
 class MonoColumnInputTestCase(unittest.TestCase):
