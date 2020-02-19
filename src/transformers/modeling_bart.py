@@ -36,50 +36,42 @@ BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 BART_START_DOCSTRING = r"""
- "BART is a sequence to sequence model which uses a standard Transformer based Translation architecture.
 
-    This model is a PyTorch `torch.nn.Module`_ sub-class. Use it as a regular PyTorch Module and
-    refer to the PyTorch documentation for all matter related to general usage and behavior.
+    'BART is a An encoder decoder transformer pre-trained in a text-to-text denoising generative setting.'
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch Module and
+    refer to the PyTorch documentation for all matters related to general usage and behavior.
 
-    .. _`Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer`:
-        https://arxiv.org/abs/1910.10683
-
-    .. _`torch.nn.Module`:
-        https://pytorch.org/docs/stable/nn.html#module
- Paper: BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension
-    https://arxiv.org/abs/1910.13461
- Authors: Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov, Luke Zettlemoyer
- (Submitted on 29 Oct 2019)
- Code Ported from https://github.com/pytorch/fairseq/tree/master/examples/bart
-    An encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
-
+    `Paper <https://arxiv.org/abs/1910.13461>`_: BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension 
+    Authors: Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov, Luke Zettlemoyer
+    (Submitted on 29 Oct 2019) `Paper` `Paper`
+    Code Ported from https://github.com/pytorch/fairseq/tree/master/examples/bart
+    
     Parameters:
         config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+
 """
 
 BART_INPUTS_DOCSTRING = r"""
-    Inputs:
-        **input_ids**: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Indices of input sequence tokens in the vocabulary. Use BartTokenizer.encode to produce them.
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+               Indices of input sequence tokens in the vocabulary. Use BartTokenizer.encode to produce them.
             Padding will be ignored by default should you provide it.
             Indices can be obtained using :class:`transformers.BartTokenizer.encode(text)`.
-            Also see :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
-        **attention_mask**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
-            Mask to avoid performing attention on padding token indices in the encoder inputs.
-            Default: a mask will be created that ignore config.pad_token_id
+            
+        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Warning: this parameter is different from other attention_mask parameters and should be used with caution.
+            OLD
+            Mask to avoid performing attention on padding token indices. (in input_ids)
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        **decoder_input_ids**: (`optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
+        decoder_input_ids: (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             only use for translation and summarization. Otherwise use the default which shifts the encoder's
             input_ids right
-        **decoder_attention_mask**  `optional`) ``torch.FloatTensor`` of shape ``(batch_size, sequence_length)``:
-           default behavior ignore pad tokens and future tokens.
+        decoder_attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
+           default behavior (if None is passed is to ignore pad tokens and future tokens.)
              See diagram 1 in the paper for more info on the default strategy
-
-    read `prepare_bart_inputs` for more information on the default behavior.
-
 """
 LARGE_NEGATIVE = -1e4
 
@@ -841,7 +833,6 @@ RET_DOCSTRING = r"""
     "The bare BART Model outputting raw hidden-states without any specific head on top.", BART_START_DOCSTRING,
 )
 class BartModel(PretrainedBartModel):
-    """"""
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
@@ -855,15 +846,6 @@ class BartModel(PretrainedBartModel):
         self.decoder = BartDecoder(config, self.shared)
 
         self.init_weights()
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, value):
-        self.shared = value
-
-    def get_output_embeddings(self):
-        return _make_linear_from_emb(self.shared)
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def forward(
@@ -902,6 +884,17 @@ class BartModel(PretrainedBartModel):
         encoder_outputs = _filter_out_falsey_values(encoder_outputs)  # type: tuple
         return decoder_outputs + encoder_outputs
 
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, value):
+        self.shared = value
+
+    def get_output_embeddings(self):
+        return _make_linear_from_emb(self.shared)
+
+
+
 
 @add_start_docstrings(
     "The bare BART Model with a language modeling head", BART_START_DOCSTRING,
@@ -927,29 +920,32 @@ class BartForMaskedLM(PretrainedBartModel):
         **unused
     ):
         r"""
-            **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-                Labels for computing the masked language modeling loss.
-                Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
-                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
-                with labels
-                in ``[0, ..., config.vocab_size]``.
+        masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the masked language modeling loss.
+            Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
+            with labels
+            in ``[0, ..., config.vocab_size]``.
 
-        Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-            **loss**: (`optional`, returned when ``lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-                Masked language modeling loss.
-            **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
-                Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-            **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-                list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-                of shape ``(batch_size, sequence_length, hidden_size)``:
-                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-                list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads,
-                sequence_length, sequence_length)``:
-                Attentions weights after the attention softmax, used to compute the weighted average in the
-                self-attention heads.
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
+        masked_lm_loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Masked language modeling loss.
+        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-        Examples::
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
 
             tokenizer = BartTokenizer.from_pretrained('bart-large')
             model = BartForMaskedLM.from_pretrained('bart-large')
@@ -1008,46 +1004,39 @@ class BartForSequenceClassification(PretrainedBartModel):
         labels=None,
     ):
         r"""
-            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-                Labels for computing the sequence classification/regression loss.
-                Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-                If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-                If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        Returns:
-            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (
-            :class:`~transformers.BartConfig`) and inputs:
-            loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is
-            provided):
-                Classification  loss.
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BartConfig`) and inputs:
+            loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
+                Classification  loss (cross entropy)
             logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
                 Classification (or regression if config.num_labels==1) scores (before SoftMax).
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when
-            ``config.output_hidden_states=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of
-                each layer)
+            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
                 of shape :obj:`(batch_size, sequence_length, hidden_size)`.
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when
-            ``config.output_attentions=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
+            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
                 Attentions weights after the attention softmax, used to compute the weighted average in the
                 self-attention
                 heads.
 
-        Examples::
+    Examples::
 
-            from transformers import BartTokenizer, BartForSequenceClassification
-            import torch
+        from transformers import BartTokenizer, BartForSequenceClassification
+        import torch
 
-            tokenizer = BartTokenizer.from_pretrained('bart-large')
-            model = BartForSequenceClassification.from_pretrained('bart-large')
-            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute",
-            add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-            labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-            outputs = model(input_ids, labels=labels)
-            loss, logits = outputs[:2]
+        tokenizer = BartTokenizer.from_pretrained('bart-large')
+        model = BartForSequenceClassification.from_pretrained('bart-large')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute",
+        add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, logits = outputs[:2]
 
         """
         outputs = self.model.forward(

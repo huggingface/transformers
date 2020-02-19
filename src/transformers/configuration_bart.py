@@ -31,6 +31,9 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class BartConfig(PretrainedConfig):
+    r"""
+        Configuration class for Bart. Parameters are renamed from the fairseq implementation
+    """
     model_type = "bart"
     pretrained_config_archive_map = BART_PRETRAINED_CONFIG_ARCHIVE_MAP
 
