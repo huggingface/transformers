@@ -245,17 +245,17 @@ class BartHeadTests(unittest.TestCase):
         self.assertEqual(n_pad_after, n_pad_before - 1)
         self.assertTrue(torch.eq(shifted[:, 0], 2).all())
 
+    @slow
     def test_tokenization(self):
-        tokenizer = BartTokenizer.from_pretrained('bart-large')
-        examples = ['Hello world', ' world', 'world']
-        fairseq_results = [torch.Tensor([0, 31414, 232, 2]),
-                           torch.Tensor([0, 232, 2]),
-                           torch.Tensor([0, 8331, 2])]
-        for ex,desired_result in zip(examples, fairseq_results):
-            bart_toks = tokenizer.encode(ex, return_tensors='pt')
+        tokenizer = BartTokenizer.from_pretrained("bart-large")
+        examples = [" Hello world", " DomDramg"]  # need leading spaces for equality
+        fairseq_results = [
+            torch.Tensor([0, 20920, 232, 2]),
+            torch.Tensor([0, 11349, 495, 4040, 571, 2]),
+        ]
+        for ex, desired_result in zip(examples, fairseq_results):
+            bart_toks = tokenizer.encode(ex, return_tensors="pt")
             _assert_tensors_equal(desired_result.long(), bart_toks, prefix=ex)
-
-        tokenizer.encoder()
 
     def test_input_preparation(self):
         example_no_pad = [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]
@@ -272,16 +272,18 @@ class BartHeadTests(unittest.TestCase):
                 _assert_tensors_equal(inputs_dict["attention_mask"], inputs_with_passed_attn["attention_mask"])
 
 
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=''):
-    if a is None:
-        assert b is None
+def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
+    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+    if a is None and b is None:
         return True
-    elif torch.allclose(a, b, atol=atol):
-        return True
-    else:
+    try:
+        if torch.allclose(a, b, atol=atol):
+            return True
+        raise
+    except Exception:
         msg = "{} != {}".format(a, b)
         if prefix:
-            msg = prefix + ': ' + msg
+            msg = prefix + ": " + msg
         raise AssertionError(msg)
 
 

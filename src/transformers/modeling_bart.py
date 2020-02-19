@@ -818,7 +818,8 @@ def _filter_out_falsey_values(tup) -> Tuple:
     """Remove entries that are None or [] from an iterable."""
     return tuple(x for x in tup if isinstance(x, torch.Tensor) or x)
 
-RET_DOCSTRING =r"""
+
+RET_DOCSTRING = r"""
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
@@ -837,8 +838,7 @@ RET_DOCSTRING =r"""
 
 
 @add_start_docstrings(
-    "The bare BART Model outputting raw hidden-states without any specific head on top.",
-    BART_START_DOCSTRING,
+    "The bare BART Model outputting raw hidden-states without any specific head on top.", BART_START_DOCSTRING,
 )
 class BartModel(PretrainedBartModel):
     """"""
@@ -907,35 +907,6 @@ class BartModel(PretrainedBartModel):
     "The bare BART Model with a language modeling head", BART_START_DOCSTRING,
 )
 class BartForMaskedLM(PretrainedBartModel):
-    r"""
-        **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
-            Labels for computing the masked language modeling loss.
-            Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``.
-
-    Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Masked language modeling loss.
-        **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
-            list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
-            of shape ``(batch_size, sequence_length, hidden_size)``:
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        **attentions**: (`optional`, returned when ``config.output_attentions=True``)
-            list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
-
-    Examples::
-
-        tokenizer = BartTokenizer.from_pretrained('bart-large')
-        model = BartForMaskedLM.from_pretrained('bart-large')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids=input_ids, lm_labels=input_ids)
-        loss, prediction_scores = outputs[:2]
-
-    """
     base_model_prefix = "model"
 
     def __init__(self, config: BartConfig):
@@ -955,6 +926,37 @@ class BartForMaskedLM(PretrainedBartModel):
         lm_labels=None,
         **unused
     ):
+        r"""
+            **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+                Labels for computing the masked language modeling loss.
+                Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
+                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
+                with labels
+                in ``[0, ..., config.vocab_size]``.
+
+        Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
+            **loss**: (`optional`, returned when ``lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+                Masked language modeling loss.
+            **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
+                Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+            **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+                list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
+                of shape ``(batch_size, sequence_length, hidden_size)``:
+                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+                list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads,
+                sequence_length, sequence_length)``:
+                Attentions weights after the attention softmax, used to compute the weighted average in the
+                self-attention heads.
+
+        Examples::
+
+            tokenizer = BartTokenizer.from_pretrained('bart-large')
+            model = BartForMaskedLM.from_pretrained('bart-large')
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+            outputs = model(input_ids=input_ids, lm_labels=input_ids)
+            loss, prediction_scores = outputs[:2]
+        """
         outputs = self.model.forward(
             input_ids,
             attention_mask=attention_mask,
@@ -986,9 +988,6 @@ class BartForMaskedLM(PretrainedBartModel):
     BART_START_DOCSTRING,
 )
 class BartForSequenceClassification(PretrainedBartModel):
-
-
-
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = BartModel(config)
