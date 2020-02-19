@@ -145,7 +145,7 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             return_overflowing_tokens=True,
         )
 
-        for key in tokens.keys():
+        for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
             self.assertEqual(len(tokens[key].shape), 2)
 
         # Mono sample
@@ -157,7 +157,7 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             return_overflowing_tokens=True,
         )
 
-        for key in tokens.keys():
+        for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
             self.assertEqual(len(tokens[key].shape), 2)
             self.assertEqual(tokens[key].shape[-1], 6)
 
@@ -170,7 +170,7 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             return_overflowing_tokens=True,
         )
 
-        for key in tokens.keys():
+        for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
             self.assertEqual(len(tokens[key].shape), 2)
             self.assertEqual(tokens[key].shape[-1], 6)
 
