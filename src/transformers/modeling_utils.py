@@ -977,11 +977,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             next_batch_beam = []
 
             # for each sentence
-            for batch_ex in range(batch_size):
+            for batch_idx in range(batch_size):
 
                 # if we are done with this sentence
-                done[batch_ex] = done[batch_ex] or generated_hyps[batch_ex].is_done(next_scores[batch_ex].max().item())
-                if done[batch_ex] and pad_token_id is not None:
+                done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(next_scores[batch_idx].max().item())
+                if done[batch_idx]:
+                    assert len(generated_hyps[batch_idx]) >= num_beams, 'Batch can only be done if at least {} beams have been generated'.format(num_beams)
+                    assert eos_token_ids is not None and pad_token_id is not None, 'generated beams >= num_beams -> eos_token_id and pad_token have to be defined'
                     next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
                     continue
 
@@ -989,30 +991,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 next_sent_beam = []
 
                 # next words for this sentence
-                for idx, score in zip(next_words[batch_ex], next_scores[batch_ex]):
+                for idx, score in zip(next_words[batch_idx], next_scores[batch_idx]):
 
                     # get beam and word IDs
                     beam_id = idx // vocab_size
                     word_id = idx % vocab_size
 
-                    # end of sentence, or next word
-                    if (eos_token_ids is not None and word_id.item() in eos_token_ids) or cur_len + 1 == max_length:
-                        generated_hyps[batch_ex].add(
-                            input_ids[batch_ex * num_beams + beam_id, :cur_len].clone(), score.item()
+                    # add to generated hypotheses if end of sentence or last iteration
+                    if (eos_token_ids is not None and word_id.item() in eos_token_ids):
+                        generated_hyps[batch_idx].add(
+                            input_ids[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item()
                         )
                     else:
-                        next_sent_beam.append((score, word_id, batch_ex * num_beams + beam_id))
+                        # add next predicted word if it is not eos_token
+                        next_sent_beam.append((score, word_id, batch_idx * num_beams + beam_id))
 
                     # the beam for next step is full
                     if len(next_sent_beam) == num_beams:
                         break
 
                 # update next beam content
-                assert len(next_sent_beam) == 0 if cur_len + 1 == max_length else num_beams
-                if len(next_sent_beam) == 0 and pad_token_id is not None:
-                    next_sent_beam = [(0, pad_token_id, 0)] * num_beams  # pad the batch
+                assert len(next_sent_beam) == num_beams, "Beam should always be full"
                 next_batch_beam.extend(next_sent_beam)
-                assert len(next_batch_beam) == num_beams * (batch_ex + 1)
+                assert len(next_batch_beam) == num_beams * (batch_idx + 1)
 
             # sanity check / prepare next batch
             assert len(next_batch_beam) == batch_size * num_beams
@@ -1044,22 +1045,42 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if all(done):
                 break
 
+        for batch_idx in range(batch_size):
+            # Add all open beam hypothesis to generated_hyps
+            if not done[batch_idx]:
+                for idx, score in zip(next_words[batch_idx], next_scores[batch_idx]):
+
+                    # get beam and word IDs
+                    beam_id = idx // vocab_size
+                    word_id = idx % vocab_size
+                    generated_hyps[batch_idx].add(
+                        input_ids[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item()
+                    )
+
         # select the best hypotheses
         tgt_len = input_ids.new(batch_size)
         best = []
 
         for i, hypotheses in enumerate(generated_hyps):
             best_hyp = max(hypotheses.hyp, key=lambda x: x[0])[1]
-            tgt_len[i] = len(best_hyp) + 1  # +1 for the <EOS> symbol
+            tgt_len[i] = len(best_hyp)
             best.append(best_hyp)
 
-        # generate target batch
-        decoded = input_ids.new(batch_size, tgt_len.max().item()).fill_(pad_token_id)
+        # shorter batches are filled with pad_token
+        if tgt_len.min().item() != tgt_len.max().item():
+            assert pad_token_id is not None, "`Pad_token_id` has to be defined"
+            tgt_max_len = min(tgt_len.max().item() + 1, max_length)
+            decoded = input_ids.new(batch_size, tgt_max_len).fill_(pad_token_id)
 
-        for i, hypo in enumerate(best):
-            decoded[i, : tgt_len[i] - 1] = hypo
-            if eos_token_ids is not None:
-                decoded[i, tgt_len[i] - 1] = eos_token_ids[0]
+            # fill with hypothesis and eos_token_id if necessary
+            for i, hypo in enumerate(best):
+                decoded[i, : tgt_len[i]] = hypo
+                if tgt_len[i] < max_length:
+                    decoded[i, tgt_len[i]] = eos_token_ids[0]
+        else:
+            # none of the hypotheses have an eos_token
+            assert (len(hypo) == max_length for hypo in best)
+            decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
 
         return decoded
 
@@ -1100,14 +1121,14 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf")
 
 
 class BeamHypotheses(object):
-    def __init__(self, n_hyp, max_length, length_penalty, early_stopping):
+    def __init__(self, num_beams, max_length, length_penalty, early_stopping):
         """
         Initialize n-best list of hypotheses.
         """
         self.max_length = max_length - 1  # ignoring bos_token
         self.length_penalty = length_penalty
         self.early_stopping = early_stopping
-        self.n_hyp = n_hyp
+        self.num_beams = num_beams
         self.hyp = []
         self.worst_score = 1e9
 
@@ -1122,9 +1143,9 @@ class BeamHypotheses(object):
         Add a new hypothesis to the list.
         """
         score = sum_logprobs / len(hyp) ** self.length_penalty
-        if len(self) < self.n_hyp or score > self.worst_score:
+        if len(self) < self.num_beams or score > self.worst_score:
             self.hyp.append((score, hyp))
-            if len(self) > self.n_hyp:
+            if len(self) > self.num_beams:
                 sorted_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.hyp)])
                 del self.hyp[sorted_scores[0][1]]
                 self.worst_score = sorted_scores[1][0]
@@ -1136,7 +1157,7 @@ class BeamHypotheses(object):
         If there are enough hypotheses and that none of the hypotheses being generated
         can become better than the worst one in the heap, then we are done with this sentence.
         """
-        if len(self) < self.n_hyp:
+        if len(self) < self.num_beams:
             return False
         elif self.early_stopping:
             return True
