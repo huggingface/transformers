@@ -254,7 +254,7 @@ def main():
         generated_sequences.append(total_sequence)
         print(total_sequence)
 
-    return generated_sequences if len(generated_sequences) > 1 else generated_sequences[0]
+    return generated_sequences
 
 
 if __name__ == "__main__":
