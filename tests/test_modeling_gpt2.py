@@ -64,6 +64,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             num_labels=3,
             num_choices=4,
             scope=None,
+            num_return_sequences=3
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -88,6 +89,9 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
+            self.bos_token_id = vocab_size - 1
+            self.eos_token_ids = [vocab_size - 1]
+            self.num_return_sequences = num_return_sequences
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -122,9 +126,11 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 # hidden_dropout_prob=self.hidden_dropout_prob,
                 # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
                 n_positions=self.max_position_embeddings,
-                n_ctx=self.max_position_embeddings
+                n_ctx=self.max_position_embeddings,
                 # type_vocab_size=self.type_vocab_size,
                 # initializer_range=self.initializer_range
+                bos_token_id=self.bos_token_id,
+                eos_token_ids=self.eos_token_ids
             )
 
             head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
@@ -175,6 +181,17 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(
                 list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
             )
+
+        def create_and_check_generate_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+            model = GPT2LMHeadModel(config)
+            model.to(torch_device)
+            model.eval()
+
+            model.generate()  # no input
+            model.generate(do_sample=False)  # no input, greedy decoding
+            model.generate(input_ids)  # batch_size = 1
+            model.generate(input_ids, config.num_return_sequences)  # batch_size > 1
+            model.generate(input_ids, config.num_return_sequences, do_sample=False)  # batch_size > 1, gredy decoding
 
         def create_and_check_double_lm_head_model(
             self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
@@ -238,6 +255,10 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_gpt2_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
+
+    def test_gpt2_lm_head_model_generation(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_generate_lm_head_model(*config_and_inputs)
 
     def test_gpt2_double_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
