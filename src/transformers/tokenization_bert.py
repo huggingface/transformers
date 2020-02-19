@@ -572,3 +572,11 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.do_lower_case = do_lower_case
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+
+        if token_ids_1:
+            output += token_ids_1 + [self.sep_token_id]
+
+        return output
