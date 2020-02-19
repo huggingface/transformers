@@ -506,14 +506,14 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         raise NotImplementedError
 
     def call(
-            self,
-            inputs,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            training=False,
+        self,
+        inputs,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        training=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
