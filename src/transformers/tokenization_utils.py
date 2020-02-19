@@ -89,8 +89,9 @@ def truncate_and_pad(
         logger.warning(
             "Disabled padding because no padding token set (pad_token: {}, pad_token_id: {}).\n"
             "To remove this error, you can add a new pad token and then resize model embedding:\n"
-            "\ttokenizer.pad_token = '<PAD>'\n\tmodel.resize_token_embeddings(len(tokenizer))"
-                .format(pad_token, pad_token_id)
+            "\ttokenizer.pad_token = '<PAD>'\n\tmodel.resize_token_embeddings(len(tokenizer))".format(
+                pad_token, pad_token_id
+            )
         )
 
     yield
@@ -1760,6 +1761,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         text_pair=None,
         add_special_tokens=False,
         max_length=None,
+        pad_to_max_length=False,
         stride=0,
         truncation_strategy="longest_first",
         return_tensors=None,
@@ -1783,7 +1785,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
-            pad_to_max_length=False,
+            pad_to_max_length=pad_to_max_length,
             **kwargs,
         )
 
