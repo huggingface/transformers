@@ -189,11 +189,17 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            model.generate()  # no input
-            model.generate(do_sample=False)  # no input, greedy decoding
-            model.generate(input_ids)  # batch_size = 1
-            model.generate(input_ids, config.num_return_sequences)  # batch_size > 1
-            model.generate(input_ids, config.num_return_sequences, do_sample=False)  # batch_size > 1, gredy decoding
+            # generate function should not produce any None values so that every output is decodable
+            self.check_are_valid_tokens(model.generate())  # no input
+            self.check_are_valid_tokens(model.generate(do_sample=False))  # no input, greedy decoding
+            self.check_are_valid_tokens(model.generate(input_ids))  # batch_size = 1
+            self.check_are_valid_tokens(model.generate(input_ids, config.num_return_sequences))  # batch_size > 1
+            self.check_are_valid_tokens(model.generate(input_ids, config.num_return_sequences, do_sample=False))  # batch_size > 1, gredy decoding
+
+        def check_are_valid_tokens(self, output_ids):
+            for token_id in output_ids[0].tolist():
+                self.parent.assertGreaterEqual(token_id, 0)
+                self.parent.assertLess(token_id, self.vocab_size)
 
         def create_and_check_double_lm_head_model(
             self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
@@ -258,7 +264,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
 
-    def test_gpt2_lm_head_model_generation(self):
+    def test_gpt2_lm_head_model_generate(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_lm_head_model(*config_and_inputs)
 
