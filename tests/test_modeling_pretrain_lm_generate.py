@@ -31,11 +31,11 @@ if is_torch_available():
 
 
 @require_torch
-class LMGenerationTest(unittest.TestCase):
+class LMGenerateTest(unittest.TestCase):
 
     all_model_classes_gpt2 = (GPT2LMHeadModel) if is_torch_available() else ()
 
-    class LMGenerationTester(object):
+    class LMGenerateTester(object):
         def __init__(
             self,
             parent,
@@ -88,7 +88,7 @@ class LMGenerationTest(unittest.TestCase):
                     self.parent.assertListEqual(list(output_ids[0]), expected_output_ids)
 
     def setUp(self):
-        self.model_tester = LMGenerationTest.LMGenerationTester(self)
+        self.model_tester = LMGenerateTest.LMGenerateTester(self)
 
     @slow
     def test_gpt2_generate(self):
