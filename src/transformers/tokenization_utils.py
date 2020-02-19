@@ -1743,8 +1743,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         # Sanitize the output to have dict[list] from list[dict]
         sanitized = {}
         for key in tokens[0].keys():
-            stack = [item[key] for item in tokens]
-            stack = [e for item in stack for e in item]
+            stack = [e for item in tokens for e in item[key]]
             if return_tensors == "tf":
                 stack = tf.stack(stack, axis=0)
             elif return_tensors == "pt":
@@ -1753,6 +1752,15 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 stack = stack[0]
 
             sanitized[key] = stack
+
+        # If returning overflowing tokens, we need to return a mapping
+        # from the batch idx to the original sample
+        if return_overflowing_tokens:
+            overflow_to_sample_mapping = [
+                i if len(item['input_ids']) == 1 else [i] * len(item['input_ids'])
+                for i, item in enumerate(tokens)
+            ]
+            sanitized['overflow_to_sample_mapping'] = overflow_to_sample_mapping
         return sanitized
 
     def encode_plus(
