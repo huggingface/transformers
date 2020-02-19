@@ -19,7 +19,7 @@ import unittest
 from transformers import is_torch_available
 
 from .utils import CACHE_DIR, require_torch, slow, torch_device
-from .utils_generation import GPT2_PADDING_TOKENS, GPT2_PRETRAINED_MODEL_GENERATION_TEST_CASES
+from .utils_generate import GPT2_PADDING_TOKENS, GPT2_PRETRAINED_MODEL_GENERATION_TEST_CASES
 
 
 if is_torch_available():
@@ -64,12 +64,12 @@ class LMGenerationTest(unittest.TestCase):
         def list_to_torch_tensor(self, tokens_list):
             return torch.tensor(tokens_list, dtype=torch.long, device=torch_device)
 
-        def check_language_generation(self, model_generation_test_cases, model_archive_map, lm_model):
+        def check_language_generate(self, model_generate_test_cases, model_archive_map, lm_model):
             for model_name in list(model_archive_map.keys()):
-                if model_name in model_generation_test_cases:
+                if model_name in model_generate_test_cases:
                     model = lm_model.from_pretrained(model_name, cache_dir=CACHE_DIR)
                     self.parent.assertIsNotNone(model)
-                    model_test_config = model_generation_test_cases[model_name]
+                    model_test_config = model_generate_test_cases[model_name]
                     torch_seed = model_test_config["seed"]
                     input_ids = self.list_to_torch_tensor(model_test_config["input"])
                     expected_output_ids = model_test_config["exp_output"]
@@ -91,8 +91,8 @@ class LMGenerationTest(unittest.TestCase):
         self.model_tester = LMGenerationTest.LMGenerationTester(self)
 
     @slow
-    def test_gpt2_generation(self):
+    def test_gpt2_generate(self):
         self.model_tester.set_tokens(GPT2_PADDING_TOKENS)
-        self.model_tester.check_language_generation(
+        self.model_tester.check_language_generate(
             GPT2_PRETRAINED_MODEL_GENERATION_TEST_CASES, GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, GPT2LMHeadModel,
         )
