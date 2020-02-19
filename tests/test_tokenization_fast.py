@@ -53,30 +53,28 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         input_p = tokenizer_p.encode_plus(self._data)
         input_r = tokenizer_r.encode_plus(self._data)
 
-        for key in input_p.keys():
+        for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
             self.assert_sequence_almost_equals(input_p[key], input_r[key], threshold)
 
         input_pairs_p = tokenizer_p.encode_plus(self._data, self._data)
         input_pairs_r = tokenizer_r.encode_plus(self._data, self._data)
 
-        for key in input_p.keys():
+        for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
             self.assert_sequence_almost_equals(input_pairs_p[key], input_pairs_r[key], threshold)
 
         # Ensure truncation match
         input_p = tokenizer_p.encode_plus(self._data, max_length=512)
         input_r = tokenizer_r.encode_plus(self._data, max_length=512)
 
-        self.assertSequenceEqual(input_p["input_ids"], input_r["input_ids"])
-        self.assertSequenceEqual(input_p["token_type_ids"], input_r["token_type_ids"])
-        self.assertSequenceEqual(input_p["attention_mask"], input_r["attention_mask"])
+        for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
+            self.assert_sequence_almost_equals(input_p[key], input_r[key], threshold)
 
         # Ensure truncation with stride match
         input_p = tokenizer_p.encode_plus(self._data, max_length=512, stride=3, return_overflowing_tokens=True)
         input_r = tokenizer_r.encode_plus(self._data, max_length=512, stride=3, return_overflowing_tokens=True)
 
-        self.assertSequenceEqual(input_p["input_ids"], input_r["input_ids"])
-        self.assertSequenceEqual(input_p["token_type_ids"], input_r["token_type_ids"])
-        self.assertSequenceEqual(input_p["attention_mask"], input_r["attention_mask"])
+        for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
+            self.assert_sequence_almost_equals(input_p[key], input_r[key], threshold)
 
     def assert_add_tokens(self, tokenizer_r):
         vocab_size = tokenizer_r.vocab_size
@@ -325,7 +323,7 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             )
 
             # Assure tokenization overlap between python and rust impl.
-            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
+            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.01)
 
             # Ensure add_tokens and add_special_tokens return the correct vocab size
             self.assert_add_tokens(tokenizer_r)
