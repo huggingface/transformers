@@ -17,7 +17,9 @@
 
 import logging
 
-from .tokenization_gpt2 import GPT2Tokenizer
+from tokenizers.processors import RobertaProcessing
+
+from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -163,3 +165,48 @@ class RobertaTokenizer(GPT2Tokenizer):
         if add_prefix_space and not text[0].isspace():
             text = " " + text
         return text
+
+
+class RobertaTokenizerFast(GPT2TokenizerFast):
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
+    def __init__(
+        self,
+        vocab_file,
+        merges_file,
+        errors="replace",
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        add_prefix_space=False,
+        **kwargs
+    ):
+        kwargs.setdefault("pad_token", pad_token)
+        kwargs.setdefault("sep_token", sep_token)
+        kwargs.setdefault("cls_token", cls_token)
+        kwargs.setdefault("mask_token", mask_token)
+
+        super().__init__(
+            vocab_file=vocab_file,
+            merges_file=merges_file,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
+
+        self.tokenizer._tokenizer.post_processor = RobertaProcessing(
+            (sep_token, self.sep_token_id), (cls_token, self.cls_token_id)
+        )
+
+        # As we override the post_processor post super.__init__ the computed num_added_tokens is wrong in super().
+        # We need to recompute max_len according to the newly register post_processor to get real values.
+        self.max_len_single_sentence = self.max_len - self.num_added_tokens(False)  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - self.num_added_tokens(True)  # take into account special tokens

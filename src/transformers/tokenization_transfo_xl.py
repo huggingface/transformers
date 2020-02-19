@@ -23,11 +23,18 @@ import logging
 import os
 import pickle
 from collections import Counter, OrderedDict
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
+from tokenizers import Encoding, Tokenizer
+from tokenizers.implementations import BaseTokenizer
+from tokenizers.models import WordLevel
+from tokenizers.normalizers import Lowercase, Sequence, unicode_normalizer_from_str
+from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
+from tokenizers.processors import BertProcessing
 
 from .file_utils import cached_path, is_torch_available
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
 if is_torch_available():
@@ -41,6 +48,12 @@ VOCAB_FILES_NAMES = {"pretrained_vocab_file": "vocab.bin", "vocab_file": "vocab.
 PRETRAINED_VOCAB_FILES_MAP = {
     "pretrained_vocab_file": {
         "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-vocab.bin",
+    }
+}
+
+PRETRAINED_VOCAB_FILES_MAP_FAST = {
+    "pretrained_vocab_file": {
+        "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-vocab.json",
     }
 }
 
@@ -278,6 +291,108 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             return symbols + ["<eos>"]
         else:
             return symbols
+
+
+class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
+    def __init__(
+        self,
+        vocab_file,
+        delimiter,
+        lowercase,
+        unk_token,
+        eos_token,
+        add_eos=False,
+        add_double_eos=False,
+        normalization: Optional[str] = None,
+    ):
+
+        tokenizer = WordLevel.from_files(vocab_file, unk_token=unk_token)
+        tokenizer = Tokenizer(tokenizer)
+
+        # Create the correct normalization path
+        normalizer = []
+
+        # Include unicode normalization
+        if normalization:
+            normalizer += [unicode_normalizer_from_str(normalization)]
+
+        # Include case normalization
+        if lowercase:
+            normalizer += [Lowercase()]
+
+        if len(normalizer) > 0:
+            tokenizer.normalizer = Sequence(normalizer) if len(normalizer) > 1 else normalizer[0]
+
+        # Setup the splitter
+        tokenizer.pre_tokenizer = CharDelimiterSplit(delimiter) if delimiter else WhitespaceSplit()
+
+        if add_double_eos:
+            tokenizer.post_processor = BertProcessing(
+                (eos_token, tokenizer.token_to_id(eos_token)), (eos_token, tokenizer.token_to_id(eos_token))
+            )
+
+        parameters = {
+            "model": "TransfoXLModel",
+            "add_eos": add_eos,
+            "add_double_eos": add_double_eos,
+            "unk_token": unk_token,
+            "eos_token": eos_token,
+            "delimiter": delimiter,
+            "lowercase": lowercase,
+        }
+
+        super().__init__(tokenizer, parameters)
+
+    def encode_batch(self, sequences: List[Union[str, Tuple[str, str]]]) -> List[Encoding]:
+        return super().encode_batch(
+            [seq.strip() if isinstance(seq, str) else (seq[0].strip(), seq[1].strip()) for seq in sequences]
+        )
+
+    def encode(self, sequence: str, pair: Optional[str] = None) -> Encoding:
+        return super().encode(sequence.strip(), pair.strip() if pair else pair)
+
+
+class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP_FAST
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+
+    def __init__(
+        self,
+        special=None,
+        min_freq=0,
+        max_size=None,
+        lower_case=False,
+        delimiter=None,
+        vocab_file=None,
+        pretrained_vocab_file=None,
+        never_split=None,
+        unk_token="<unk>",
+        eos_token="<eos>",
+        additional_special_tokens=["<formula>"],
+        add_eos=False,
+        add_double_eos=False,
+        normalization=None,
+        **kwargs
+    ):
+
+        super().__init__(
+            _TransfoXLDelimiterLookupTokenizer(
+                vocab_file=vocab_file or pretrained_vocab_file,
+                delimiter=delimiter,
+                lowercase=lower_case,
+                unk_token=unk_token,
+                eos_token=eos_token,
+                add_eos=add_eos,
+                add_double_eos=add_double_eos,
+                normalization=normalization,
+            ),
+            unk_token=unk_token,
+            eos_token=eos_token,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
 
 
 class LMOrderedIterator(object):

@@ -21,6 +21,10 @@ import json
 import logging
 import os
 import re
+from collections import defaultdict
+from contextlib import contextmanager
+
+from tokenizers.implementations import BaseTokenizer
 
 from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
 
@@ -35,6 +39,68 @@ logger = logging.getLogger(__name__)
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+
+
+@contextmanager
+def truncate_and_pad(
+    tokenizer: BaseTokenizer,
+    max_length: int,
+    stride: int,
+    strategy: str,
+    pad_to_max_length: bool,
+    padding_side: str,
+    pad_token_id: int,
+    pad_token_type_id: int,
+    pad_token: str,
+):
+    """
+    This contextmanager is in charge of defining the truncation and the padding strategies and then
+    restore the tokenizer settings afterwards.
+
+    This contextmanager assumes the provider tokenizer has no padding / truncation strategy
+    before the managed section. If your tokenizer set a padding / truncation strategy before,
+    then it will be reset to no padding/truncation when exiting the managed section.
+
+    :param tokenizer:
+    :param max_length:
+    :param stride:
+    :param strategy:
+    :param pad_to_max_length:
+    :param padding_side:
+    :param pad_token_id:
+    :param pad_token_type_id:
+    :param pad_token:
+    :return:
+    """
+
+    # Handle all the truncation and padding stuff
+    if max_length is not None:
+        tokenizer.enable_truncation(max_length, stride=stride, strategy=strategy)
+
+    if pad_to_max_length and (pad_token and pad_token_id >= 0):
+        tokenizer.enable_padding(
+            max_length=None,
+            direction=padding_side,
+            pad_id=pad_token_id,
+            pad_type_id=pad_token_type_id,
+            pad_token=pad_token,
+        )
+    else:
+        logger.warning(
+            "Disabled padding because no padding token set (pad_token: {}, pad_token_id: {}).\n"
+            "To remove this error, you can add a new pad token and then resize model embedding:\n"
+            "\ttokenizer.pad_token = '<PAD>'\n\tmodel.resize_token_embeddings(len(tokenizer))".format(
+                pad_token, pad_token_id
+            )
+        )
+
+    yield
+
+    if max_length is not None:
+        tokenizer.no_truncation()
+
+    if pad_to_max_length and (pad_token and pad_token_id >= 0):
+        tokenizer.no_padding()
 
 
 class PreTrainedTokenizer(object):
@@ -542,7 +608,7 @@ class PreTrainedTokenizer(object):
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
 
         Args:
-            new_tokens: list of string. Each string is a token to add. Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
+            new_tokens: string or list of string. Each string is a token to add. Tokens are only added if they are not already in the vocabulary (tested by checking if the tokenizer assign the index of the ``unk_token`` to them).
 
         Returns:
             Number of tokens added to the vocabulary.
@@ -559,6 +625,9 @@ class PreTrainedTokenizer(object):
         """
         if not new_tokens:
             return 0
+
+        if not isinstance(new_tokens, list):
+            new_tokens = [new_tokens]
 
         to_add_tokens = []
         for token in new_tokens:
@@ -837,6 +906,7 @@ class PreTrainedTokenizer(object):
         return_attention_mask=True,
         return_overflowing_tokens=False,
         return_special_tokens_mask=False,
+        return_offsets_mapping=False,
         **kwargs
     ):
         """
@@ -876,6 +946,9 @@ class PreTrainedTokenizer(object):
             return_attention_mask: (optional) Set to False to avoid returning attention mask (default True)
             return_overflowing_tokens: (optional) Set to True to return overflowing token information (default False).
             return_special_tokens_mask: (optional) Set to True to return special tokens mask information (default False).
+            return_offsets_mapping: (optional) Set to True to return (char_start, char_end) for each token (default False).
+                If using Python's tokenizer, this method will raise NotImplementedError. This one is only available on
+                Rust-based tokenizers inheriting from PreTrainedTokenizerFast.
             **kwargs: passed to the `self.tokenize()` method
 
         Return:
@@ -913,6 +986,15 @@ class PreTrainedTokenizer(object):
                     "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
                 )
 
+        if return_offsets_mapping:
+            raise NotImplementedError(
+                "return_offset_mapping is not available when using Python tokenizers."
+                "To use this feature, change your tokenizer to one deriving from "
+                "transformers.PreTrainedTokenizerFast."
+                "More information on available tokenizers at "
+                "https://github.com/huggingface/transformers/pull/2674"
+            )
+
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
 
@@ -941,6 +1023,7 @@ class PreTrainedTokenizer(object):
         return_tensors=None,
         return_input_lengths=False,
         return_attention_masks=False,
+        return_offsets_mapping=False,
         **kwargs
     ):
         """
@@ -965,8 +1048,21 @@ class PreTrainedTokenizer(object):
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
+            return_input_lengths: (optional) If set the resulting dictionary will include the length of each sample
+            return_attention_masks: (optional) Set to True to return the attention mask (default False)
+            return_offsets_mapping: (optional) Not available, should be set to False or it will throw NotImplementError
             **kwargs: passed to the `self.tokenize()` method
         """
+
+        if return_offsets_mapping:
+            raise NotImplementedError(
+                "return_offset_mapping is not available when using Python tokenizers."
+                "To use this feature, change your tokenizer to one deriving from "
+                "transformers.PreTrainedTokenizerFast."
+                "More information on available tokenizers at "
+                "https://github.com/huggingface/transformers/pull/2674"
+            )
+
         batch_outputs = {}
         for ids_or_pair_ids in batch_text_or_text_pairs:
             if isinstance(ids_or_pair_ids, (list, tuple)):
@@ -1430,30 +1526,29 @@ class PreTrainedTokenizer(object):
 
 
 class PreTrainedTokenizerFast(PreTrainedTokenizer):
-    _tokenizer = None
-    _decoder = None
+    def __init__(self, tokenizer: BaseTokenizer, **kwargs):
+        if tokenizer is None:
+            raise ValueError("Provided tokenizer cannot be None")
+        self._tokenizer = tokenizer
 
-    def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.max_len_single_sentence = self.max_len - self.num_added_tokens(False)  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - self.num_added_tokens(True)  # take into account special tokens
 
     @property
     def tokenizer(self):
-        if self._tokenizer is None:
-            raise NotImplementedError
         return self._tokenizer
 
     @property
     def decoder(self):
-        if self._decoder is None:
-            raise NotImplementedError
-        return self._decoder
+        return self._tokenizer._tokenizer.decoder
 
     @property
     def vocab_size(self):
-        return self.tokenizer.get_vocab_size(with_added_tokens=False)
+        return self._tokenizer.get_vocab_size(with_added_tokens=False)
 
     def __len__(self):
-        return self.tokenizer.get_vocab_size(with_added_tokens=True)
+        return self._tokenizer.get_vocab_size(with_added_tokens=True)
 
     @PreTrainedTokenizer.bos_token.setter
     def bos_token(self, value):
@@ -1507,36 +1602,42 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_attention_mask=True,
         return_overflowing_tokens=False,
         return_special_tokens_mask=False,
+        return_offsets_mapping=False,
     ):
-        encoding_dict = {
-            "input_ids": encoding.ids,
-        }
-        if return_token_type_ids:
-            encoding_dict["token_type_ids"] = encoding.type_ids
-        if return_attention_mask:
-            encoding_dict["attention_mask"] = encoding.attention_mask
-        if return_overflowing_tokens:
-            overflowing = encoding.overflowing
-            encoding_dict["overflowing_tokens"] = overflowing.ids if overflowing is not None else []
-        if return_special_tokens_mask:
-            encoding_dict["special_tokens_mask"] = encoding.special_tokens_mask
+        if return_overflowing_tokens and encoding.overflowing is not None:
+            encodings = [encoding] + encoding.overflowing
+        else:
+            encodings = [encoding]
+
+        encoding_dict = defaultdict(list)
+        for e in encodings:
+            encoding_dict["input_ids"].append(e.ids)
+
+            if return_token_type_ids:
+                encoding_dict["token_type_ids"].append(e.type_ids)
+            if return_attention_mask:
+                encoding_dict["attention_mask"].append(e.attention_mask)
+            if return_special_tokens_mask:
+                encoding_dict["special_tokens_mask"].append(e.special_tokens_mask)
+            if return_offsets_mapping:
+                encoding_dict["offset_mapping"].append([e.original_str.offsets(o) for o in e.offsets])
 
         # Prepare inputs as tensors if asked
         if return_tensors == "tf" and is_tf_available():
-            encoding_dict["input_ids"] = tf.constant([encoding_dict["input_ids"]])
+            encoding_dict["input_ids"] = tf.constant(encoding_dict["input_ids"])
             if "token_type_ids" in encoding_dict:
-                encoding_dict["token_type_ids"] = tf.constant([encoding_dict["token_type_ids"]])
+                encoding_dict["token_type_ids"] = tf.constant(encoding_dict["token_type_ids"])
 
             if "attention_mask" in encoding_dict:
-                encoding_dict["attention_mask"] = tf.constant([encoding_dict["attention_mask"]])
+                encoding_dict["attention_mask"] = tf.constant(encoding_dict["attention_mask"])
 
         elif return_tensors == "pt" and is_torch_available():
-            encoding_dict["input_ids"] = torch.tensor([encoding_dict["input_ids"]])
+            encoding_dict["input_ids"] = torch.tensor(encoding_dict["input_ids"])
             if "token_type_ids" in encoding_dict:
-                encoding_dict["token_type_ids"] = torch.tensor([encoding_dict["token_type_ids"]])
+                encoding_dict["token_type_ids"] = torch.tensor(encoding_dict["token_type_ids"])
 
             if "attention_mask" in encoding_dict:
-                encoding_dict["attention_mask"] = torch.tensor([encoding_dict["attention_mask"]])
+                encoding_dict["attention_mask"] = torch.tensor(encoding_dict["attention_mask"])
         elif return_tensors is not None:
             logger.warning(
                 "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
@@ -1546,70 +1647,160 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
         return encoding_dict
 
-    def encode_plus(
-        self,
-        text,
-        text_pair=None,
-        return_tensors=None,
-        return_token_type_ids=True,
-        return_attention_mask=True,
-        return_overflowing_tokens=False,
-        return_special_tokens_mask=False,
-        **kwargs
-    ):
-        encoding = self.tokenizer.encode(text, text_pair)
-        return self._convert_encoding(
-            encoding,
-            return_tensors=return_tensors,
-            return_token_type_ids=return_token_type_ids,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-        )
-
-    def tokenize(self, text):
-        return self.tokenizer.encode(text).tokens
-
     def _convert_token_to_id_with_added_voc(self, token):
-        id = self.tokenizer.token_to_id(token)
+        id = self._tokenizer.token_to_id(token)
         if id is None:
             return self.unk_token_id
         return id
 
     def _convert_id_to_token(self, index):
-        return self.tokenizer.id_to_token(int(index))
+        return self._tokenizer.id_to_token(int(index))
 
     def convert_tokens_to_string(self, tokens):
-        return self.decoder.decode(tokens)
+        return self._tokenizer.decode(tokens)
 
     def add_tokens(self, new_tokens):
-        self.tokenizer.add_tokens(new_tokens)
+        if isinstance(new_tokens, str):
+            new_tokens = [new_tokens]
+        return self._tokenizer.add_tokens(new_tokens)
 
     def add_special_tokens(self, special_tokens_dict):
         added = super().add_special_tokens(special_tokens_dict)
         self._update_special_tokens()
         return added
 
-    def encode_batch(
+    def num_added_tokens(self, pair=False):
+        return self.tokenizer.num_special_tokens_to_add(pair)
+
+    def tokenize(self, text, **kwargs):
+        return self.tokenizer.encode(text).tokens
+
+    def batch_encode_plus(
         self,
-        texts,
+        batch_text_or_text_pairs=None,
+        add_special_tokens=True,
+        max_length=None,
+        stride=0,
+        truncation_strategy="longest_first",
+        pad_to_max_length=False,
         return_tensors=None,
         return_token_type_ids=True,
         return_attention_mask=True,
         return_overflowing_tokens=False,
         return_special_tokens_mask=False,
+        return_offsets_mapping=False,
+        **kwargs
     ):
-        return [
+        # Needed if we have to return a tensor
+        pad_to_max_length = pad_to_max_length or (return_tensors is not None)
+
+        # Throw an error if we can pad because there is no padding token
+        if pad_to_max_length and self.pad_token_id is None:
+            raise ValueError("Unable to set proper padding strategy as the tokenizer does have padding token")
+
+        # Set the truncation and padding strategy and restore the initial configuration
+        with truncate_and_pad(
+            tokenizer=self._tokenizer,
+            max_length=max_length,
+            stride=stride,
+            strategy=truncation_strategy,
+            pad_to_max_length=pad_to_max_length,
+            padding_side=self.padding_side,
+            pad_token_id=self.pad_token_id,
+            pad_token_type_id=self.pad_token_type_id,
+            pad_token=self._pad_token,
+        ):
+
+            if not isinstance(batch_text_or_text_pairs, list):
+                raise TypeError(
+                    "batch_text_or_text_pairs has to be a list (got {})".format(type(batch_text_or_text_pairs))
+                )
+
+            # Avoid thread overhead if only one example.
+            if len(batch_text_or_text_pairs) == 1:
+                if isinstance(batch_text_or_text_pairs[0], (tuple, list)):
+                    tokens = self._tokenizer.encode(*batch_text_or_text_pairs[0])
+                else:
+                    tokens = self._tokenizer.encode(batch_text_or_text_pairs[0])
+                tokens = [tokens]
+            else:
+                tokens = self._tokenizer.encode_batch(batch_text_or_text_pairs)
+
+        # Convert encoding to dict
+        tokens = [
             self._convert_encoding(
-                encoding,
+                encoding=encoding,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
             )
-            for encoding in self.tokenizer.encode_batch(texts)
+            for encoding in tokens
         ]
+
+        # Sanitize the output to have dict[list] from list[dict]
+        sanitized = {}
+        for key in tokens[0].keys():
+            stack = [e for item in tokens for e in item[key]]
+            if return_tensors == "tf":
+                stack = tf.stack(stack, axis=0)
+            elif return_tensors == "pt":
+                stack = torch.stack(stack, dim=0)
+            elif not return_tensors and len(stack) == 1:
+                stack = stack[0]
+
+            sanitized[key] = stack
+
+        # If returning overflowing tokens, we need to return a mapping
+        # from the batch idx to the original sample
+        if return_overflowing_tokens:
+            overflow_to_sample_mapping = [
+                i if len(item["input_ids"]) == 1 else [i] * len(item["input_ids"]) for i, item in enumerate(tokens)
+            ]
+            sanitized["overflow_to_sample_mapping"] = overflow_to_sample_mapping
+        return sanitized
+
+    def encode_plus(
+        self,
+        text,
+        text_pair=None,
+        add_special_tokens=False,
+        max_length=None,
+        pad_to_max_length=False,
+        stride=0,
+        truncation_strategy="longest_first",
+        return_tensors=None,
+        return_token_type_ids=True,
+        return_attention_mask=True,
+        return_overflowing_tokens=False,
+        return_special_tokens_mask=False,
+        return_offsets_mapping=False,
+        **kwargs
+    ):
+        batched_input = [(text, text_pair)] if text_pair else [text]
+        batched_output = self.batch_encode_plus(
+            batched_input,
+            add_special_tokens=add_special_tokens,
+            max_length=max_length,
+            stride=stride,
+            truncation_strategy=truncation_strategy,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            pad_to_max_length=pad_to_max_length,
+            **kwargs,
+        )
+
+        # Return tensor is None, then we can remove the leading batch axis
+        if not return_tensors:
+            return {key: value[0] if isinstance(value[0], list) else value for key, value in batched_output.items()}
+        else:
+            return batched_output
 
     def decode(self, token_ids, skip_special_tokens=False, clean_up_tokenization_spaces=True):
         text = self.tokenizer.decode(token_ids, skip_special_tokens)
@@ -1620,8 +1811,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         else:
             return text
 
-    def decode_batch(self, ids_batch, skip_special_tokens=False, clear_up_tokenization_spaces=True):
-        return [
-            self.clean_up_tokenization(text) if clear_up_tokenization_spaces else text
-            for text in self.tokenizer.decode_batch(ids_batch, skip_special_tokens)
-        ]
+    def save_vocabulary(self, save_directory):
+        if os.path.isdir(save_directory):
+            folder, file = save_directory, self.vocab_files_names["vocab_file"]
+        else:
+            folder, file = os.path.split(os.path.abspath(save_directory))
+        self._tokenizer.save(folder, file)
