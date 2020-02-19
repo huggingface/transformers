@@ -194,7 +194,9 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             self.check_are_valid_tokens(model.generate(do_sample=False))  # no input, greedy decoding
             self.check_are_valid_tokens(model.generate(input_ids))  # batch_size = 1
             self.check_are_valid_tokens(model.generate(input_ids, config.num_return_sequences))  # batch_size > 1
-            self.check_are_valid_tokens(model.generate(input_ids, config.num_return_sequences, do_sample=False))  # batch_size > 1, gredy decoding
+            self.check_are_valid_tokens(
+                model.generate(input_ids, config.num_return_sequences, do_sample=False)
+            )  # batch_size > 1, gredy decoding
 
         def check_are_valid_tokens(self, output_ids):
             for token_id in output_ids[0].tolist():
