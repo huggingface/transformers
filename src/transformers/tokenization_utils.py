@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+from collections import defaultdict
 from contextlib import contextmanager
 
 from tokenizers.implementations import BaseTokenizer
@@ -76,7 +77,7 @@ def truncate_and_pad(
     if max_length is not None:
         tokenizer.enable_truncation(max_length, stride=stride, strategy=strategy)
 
-    if pad_token and pad_token_id >= 0:
+    if pad_to_max_length and (pad_token and pad_token_id >= 0):
         tokenizer.enable_padding(
             max_length=None,
             direction=padding_side,
@@ -97,7 +98,7 @@ def truncate_and_pad(
     if max_length is not None:
         tokenizer.no_truncation()
 
-    if pad_token and pad_token_id >= 0:
+    if pad_to_max_length and (pad_token and pad_token_id >= 0):
         tokenizer.no_padding()
 
 
@@ -1607,18 +1608,18 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         else:
             encodings = [encoding]
 
-        encoding_dict = {
-            "input_ids": [e.ids for e in encodings],
-        }
+        encoding_dict = defaultdict(list)
+        for e in encodings:
+            encoding_dict["input_ids"].append(e.ids)
 
-        if return_token_type_ids:
-            encoding_dict["token_type_ids"] = [e.type_ids for e in encodings]
-        if return_attention_mask:
-            encoding_dict["attention_mask"] = [e.attention_mask for e in encodings]
-        if return_special_tokens_mask:
-            encoding_dict["special_tokens_mask"] = [e.special_tokens_mask for e in encodings]
-        if return_offsets_mapping:
-            encoding_dict["offset_mapping"] = [[e.original_str.offsets(o) for o in e.offsets] for e in encodings]
+            if return_token_type_ids:
+                encoding_dict["token_type_ids"].append(e.type_ids)
+            if return_attention_mask:
+                encoding_dict["attention_mask"].append(e.attention_mask)
+            if return_special_tokens_mask:
+                encoding_dict["special_tokens_mask"].append(e.special_tokens_mask)
+            if return_offsets_mapping:
+                encoding_dict["offset_mapping"].append([e.original_str.offsets(o) for o in e.offsets])
 
         # Prepare inputs as tensors if asked
         if return_tensors == "tf" and is_tf_available():
@@ -1744,7 +1745,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             stack = [item[key] for item in tokens]
             stack = [e for item in stack for e in item]
             if return_tensors == "tf":
-                stack = tf.concat(stack, axis=0)
+                stack = tf.stack(stack, axis=0)
             elif return_tensors == "pt":
                 stack = torch.stack(stack, dim=0)
             elif not return_tensors and len(stack) == 1:
