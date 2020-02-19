@@ -39,6 +39,7 @@ if is_torch_available():
         prepare_bart_inputs_dict,
         LARGE_NEGATIVE,
     )
+    from transformers.tokenization_bart import BartTokenizer
 
 
 @require_torch
@@ -244,6 +245,18 @@ class BartHeadTests(unittest.TestCase):
         self.assertEqual(n_pad_after, n_pad_before - 1)
         self.assertTrue(torch.eq(shifted[:, 0], 2).all())
 
+    def test_tokenization(self):
+        tokenizer = BartTokenizer.from_pretrained('bart-large')
+        examples = ['Hello world', ' world', 'world']
+        fairseq_results = [torch.Tensor([0, 31414, 232, 2]),
+                           torch.Tensor([0, 232, 2]),
+                           torch.Tensor([0, 8331, 2])]
+        for ex,desired_result in zip(examples, fairseq_results):
+            bart_toks = tokenizer.encode(ex, return_tensors='pt')
+            _assert_tensors_equal(desired_result.long(), bart_toks, prefix=ex)
+
+        tokenizer.encoder()
+
     def test_input_preparation(self):
         example_no_pad = [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]
         example_b = [0, 31414, 232, 328, 740, 1140, 69, 46078, 1588, 2, 1]
@@ -259,7 +272,7 @@ class BartHeadTests(unittest.TestCase):
                 _assert_tensors_equal(inputs_dict["attention_mask"], inputs_with_passed_attn["attention_mask"])
 
 
-def _assert_tensors_equal(a, b, atol=1e-12):
+def _assert_tensors_equal(a, b, atol=1e-12, prefix=''):
     if a is None:
         assert b is None
         return True
@@ -267,6 +280,8 @@ def _assert_tensors_equal(a, b, atol=1e-12):
         return True
     else:
         msg = "{} != {}".format(a, b)
+        if prefix:
+            msg = prefix + ': ' + msg
         raise AssertionError(msg)
 
 

@@ -23,7 +23,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from .configuration_bart import BartConfig
-from .file_utils import add_start_docstrings
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 
 
@@ -818,14 +818,27 @@ def _filter_out_falsey_values(tup) -> Tuple:
     """Remove entries that are None or [] from an iterable."""
     return tuple(x for x in tup if isinstance(x, torch.Tensor) or x)
 
-
+RET_DOCSTRING =r"""
+    Return:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+"""
 # Public API
 
 
 @add_start_docstrings(
     "The bare BART Model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
-    BART_INPUTS_DOCSTRING,
 )
 class BartModel(PretrainedBartModel):
     """"""
@@ -852,6 +865,7 @@ class BartModel(PretrainedBartModel):
     def get_output_embeddings(self):
         return _make_linear_from_emb(self.shared)
 
+    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids,
@@ -890,7 +904,7 @@ class BartModel(PretrainedBartModel):
 
 
 @add_start_docstrings(
-    "The bare BART Model with a language modeling head", BART_START_DOCSTRING, BART_INPUTS_DOCSTRING,
+    "The bare BART Model with a language modeling head", BART_START_DOCSTRING,
 )
 class BartForMaskedLM(PretrainedBartModel):
     r"""
@@ -929,6 +943,7 @@ class BartForMaskedLM(PretrainedBartModel):
         self.model = BartModel(config)
         self.lm_head = _make_linear_from_emb(self.model.shared)
 
+    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids,
@@ -969,47 +984,10 @@ class BartForMaskedLM(PretrainedBartModel):
 @add_start_docstrings(
     """Bart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE tasks. """,
     BART_START_DOCSTRING,
-    BART_INPUTS_DOCSTRING,
 )
 class BartForSequenceClassification(PretrainedBartModel):
-    r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
-    Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BartConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-
-    Examples::
-
-        from transformers import BartTokenizer, BartForSequenceClassification
-        import torch
-
-        tokenizer = BartTokenizer.from_pretrained('bart-large')
-        model = BartForSequenceClassification.from_pretrained('bart-large')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
-        loss, logits = outputs[:2]
-
-    """
 
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -1020,6 +998,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         self.model._init_weights(self.classification_head.dense)
         self.model._init_weights(self.classification_head.out_proj)
 
+    @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids,
@@ -1029,6 +1008,49 @@ class BartForSequenceClassification(PretrainedBartModel):
         decoder_attention_mask=None,
         labels=None,
     ):
+        r"""
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the sequence classification/regression loss.
+                Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+                If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+                If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Returns:
+            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (
+            :class:`~transformers.BartConfig`) and inputs:
+            loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is
+            provided):
+                Classification  loss.
+            logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+                Classification (or regression if config.num_labels==1) scores (before SoftMax).
+            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when
+            ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of
+                each layer)
+                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when
+            ``config.output_attentions=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+                Attentions weights after the attention softmax, used to compute the weighted average in the
+                self-attention
+                heads.
+
+        Examples::
+
+            from transformers import BartTokenizer, BartForSequenceClassification
+            import torch
+
+            tokenizer = BartTokenizer.from_pretrained('bart-large')
+            model = BartForSequenceClassification.from_pretrained('bart-large')
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute",
+            add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+            outputs = model(input_ids, labels=labels)
+            loss, logits = outputs[:2]
+
+        """
         outputs = self.model.forward(
             input_ids,
             attention_mask=attention_mask,
