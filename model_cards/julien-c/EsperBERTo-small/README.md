@@ -22,8 +22,8 @@ from transformers import pipeline
 
 fill_mask = pipeline(
     "fill-mask",
-    model="julien-c/EspertBERTo-small",
-    tokenizer="julien-c/EspertBERTo-small"
+    model="julien-c/EsperBERTo-small",
+    tokenizer="julien-c/EsperBERTo-small"
 )
 
 fill_mask("Jen la komenco de bela <mask>.")

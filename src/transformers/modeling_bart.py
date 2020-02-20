@@ -74,6 +74,7 @@ BART_INPUTS_DOCSTRING = r"""
              See diagram 1 in the paper for more info on the default strategy
 """
 LARGE_NEGATIVE = -1e4
+torch.Tensor._
 
 
 def _prepare_bart_inputs(
@@ -833,7 +834,6 @@ RET_DOCSTRING = r"""
     "The bare BART Model outputting raw hidden-states without any specific head on top.", BART_START_DOCSTRING,
 )
 class BartModel(PretrainedBartModel):
-
     def __init__(self, config: BartConfig):
         super().__init__(config)
         self.output_attentions = config.output_attentions
@@ -892,8 +892,6 @@ class BartModel(PretrainedBartModel):
 
     def get_output_embeddings(self):
         return _make_linear_from_emb(self.shared)
-
-
 
 
 @add_start_docstrings(

@@ -34,6 +34,9 @@ To create the package for pypi.
 
 7. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
+8. Update the documentation commit in .circleci/deploy.sh for the accurate documentation to be displayed
+
+9. Update README.md to redirect to correct documentation.
 """
 
 import shutil
@@ -76,8 +79,8 @@ extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "sciki
 
 setup(
     name="transformers",
-    version="2.4.1",
-    author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
+    version="2.5.0",
+    author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
     long_description=open("README.md", "r", encoding="utf-8").read(),
@@ -89,7 +92,7 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.0.11",
+        "tokenizers == 0.5.0",
         # accessing files from S3 directly
         "boto3",
         # filesystem locks e.g. to prevent parallel downloads
