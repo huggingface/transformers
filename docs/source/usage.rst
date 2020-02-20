@@ -194,6 +194,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
 
 ::
 
+    ## PYTORCH CODE
     from transformers import AutoTokenizer, AutoModelForQuestionAnswering
     import torch
 
@@ -226,6 +227,45 @@ Here is an example of question answering using a model and a tokenizer. The proc
         )  # Get the most likely beginning of answer with the argmax of the score
         answer_end = torch.argmax(answer_end_scores) + 1  # Get the most likely end of answer with the argmax of the score
 
+        answer = tokenizer.convert_tokens_to_string(tokenizer.convert_ids_to_tokens(input_ids[answer_start:answer_end]))
+
+        print(f"Question: {question}")
+        print(f"Answer: {answer}\n")
+    ## TENSORFLOW CODE
+    from transformers import AutoTokenizer, TFAutoModelForQuestionAnswering
+    import tensorflow as tf
+
+    tokenizer = AutoTokenizer.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
+    model = TFAutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
+
+    text = r"""
+    🤗 Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides general-purpose
+    architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet…) for Natural Language Understanding (NLU) and Natural
+    Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between
+    TensorFlow 2.0 and PyTorch.
+    """
+
+    questions = [
+        "How many pretrained models are available in Transformers?",
+        "What does Transformers provide?",
+        "Transformers provides interoperability between which frameworks?",
+    ]
+
+    for i in range(len(questions)):
+        question = questions[i]
+        inputs = tokenizer.encode_plus(question, text, add_special_tokens=True, return_tensors="tf")
+        input_ids = inputs["input_ids"].numpy()[0]
+
+        text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+        answer_start_scores, answer_end_scores = model(inputs)
+
+        answer_start = tf.argmax(
+            answer_start_scores, axis=1
+        ).numpy()[0]  # Get the most likely beginning of answer with the argmax of the score
+        answer_end = (
+            tf.argmax(answer_end_scores, axis=1) + 1
+        ).numpy()[0]  # Get the most likely end of answer with the argmax of the score
+        print(answer_start, answer_end)
         answer = tokenizer.convert_tokens_to_string(tokenizer.convert_ids_to_tokens(input_ids[answer_start:answer_end]))
 
         print(f"Question: {question}")
@@ -302,6 +342,7 @@ Here is an example doing masked language modeling using a model and a tokenizer.
 
 ::
 
+    ## PYTORCH CODE
     from transformers import AutoModelWithLMHead, AutoTokenizer
     import torch
 
@@ -320,7 +361,25 @@ Here is an example doing masked language modeling using a model and a tokenizer.
 
     for token in top_5_tokens:
         print(sequence.replace(tokenizer.mask_token, tokenizer.decode([token])))
+    ## TENSORFLOW CODE
+    from transformers import TFAutoModelWithLMHead, AutoTokenizer
+    import tensorflow as tf
 
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased")
+    model = TFAutoModelWithLMHead.from_pretrained("distilbert-base-cased")
+
+    sequence = f"Distilled models are smaller than the models they mimic. Using them instead of the large versions would help {tokenizer.mask_token} our carbon footprint."
+
+    input = tokenizer.encode(sequence, return_tensors="tf")
+    mask_token_index = tf.where(input == tokenizer.mask_token_id)[0, 1]
+
+    token_logits = model(input)[0]
+    mask_token_logits = token_logits[0, mask_token_index, :]
+
+    top_5_tokens = tf.math.top_k(mask_token_logits, 5).indices.numpy()
+
+    for token in top_5_tokens:
+        print(sequence.replace(tokenizer.mask_token, tokenizer.decode([token])))
 
 This should print five sequences, with the top 5 tokens predicted by the model:
 
@@ -350,6 +409,7 @@ following the initial sequence.
 
 ::
 
+    ## PYTORCH CODE
     from transformers import AutoModelWithLMHead, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
@@ -362,6 +422,24 @@ following the initial sequence.
 
     resulting_string = tokenizer.decode(generated.tolist()[0])
     print(resulting_string)
+    ## TENSORFLOW CODE
+    from transformers import TFAutoModelWithLMHead, AutoTokenizer
+    import tensorflow as tf
+
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    model = TFAutoModelWithLMHead.from_pretrained("gpt2")
+
+    sequence = f"Hugging Face is based in DUMBO, New York City, and is"
+    generated = tokenizer.encode(sequence)
+
+    for i in range(50):
+        predictions = model(tf.constant([generated]))[0]
+        token = tf.argmax(predictions[0], axis=1)[-1].numpy()
+        generated += [token]
+
+    resulting_string = tokenizer.decode(generated)
+    print(resulting_string)
+
 
 This outputs a (hopefully) coherent string from the original sequence:
 
