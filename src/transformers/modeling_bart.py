@@ -368,7 +368,6 @@ class DecoderLayer(nn.Module):
         if prev_self_attn_state is not None:
             saved_state = prev_self_attn_state
             decoder_cached_states["self"] = saved_state
-            # self.self_attn._update_layer_cache(decoder_cached_states, saved_state)
         y = x  # TODO(SS): figure out why fairseq did this, then hopefully delete it
 
         x, self_attn_weights = self.self_attn.forward(
