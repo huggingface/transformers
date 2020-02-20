@@ -825,10 +825,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 if temperature != 1.0:
                     next_token_logits = next_token_logits / temperature
                 # Top-p/top-k filtering
-                scores = top_k_top_p_filtering(next_token_logits.clone(), top_k=top_k, top_p=top_p).clamp(0,)
-                probas = F.softmax(scores, dim=-1)
+                next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
                 # Sample
-                next_token = torch.multinomial(probas, num_samples=1).squeeze(1)
+                next_token = torch.multinomial(F.softmax(next_token_logits, dim=-1), num_samples=1).squeeze(1)
             else:
                 # Greedy decoding
                 next_token = torch.argmax(next_token_logits, dim=-1)
@@ -1036,7 +1035,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         return decoded
 
 
-def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-10, min_tokens_to_keep=1):
+def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
             logits: logits distribution shape (batch size, vocabulary size)
