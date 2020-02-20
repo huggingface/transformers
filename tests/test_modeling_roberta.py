@@ -349,9 +349,9 @@ class RobertaModelIntegrationTest(unittest.TestCase):
         """
         model = RobertaForMaskedLM.from_pretrained("roberta-base")
 
-        input_ids = torch.tensor([[0, 1308, 2674, 1907, 9, 7134,   16,  821, 6998,  102,  328, 2]])
+        input_ids = torch.tensor([[0, 1308, 2674, 1907, 9, 7134, 16, 821, 6998, 102, 328, 2]])
         output = model(input_ids)[0]
-        expected_tensor = torch.tensor([[35.4675, -3.9585, 22.8375],
-                                        [ 1.6043, -4.0382, 11.2205],
-                                        [-0.7618, -4.3771, 12.1674]])
+        expected_tensor = torch.tensor(
+            [[35.4675, -3.9585, 22.8375], [1.6043, -4.0382, 11.2205], [-0.7618, -4.3771, 12.1674]]
+        )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_tensor, atol=1e-3))
