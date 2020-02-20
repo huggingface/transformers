@@ -30,7 +30,7 @@ VOCAB_FILES_NAMES = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {  # These have identical contents
+    "vocab_file": {
         "roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-vocab.json",
         "roberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json",
         "roberta-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-vocab.json",
@@ -38,7 +38,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "roberta-base-openai-detector": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-vocab.json",
         "roberta-large-openai-detector": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json",
     },
-    "merges_file": {  # These have identical contents
+    "merges_file": {
         "roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-merges.txt",
         "roberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt",
         "roberta-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-merges.txt",
@@ -71,7 +71,6 @@ class RobertaTokenizer(GPT2Tokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    n_seps_between_sentences = 2
 
     def __init__(
         self,
@@ -115,7 +114,7 @@ class RobertaTokenizer(GPT2Tokenizer):
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
         cls = [self.cls_token_id]
         sep = [self.sep_token_id]
-        return cls + token_ids_0 + [sep] * self.n_seps_between_sentences + token_ids_1 + sep
+        return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
         """
@@ -142,7 +141,7 @@ class RobertaTokenizer(GPT2Tokenizer):
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + [1] * self.n_seps_between_sentences + ([0] * len(token_ids_1)) + [1]
+        return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
 
     def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
         """
@@ -156,8 +155,7 @@ class RobertaTokenizer(GPT2Tokenizer):
 
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
-
-        return len(cls + token_ids_0 + [sep] * self.n_seps_between_sentences + token_ids_1 + sep) * [0]
+        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def prepare_for_tokenization(self, text, add_special_tokens=False, **kwargs):
         if "add_prefix_space" in kwargs:
@@ -212,6 +210,12 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         # We need to recompute max_len according to the newly register post_processor to get real values.
         self.max_len_single_sentence = self.max_len - self.num_added_tokens(False)  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - self.num_added_tokens(True)  # take into account special tokens
+
+        logger.warning(
+            "RobertaTokenizerFast has an issue when working on mask language modeling "
+            "where it introduces an extra encoded space before the mask token."
+            "See https://github.com/huggingface/transformers/pull/2778 for more information."
+        )
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]

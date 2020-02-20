@@ -33,4 +33,3 @@ class BartTokenizer(RobertaTokenizer):
         "vocab_file": {m: vocab_url for m in _all_bart_models},
         "merges_file": {m: merges_url for m in _all_bart_models},
     }
-    n_seps_between_sentences = 1
