@@ -60,21 +60,21 @@ logger = logging.getLogger(__name__)
 
 TOKENIZER_MAPPING = OrderedDict(
     [
-        (T5Config, T5Tokenizer),
-        (DistilBertConfig, DistilBertTokenizer),
-        (AlbertConfig, AlbertTokenizer),
-        (CamembertConfig, CamembertTokenizer),
-        (XLMRobertaConfig, XLMRobertaTokenizer),
-        (BartConfig, BartTokenizer),
-        (RobertaConfig, RobertaTokenizer),
-        (BertConfig, BertTokenizer),
-        (OpenAIGPTConfig, OpenAIGPTTokenizer),
-        (GPT2Config, GPT2Tokenizer),
-        (TransfoXLConfig, TransfoXLTokenizer),
-        (XLNetConfig, XLNetTokenizer),
-        (FlaubertConfig, FlaubertTokenizer),
-        (XLMConfig, XLMTokenizer),
-        (CTRLConfig, CTRLTokenizer),
+        (T5Config, (T5Tokenizer, None)),
+        (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
+        (AlbertConfig, (AlbertTokenizer, None)),
+        (CamembertConfig, (CamembertTokenizer, None)),
+        (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
+        (BartConfig, (BartTokenizer, None)),
+        (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
+        (BertConfig, (BertTokenizer, BertTokenizerFast)),
+        (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
+        (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
+        (TransfoXLConfig, (TransfoXLTokenizer, TransfoXLTokenizerFast)),
+        (XLNetConfig, (XLNetTokenizer, None)),
+        (FlaubertConfig, (FlaubertTokenizer, None)),
+        (XLMConfig, (XLMTokenizer, None)),
+        (CTRLConfig, (CTRLTokenizer, None)),
     ]
 )
 

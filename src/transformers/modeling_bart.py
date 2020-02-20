@@ -41,11 +41,11 @@ BART_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matters related to general usage and behavior.
 
-    `Paper <https://arxiv.org/abs/1910.13461>`_: BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension 
+    `Paper <https://arxiv.org/abs/1910.13461>`_: BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension
     Authors: Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov, Luke Zettlemoyer
     (Submitted on 29 Oct 2019)
     Code Ported from https://github.com/pytorch/fairseq/tree/master/examples/bart
-    
+
     Parameters:
         config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the configuration.
@@ -59,7 +59,6 @@ BART_INPUTS_DOCSTRING = r"""
                Indices of input sequence tokens in the vocabulary. Use BartTokenizer.encode to produce them.
             Padding will be ignored by default should you provide it.
             Indices can be obtained using :class:`transformers.BartTokenizer.encode(text)`.
-            
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Warning: this parameter is different from other attention_mask parameters and should be used with caution.
             OLD
@@ -74,7 +73,6 @@ BART_INPUTS_DOCSTRING = r"""
              See diagram 1 in the paper for more info on the default strategy
 """
 LARGE_NEGATIVE = -1e4
-torch.Tensor._
 
 
 def _prepare_bart_inputs(
