@@ -376,6 +376,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
+        disable_outgoing = kwargs.pop("disable_outgoing", False)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -388,6 +389,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 force_download=force_download,
                 resume_download=resume_download,
                 proxies=proxies,
+                disable_outgoing=disable_outgoing,
                 **kwargs,
             )
         else:
@@ -435,6 +437,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     force_download=force_download,
                     proxies=proxies,
                     resume_download=resume_download,
+                    disable_outgoing=disable_outgoing,
                 )
             except EnvironmentError:
                 if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
@@ -460,6 +463,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             resolved_archive_file = None
 
         # Instantiate model.
+        print(model_kwargs)
         model = cls(config, *model_args, **model_kwargs)
 
         if state_dict is None and not from_tf:
