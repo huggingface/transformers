@@ -549,8 +549,11 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
+        clean_text=True,
         tokenize_chinese_chars=True,
         add_special_tokens=True,
+        strip_accents=True,
+        wordpieces_prefix="##",
         **kwargs
     ):
         super().__init__(
@@ -560,8 +563,11 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
                 unk_token=unk_token,
                 sep_token=sep_token,
                 cls_token=cls_token,
+                clean_text=clean_text,
                 handle_chinese_chars=tokenize_chinese_chars,
+                strip_accents=strip_accents,
                 lowercase=do_lower_case,
+                wordpieces_prefix=wordpieces_prefix,
             ),
             unk_token=unk_token,
             sep_token=sep_token,
