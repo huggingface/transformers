@@ -60,17 +60,15 @@ BART_INPUTS_DOCSTRING = r"""
             Padding will be ignored by default should you provide it.
             Indices can be obtained using :class:`transformers.BartTokenizer.encode(text)`.
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Warning: this parameter is different from other attention_mask parameters and should be used with caution.
-            OLD
-            Mask to avoid performing attention on padding token indices. (in input_ids)
+            Mask to avoid performing attention on padding token indices in input_ids.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         decoder_input_ids: (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
-            only use for translation and summarization. Otherwise use the default which shifts the encoder's
-            input_ids right
-        decoder_attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
-           default behavior (if None is passed is to ignore pad tokens and future tokens.)
-             See diagram 1 in the paper for more info on the default strategy
+            Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
+        decoder_attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, 1, tgt_seq_len, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
+            Default behavior: generate a tensor that ignores pad tokens and future tokens, as in the paper.
+            If you want to change padding behavior, you should read :function:`~transformers.modeling_bart._prepare_decoder_inputs` and modify. 
+            See diagram 1 in the paper for more info on the default strategy
 """
 LARGE_NEGATIVE = -1e4
 
