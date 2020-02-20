@@ -164,7 +164,8 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 decoder_attention_mask=decoder_attention_mask,
                 decoder_lm_labels=decoder_lm_labels,
             )
-            loss, prediction_scores = outputs[0], outputs[1]
+            loss, prediction_scores, encoder_features = outputs
+            self.parent.assertEqual(len(outputs), 3)
             result = {
                 "loss": loss,
                 "prediction_scores": prediction_scores,
