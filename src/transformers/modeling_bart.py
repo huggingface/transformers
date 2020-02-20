@@ -873,7 +873,7 @@ class BartModel(PretrainedBartModel):
             decoder_input_ids,
             encoder_outputs[0],
             attention_mask,
-            decoder_attention_mask,
+            decoder_attn_mask,
             decoder_cached_states=decoder_cached_states,
         )
         # Attention and hidden_states will be [] or None if they aren't needed

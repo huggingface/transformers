@@ -125,7 +125,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             0
         ]  # check that attention_mask doesnt break or something
         mask = inputs_dict.pop("decoder_attention_mask")
-        decoder_features = model.forward(**inputs_dict)[0]
+        useless_mask = torch.zeros_like(mask)
+        decoder_features = model.forward(decoder_attention_mask=useless_mask, **inputs_dict)[0]
         self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
         self.assertEqual(
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
