@@ -75,20 +75,18 @@ BART_INPUTS_DOCSTRING = r"""
 LARGE_NEGATIVE = -1e4
 
 
-def _prepare_bart_inputs(
-    config, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attn_mask=None,
+def _prepare_bart_decoder_inputs(
+    config, input_ids, decoder_input_ids=None, decoder_attn_mask=None,
 ):
     """Prepare masks that ignore padding tokens for both encoder and decoder and a causal lm mask for the decoder if
     none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
     """
     pad_token_id = config.pad_token_id
     need_causal_mask = not config.output_past
-    if attention_mask is None:  # ignore pad tokens in input_ids
-        attention_mask = make_padding_mask(input_ids, padding_idx=pad_token_id)
     if decoder_input_ids is None:
         decoder_input_ids = shift_tokens_right(input_ids, pad_token_id)
+    bsz, tgt_len = decoder_input_ids.size()[:2]
     if decoder_attn_mask is None:
-        bsz, tgt_len = decoder_input_ids.size()[:2]
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
         if need_causal_mask:
             causal_lm_mask = torch.triu(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1)
@@ -96,8 +94,8 @@ def _prepare_bart_inputs(
             causal_lm_mask = None
         new_shape = (bsz, tgt_len, tgt_len)
         decoder_attn_mask = _combine_masks(decoder_padding_mask, causal_lm_mask, new_shape)
-        # decoder_attention_mask.shape =  (bsz, 1, tgt_len, tgt_len)
-    return attention_mask, decoder_input_ids, decoder_attn_mask
+    assert decoder_attn_mask is None or decoder_attn_mask.shape == (bsz, 1, tgt_len, tgt_len)
+    return decoder_input_ids, decoder_attn_mask
 
 
 def prepare_bart_inputs_dict(
@@ -107,18 +105,19 @@ def prepare_bart_inputs_dict(
     none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
 
     """
-    attention_mask, decoder_input_ids, decoder_attn_mask = _prepare_bart_inputs(
-        config,
-        input_ids,
-        attention_mask=attention_mask,
-        decoder_input_ids=decoder_input_ids,
-        decoder_attn_mask=decoder_attn_mask,
-    )
+    # attention_mask, decoder_input_ids, decoder_attn_mask = _prepare_bart_inputs(
+    #     config,
+    #     input_ids,
+    #     attention_mask=attention_mask,
+    #     decoder_input_ids=decoder_input_ids,
+    #     decoder_attn_mask=decoder_attn_mask,
+    # )
+    attention_mask = input_ids.ne(config.pad_token_id)
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
-        "decoder_attention_mask": decoder_attn_mask,
-        "decoder_input_ids": decoder_input_ids,
+        # "decoder_attention_mask": decoder_attn_mask,
+        # "decoder_input_ids": decoder_input_ids,
     }
 
 
@@ -149,12 +148,12 @@ class PretrainedBartModel(PreTrainedModel):
                 [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 2, pad_token],
             ]
         ).long()
-        attention_mask, decoder_input_ids, decoder_attn_mask = _prepare_bart_inputs(
+        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(
             self.config, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attn_mask=None
         )
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
+            "attention_mask": input_ids.ne(pad_token),
             "input_ids": input_ids,
             "decoder_attention_mask": decoder_attn_mask,
         }
@@ -855,14 +854,17 @@ class BartModel(PretrainedBartModel):
         decoder_attention_mask=None,
         decoder_cached_states=None,
     ):
+        if attention_mask is not None:
+            assert attention_mask.dim() == 2
+
+            attention_mask = (1.0 - attention_mask.long()) * -10000.0
+            assert attention_mask.max() <= 0
+
         # make masks if user doesn't supply
-        attention_mask, decoder_input_ids, decoder_attn_mask = _prepare_bart_inputs(
-            self.config,
-            input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attn_mask=decoder_attention_mask,
+        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(
+            self.config, input_ids, decoder_input_ids=decoder_input_ids, decoder_attn_mask=decoder_attention_mask,
         )
+
         assert decoder_input_ids is not None
         if encoder_outputs is None:
             # TODO(SS): make this caching more usable when overwrite generate
