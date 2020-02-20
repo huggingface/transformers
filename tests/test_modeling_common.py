@@ -52,7 +52,7 @@ class ModelTesterMixin:
 
     model_tester = None
     all_model_classes = ()
-    all_lm_head_model_classes = ()
+    all_generative_model_classes = ()
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
