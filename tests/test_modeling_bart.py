@@ -288,6 +288,9 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
         raise AssertionError(msg)
 
 
+TOLERANCE = 1e-4
+
+
 @require_torch
 class BartModelIntegrationTest(unittest.TestCase):
     @slow
@@ -302,7 +305,7 @@ class BartModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.Tensor(
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]]
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     @slow
     def test_mnli_inference(self):
@@ -326,8 +329,8 @@ class BartModelIntegrationTest(unittest.TestCase):
         inputs_dict = prepare_bart_inputs_dict(model.config, input_ids=input_ids_no_pad)
         with torch.no_grad():
             logits2 = model.forward(**inputs_dict)[0]
-        _assert_tensors_equal(batched_logits[1], logits2, atol=1e-3)
-        _assert_tensors_equal(expected_slice, logits_arr, atol=1e-3)
+        _assert_tensors_equal(batched_logits[1], logits2, atol=TOLERANCE)
+        _assert_tensors_equal(expected_slice, logits_arr, atol=TOLERANCE)
 
     @unittest.skip("This is just too slow")
     def test_model_from_pretrained(self):
