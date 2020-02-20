@@ -662,6 +662,9 @@ class XLMTokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return len(self.encoder)
 
+    def get_vocab(self):
+        return dict(self.encoder, **self.added_tokens_encoder)
+
     def bpe(self, token):
         word = tuple(token[:-1]) + (token[-1] + "</w>",)
         if token in self.cache:

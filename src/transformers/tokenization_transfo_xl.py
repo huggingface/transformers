@@ -273,6 +273,9 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return len(self.idx2sym)
 
+    def get_vocab(self):
+        return dict(self.sym2idx, **self.added_tokens_encoder)
+
     def _tokenize(self, line, add_eos=False, add_double_eos=False):
         line = line.strip()
         # convert to lower case

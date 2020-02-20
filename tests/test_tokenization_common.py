@@ -542,3 +542,23 @@ class TokenizerTesterMixin:
         print(new_tokenizer.init_kwargs)
         assert tokenizer.init_kwargs["random_argument"] is True
         assert new_tokenizer.init_kwargs["random_argument"] is False
+
+    def test_get_vocab(self):
+        tokenizer = self.get_tokenizer()
+        vocab = tokenizer.get_vocab()
+
+        self.assertIsInstance(vocab, dict)
+        self.assertEqual(len(vocab), len(tokenizer))
+
+        for word, ind in vocab.items():
+            self.assertEqual(tokenizer.convert_tokens_to_ids(word), ind)
+            self.assertEqual(tokenizer.convert_ids_to_tokens(ind), word)
+
+        tokenizer.add_tokens(["asdfasdfasdfasdf"])
+        vocab = tokenizer.get_vocab()
+        self.assertIsInstance(vocab, dict)
+        self.assertEqual(len(vocab), len(tokenizer))
+
+        for word, ind in vocab.items():
+            self.assertEqual(tokenizer.convert_tokens_to_ids(word), ind)
+            self.assertEqual(tokenizer.convert_ids_to_tokens(ind), word)
