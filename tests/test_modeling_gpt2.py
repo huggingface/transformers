@@ -37,6 +37,7 @@ if is_torch_available():
 class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
+    all_generative_model_classes = (GPT2LMHeadModel,) if is_torch_available() else ()
 
     class GPT2ModelTester(object):
         def __init__(
@@ -186,38 +187,6 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
             )
 
-        def create_and_check_generate_lm_head_model(self, config, input_ids, *args):
-            model = GPT2LMHeadModel(config)
-            model.to(torch_device)
-            model.eval()
-
-            # generate function should not produce any None values so that every output is decodable
-            self.check_tokens(model.generate(max_length=self.max_length))  # no input
-            self.check_tokens(
-                model.generate(max_length=self.max_length, num_return_sequences=self.num_return_sequences)
-            )  # batch_size > 1
-            self.check_tokens(
-                model.generate(input_ids, num_return_sequences=self.num_return_sequences, do_sample=False)
-            )  # batch_size > 1, greedy decoding, input_ids defined
-            self.check_tokens(
-                model.generate(
-                    num_beams=self.num_beams,
-                    max_length=self.max_length,
-                    num_return_sequences=self.num_return_sequences,
-                )
-            )  # num_beams > 1
-            self.check_tokens(
-                model.generate(
-                    do_sample=False,
-                    num_beams=self.num_beams,
-                    max_length=self.max_length,
-                    num_return_sequences=self.num_return_sequences,
-                )
-            )  # greedy decoding
-            self.check_tokens(
-                model.generate(input_ids, num_return_sequences=self.num_return_sequences, num_beams=self.num_beams)
-            )  # batch_size > 1, num_beams > 1, input_ids defined
-
         def create_and_check_double_lm_head_model(
             self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
         ):
@@ -285,10 +254,6 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_gpt2_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
-
-    def test_gpt2_lm_head_model_generate(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_lm_head_model(*config_and_inputs)
 
     def test_gpt2_double_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
