@@ -294,7 +294,8 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
 
             # Check the number of returned files for save_vocabulary
-            self.assertEqual(len(tokenizer_r.save_vocabulary(".")), len(tokenizer_p.save_vocabulary(".")))
+            rust_saved_files, python_saved_files = tokenizer_r.save_vocabulary("."), tokenizer_p.save_vocabulary(".")
+            self.assertEqual(rust_saved_files, python_saved_files)
 
             # Check for padding
             self.assert_padding(tokenizer_r, tokenizer_p)
