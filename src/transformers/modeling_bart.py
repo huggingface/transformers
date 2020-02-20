@@ -43,7 +43,7 @@ BART_START_DOCSTRING = r"""
 
     `Paper <https://arxiv.org/abs/1910.13461>`_: BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension 
     Authors: Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov, Luke Zettlemoyer
-    (Submitted on 29 Oct 2019) `Paper` `Paper`
+    (Submitted on 29 Oct 2019)
     Code Ported from https://github.com/pytorch/fairseq/tree/master/examples/bart
     
     Parameters:
