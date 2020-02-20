@@ -269,9 +269,3 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             **kwargs,
         )
-
-        logger.warning(
-            "RobertaTokenizerFast has an issue when working on mask language modeling "
-            "where it introduces an extra encoded space before the mask token."
-            "See https://github.com/huggingface/transformers/pull/2778 for more information."
-        )
