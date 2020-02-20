@@ -68,6 +68,76 @@ function addHfMenu() {
     document.body.insertAdjacentHTML('afterbegin', div);
 }
 
+function platformToggle() {
+    const codeBlocks = Array.from(document.getElementsByClassName("highlight"));
+    const pytorchIdentifier = "## PYTORCH CODE";
+    const tensorflowIdentifier = "## TENSORFLOW CODE";
+    const pytorchSpanIdentifier = `<span class="c1">${pytorchIdentifier}</span>`;
+    const tensorflowSpanIdentifier = `<span class="c1">${tensorflowIdentifier}</span>`;
+
+    const getFrameworkSpans = filteredCodeBlock => {
+        const spans = filteredCodeBlock.element.innerHTML;
+        const pytorchSpanPosition = spans.indexOf(pytorchSpanIdentifier);
+        const tensorflowSpanPosition = spans.indexOf(tensorflowSpanIdentifier);
+
+        let pytorchSpans;
+        let tensorflowSpans;
+
+        if(pytorchSpanPosition < tensorflowSpanPosition){
+            pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, tensorflowSpanPosition);
+            tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, spans.length);
+        }else{
+            tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, pytorchSpanPosition);
+            pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, spans.length);
+        }
+
+        return {
+            ...filteredCodeBlock,
+            pytorchSample: pytorchSpans ,
+            tensorflowSample: tensorflowSpans
+        }
+    };
+
+    const createFrameworkButtons = sample => {
+            console.log(sample);
+            const pytorchButton = document.createElement("button");
+            pytorchButton.innerText = "PyTorch";
+
+            const tensorflowButton = document.createElement("button");
+            tensorflowButton.innerText = "TensorFlow";
+
+            const selectorDiv = document.createElement("div");
+            selectorDiv.classList.add("framework-selector");
+            selectorDiv.appendChild(pytorchButton);
+            selectorDiv.appendChild(tensorflowButton);
+            sample.element.parentElement.prepend(selectorDiv);
+
+            sample.element.innerHTML = sample.pytorchSample;
+            pytorchButton.classList.add("selected");
+            tensorflowButton.classList.remove("selected");
+
+            pytorchButton.addEventListener("click", () => {
+                sample.element.innerHTML = sample.pytorchSample;
+                pytorchButton.classList.add("selected");
+                tensorflowButton.classList.remove("selected");
+            });
+            tensorflowButton.addEventListener("click", () => {
+               sample.element.innerHTML = sample.tensorflowSample;
+                tensorflowButton.classList.add("selected");
+                pytorchButton.classList.remove("selected");
+            });
+        };
+
+    const samples = codeBlocks
+        .map(element => {return {element: element.firstChild, innerText: element.innerText}})
+        .filter(codeBlock => codeBlock.innerText.includes(pytorchIdentifier) && codeBlock.innerText.includes(tensorflowIdentifier))
+        .map(getFrameworkSpans)
+        .forEach(createFrameworkButtons);
+
+    console.log(samples)
+}
+
+
 /*!
  * github-buttons v2.2.10
  * (c) 2019 なつき
@@ -85,6 +155,7 @@ function onLoad() {
     addGithubButton();
     parseGithubButtons();
     addHfMenu();
+    platformToggle();
 }
 
 window.addEventListener("load", onLoad);
