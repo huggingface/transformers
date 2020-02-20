@@ -83,7 +83,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             pad_token_id=5,
             num_return_sequences=3,
             max_length=5,
-            num_beams=3
+            num_beams=3,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -156,7 +156,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
                 num_labels=self.type_sequence_label_size,
                 bos_token_id=self.bos_token_id,
                 pad_token_id=self.pad_token_id,
-                eos_token_id=self.eos_token_id
+                eos_token_id=self.eos_token_id,
             )
 
             return (
@@ -309,13 +309,26 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             # generate function should not produce any None values so that every output is decodable
             self.check_tokens(model.generate(max_length=self.max_length))  # no input
-            self.check_tokens(model.generate(max_length=self.max_length, num_return_sequences=self.num_return_sequences))  # batch_size > 1
             self.check_tokens(
-                model.generate(input_ids, num_return_sequences=self.num_return_sequences, do_sample=False))  # batch_size > 1, greedy decoding, input_ids defined
+                model.generate(max_length=self.max_length, num_return_sequences=self.num_return_sequences)
+            )  # batch_size > 1
             self.check_tokens(
-                model.generate(num_beams=self.num_beams, max_length=self.max_length, num_return_sequences=self.num_return_sequences))  # num_beams > 1
+                model.generate(input_ids, num_return_sequences=self.num_return_sequences, do_sample=False)
+            )  # batch_size > 1, greedy decoding, input_ids defined
             self.check_tokens(
-                model.generate(do_sample=False, num_beams=self.num_beams, max_length=self.max_length, num_return_sequences=self.num_return_sequences)
+                model.generate(
+                    num_beams=self.num_beams,
+                    max_length=self.max_length,
+                    num_return_sequences=self.num_return_sequences,
+                )
+            )  # num_beams > 1
+            self.check_tokens(
+                model.generate(
+                    do_sample=False,
+                    num_beams=self.num_beams,
+                    max_length=self.max_length,
+                    num_return_sequences=self.num_return_sequences,
+                )
             )  # greedy decoding
             self.check_tokens(
                 model.generate(input_ids, num_return_sequences=self.num_return_sequences, num_beams=self.num_beams)

@@ -646,7 +646,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 The number of independently computed returned sequences for each element in the batch. Default to 1.
 
         Return:
-            
+
             output: `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`
                 sequence_length is either equal to max_length or shorter if all batches finished early due to the `eos_token_id`
 
@@ -654,7 +654,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
-            outputs = model.generate(max_length=40, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id, do_sample=False)  # do greedy decoding without beam search
+            outputs = model.generate(max_length=40, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id, do_sample=False)  # do greedy decoding
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
@@ -663,20 +663,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
             outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
             for i in range(3): #  3 output sequences were generated
-                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[0][i], skip_special_tokens=True)))
+                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
             input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, bos_token_id=tokenizer.bos_token_id, pad_token_id=tokenizer.pad_token_id, eos_token_ids=tokenizer.eos_token_id, num_return_sequences=3)  # generate sequences using by sampling
-            print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
+            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, bos_token_id=tokenizer.bos_token_id, pad_token_id=tokenizer.pad_token_id, eos_token_ids=tokenizer.eos_token_id, num_return_sequences=3)  # 3 generate sequences using by sampling
+            for i in range(3): #  3 output sequences were generated
+                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
             input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
             input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2, do_sample=False)  # generate sequences using using greedy search
+            outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
         """

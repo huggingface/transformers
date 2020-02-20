@@ -66,7 +66,7 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
             scope=None,
             num_return_sequences=3,
             max_length=5,
-            num_beams=3
+            num_beams=3,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -165,15 +165,25 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
 
             # generate function should not produce any None values so that every output is decodable
             with self.parent.assertRaises(AssertionError):
-                self.check_tokens(model.generate(max_length=self.max_length))  # no input, should throw error because bos_token_id is not defined in ctrl
+                self.check_tokens(
+                    model.generate(max_length=self.max_length)
+                )  # no input, should throw error because bos_token_id is not defined in ctrl
             self.check_tokens(
-                model.generate(input_ids, num_return_sequences=self.num_return_sequences))  # batch_size > 1, input_ids defined
+                model.generate(input_ids, num_return_sequences=self.num_return_sequences)
+            )  # batch_size > 1, input_ids defined
             self.check_tokens(
-                model.generate(input_ids, num_return_sequences=self.num_return_sequences, do_sample=False))  # batch_size > 1, greedy decoding, input_ids defined
+                model.generate(input_ids, num_return_sequences=self.num_return_sequences, do_sample=False)
+            )  # batch_size > 1, greedy decoding, input_ids defined
             self.check_tokens(
-                model.generate(input_ids, num_beams=self.num_beams, num_return_sequences=self.num_return_sequences))  # num_beams > 1
+                model.generate(input_ids, num_beams=self.num_beams, num_return_sequences=self.num_return_sequences)
+            )  # num_beams > 1
             self.check_tokens(
-                model.generate(input_ids, do_sample=False, num_beams=self.num_beams, num_return_sequences=self.num_return_sequences)
+                model.generate(
+                    input_ids,
+                    do_sample=False,
+                    num_beams=self.num_beams,
+                    num_return_sequences=self.num_return_sequences,
+                )
             )  # greedy decoding
 
         def create_and_check_double_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
