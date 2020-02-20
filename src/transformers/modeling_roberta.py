@@ -25,6 +25,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from .configuration_roberta import RobertaConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu
+from .modeling_utils import create_position_ids_from_input_ids
 
 
 logger = logging.getLogger(__name__)
@@ -56,25 +57,13 @@ class RobertaEmbeddings(BertEmbeddings):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = self.create_position_ids_from_input_ids(input_ids).to(input_ids.device)
+                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx).to(input_ids.device)
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         return super().forward(
             input_ids, token_type_ids=token_type_ids, position_ids=position_ids, inputs_embeds=inputs_embeds
         )
-
-    def create_position_ids_from_input_ids(self, x):
-        """ Replace non-padding symbols with their position numbers. Position numbers begin at
-        padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
-        `utils.make_positions`.
-
-        :param torch.Tensor x:
-        :return torch.Tensor:
-        """
-        mask = x.ne(self.padding_idx).long()
-        incremental_indicies = torch.cumsum(mask, dim=1) * mask
-        return incremental_indicies + self.padding_idx
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """ We are provided embeddings directly. We cannot infer which are padded so just generate
