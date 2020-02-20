@@ -211,6 +211,12 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         self.max_len_single_sentence = self.max_len - self.num_added_tokens(False)  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - self.num_added_tokens(True)  # take into account special tokens
 
+        logger.warning(
+            "RobertaTokenizerFast has an issue when working on mask language modeling "
+            "where it introduces an extra encoded space before the mask token."
+            "See https://github.com/huggingface/transformers/pull/2778 for more information."
+        )
+
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
         if token_ids_1 is None:

@@ -85,7 +85,7 @@ def truncate_and_pad(
             pad_type_id=pad_token_type_id,
             pad_token=pad_token,
         )
-    else:
+    elif pad_to_max_length:
         logger.warning(
             "Disabled padding because no padding token set (pad_token: {}, pad_token_id: {}).\n"
             "To remove this error, you can add a new pad token and then resize model embedding:\n"
