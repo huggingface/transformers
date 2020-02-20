@@ -214,7 +214,7 @@ def cached_path(
     user_agent=None,
     extract_compressed_file=False,
     force_extract=False,
-    disable_outgoing=False,
+    local_files_only=False,
 ) -> Optional[str]:
     """
     Given something that might be a URL (or might be a local path),
@@ -251,7 +251,7 @@ def cached_path(
             proxies=proxies,
             resume_download=resume_download,
             user_agent=user_agent,
-            disable_outgoing=disable_outgoing,
+            local_files_only=local_files_only,
         )
     elif os.path.exists(url_or_filename):
         # File, and it exists.
@@ -387,7 +387,7 @@ def get_from_cache(
     etag_timeout=10,
     resume_download=False,
     user_agent=None,
-    disable_outgoing=False,
+    local_files_only=False,
 ) -> Optional[str]:
     """
     Given a URL, look for the corresponding file in the local cache.
@@ -405,7 +405,7 @@ def get_from_cache(
     os.makedirs(cache_dir, exist_ok=True)
 
     etag = None
-    if not disable_outgoing:
+    if not local_files_only:
         # Get eTag to add to filename, if it exists.
         if url.startswith("s3://"):
             etag = s3_etag(url, proxies=proxies)
@@ -437,13 +437,13 @@ def get_from_cache(
             if len(matching_files) > 0:
                 return os.path.join(cache_dir, matching_files[-1])
             else:
-                # If files cannot be found and disable_outgoing=True,
-                # the models might've been found if disable_outgoing=False
+                # If files cannot be found and local_files_only=True,
+                # the models might've been found if local_files_only=False
                 # Notify the user about that
-                if disable_outgoing:
+                if local_files_only:
                     raise ValueError(
                         "Cannot find the requested files in the cached path and outgoing traffic has been"
-                        " disabled. To enable model look-ups and downloads online, set 'disable_outgoing'"
+                        " disabled. To enable model look-ups and downloads online, set 'local_files_only'"
                         " to False."
                     )
                 return None
