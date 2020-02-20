@@ -299,23 +299,30 @@ def squad_convert_examples_to_features(
     """
 
     # Defining helper methods
-    features = []
-    threads = min(threads, cpu_count())
-    with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
-        annotate_ = partial(
-            squad_convert_example_to_features,
-            max_seq_length=max_seq_length,
-            doc_stride=doc_stride,
-            max_query_length=max_query_length,
-            is_training=is_training,
-        )
-        features = list(
-            tqdm(
-                p.imap(annotate_, examples, chunksize=32),
-                total=len(examples),
-                desc="convert squad examples to features",
+    
+    if len(examples) < 5:
+        squad_convert_example_to_features_init(tokenizer)
+        features = [squad_convert_example_to_features(example=examples[0], max_seq_length=max_seq_length, doc_stride=doc_stride, max_query_length=max_query_length, is_training=is_training)]
+
+    else:
+        features = []
+        threads = min(threads, cpu_count())
+        with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
+            annotate_ = partial(
+                squad_convert_example_to_features,
+                max_seq_length=max_seq_length,
+                doc_stride=doc_stride,
+                max_query_length=max_query_length,
+                is_training=is_training,
             )
-        )
+            features = list(
+                tqdm(
+                    p.imap(annotate_, examples, chunksize=32),
+                    total=len(examples),
+                    desc="convert squad examples to features",
+                )
+            )
+        
     new_features = []
     unique_id = 1000000000
     example_index = 0
