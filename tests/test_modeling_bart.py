@@ -36,8 +36,6 @@ if is_torch_available():
     from transformers.modeling_bart import (
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
         shift_tokens_right,
-        prepare_bart_inputs_dict,
-        LARGE_NEGATIVE,
     )
     from transformers.tokenization_bart import BartTokenizer
 
@@ -82,6 +80,17 @@ class ModelTester:
         )
         inputs_dict = prepare_bart_inputs_dict(config, input_ids)
         return config, inputs_dict
+
+
+def prepare_bart_inputs_dict(
+    config, input_ids, attention_mask=None,
+):
+    if attention_mask is None:
+        attention_mask = input_ids.ne(config.pad_token_id)
+    return {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+    }
 
 
 @require_torch
@@ -257,20 +266,6 @@ class BartHeadTests(unittest.TestCase):
         for ex, desired_result in zip(examples, fairseq_results):
             bart_toks = tokenizer.encode(ex, return_tensors="pt")
             _assert_tensors_equal(desired_result.long(), bart_toks, prefix=ex)
-
-    def test_input_preparation(self):
-        example_no_pad = [0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]
-        example_b = [0, 31414, 232, 328, 740, 1140, 69, 46078, 1588, 2, 1]
-
-        input_ids_w_padding = torch.Tensor([example_no_pad, example_b]).long()  # has padding
-
-        for ids in [input_ids_w_padding, torch.Tensor([example_no_pad]).long()]:
-            inputs_dict = prepare_bart_inputs_dict(BartConfig(), ids)
-            # self.assertEqual(inputs_dict["decoder_attention_mask"].min().item(), LARGE_NEGATIVE)
-            legacy_attention_mask = 1 - ids.eq(1).int()
-            inputs_with_passed_attn = prepare_bart_inputs_dict(BartConfig(), ids, attention_mask=legacy_attention_mask)
-            with self.assertRaises(Exception):  # TODO(SS): fix passing in attention_mask
-                _assert_tensors_equal(inputs_dict["attention_mask"], inputs_with_passed_attn["attention_mask"])
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):

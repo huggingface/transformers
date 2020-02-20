@@ -98,29 +98,6 @@ def _prepare_bart_decoder_inputs(
     return decoder_input_ids, decoder_attn_mask
 
 
-def prepare_bart_inputs_dict(
-    config, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attn_mask=None,
-):
-    """Prepare masks that ignore padding tokens for both encoder and decoder and a causal lm mask for the decoder if
-    none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
-
-    """
-    # attention_mask, decoder_input_ids, decoder_attn_mask = _prepare_bart_inputs(
-    #     config,
-    #     input_ids,
-    #     attention_mask=attention_mask,
-    #     decoder_input_ids=decoder_input_ids,
-    #     decoder_attn_mask=decoder_attn_mask,
-    # )
-    attention_mask = input_ids.ne(config.pad_token_id)
-    return {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        # "decoder_attention_mask": decoder_attn_mask,
-        # "decoder_input_ids": decoder_input_ids,
-    }
-
-
 class PretrainedBartModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
