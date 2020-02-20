@@ -78,6 +78,12 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             initializer_range=0.05,
             seed=1,
             type_vocab_size=2,
+            bos_token_id=1,
+            eos_token_id=2,
+            pad_token_id=5,
+            num_return_sequences=3,
+            max_length=5,
+            num_beams=3
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -101,6 +107,12 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             self.seed = seed
             self.type_vocab_size = type_vocab_size
             self.type_sequence_label_size = type_sequence_label_size
+            self.bos_token_id = bos_token_id
+            self.pad_token_id = pad_token_id
+            self.eos_token_id = eos_token_id
+            self.num_return_sequences = num_return_sequences
+            self.max_length = max_length
+            self.num_beams = num_beams
 
         def prepare_config_and_inputs(self):
             input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -142,6 +154,9 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
                 bi_data=self.bi_data,
                 initializer_range=self.initializer_range,
                 num_labels=self.type_sequence_label_size,
+                bos_token_id=self.bos_token_id,
+                pad_token_id=self.pad_token_id,
+                eos_token_id=self.eos_token_id
             )
 
             return (
@@ -286,6 +301,25 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
                 list(list(mem.size()) for mem in result["mems_2"]),
                 [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
             )
+
+        def create_and_check_generate_lm_head_model(self, config, input_ids, *args):
+            model = XLNetLMHeadModel(config)
+            model.to(torch_device)
+            model.eval()
+
+            # generate function should not produce any None values so that every output is decodable
+            self.check_tokens(model.generate(max_length=self.max_length))  # no input
+            self.check_tokens(model.generate(max_length=self.max_length, num_return_sequences=self.num_return_sequences))  # batch_size > 1
+            self.check_tokens(
+                model.generate(input_ids, num_return_sequences=self.num_return_sequences, do_sample=False))  # batch_size > 1, greedy decoding, input_ids defined
+            self.check_tokens(
+                model.generate(num_beams=self.num_beams, max_length=self.max_length, num_return_sequences=self.num_return_sequences))  # num_beams > 1
+            self.check_tokens(
+                model.generate(do_sample=False, num_beams=self.num_beams, max_length=self.max_length, num_return_sequences=self.num_return_sequences)
+            )  # greedy decoding
+            self.check_tokens(
+                model.generate(input_ids, num_return_sequences=self.num_return_sequences, num_beams=self.num_beams)
+            )  # batch_size > 1, num_beams > 1, input_ids defined
 
         def create_and_check_xlnet_qa(
             self,
@@ -437,6 +471,11 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
                 [[self.seq_length, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
             )
 
+        def check_tokens(self, output_ids):
+            for token_id in output_ids[0].tolist():
+                self.parent.assertGreaterEqual(token_id, 0)
+                self.parent.assertLess(token_id, self.vocab_size)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -478,6 +517,10 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_lm_head(*config_and_inputs)
+
+    def test_xlnet_lm_head_model_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_generate_lm_head_model(*config_and_inputs)
 
     def test_xlnet_sequence_classif(self):
         self.model_tester.set_seed()

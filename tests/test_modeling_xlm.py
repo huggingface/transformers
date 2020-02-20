@@ -81,6 +81,10 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             summary_type="last",
             use_proj=True,
             scope=None,
+            bos_token_id=0,
+            num_return_sequences=3,
+            max_length=5,
+            num_beams=3
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -111,6 +115,10 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
+            self.bos_token_id = bos_token_id
+            self.num_return_sequences = num_return_sequences
+            self.max_length = max_length
+            self.num_beams = num_beams
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -151,6 +159,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
                 initializer_range=self.initializer_range,
                 summary_type=self.summary_type,
                 use_proj=self.use_proj,
+                bos_token_id=self.bos_token_id
             )
 
             return (
@@ -218,6 +227,25 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(
                 list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
             )
+
+        def create_and_check_generate_lm_head_model(self, config, input_ids, *args):
+            model = XLMWithLMHeadModel(config)
+            model.to(torch_device)
+            model.eval()
+
+            # generate function should not produce any None values so that every output is decodable
+            self.check_tokens(model.generate(max_length=self.max_length))  # no input
+            self.check_tokens(model.generate(max_length=self.max_length, num_return_sequences=self.num_return_sequences))  # batch_size > 1
+            self.check_tokens(
+                model.generate(input_ids, num_return_sequences=self.num_return_sequences, do_sample=False))  # batch_size > 1, greedy decoding, input_ids defined
+            self.check_tokens(
+                model.generate(num_beams=self.num_beams, max_length=self.max_length, num_return_sequences=self.num_return_sequences))  # num_beams > 1
+            self.check_tokens(
+                model.generate(do_sample=False, num_beams=self.num_beams, max_length=self.max_length, num_return_sequences=self.num_return_sequences)
+            )  # greedy decoding
+            self.check_tokens(
+                model.generate(input_ids, num_return_sequences=self.num_return_sequences, num_beams=self.num_beams)
+            )  # batch_size > 1, num_beams > 1, input_ids defined
 
         def create_and_check_xlm_simple_qa(
             self,
@@ -343,6 +371,11 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
                 list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size]
             )
 
+        def check_tokens(self, output_ids):
+            for token_id in output_ids[0].tolist():
+                self.parent.assertGreaterEqual(token_id, 0)
+                self.parent.assertLess(token_id, self.vocab_size)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -372,6 +405,10 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_xlm_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_lm_head(*config_and_inputs)
+
+    def test_xlm_head_model_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_generate_lm_head_model(*config_and_inputs)
 
     def test_xlm_simple_qa(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
