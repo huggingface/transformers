@@ -37,14 +37,8 @@ BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
 
 BART_START_DOCSTRING = r"""
 
-    'BART is a An encoder decoder transformer pre-trained in a text-to-text denoising generative setting.'
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matters related to general usage and behavior.
-
-    `Paper <https://arxiv.org/abs/1910.13461>`_: BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension
-    Authors: Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov, Luke Zettlemoyer
-    (Submitted on 29 Oct 2019)
-    Code Ported from https://github.com/pytorch/fairseq/tree/master/examples/bart
 
     Parameters:
         config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
@@ -63,11 +57,11 @@ BART_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices in input_ids.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        decoder_input_ids: (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
+        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
         decoder_attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, 1, tgt_seq_len, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens and future tokens, as in the paper.
-            If you want to change padding behavior, you should read :function:`~transformers.modeling_bart._prepare_decoder_inputs` and modify. 
+            If you want to change padding behavior, you should read :func:`~transformers.modeling_bart._prepare_decoder_inputs` and modify.
             See diagram 1 in the paper for more info on the default strategy
 """
 LARGE_NEGATIVE = -1e4
@@ -76,7 +70,7 @@ LARGE_NEGATIVE = -1e4
 def _prepare_bart_decoder_inputs(
     config, input_ids, decoder_input_ids=None, decoder_attn_mask=None,
 ):
-    """Prepare masks that ignore padding tokens for both encoder and decoder and a causal lm mask for the decoder if
+    """Prepare masks that ignore padding tokens  decoder and a causal lm mask for the decoder if
     none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
     """
     pad_token_id = config.pad_token_id
@@ -91,6 +85,7 @@ def _prepare_bart_decoder_inputs(
         else:
             causal_lm_mask = None
         new_shape = (bsz, tgt_len, tgt_len)
+        # make it broadcastable so can just be added to the attention coefficients
         decoder_attn_mask = _combine_masks(decoder_padding_mask, causal_lm_mask, new_shape)
     assert decoder_attn_mask is None or decoder_attn_mask.shape == (bsz, 1, tgt_len, tgt_len)
     return decoder_input_ids, decoder_attn_mask
