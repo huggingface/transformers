@@ -36,7 +36,7 @@ if is_torch_available():
     from transformers.modeling_bart import (
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
         shift_tokens_right,
-        _prepare_bart_decoder_inputs
+        _prepare_bart_decoder_inputs,
     )
     from transformers.tokenization_bart import BartTokenizer
 
@@ -115,10 +115,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_advanced_inputs(self):
         # (config, input_ids, token_type_ids, input_mask, *unused) = \
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(config, inputs_dict['input_ids'])
-
-
-
+        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(config, inputs_dict["input_ids"])
         model = BartModel(config)
         model.to(torch_device)
         model.eval()
@@ -134,10 +131,11 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         _check_var(model.encoder.layers[0].fc1)
         _check_var(model.encoder.embed_positions)
 
-        decoder_features_with_mask = model.forward(**inputs_dict)[
-            0
-        ]  # check that attention_mask doesnt break or something
-        #mask = inputs_dict.pop("decoder_attention_mask")
+        decoder_features_with_created_mask = model.forward(**inputs_dict)[0]
+        decoder_features_with_passed_mask = model.forward(
+            decoder_attention_mask=decoder_attn_mask, decoder_input_ids=decoder_input_ids, **inputs_dict
+        )[0]
+        _assert_tensors_equal(decoder_features_with_passed_mask, decoder_features_with_created_mask)
         useless_mask = torch.zeros_like(decoder_attn_mask)
         decoder_features = model.forward(decoder_attention_mask=useless_mask, **inputs_dict)[0]
         self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
@@ -145,7 +143,13 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
         )
         if decoder_attn_mask.min().item() < -1e3:  # some tokens were masked
-            self.assertFalse((decoder_features_with_mask == decoder_features).all().item())
+            self.assertFalse((decoder_features_with_created_mask == decoder_features).all().item())
+
+        # Test different encoder attention masks
+        decoder_features_with_long_encoder_mask = model.forward(
+            inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"].long()
+        )[0]
+        _assert_tensors_equal(decoder_features_with_long_encoder_mask, decoder_features_with_created_mask)
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
