@@ -645,6 +645,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             num_return_sequences: (`optional`) int
                 The number of independently computed returned sequences for each element in the batch. Default to 1.
 
+        Return:
+            
+            output: `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`
+                sequence_length is either equal to max_length or shorter if all batches finished early due to the `eos_token_id`
+
         Examples::
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
@@ -714,7 +719,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
         assert input_ids is not None or (
             isinstance(bos_token_id, int) and bos_token_id >= 0
-        ), "`bos_token_id` should be a positive integer."
+        ), "If input_ids is not defined, `bos_token_id` should be a positive integer."
         assert pad_token_id is None or (
             isinstance(pad_token_id, int) and (pad_token_id >= 0)
         ), "`pad_token_id` should be a positive integer."
@@ -753,9 +758,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             input_ids = input_ids.contiguous().view(
                 batch_size * num_return_sequences, cur_len
             )  # (batch_size * num_return_sequences, cur_len)
-            batch_size = batch_size * num_return_sequences
+            effective_batch_size = batch_size * num_return_sequences
         else:
-            batch_size = batch_size
+            effective_batch_size = batch_size
 
         if num_beams > 1:
             output = self._generate_beam_search(
@@ -769,7 +774,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 repetition_penalty,
                 pad_token_id,
                 eos_token_ids,
-                batch_size,
+                effective_batch_size,
                 length_penalty,
                 num_beams,
                 vocab_size,
@@ -786,11 +791,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 repetition_penalty,
                 pad_token_id,
                 eos_token_ids,
-                batch_size,
+                effective_batch_size,
             )
 
-        if num_return_sequences != 1:
-            output = output.view(batch_size, num_return_sequences, -1)
         return output
 
     def _generate_no_beam_search(
