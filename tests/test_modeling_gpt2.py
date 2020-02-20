@@ -216,11 +216,6 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.parent.assertListEqual(list(result["mc_logits"].size()), [self.batch_size, self.num_choices])
 
-        def check_tokens(self, output_ids):
-            for token_id in output_ids[0].tolist():
-                self.parent.assertGreaterEqual(token_id, 0)
-                self.parent.assertLess(token_id, self.vocab_size)
-
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
 
