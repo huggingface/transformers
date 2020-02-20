@@ -260,9 +260,10 @@ class RobertaLMHead(nn.Module):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = BertLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        if weight is None:
-            weight = nn.Linear(config.hidden_size, config.vocab_size, bias=False).weight
-        self.weight = weight
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        if weight is not None:
+            self.decoder.weight = weight
+
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     def forward(self, features, **kwargs):
@@ -271,7 +272,7 @@ class RobertaLMHead(nn.Module):
         x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
-        x = F.linear(x, self.weight) + self.bias
+        x = self.decoder(x) + self.bias
 
         return x
 
