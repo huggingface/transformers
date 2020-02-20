@@ -20,7 +20,8 @@ import logging
 
 import torch
 import torch.nn as nn
-from torch.nn import functional as F, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import functional as F
 
 from .configuration_roberta import RobertaConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
