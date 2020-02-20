@@ -320,20 +320,6 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
 
 class RobertaModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
-        model = RobertaForMaskedLM.from_pretrained("roberta-base")
-
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 11, 50265))
-        self.assertEqual(output.shape, expected_shape)
-        # compare the actual values for a slice.
-        expected_slice = torch.Tensor(
-            [[[33.8843, -4.3107, 22.7779], [4.6533, -2.8099, 13.6252], [1.8222, -3.6898, 8.8600]]]
-        )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
-
-    @slow
     def test_inference_no_head(self):
         model = RobertaModel.from_pretrained("roberta-base")
 
@@ -355,3 +341,17 @@ class RobertaModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         expected_tensor = torch.Tensor([[-0.9469, 0.3913, 0.5118]])
         self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-3))
+
+    @slow
+    def test_lm_inference_identical_to_fairseq(self):
+        """ Tests whether for given input 'My favorite type of cheese is gouda!'
+            the output is as expected, i.e. identical to the fairseq output
+        """
+        model = RobertaForMaskedLM.from_pretrained("roberta-base")
+
+        input_ids = torch.tensor([[0, 1308, 2674, 1907, 9, 7134,   16,  821, 6998,  102,  328, 2]])
+        output = model(input_ids)[0]
+        expected_tensor = torch.tensor([[35.4675, -3.9585, 22.8375],
+                                        [ 1.6043, -4.0382, 11.2205],
+                                        [-0.7618, -4.3771, 12.1674]])
+        self.assertTrue(torch.allclose(output[0, :3, :3], expected_tensor, atol=1e-3))
