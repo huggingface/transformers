@@ -875,9 +875,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if unfinished_sents.max() == 0:
                 break
 
-        # if some batches have to be padded, the pad_token_id has to be defined
+        # if there are different sentences lengths in the batch, some batches have to be padded
         if sent_lengths.min().item() != sent_lengths.max().item():
-            assert pad_token_id is not None, "`Pad_token_id` has to be defined if `eos_token_ids`"
+            assert pad_token_id is not None, "`Pad_token_id` has to be defined if batches have different lengths"
             # finished sents are filled with pad_token
             decoded = input_ids.new(batch_size, sent_lengths.max().item()).fill_(pad_token_id)
         else:
