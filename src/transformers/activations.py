@@ -18,7 +18,10 @@ def _gelu_python(x):
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
-gelu = getattr(F, "gelu", _gelu_python)
+if torch.__version__ < "1.4.0":
+    gelu = _gelu_python
+else:
+    gelu = F.gelu
 
 
 def gelu_new(x):
