@@ -21,7 +21,7 @@ def _gelu_python(x):
 if torch.__version__ < "1.4.0":
     gelu = _gelu_python
 else:
-    gelu = getattr(F, "gelu", _gelu_python)
+    gelu = F.gelu
 
 
 def gelu_new(x):
