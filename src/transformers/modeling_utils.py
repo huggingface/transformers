@@ -463,7 +463,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             resolved_archive_file = None
 
         # Instantiate model.
-        print(model_kwargs)
         model = cls(config, *model_args, **model_kwargs)
 
         if state_dict is None and not from_tf:
