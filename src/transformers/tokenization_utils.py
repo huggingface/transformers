@@ -79,7 +79,7 @@ def truncate_and_pad(
 
     if pad_to_max_length and (pad_token and pad_token_id >= 0):
         tokenizer.enable_padding(
-            max_length=None,
+            max_length=max_length,
             direction=padding_side,
             pad_id=pad_token_id,
             pad_type_id=pad_token_type_id,
