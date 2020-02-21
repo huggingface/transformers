@@ -1,10 +1,10 @@
 ---
 language: german
-thumbnail: https://thumb.tildacdn.com/tild3162-6462-4566-b663-376630376138/-/format/webp/Screenshot_from_2020.png
+thumbnail: https://static.tildacdn.com/tild6438-3730-4164-b266-613634323466/german_bert.png
 ---
 
 # German BERT
-
+![bert_image](https://static.tildacdn.com/tild6438-3730-4164-b266-613634323466/german_bert.png)
 ## Overview
 **Language model:** bert-base-cased   
 **Language:** German  
