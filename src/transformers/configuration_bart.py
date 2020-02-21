@@ -59,6 +59,7 @@ class BartConfig(PretrainedConfig):
         classifier_dropout=0.0,
         output_past=False,
         num_labels=3,
+        is_encoder_decoder=True,
         **common_kwargs
     ):
         r"""
@@ -91,6 +92,9 @@ class BartConfig(PretrainedConfig):
 
         # Classifier stuff
         self.classif_dropout = classifier_dropout
+
+        # set encoder-decoder flag
+        self.is_encoder_decoder = is_encoder_decoder
 
     @property
     def num_attention_heads(self):

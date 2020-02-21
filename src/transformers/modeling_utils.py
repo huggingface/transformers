@@ -570,6 +570,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         return {"input_ids": input_ids}
 
+        # TODO (PVP): Shouldn't be needed if named tuples are implemented
+
+    def postprocess_outputs_for_generation(self, outputs, **kwargs):
+        return (outputs[0], outputs[1], None)
+
     def _do_output_past(self, outputs):
         has_output_past = hasattr(self.config, "output_past") and self.config.output_past
         has_mem_len = hasattr(self.config, "mem_len") and self.config.mem_len
@@ -750,8 +755,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             pad_token_id = eos_token_ids[0]
 
         # current position and vocab size
-        # cur_len = input_ids.shape[1] TODO FOR SEQ-2-SEQ: This doesn't work for seq-2-seq models as the input_ids will be encoded and not prepended to the output. Proposal:
-        cur_len = 0 if self._is_seq_to_seq() else input_ids.shape[0]
+        #  NOTE: FOR SEQ-2-SEQ: This doesn't work for seq-2-seq models as the input_ids will be encoded and not prepended to the output. Proposal:
+        if self.config.is_encoder_decoder:
+            assert bos_token_id is not None, "Encoder Decoder Models need to have a bos_token_id"
+            encoder_inputs = input_ids
+            input_ids = torch.full(
+                (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device
+            )
+            cur_len = 1  # bos_token_id counts for 1
+        else:
+            encoder_inputs = None
+            cur_len = input_ids.shape[0]
 
         vocab_size = self.config.vocab_size
 
@@ -781,6 +795,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 length_penalty,
                 num_beams,
                 vocab_size,
+                encoder_inputs,
             )
         else:
             output = self._generate_no_beam_search(
@@ -795,6 +810,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 pad_token_id,
                 eos_token_ids,
                 effective_batch_size,
+                encoder_inputs,
             )
 
         return output
@@ -812,6 +828,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         pad_token_id,
         eos_token_ids,
         batch_size,
+        encoder_inputs,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
             All returned sequence are generated independantly.
@@ -821,28 +838,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
 
         past = None
-        # TODO: FOR SEQ-2-SEQ: the original input_ids have to be saved somewhere since they are always given as encoder_inputs. Also we need to keep track of the encoder_outputs for the decoder
-        if self._is_seq_to_seq():
-            encoder_inputs = input_ids
-            encoder_outputs = None  # If general postprocess_outputs_for_generation fn (see below) should be used for all models then encoder_outputs = None should be set for all models to None (as it is done with the variable 'past')
+
+        if self.config.is_encoder_decoder:
+            encoder_outputs = None  #
+            # If general postprocess_outputs_for_generation fn (see below) should be used for all models then encoder_outputs = None should be set for all models to None (as it is done with the variable 'past')
 
         while cur_len < max_length:
-            # TODO: FOR SEQ-2-SEQ: This function might need a different signature because we need to input
+            # NOTE: FOR SEQ-2-SEQ: This function might need a different signature because we need to input
             # 1) always the original inputs to be encoded
             # 2) the changing decoder_inputs (which are decoded auto-regressively
             # 3) the cached_past
-            # Proposal:
 
-            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, encoder_inputs=encoder_inputs)
-            # TODO: FOR SEQ-2-SEQ: the input_ids should be the encoder_inputs and the decoder_input_ids should be the input_ids (which should be set to None or empty tensor by the prepare_inputs_for_generation fn in the respective seq-to-seq models).
+            model_inputs = self.prepare_inputs_for_generation(
+                input_ids, past=past, encoder_inputs=encoder_inputs, encoder_outputs=encoder_outputs
+            )
+            # NOTE: FOR SEQ-2-SEQ: the input_ids should be the encoder_inputs and the decoder_input_ids should be the input_ids (which should be set to None or empty tensor by the prepare_inputs_for_generation fn in the respective seq-to-seq models for the first decoding step).
 
             outputs = self(**model_inputs)
 
-            # TODO: FOR SEQ-2-SEQ - the next_token_logits should come from the decoder_outputs
+            # NOTE: FOR SEQ-2-SEQ - the next_token_logits should come from the decoder_outputs
             # Maybe need a separate function for this which is implemented in the SEQ-2-SEQ model file:
             # Proposal:
-            if self._is_seq_to_seq():
-                next_token_logits, past, encoder_outputs = self.postprocess_outputs_for_generatio(outputs)
+            # UPDATE: the if-else statement could be very much simplified if named tuples are used instead of tuples.
+            # TODO (PVP): Need to also treat LMs such as DoubleHead LMs which are not encoder_decoder models but also have a different order
+            if self.config.is_encoder_decoder:
+                next_token_logits, encoder_outputs, past = self.postprocess_outputs_for_generation(outputs)
             else:
                 next_token_logits = outputs[0][:, -1, :]
 
@@ -850,7 +870,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 if self._do_output_past(outputs):
                     past = outputs[1]
 
-            # TODO: Another idea would be to use a postprocess_outputs_for_generation fn for all models then the 'self._do_output_past is also not needed anymore, whereas past and encoder_outputs would just always be set to None by all not seq-to-seq models. Something like:
+            # NOTE: Another idea would be to use a postprocess_outputs_for_generation fn for all models then the 'self._do_output_past is also not needed anymore, whereas past and encoder_outputs would just always be set to None by all not seq-to-seq models. Something like:
             #            next_token_logits, past, encoder_outputs = self.postprocess_outputs_for_generation(ouputs)
 
             # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
@@ -928,9 +948,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         length_penalty,
         num_beams,
         vocab_size,
+        encoder_inputs,
     ):
         """ Generate sequences for each example with beam search.
         """
+        # TODO (PVP): Need to implement changes for encoder decoder models in this function as well!
         # Expand input to num beams
         input_ids = input_ids.unsqueeze(1).expand(batch_size, num_beams, cur_len)
         input_ids = input_ids.contiguous().view(batch_size * num_beams, cur_len)  # (batch_size * num_beams, cur_len)

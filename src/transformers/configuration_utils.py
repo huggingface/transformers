@@ -66,6 +66,7 @@ class PretrainedConfig(object):
 
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_decoder = kwargs.pop("is_decoder", False)
+        self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
 
         # Parameters for sequence generation
         self.max_length = kwargs.pop("max_length", 20)

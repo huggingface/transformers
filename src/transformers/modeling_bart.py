@@ -939,8 +939,30 @@ class BartForMaskedLM(PretrainedBartModel):
         return outputs
 
     @staticmethod
-    def prepare_inputs_for_generation(input_ids, past, **kwargs):
-        return {"input_ids": input_ids, "decoder_cached_states": past, "decoder_input_ids": input_ids}
+    def prepare_inputs_for_generation(decoder_input_ids, past, encoder_inputs, encoder_outputs, **wwargs):
+        # if encoder_outputs are not defined, the decoder input should be none, since it's the first decoding step
+        if encoder_outputs is None:
+            decoder_input_ids = None
+
+        # the input_ids for Bart always correspond to the encoder_inputs, which don't change during decoding
+        inputs_ids = encoder_inputs
+        return {
+            "input_ids": inputs_ids,
+            "encoder_outputs": encoder_outputs,
+            "decoder_cached_states": past,
+            "decoder_input_ids": decoder_input_ids,
+        }
+
+    def postprocess_outputs_for_generation(self, outputs):
+        # TODO: (SS, PVP) this function sorts the outputs depending on output_hidden_states settings and (WIP) output_attention settings. In general this function is not great and should be replaced when the tuple model outputs are replaced by named tuple model outputs
+        output_ids = outputs[0][:, -1, :]
+        if self.config.output_hidden_states:
+            past = outputs[1]
+            encoder_outputs = (outputs[2],)
+        else:
+            past = None
+            encoder_outputs = (outputs[1],)
+        return output_ids, encoder_outputs, past
 
     def get_output_embeddings(self):
         return self.lm_head
