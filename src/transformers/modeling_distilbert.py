@@ -217,11 +217,6 @@ class TransformerBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.n_heads = config.n_heads
-        self.dim = config.dim
-        self.hidden_dim = config.hidden_dim
-        self.dropout = nn.Dropout(p=config.dropout)
-        self.activation = config.activation
         self.output_attentions = config.output_attentions
 
         assert config.dim % config.n_heads == 0
