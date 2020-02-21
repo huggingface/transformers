@@ -1906,20 +1906,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory):
         if os.path.isdir(save_directory):
-            folder, file = save_directory, "native"
+            files = self._tokenizer.save(save_directory)
         else:
             folder, file = os.path.split(os.path.abspath(save_directory))
-            file = "native"
-
-        files = self._tokenizer.save(folder, file)
-
-        # TODO: Change the way we generate input names on Rust side
-        # Rename files from tokenizers with pattern {}-vocab.json / {}-merges.txt
-        for i, file in enumerate(files):
-            if "native" in file:
-                renamed_file = file[file.index('-') + 1:]
-                os.rename(os.path.join(folder, file), os.path.join(folder, renamed_file))
-
-                files[i] = renamed_file
+            files = self._tokenizer.save(folder, name=file)
 
         return tuple(files)
