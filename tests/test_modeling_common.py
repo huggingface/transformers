@@ -58,7 +58,6 @@ class ModelTesterMixin:
     test_resize_embeddings = True
     test_head_masking = True
     is_encoder_decoder = False
-    model_test_cases = {}
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
