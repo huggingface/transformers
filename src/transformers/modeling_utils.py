@@ -745,7 +745,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         if pad_token_id is None and eos_token_ids is not None:
             logger.warning(
-                "Set `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_ids[0])
+                "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_ids[0])
             )
             pad_token_id = eos_token_ids[0]
 
