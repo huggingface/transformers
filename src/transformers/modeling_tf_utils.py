@@ -192,9 +192,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""Instantiate a pretrained TF 2.0 model from a pre-trained model configuration.
 
-        The model is set in evaluation mode by default using ``model.eval()`` (Dropout modules are deactivated)
-        To train the model, you should first set it back in training mode with ``model.train()``
-
         The warning ``Weights from XXX not initialized from pretrained model`` means that the weights of XXX do not come pre-trained with the rest of the model.
         It is up to you to train those weights with a downstream fine-tuning task.
 
