@@ -220,8 +220,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
         "Transformers provides interoperability between which frameworks?",
     ]
 
-    for i in range(len(questions)):
-        question = questions[i]
+    for question in questions:
         inputs = tokenizer.encode_plus(question, text, add_special_tokens=True, return_tensors="pt")
         input_ids = inputs["input_ids"].tolist()[0]
 
@@ -257,8 +256,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
         "Transformers provides interoperability between which frameworks?",
     ]
 
-    for i in range(len(questions)):
-        question = questions[i]
+    for question in questions:
         inputs = tokenizer.encode_plus(question, text, add_special_tokens=True, return_tensors="tf")
         input_ids = inputs["input_ids"].numpy()[0]
 
@@ -271,7 +269,6 @@ Here is an example of question answering using a model and a tokenizer. The proc
         answer_end = (
             tf.argmax(answer_end_scores, axis=1) + 1
         ).numpy()[0]  # Get the most likely end of answer with the argmax of the score
-        print(answer_start, answer_end)
         answer = tokenizer.convert_tokens_to_string(tokenizer.convert_ids_to_tokens(input_ids[answer_start:answer_end]))
 
         print(f"Question: {question}")
