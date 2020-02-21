@@ -30,6 +30,7 @@ if is_torch_available():
 class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (CTRLModel, CTRLLMHeadModel) if is_torch_available() else ()
+    all_generative_model_classes = (CTRLLMHeadModel,) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
@@ -61,9 +62,6 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
             num_labels=3,
             num_choices=4,
             scope=None,
-            num_return_sequences=3,
-            max_length=5,
-            num_beams=3,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -88,9 +86,6 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
-            self.num_return_sequences = num_return_sequences
-            self.max_length = max_length
-            self.num_beams = num_beams
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -178,39 +173,6 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
                 list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
             )
 
-        def create_and_check_generate_lm_head_model(self, config, input_ids, *args):
-            model = CTRLLMHeadModel(config)
-            model.to(torch_device)
-            model.eval()
-
-            # generate function should not produce any None values so that every output is decodable
-            with self.parent.assertRaises(AssertionError):
-                self.check_tokens(
-                    model.generate(max_length=self.max_length)
-                )  # no input, should throw error because bos_token_id is not defined in ctrl
-            self.check_tokens(
-                model.generate(input_ids, num_return_sequences=self.num_return_sequences)
-            )  # batch_size > 1, input_ids defined
-            self.check_tokens(
-                model.generate(input_ids, num_return_sequences=self.num_return_sequences, do_sample=False)
-            )  # batch_size > 1, greedy decoding, input_ids defined
-            self.check_tokens(
-                model.generate(input_ids, num_beams=self.num_beams, num_return_sequences=self.num_return_sequences)
-            )  # num_beams > 1
-            self.check_tokens(
-                model.generate(
-                    input_ids,
-                    do_sample=False,
-                    num_beams=self.num_beams,
-                    num_return_sequences=self.num_return_sequences,
-                )
-            )  # greedy decoding
-
-        def check_tokens(self, output_ids):
-            for token_id in output_ids[0].tolist():
-                self.parent.assertGreaterEqual(token_id, 0)
-                self.parent.assertLess(token_id, self.vocab_size)
-
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
 
@@ -244,10 +206,6 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
     def test_ctrl_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
-
-    def test_ctrl_lm_head_model_generate(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_generate_lm_head_model(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
