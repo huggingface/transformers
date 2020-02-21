@@ -5,23 +5,26 @@ This page shows the most frequent use-cases when using the library. The models a
 configurations and a great versatility in use-cases. The most simple ones are presented here, showcasing usage
 for tasks such as question answering, sequence classification, named entity recognition and others.
 
-These examples leverage auto-models, but feel free to modify the code to be more specific and adapt it to your specific
-use-case.
+These examples leverage auto-models, which are classes that will instantiate a model according to a given checkpoint,
+automatically selecting the correct model architecture
+Feel free to modify the code to be more specific and adapt it to your specific use-case.
 
 In order for a model to perform well on a task, it must be loaded from a checkpoint corresponding to that task. These
 checkpoints are usually pre-trained on a large corpus of data and fine-tuned on a specific task. This means the
 following:
 
 - Not all models were fine-tuned on all tasks. If you want to fine-tune a model on a specific task, you can leverage
-  one of the `run_$TASK.py` script in the `examples` directory.
+  one of the `run_$TASK.py` script in the
+  `examples <https://github.com/huggingface/transformers/tree/master/examples>`_ directory.
 - Fine-tuned models were fine-tuned on a specific dataset. This dataset may or may not overlap with your use-case
-  and domain. As mentioned previously, you may leverage the `examples` scripts to fine-tune your model, or you
+  and domain. As mentioned previously, you may leverage the
+  `examples <https://github.com/huggingface/transformers/tree/master/examples>`_ scripts to fine-tune your model, or you
   may create your own training script.
 
 In order to do an inference on a task, several mechanisms are made available by the library:
 
 - Pipelines
-- Using a model directly with a tokenizer
+- Using a model directly with a tokenizer (PyTorch/TensorFlow)
 
 Both approaches are showcased here.
 
@@ -38,7 +41,9 @@ Sequence Classification
 
 Sequence classification is the task of classifying sequences according to a given number of classes. An example
 of sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune
-a model on a GLUE sequence classification task, you may leverage the `run_glue.py` or `run_tf_glue.py` scripts.
+a model on a GLUE sequence classification task, you may leverage the
+`run_glue.py <https://github.com/huggingface/transformers/tree/master/examples/run_glue.py>`_ or
+`run_tf_glue.py <https://github.com/huggingface/transformers/tree/master/examples/run_tf_glue.py>`_ scripts.
 
 Here is an example using the pipelines do to sentiment analysis: identifying if a sequence is positive or negative.
 It leverages a fine-tuned model on sst2, which is a GLUE task.
@@ -66,7 +71,8 @@ of each other. The process is the following:
 - Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and loads it
   with the weights stored in the checkpoint.
 - Build a sequence from the two sentences, with the correct model-specific separators token type ids
-  and attention masks
+  and attention masks (:func:`~transformers.PreTrainedTokenizer.encode` and
+  :func:`~transformers.PreTrainedTokenizer.encode_plus` take care of this)
 - Pass this sequence through the model so that it is classified in one of the two available classes: 0
   (not a paraphrase) and 1 (is a paraphrase)
 - Compute the softmax of the result to get probabilities over the classes
@@ -152,8 +158,8 @@ Extractive Question Answering is the task of extracting an answer from a text gi
 question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
 a model on a SQuAD task, you may leverage the `run_squad.py`.
 
-Here is an example using the pipelines do to sentiment analysis: identifying if a sequence is positive or negative.
-It leverages a fine-tuned model on sst2, which is a GLUE task.
+Here is an example using the pipelines do to question answering: extracting an answer from a text given a question.
+It leverages a fine-tuned model on SQuAD.
 
 ::
 
@@ -295,7 +301,7 @@ causal language modeling.
 
 Language modeling can be useful outside of pre-training as well, for example to shift the model distribution to be
 domain-specific: using a language model trained over a very large corpus, and then fine-tuning it to a news dataset
-or on scientific paper e.g. `LysandreJik/arxiv-nlp <https://huggingface.co/lysandre/arxiv-nlp>`__.
+or on scientific papers e.g. `LysandreJik/arxiv-nlp <https://huggingface.co/lysandre/arxiv-nlp>`__.
 
 Masked Language Modeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -303,8 +309,8 @@ Masked Language Modeling
 Masked language modeling is the task of masking tokens in a sequence with a masking token, and prompting the model to
 fill that mask with an appropriate token. This allows the model to attend to both the right context (tokens on the
 right of the mask) and the left context (tokens on the left of the mask). Such a training creates a strong basis
-for downstream tasks requiring bi-directional context such as SQuAD
-(see `Lewis, Lui, Goyal et al. <https://arxiv.org/abs/1910.13461>`__, part 4.2).
+for downstream tasks requiring bi-directional context such as SQuAD (question answering,
+see `Lewis, Lui, Goyal et al. <https://arxiv.org/abs/1910.13461>`__, part 4.2).
 
 Here is an example of using pipelines to replace a mask from a sequence:
 
@@ -337,7 +343,7 @@ Here is an example doing masked language modeling using a model and a tokenizer.
 - Retrieve the predictions at the index of the mask token: this tensor has the same size as the vocabulary, and the
   values are the scores attributed to each token. The model gives higher score to tokens he deems probable in that
   context.
-- Retrieve the top 5 tokens using the PyTorch :obj:`topk` method.
+- Retrieve the top 5 tokens using the PyTorch :obj:`topk` or TensorFlow :obj:`top_k` methods.
 - Replace the mask token by the tokens and print the results
 
 ::
@@ -391,9 +397,6 @@ This should print five sequences, with the top 5 tokens predicted by the model:
     Distilled models are smaller than the models they mimic. Using them instead of the large versions would help offset our carbon footprint.
     Distilled models are smaller than the models they mimic. Using them instead of the large versions would help improve our carbon footprint.
 
-It is totally possible to put more than one mask token in a single sequence, but doing so would reduce the available
-context (one less token in the context) and therefore decrease the prediction accuracy.
-
 
 Causal Language Modeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -402,10 +405,10 @@ Causal language modeling is the task of predicting the token following a sequenc
 model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
 for generation tasks.
 
-There is currently no pipeline to do causal language modeling/generation. This page will be completed once there is one.
+There is currently no pipeline to do causal language modeling/generation.
 
-Here is an example using the tokenizer and model. leveraging the :func:`generate` method to generate the tokens
-following the initial sequence.
+Here is an example using the tokenizer and model. leveraging the :func:`~transformers.PreTrainedModel.generate` method
+to generate the tokens following the initial sequence in PyTorch, and creating a simple loop in TensorFlow.
 
 ::
 
@@ -441,7 +444,8 @@ following the initial sequence.
     print(resulting_string)
 
 
-This outputs a (hopefully) coherent string from the original sequence:
+This outputs a (hopefully) coherent string from the original sequence, as the
+:func:`~transformers.PreTrainedModel.generate` samples from a top_p/tok_k distribution:
 
 ::
 
@@ -452,8 +456,143 @@ This outputs a (hopefully) coherent string from the original sequence:
 Named Entity Recognition
 ----------------------------------------------------
 
-Multiple Choice
-----------------------------------------------------
+Named Entity Recognition (NER) is the task of classifying tokens according to a class, for example identifying a
+token as a person, an organisation or a location.
+An example of a named entity recognition dataset is the CoNLL-2003 dataset, which is entirely based on that task.
+If you would like to fine-tune a model on an NER task, you may leverage the `ner/run_ner.py` (PyTorch),
+`ner/run_pl_ner.py` (leveraging pytorch-lightning) or the `ner/run_tf_ner.py` (TensorFlow) scripts.
 
-Summarization
-----------------------------------------------------
+Here is an example using the pipelines do to named entity recognition, trying to identify tokens as belonging to one
+of 9 classes:
+
+- O, Outside of a named entity
+- B-MIS, Beginning of a miscellaneous entity right after another miscellaneous entity
+- I-MIS, Miscellaneous entity
+- B-PER, Beginning of a person's name right after another person's name
+- I-PER, Person's name
+- B-ORG, Beginning of an organisation right after another organisation
+- I-ORG, Organisation
+- B-LOC, Beginning of a location right after another location
+- I-LOC, Location
+
+It leverages a fine-tuned model on CoNLL-2003, fine-tuned by `@stefan-it <https://github.com/stefan-it>`__ from
+`dbmdz <https://github.com/dbmdz>`__.
+
+::
+
+    from transformers import pipeline
+
+    nlp = pipeline("ner")
+
+    sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, therefore very" \
+               "close to the Manhattan Bridge which is visible from the window."
+
+    print(nlp(sequence))
+
+This outputs a list of all words that have been identified as an entity from the 9 classes defined above. Here is the
+expected results:
+
+::
+
+    [
+        {'word': 'Hu', 'score': 0.9995632767677307, 'entity': 'I-ORG'},
+        {'word': '##gging', 'score': 0.9915938973426819, 'entity': 'I-ORG'},
+        {'word': 'Face', 'score': 0.9982671737670898, 'entity': 'I-ORG'},
+        {'word': 'Inc', 'score': 0.9994403719902039, 'entity': 'I-ORG'},
+        {'word': 'New', 'score': 0.9994346499443054, 'entity': 'I-LOC'},
+        {'word': 'York', 'score': 0.9993270635604858, 'entity': 'I-LOC'},
+        {'word': 'City', 'score': 0.9993864893913269, 'entity': 'I-LOC'},
+        {'word': 'D', 'score': 0.9825621843338013, 'entity': 'I-LOC'},
+        {'word': '##UM', 'score': 0.936983048915863, 'entity': 'I-LOC'},
+        {'word': '##BO', 'score': 0.8987102508544922, 'entity': 'I-LOC'},
+        {'word': 'Manhattan', 'score': 0.9758241176605225, 'entity': 'I-LOC'},
+        {'word': 'Bridge', 'score': 0.990249514579773, 'entity': 'I-LOC'}
+    ]
+
+Note how the words "Hugging Face" have been identified as an organisation, and "New York City", "DUMBO" and
+"Manhattan Bridge" have been identified as locations.
+
+Here is an example doing named entity recognition using a model and a tokenizer. The process is the following:
+
+- Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and
+  loads it with the weights stored in the checkpoint.
+- Define the label list with which the model was trained on.
+- Define a sequence with known entities, such as "Hugging Face" as an organisation and "New York City" as a location.
+- Split words into tokens so that they can be mapped to the predictions. We use a small hack by firstly completely
+  encoding and decoding the sequence, so that we're left with a string that contains the special tokens.
+- Encode that sequence into IDs (special tokens are added automatically).
+- Retrieve the predictions by passing the input to the model and getting the first output. This results in a
+  distribution over the 9 possible classes for each token. We take the argmax to retrieve the most likely class
+  for each token.
+- Zip together each token with its prediction and print it.
+
+::
+
+    ## PYTORCH CODE
+    from transformers import AutoModelForTokenClassification, AutoTokenizer
+    import torch
+
+    model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+
+    label_list = [
+        "O",       # Outside of a named entity
+        "B-MISC",  # Beginning of a miscellaneous entity right after another miscellaneous entity
+        "I-MISC",  # Miscellaneous entity
+        "B-PER",   # Beginning of a person's name right after another person's name
+        "I-PER",   # Person's name
+        "B-ORG",   # Beginning of an organisation right after another organisation
+        "I-ORG",   # Organisation
+        "B-LOC",   # Beginning of a location right after another location
+        "I-LOC"    # Location
+    ]
+
+    sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, therefore very" \
+               "close to the Manhattan Bridge."
+
+    # Bit of a hack to get the tokens with the special tokens
+    tokens = tokenizer.tokenize(tokenizer.decode(tokenizer.encode(sequence)))
+    inputs = tokenizer.encode(sequence, return_tensors="pt")
+
+    outputs = model(inputs)[0]
+    predictions = torch.argmax(outputs, dim=2)
+
+    print([(token, label_list[prediction]) for token, prediction in zip(tokens, predictions[0].tolist())])
+    ## TENSORFLOW CODE
+    from transformers import TFAutoModelForTokenClassification, AutoTokenizer
+    import tensorflow as tf
+
+    model = TFAutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+
+    label_list = [
+        "O",       # Outside of a named entity
+        "B-MISC",  # Beginning of a miscellaneous entity right after another miscellaneous entity
+        "I-MISC",  # Miscellaneous entity
+        "B-PER",   # Beginning of a person's name right after another person's name
+        "I-PER",   # Person's name
+        "B-ORG",   # Beginning of an organisation right after another organisation
+        "I-ORG",   # Organisation
+        "B-LOC",   # Beginning of a location right after another location
+        "I-LOC"    # Location
+    ]
+
+    sequence = "Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO, therefore very" \
+               "close to the Manhattan Bridge."
+
+    # Bit of a hack to get the tokens with the special tokens
+    tokens = tokenizer.tokenize(tokenizer.decode(tokenizer.encode(sequence)))
+    inputs = tokenizer.encode(sequence, return_tensors="tf")
+
+    outputs = model(inputs)[0]
+    predictions = tf.argmax(outputs, axis=2)
+
+    print([(token, label_list[prediction]) for token, prediction in zip(tokens, predictions[0].numpy())])
+
+This outputs a list of each token mapped to their prediction. Differently from the pipeline, here every token has
+a prediction as we didn't remove the "0" class which means that no particular entity was found on that token. The
+following array should be the output:
+
+::
+
+    [('[CLS]', 'O'), ('Hu', 'I-ORG'), ('##gging', 'I-ORG'), ('Face', 'I-ORG'), ('Inc', 'I-ORG'), ('.', 'O'), ('is', 'O'), ('a', 'O'), ('company', 'O'), ('based', 'O'), ('in', 'O'), ('New', 'I-LOC'), ('York', 'I-LOC'), ('City', 'I-LOC'), ('.', 'O'), ('Its', 'O'), ('headquarters', 'O'), ('are', 'O'), ('in', 'O'), ('D', 'I-LOC'), ('##UM', 'I-LOC'), ('##BO', 'I-LOC'), (',', 'O'), ('therefore', 'O'), ('very', 'O'), ('##c', 'O'), ('##lose', 'O'), ('to', 'O'), ('the', 'O'), ('Manhattan', 'I-LOC'), ('Bridge', 'I-LOC'), ('.', 'O'), ('[SEP]', 'O')]
