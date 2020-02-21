@@ -869,9 +869,11 @@ class BartModel(PretrainedBartModel):
 class BartForMaskedLM(PretrainedBartModel):
     base_model_prefix = "model"
 
-    def __init__(self, config: BartConfig):
+    def __init__(self, config: BartConfig, model=None):
         super().__init__(config)
-        self.model = BartModel(config)
+        if model is None:
+            model = BartModel(config)
+        self.model = model
         self.lm_head = _make_linear_from_emb(self.model.shared)
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
