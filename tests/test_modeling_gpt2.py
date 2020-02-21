@@ -37,6 +37,9 @@ if is_torch_available():
 class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
+    all_generative_model_classes = (
+        (GPT2LMHeadModel,) if is_torch_available() else ()
+    )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
 
     class GPT2ModelTester(object):
         def __init__(
@@ -88,6 +91,8 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
+            self.bos_token_id = vocab_size - 1
+            self.eos_token_id = vocab_size - 1
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -122,9 +127,11 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 # hidden_dropout_prob=self.hidden_dropout_prob,
                 # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
                 n_positions=self.max_position_embeddings,
-                n_ctx=self.max_position_embeddings
+                n_ctx=self.max_position_embeddings,
                 # type_vocab_size=self.type_vocab_size,
                 # initializer_range=self.initializer_range
+                bos_token_id=self.bos_token_id,
+                eos_token_ids=self.eos_token_id,
             )
 
             head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
