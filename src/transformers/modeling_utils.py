@@ -853,7 +853,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             # update generations and finished sentences
             if eos_token_ids is not None:
-                # add pad_token_id for finished sents instead of next_token to possible speed up decoding
+                # pad finished sentences if eos_token_ids exist
                 tokens_to_add = next_token * unfinished_sents + (pad_token_id) * (1 - unfinished_sents)
             else:
                 tokens_to_add = next_token
