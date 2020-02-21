@@ -570,9 +570,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         return {"input_ids": input_ids}
 
-        # TODO (PVP): Shouldn't be needed if named tuples are implemented
-
     def postprocess_outputs_for_generation(self, outputs, **kwargs):
+        # TODO (PVP): Whole fn shouldn't be necessary if named tuples are implemented
         return (outputs[0], outputs[1], None)
 
     def _do_output_past(self, outputs):
@@ -756,14 +755,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         # current position and vocab size
         #  NOTE: FOR SEQ-2-SEQ: This doesn't work for seq-2-seq models as the input_ids will be encoded and not prepended to the output. Proposal:
+
         if self.config.is_encoder_decoder:
             assert bos_token_id is not None, "Encoder Decoder Models need to have a bos_token_id"
+            # encoder decoder need to start with empty input_ids and copy the input_ids to encoder_inputs
             encoder_inputs = input_ids
             input_ids = torch.full(
                 (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device
             )
             cur_len = 1  # bos_token_id counts for 1
         else:
+            # current position and vocab size
             encoder_inputs = None
             cur_len = input_ids.shape[0]
 
