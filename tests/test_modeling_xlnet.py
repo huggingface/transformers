@@ -52,6 +52,9 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    all_generative_model_classes = (
+        (XLNetLMHeadModel,) if is_torch_available() else ()
+    )  # TODO (PVP): Check other models whether language generation is also applicable
     test_pruning = False
 
     class XLNetModelTester(object):
@@ -78,6 +81,9 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             initializer_range=0.05,
             seed=1,
             type_vocab_size=2,
+            bos_token_id=1,
+            eos_token_id=2,
+            pad_token_id=5,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -101,6 +107,9 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             self.seed = seed
             self.type_vocab_size = type_vocab_size
             self.type_sequence_label_size = type_sequence_label_size
+            self.bos_token_id = bos_token_id
+            self.pad_token_id = pad_token_id
+            self.eos_token_id = eos_token_id
 
         def prepare_config_and_inputs(self):
             input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -142,6 +151,9 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
                 bi_data=self.bi_data,
                 initializer_range=self.initializer_range,
                 num_labels=self.type_sequence_label_size,
+                bos_token_id=self.bos_token_id,
+                pad_token_id=self.pad_token_id,
+                eos_token_id=self.eos_token_id,
             )
 
             return (
