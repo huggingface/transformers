@@ -222,6 +222,7 @@ if is_torch_available():
         CamembertModel,
         CamembertForSequenceClassification,
         CamembertForTokenClassification,
+        CamembertForQuestionAnswering,
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_distilbert import (
