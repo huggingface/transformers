@@ -939,7 +939,7 @@ class BartForMaskedLM(PretrainedBartModel):
         return outputs
 
     @staticmethod
-    def prepare_inputs_for_generation(decoder_input_ids, past, encoder_inputs, encoder_outputs, **wwargs):
+    def prepare_inputs_for_generation(decoder_input_ids, past, encoder_inputs, encoder_outputs, **kwargs):
         # if encoder_outputs are not defined, the decoder input should be none, since it's the first decoding step
         if encoder_outputs is None:
             decoder_input_ids = None
