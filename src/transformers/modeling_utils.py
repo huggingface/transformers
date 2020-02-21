@@ -840,10 +840,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
 
         past = None
-
-        if self.config.is_encoder_decoder:
-            encoder_outputs = None  #
-            # If general postprocess_outputs_for_generation fn (see below) should be used for all models then encoder_outputs = None should be set for all models to None (as it is done with the variable 'past')
+        # If general postprocess_outputs_for_generation fn (see below) should be used for all models then encoder_outputs = None should be set for all models to None (as it is done with the variable 'past')
+        encoder_outputs = None  #
 
         while cur_len < max_length:
             # NOTE: FOR SEQ-2-SEQ: This function might need a different signature because we need to input
