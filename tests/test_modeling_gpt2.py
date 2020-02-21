@@ -271,31 +271,29 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         model = GPT2LMHeadModel.from_pretrained("distilgpt2")
         input_ids = torch.Tensor([[464, 3290, 318, 13779]]).long()
         special_tokens = prepare_gpt2_generation_special_tokens()
-        expected_output_ids = (
-            [
-                464,
-                3290,
-                318,
-                13779,
-                996,
-                339,
-                460,
-                3360,
-                655,
-                2513,
-                287,
-                262,
-                3952,
-                13,
-                632,
-                318,
-                407,
-                845,
-                3621,
-                #  284,
-                50256,  # TODO(PVP): 50256 is due to previous problems with pad_token. Should be changed to 284 once PR #2885 is merged
-            ]
-        )  # The dog is cute though he can sometimes just walk in the park. It is not very nice to
+        expected_output_ids = [
+            464,
+            3290,
+            318,
+            13779,
+            996,
+            339,
+            460,
+            3360,
+            655,
+            2513,
+            287,
+            262,
+            3952,
+            13,
+            632,
+            318,
+            407,
+            845,
+            3621,
+            #  284,
+            50256,  # TODO(PVP): 50256 is due to previous problems with pad_token. Should be changed to 284 once PR #2885 is merged
+        ]  # The dog is cute though he can sometimes just walk in the park. It is not very nice to
         torch.manual_seed(0)
 
         output_ids = model.generate(
