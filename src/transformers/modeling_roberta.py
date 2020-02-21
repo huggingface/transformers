@@ -264,7 +264,7 @@ class RobertaLMHead(nn.Module):
         x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
-        x = self.decoder(x) + self.bias
+        x = self.decoder(x)
 
         return x
 
