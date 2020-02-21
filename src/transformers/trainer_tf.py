@@ -40,8 +40,6 @@ class TFTrainer(object):
         self.learning_rate = kwargs.pop("learning_rate", None)
         self.epsilon = kwargs.pop("epsilon", None)
         self.loss_name = kwargs.pop("loss_name", None)
-        self.training_data = kwargs.pop("training_data", None)
-        self.validation_data = kwargs.pop("validation_data", None)
         self.batch_size = kwargs.pop("batch_size", None)
         self.eval_batch_size = kwargs.pop("eval_batch_size", None)
         self.distributed = kwargs.pop("distributed", None)
@@ -55,10 +53,41 @@ class TFTrainer(object):
         self.doc_stride = kwargs.pop("doc_stride", None)
         self.max_query_len = kwargs.pop("max_query_len", None)
         self.max_grad_norm = kwargs.pop("max_grad_norm", None)
+        self.labels = kwargs.pop("labels", None)
+        self.metric_name = kwargs.pop("metric_name", None)
 
         assert len(kwargs) == 0, "unrecognized params passed: %s" % ",".join(kwargs.keys())
     
-    def setup_training(self, checkpoint_path, log_path, data_dir=None):
+    def setup_training(self, checkpoint_path, log_path, data_dir=None, training_data=None, validation_data=None, test_data=None):
+        """
+        Setup the different steps to train a model:
+          - check if all the data are given
+          - create the proper strategy
+          - create the features
+          - prepare the model settings
+        
+        Args:
+          checkpoint_path: the directory path where the model checkpoints will be saved.
+          log_path: the directory path where the Tensorboard logs will be saved.
+          data_dir (optional): the directoty path where the data are. This parameter becomes mandatory if
+            the parameters training_data and validation_data are not given.
+          training_data (optional): the training data, either as a list of example or as a tf.data.Dataset.
+            This parameter becomes mandatory if the parameter data_dir is not given.
+          validation_data (optional): the validation data, either as a list of example or as a tf.data.Dataset.
+            This parameter becomes mandatory if the parameter data_dir is not given.
+          test_data (optional): the test data, either as a list of example or as a tf.data.Dataset.
+            If None it will takes the validation_data.
+        """
+        if test_data is None:
+            self.test_data = validation_data
+
+        if data_dir is None and (training_data is None or validation_data is None):
+            raise ValueError(
+                "If the data_dir parameter is None, the parameters training_data and validation_data should be given"
+            )
+
+        self.training_data = training_data
+        self.validation_data = validation_data
         if self.distributed:
             self.strategy = tf.distribute.MirroredStrategy()
             self.batch_size *= self.strategy.num_replicas_in_sync
@@ -78,22 +107,35 @@ class TFTrainer(object):
             self.processor = SquadV2Processor()
         elif self.data_processor_name == "xnli":
             self.processor = xnli_processors[self.task](language=self.language, train_language=self.train_language)
+        else:
+            raise ValueError(
+                "Allowed data processors are glue, squadv1, squadv2 or xnli. Given: {}".format(self.data_processor_name)
+            )
 
-        self.preprocessing_data(tokenizer, data_dir)
-            
-        try:
-            config = AutoConfig.from_pretrained(self.pretrained_model_name_or_path, num_labels=len(self.processor.get_labels()))
-        except Exception as e:
-            config = AutoConfig.from_pretrained(self.pretrained_model_name_or_path)
+        self._preprocessing_data(tokenizer, data_dir)
+
+        if self.labels is None:
+            self.labels = self.processor.get_labels()
+        
+        self.label2id = {label: i for i, label in enumerate(self.labels)}
+        self.id2label = {i: label for i, label in enumerate(self.labels)}
+        
+        config = AutoConfig.from_pretrained(self.pretrained_model_name_or_path, num_labels=len(self.labels), id2label=self.id2label, label2id=self.label2id)
 
         with self.strategy.scope():
             self.model = globals()[self.architecture].from_pretrained(self.pretrained_model_name_or_path, config=config)
-            self.create_optimizer()
-            self.get_loss()
-            self.create_checkpoint_manager(checkpoint_path)
-            self.create_summary_writer(log_path)
+            self._create_optimizer()
+            self._get_loss_and_metric()
+            self._create_checkpoint_manager(checkpoint_path)
+            self._create_summary_writer(log_path)
     
-    def get_loss(self):
+    def get_labels(self):
+        """
+        Returns the list of labels associated to the trained model.
+        """
+        return self.labels
+    
+    def _get_loss_and_metric(self):
         """
         Use the loss corresponding to the loss_name field.
         """
@@ -101,12 +143,22 @@ class TFTrainer(object):
             self.loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         elif self.loss_name == "sparse_categorical_crossentropy":
             self.loss = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE, from_logits=True)
+        else:
+            raise ValueError(
+                "Allowed losses are mean_squared_error or sparse_categorical_crossentropy. Given: {}".format(self.loss_name)
+            )
         
-        self.train_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
-        self.test_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='test_accuracy')
+        if self.metric_name == "sparse_categorical_accuracy":
+            self.train_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
+            self.test_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='test_accuracy')
+        else:
+            raise ValueError(
+                "Allowed metrics are sparse_categorical_accuracy. Given: {}".format(self.metric_name)
+            )
+        
         self.test_loss_metric = tf.keras.metrics.Mean(name='test_loss')
     
-    def create_summary_writer(self, log_path):
+    def _create_summary_writer(self, log_path):
         """
         Create a summary writer to be able to read the logs in Tensorboard.
         """
@@ -114,7 +166,7 @@ class TFTrainer(object):
         self.train_writer = tf.summary.create_file_writer(log_path + "/train")
         self.test_writer = tf.summary.create_file_writer(log_path + "/test")
     
-    def preprocessing_data(self, tokenizer, data_dir):
+    def _preprocessing_data(self, tokenizer, data_dir):
         """
         Preprocess the training and validation data.
 
@@ -165,7 +217,7 @@ class TFTrainer(object):
         self.validation_steps = self.validation_steps.numpy()
         self.validation_data = self.validation_data.batch(self.eval_batch_size)
 
-    def create_optimizer(self):
+    def _create_optimizer(self):
         """
         Create the training optimizer with its name. Allowed names:
           - adam: Adam optimizer
@@ -200,7 +252,7 @@ class TFTrainer(object):
                 "Allowed optimizers are adam, adamw, adadelta, rmsprop or sgd. Given: {}".format(self.optimizer_name)
             )
 
-    def create_checkpoint_manager(self, checkpoint_path, max_to_keep=5, load_model=True):
+    def _create_checkpoint_manager(self, checkpoint_path, max_to_keep=5, load_model=True):
         """
         Create a checkpoint manager in order to be able to make the training
         fault-tolerant.
@@ -215,6 +267,23 @@ class TFTrainer(object):
 
         if load_model:
             ckpt.restore(self.model.ckpt_manager.latest_checkpoint)
+    
+    def _evaluate_during_training(self):
+        num_batches = 0
+        test_step = 1
+
+        for batch in self.validation_data:
+            test_step = tf.convert_to_tensor(test_step, dtype=tf.int64)
+            self._distributed_test_step(batch)
+            num_batches += 1
+            
+            with self.test_writer.as_default():
+                tf.summary.scalar("loss", self.test_loss_metric.result(), step=test_step)
+            
+            if test_step % self.validation_steps == 0:
+                break
+
+            test_step += 1
     
     def train(self):
         """
@@ -232,7 +301,7 @@ class TFTrainer(object):
 
                 for batch in self.training_data:
                     step = tf.convert_to_tensor(step, dtype=tf.int64)
-                    total_loss += self.distributed_train_step(batch)
+                    total_loss += self._distributed_train_step(batch)
                     num_batches += 1
 
                     with self.train_writer.as_default():
@@ -243,12 +312,10 @@ class TFTrainer(object):
                             tf.summary.trace_export(name="training", step=step, profiler_outdir=self.log_path)
 
                     if step % 10 == 0:
-                        print("Epoch {} Step {} Loss {:.4f} Train Accuracy {:.4f}".format(epoch, step.numpy(), total_loss.numpy() / num_batches, self.train_acc_metric.result()))
                         logger.info("Epoch {} Step {} Loss {:.4f} Train Accuracy {:.4f}".format(epoch, step.numpy(), total_loss.numpy(), self.train_acc_metric.result()))
 
                     if step % 100 == 0:
                         ckpt_save_path = self.model.ckpt_manager.save()
-                        print("Saving checkpoint for step {} at {}".format(step, ckpt_save_path))
                         logger.info("Saving checkpoint for step {} at {}".format(step, ckpt_save_path))
                     
                     if step % self.train_steps == 0:
@@ -258,33 +325,18 @@ class TFTrainer(object):
                     step += 1
 
                 train_loss = total_loss / num_batches
-                num_batches = 0
-                test_step = 1
-
-                for batch in self.validation_data:
-                    test_step = tf.convert_to_tensor(test_step, dtype=tf.int64)
-                    self.distributed_test_step(batch)
-                    num_batches += 1
-                    
-                    with self.test_writer.as_default():
-                        tf.summary.scalar("loss", self.test_loss_metric.result(), step=test_step)
-                    
-                    if test_step % self.validation_steps == 0:
-                        break
-
-                    test_step += 1
+                
+                self._evaluate_during_training()
 
                 logger.info("Epoch {} Step {} Train Loss {:.4f} Train Accuracy {:.4f}".format(epoch, step.numpy() - 1, train_loss.numpy(), self.train_acc_metric.result()))
-                print("Epoch {} Step {} Loss {:.4f}, Train Accuracy {:.4f}".format(epoch, step.numpy() - 1, train_loss.numpy(), self.train_acc_metric.result()))
                 logger.info("Epoch {} Validation Loss {:.4f} Validation Accuracy {:.4f}".format(epoch, self.test_loss_metric.result(), self.test_acc_metric.result()))
-                print("Epoch {} Validation Loss {:.4f} Validation Accuracy {:.4f}".format(epoch, self.test_loss_metric.result(), self.test_acc_metric.result()))
 
             if epoch != self.epochs:
                 self.train_acc_metric.reset_states()
                 self.test_acc_metric.reset_states()
 
     @tf.function
-    def distributed_test_step(self, dist_inputs):
+    def _distributed_test_step(self, dist_inputs):
         """
         Method that represents a custom test step in distributed mode
 
@@ -303,7 +355,7 @@ class TFTrainer(object):
 
             
     @tf.function
-    def distributed_train_step(self, dist_inputs):
+    def _distributed_train_step(self, dist_inputs):
         """
         Method that represents a custom training step in distributed mode.
 

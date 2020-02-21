@@ -1,6 +1,7 @@
 # coding=utf-8
 
 import os
+import logging
 
 import tensorflow as tf
 import tensorflow_datasets
@@ -26,6 +27,7 @@ else:
 
 tf.config.optimizer.set_jit(USE_XLA)
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": USE_AMP})
+logging.getLogger("transformers.trainer_tf").setLevel(logging.INFO)
 
 # Load dataset via TensorFlow Datasets
 data = tensorflow_datasets.load(f"glue/{TFDS_TASK}")
@@ -36,8 +38,6 @@ kwargs = {
     "learning_rate": 3e-5,
     "epsilon": 1e-08,
     "loss_name": "sparse_categorical_crossentropy",
-    "training_data": data["train"],
-    "validation_data": data["validation"],
     "batch_size": BATCH_SIZE,
     "eval_batch_size": EVAL_BATCH_SIZE,
     "distributed": False,
@@ -45,11 +45,12 @@ kwargs = {
     "data_processor_name": "glue",
     "task": TASK,
     "architecture": "TFBertForSequenceClassification",
-    "max_len": 128
+    "max_len": 128,
+    "metric_name": "sparse_categorical_accuracy"
 }
 
 trainer = TFTrainer(**kwargs)
-trainer.setup_training("checkpoints", "logs")
+trainer.setup_training("checkpoints", "logs", training_data=data["train"], validation_data=data["validation"])
 trainer.train()
 trainer.save_model("save")
 
