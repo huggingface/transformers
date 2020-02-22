@@ -869,11 +869,12 @@ class BartModel(PretrainedBartModel):
 class BartForMaskedLM(PretrainedBartModel):
     base_model_prefix = "model"
 
-    def __init__(self, config: BartConfig, model=None):
+    def __init__(self, config: BartConfig, base_model=None):
         super().__init__(config)
-        if model is None:
-            model = BartModel(config)
-        self.model = model
+        if base_model is None:
+            base_model = BartModel(config)
+        assert isinstance(base_model, BartModel)
+        self.model = base_model
         self.lm_head = _make_linear_from_emb(self.model.shared)
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
@@ -942,7 +943,11 @@ class BartForMaskedLM(PretrainedBartModel):
 
     @staticmethod
     def prepare_inputs_for_generation(input_ids, past, **kwargs):
-        return {"input_ids": input_ids, "decoder_cached_states": past, "decoder_input_ids": input_ids}
+        return {
+            "input_ids": input_ids,
+            "decoder_cached_states": past,
+            "decoder_input_ids": input_ids,  # FIXME(SS)
+        }
 
     def get_output_embeddings(self):
         return self.lm_head

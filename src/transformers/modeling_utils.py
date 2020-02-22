@@ -571,14 +571,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         return {"input_ids": input_ids}
 
     def _do_output_past(self, outputs):
-        has_output_past = hasattr(self.config, "output_past") and self.config.output_past
-        has_mem_len = hasattr(self.config, "mem_len") and self.config.mem_len
-
-        if has_output_past and not has_mem_len and len(outputs) > 1:
+        """During generation, decide whether to pass the `past` variable to the next forward pass."""
+        has_output_past = getattr(self.config, "output_past", False)
+        mem_len = getattr(self.config, "mem_len", 0)
+        if len(outputs) <= 1:
+            return False
+        if mem_len > 0 or has_output_past:
             return True
-        elif has_mem_len and self.config.mem_len > 0 and len(outputs) > 1:
-            return True
-
         return False
 
     @torch.no_grad()
