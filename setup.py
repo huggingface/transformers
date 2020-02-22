@@ -108,8 +108,6 @@ setup(
         "sentencepiece",
         # for XLM
         "sacremoses",
-        # CLI
-        "typer"
     ],
     extras_require=extras,
     scripts=["transformers-cli"],
