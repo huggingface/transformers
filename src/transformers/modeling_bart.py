@@ -956,6 +956,7 @@ class BartForMaskedLM(PretrainedBartModel):
             "decoder_input_ids": input_ids[:, -1:],
             "encoder_outputs": encoder_outputs,
         }
+
     def get_output_embeddings(self):
         return self.lm_head
 
