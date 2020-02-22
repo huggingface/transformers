@@ -195,6 +195,9 @@ class BertTokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return len(self.vocab)
 
+    def get_vocab(self):
+        return dict(self.vocab, **self.added_tokens_encoder)
+
     def _tokenize(self, text):
         split_tokens = []
         if self.do_basic_tokenize:
