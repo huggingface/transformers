@@ -491,9 +491,11 @@ class BartDecoder(nn.Module):
             decoder_layer  # type: DecoderLayer
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability > self.layerdrop):
+            if self.training and (dropout_probability < self.layerdrop):
                 continue
+
             layer_state = decoder_cached_states[i] if decoder_cached_states is not None else None
+            import ipdb; ipdb.set_trace()
             x, layer_self_attn, layer_past = decoder_layer.forward(
                 x,
                 encoder_hidden_states,
