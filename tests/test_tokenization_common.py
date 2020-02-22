@@ -19,6 +19,8 @@ import pickle
 import shutil
 import tempfile
 
+from tests.utils import require_tf, require_torch
+
 
 class TokenizerTesterMixin:
 
@@ -633,3 +635,36 @@ class TokenizerTesterMixin:
         self.assertListEqual(
             encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
         )
+
+    @require_torch
+    @require_tf
+    def test_batch_encode_plus_tensors(self):
+        tokenizer = self.get_tokenizer()
+        sequences = [
+            "Testing batch encode plus",
+            "Testing batch encode plus with different sequence lengths",
+            "Testing batch encode plus with different sequence lengths correctly pads",
+        ]
+
+        # A Tensor cannot be build by sequences which are not the same size
+        self.assertRaises(ValueError, tokenizer.batch_encode_plus, sequences, return_tensors="pt")
+        self.assertRaises(ValueError, tokenizer.batch_encode_plus, sequences, return_tensors="tf")
+
+        if tokenizer.pad_token_id is None:
+            self.assertRaises(
+                ValueError, tokenizer.batch_encode_plus, sequences, pad_to_max_length=True, return_tensors="pt"
+            )
+            self.assertRaises(
+                ValueError, tokenizer.batch_encode_plus, sequences, pad_to_max_length=True, return_tensors="tf"
+            )
+        else:
+            pytorch_tensor = tokenizer.batch_encode_plus(sequences, pad_to_max_length=True, return_tensors="pt")
+            tensorflow_tensor = tokenizer.batch_encode_plus(sequences, pad_to_max_length=True, return_tensors="tf")
+            encoded_sequences = tokenizer.batch_encode_plus(sequences, pad_to_max_length=True)
+
+            for key in encoded_sequences.keys():
+                pytorch_value = pytorch_tensor[key].tolist()
+                tensorflow_value = tensorflow_tensor[key].numpy().tolist()
+                encoded_value = encoded_sequences[key]
+
+                self.assertEqual(pytorch_value, tensorflow_value, encoded_value)

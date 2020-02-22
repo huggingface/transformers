@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-
 import copy
 import itertools
 import json
@@ -1123,11 +1122,10 @@ class PreTrainedTokenizer(object):
                 add_special_tokens=add_special_tokens,
                 stride=stride,
                 truncation_strategy=truncation_strategy,
-                return_tensors=return_tensors,
                 return_attention_mask=return_attention_masks,
-                # # TODO LD return_token_type_ids=return_token_type_ids,
-                # # TODO LD return_overflowing_tokens=return_overflowing_tokens,
-                # # TODO LD return_special_tokens_mask=return_special_tokens_mask,
+                return_token_type_ids=return_token_type_ids,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_masks,
             )
 
             # Append the non-padded length to the output
@@ -1146,20 +1144,42 @@ class PreTrainedTokenizer(object):
 
             # Do the tensor conversion in batch
             for key, value in batch_outputs.items():
-
-                padded_value = value
-                # verify that the tokenizer has a pad_token_id
-                if key != "input_len" and self._pad_token is not None:
-                    # Padding handle
-                    padded_value = [
-                        v + [self.pad_token_id if key == "input_ids" else 1] * (max_seq_len - len(v))
-                        for v in padded_value
-                    ]
-
                 if return_tensors == "tf" and is_tf_available():
-                    batch_outputs[key] = tf.constant(padded_value)
+                    try:
+                        batch_outputs[key] = tf.constant(value)
+                    except ValueError:
+                        if None in [item for sequence in value for item in sequence]:
+                            raise ValueError(
+                                "No padding token is set for this model, therefore no batch can be made"
+                                "with uneven sequences. Set a padding token or adjust the lengths of the"
+                                "sequences building the batch so that every sequence is of the same "
+                                "length."
+                            )
+                        else:
+                            raise ValueError(
+                                "The sequences building the batch are not of the same size, no tensor "
+                                "can be built. Set `pad_to_max_length=True` to pad the smaller sequences"
+                                "up to the larger sequence's length."
+                            )
                 elif return_tensors == "pt" and is_torch_available():
-                    batch_outputs[key] = torch.tensor(padded_value)
+                    try:
+                        batch_outputs[key] = torch.tensor(value)
+                    except ValueError:
+                        raise ValueError(
+                            "The sequences building the batch are not of the same size, no tensor can be "
+                            "built. Set `pad_to_max_length=True` to pad the smaller sequences up to the"
+                            "larger sequence's length."
+                        )
+                    except RuntimeError:
+                        if None in [item for sequence in value for item in sequence]:
+                            raise ValueError(
+                                "No padding token is set for this model, therefore no batch can be made"
+                                "with uneven sequences. Set a padding token or adjust the lengths of the"
+                                "sequences building the batch so that every sequence is of the same "
+                                "length."
+                            )
+                        else:
+                            raise
                 elif return_tensors is not None:
                     logger.warning(
                         "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
