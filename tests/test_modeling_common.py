@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import copy
 import logging
 import os.path
@@ -53,6 +52,7 @@ class ModelTesterMixin:
 
     model_tester = None
     all_model_classes = ()
+    all_generative_model_classes = ()
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
@@ -594,6 +594,47 @@ class ModelTesterMixin:
 
             with torch.no_grad():
                 model(**inputs_dict)
+
+    def test_lm_head_model_random_generate(self):
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict.get(
+            "input_ids", None
+        )  # TODO (PVP): ugly workaround to make code work for t5 for the moment - has to changed when t5 is fixed.
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            if config.bos_token_id is None:
+                with self.assertRaises(AssertionError):
+                    model.generate(max_length=5)
+                # batch_size = 1
+                self._check_generated_tokens(model.generate(input_ids))
+                # batch_size = 1, num_beams > 1
+                self._check_generated_tokens(model.generate(input_ids, num_beams=3))
+            else:
+                # batch_size = 1
+                self._check_generated_tokens(model.generate(max_length=5))
+                # batch_size = 1, num_beams > 1
+                self._check_generated_tokens(model.generate(max_length=5, num_beams=3))
+
+            # batch_size > 1, sample
+            self._check_generated_tokens(model.generate(input_ids, num_return_sequences=3))
+            # batch_size > 1, greedy
+            self._check_generated_tokens(model.generate(input_ids, do_sample=False, num_return_sequences=3))
+            # batch_size > 1, num_beams > 1, sample
+            self._check_generated_tokens(model.generate(input_ids, num_beams=3, num_return_sequences=3,))
+            # batch_size > 1, num_beams > 1, greedy
+            self._check_generated_tokens(
+                model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3)
+            )
+
+    def _check_generated_tokens(self, output_ids):
+        for token_id in output_ids[0].tolist():
+            self.assertGreaterEqual(token_id, 0)
+            self.assertLess(token_id, self.model_tester.vocab_size)
 
 
 global_rng = random.Random()

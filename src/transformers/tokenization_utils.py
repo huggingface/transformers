@@ -79,7 +79,7 @@ def truncate_and_pad(
 
     if pad_to_max_length and (pad_token and pad_token_id >= 0):
         tokenizer.enable_padding(
-            max_length=None,
+            max_length=max_length,
             direction=padding_side,
             pad_id=pad_token_id,
             pad_type_id=pad_token_type_id,
@@ -285,6 +285,10 @@ class PreTrainedTokenizer(object):
     def additional_special_tokens_ids(self):
         """ Ids of all the additional special tokens in the vocabulary (list of integers). Log an error if used while not having been set. """
         return self.convert_tokens_to_ids(self.additional_special_tokens)
+
+    def get_vocab(self):
+        """ Returns the vocabulary as a dict of {token: index} pairs. `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the vocab. """
+        raise NotImplementedError()
 
     def __init__(self, max_len=None, **kwargs):
         self._bos_token = None
