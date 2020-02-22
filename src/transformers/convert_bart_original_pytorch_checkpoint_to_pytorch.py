@@ -87,7 +87,7 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     # Check results
 
     if checkpoint_path == "bart.large.cnn":  # generate doesnt work yet
-        model = BartForMaskedLM(config, model=model)
+        model = BartForMaskedLM(config, base_model=model)
         model.eval()
         our_outputs = model.model.forward(tokens)[0]
     else:
