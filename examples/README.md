@@ -442,14 +442,14 @@ This example code fine-tunes XLNet on both SQuAD1.0 and SQuAD2.0 dataset. See ab
 ```bash
 export SQUAD_DIR=/path/to/SQUAD
 
-python /data/home/hlu/transformers/examples/run_squad.py \
+python run_squad.py \
     --model_type xlnet \
     --model_name_or_path xlnet-large-cased \
     --do_train \
     --do_eval \
     --do_lower_case \
-    --train_file /data/home/hlu/notebooks/NLP/examples/question_answering/train-v1.1.json \
-    --predict_file /data/home/hlu/notebooks/NLP/examples/question_answering/dev-v1.1.json \
+    --train_file $SQUAD_DIR/train-v1.1.json \
+    --predict_file $SQUAD_DIR/dev-v1.1.json \
     --learning_rate 3e-5 \
     --num_train_epochs 2 \
     --max_seq_length 384 \
