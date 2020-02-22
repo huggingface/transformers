@@ -69,8 +69,9 @@ extras["tf"] = ["tensorflow"]
 extras["tf-cpu"] = ["tensorflow-cpu"]
 extras["torch"] = ["torch"]
 
-extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
-extras["all"] = extras["serving"] + ["tensorflow", "torch"]
+extras["serving"] = ["pydantic", "uvicorn", "fastapi"]
+extras["new-cli"] = ["typer"]
+extras["all"] = extras["serving"] + extras['new-cli'] + ["tensorflow", "torch"]
 
 extras["testing"] = ["pytest", "pytest-xdist"]
 extras["quality"] = ["black", "isort", "flake8"]
@@ -107,9 +108,16 @@ setup(
         "sentencepiece",
         # for XLM
         "sacremoses",
+        # CLI
+        "typer"
     ],
     extras_require=extras,
     scripts=["transformers-cli"],
+    entry_points={
+        'console_scripts': [
+            'transformers=transformers.cli:app'
+        ],
+    },
     python_requires=">=3.5.0",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
