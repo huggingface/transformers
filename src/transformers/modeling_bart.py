@@ -495,7 +495,6 @@ class BartDecoder(nn.Module):
                 continue
 
             layer_state = decoder_cached_states[i] if decoder_cached_states is not None else None
-            import ipdb; ipdb.set_trace()
             x, layer_self_attn, layer_past = decoder_layer.forward(
                 x,
                 encoder_hidden_states,
