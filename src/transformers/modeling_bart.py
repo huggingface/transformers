@@ -472,7 +472,7 @@ class BartDecoder(nn.Module):
         positions = self.embed_positions(input_ids)
         x = self.embed_tokens(input_ids)
 
-        if positions is not None:
+        if positions is not None:  # TODO(SS): is this from fairseq?
             x += positions
 
         x = self.layernorm_embedding(x)
@@ -509,8 +509,12 @@ class BartDecoder(nn.Module):
         # Convert shapes from (seq_len, BS, model_dim) to (BS, seq_len, model_dim)
         all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
         x = x.transpose(0, 1)
+        if self.output_past:
+            next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
+        else:
+            next_cache = None
 
-        return x, next_decoder_cache, all_hidden_states, list(all_self_attns)
+        return x, next_cache, all_hidden_states, list(all_self_attns)
 
 
 class SelfAttention(nn.Module):
@@ -940,7 +944,17 @@ class BartForMaskedLM(PretrainedBartModel):
 
     @staticmethod
     def prepare_inputs_for_generation(input_ids, past, **kwargs):
-        return {"input_ids": input_ids, "decoder_cached_states": past, "decoder_input_ids": input_ids[:, -1:]}
+        if past is None:
+            encoder_outputs, decoder_cached_states = None, None
+        else:
+            encoder_outputs, decoder_cached_states = past
+
+        return {
+            "input_ids": input_ids,
+            "decoder_cached_states": decoder_cached_states,
+            "decoder_input_ids": input_ids[:, -1:],
+            "encoder_outputs": encoder_outputs,
+        }
 
     def get_output_embeddings(self):
         return self.lm_head
