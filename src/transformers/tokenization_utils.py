@@ -1026,9 +1026,12 @@ class PreTrainedTokenizer(object):
         truncation_strategy="longest_first",
         pad_to_max_length=False,
         return_tensors=None,
-        return_input_lengths=False,
+        return_token_type_ids=True,
         return_attention_masks=True,
+        return_overflowing_tokens=False,
+        return_special_tokens_masks=False,
         return_offsets_mapping=False,
+        return_input_lengths=False,
         **kwargs
     ):
         """
@@ -1109,7 +1112,6 @@ class PreTrainedTokenizer(object):
                     return len(first_ids) + self.max_len - self.max_len_single_sentence
 
             max_length = max([total_sequence_length(ids) for ids in input_ids])
-            print("nice")
 
         batch_outputs = {}
         for first_ids, second_ids in input_ids:

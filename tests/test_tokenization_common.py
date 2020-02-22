@@ -40,6 +40,15 @@ class TokenizerTesterMixin:
     def get_input_output_texts(self):
         raise NotImplementedError
 
+    @staticmethod
+    def convert_batch_encode_plus_format_to_encode_plus(batch_encode_plus_sequences):
+        # Switch from batch_encode_plus format:   {'input_ids': [[...], [...]], ...}
+        # to the concatenated encode_plus format: [{'input_ids': [...], ...}, {'input_ids': [...], ...}]
+        return [
+            {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences.keys()}
+            for i in range(len(batch_encode_plus_sequences))
+        ]
+
     def test_tokenizers_common_properties(self):
         tokenizer = self.get_tokenizer()
         attributes_list = [
@@ -535,11 +544,8 @@ class TokenizerTesterMixin:
         # we're loading an S3 configuration from a pre-trained identifier, and we have no way of testing those today.
 
         tokenizer = self.get_tokenizer(random_argument=True)
-        print(tokenizer.init_kwargs)
         assert tokenizer.init_kwargs["random_argument"] is True
         new_tokenizer = self.get_tokenizer(random_argument=False)
-        print(tokenizer.init_kwargs)
-        print(new_tokenizer.init_kwargs)
         assert tokenizer.init_kwargs["random_argument"] is True
         assert new_tokenizer.init_kwargs["random_argument"] is False
 
@@ -572,17 +578,11 @@ class TokenizerTesterMixin:
             "Testing batch encode plus with different sequence lengths correctly pads",
         ]
 
-        # Switch from batch_encode_plus format:   {'input_ids': [[...], [...]], ...}
-        # to the concatenated encode_plus format: [{'input_ids': [...], ...}, {'input_ids': [...], ...}]
-        def switch_dict_list_order(batch_encode_plus_sequences):
-            return [
-                {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences.keys()}
-                for i in range(len(batch_encode_plus_sequences))
-            ]
-
         encoded_sequences = [tokenizer.encode_plus(sequence, pad_to_max_length=False) for sequence in sequences]
-        encoded = tokenizer.batch_encode_plus(sequences)
-        self.assertListEqual(encoded_sequences, switch_dict_list_order(encoded))
+        encoded_sequences_batch = tokenizer.batch_encode_plus(sequences)
+        self.assertListEqual(
+            encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
+        )
 
         maximum_length = len(max([encoded_sequence["input_ids"] for encoded_sequence in encoded_sequences], key=len))
 
@@ -590,17 +590,46 @@ class TokenizerTesterMixin:
             tokenizer.encode_plus(sequence, pad_to_max_length=True, max_length=maximum_length)
             for sequence in sequences
         ]
-        encoded_padded = tokenizer.batch_encode_plus(sequences, pad_to_max_length=True)
-        self.assertListEqual(encoded_sequences_padded, switch_dict_list_order(encoded_padded))
-
-    def test_batch_encode_plus_add_special_tokens(self):
-        print("nice")
+        encoded_sequences_batch_padded = tokenizer.batch_encode_plus(sequences, pad_to_max_length=True)
+        self.assertListEqual(
+            encoded_sequences_padded,
+            self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch_padded),
+        )
 
     def test_batch_encode_plus_padding(self):
-        print("nice")
+        # Test that padded sequences are equivalent between batch_encode_plus and encode_plus
 
-    def test_batch_encode_plus_truncation_strategy(self):
-        print("nice")
+        # Right padding tests
+        tokenizer = self.get_tokenizer()
+        sequences = [
+            "Testing batch encode plus",
+            "Testing batch encode plus with different sequence lengths",
+            "Testing batch encode plus with different sequence lengths correctly pads",
+        ]
 
-    def test_batch_encode_plus_optional_returns(self):
-        print("nice")
+        max_length = 100
+        encoded_sequences = [
+            tokenizer.encode_plus(sequence, pad_to_max_length=True, max_length=max_length) for sequence in sequences
+        ]
+        encoded_sequences_batch = tokenizer.batch_encode_plus(sequences, pad_to_max_length=True, max_length=max_length)
+        self.assertListEqual(
+            encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
+        )
+
+        # Left padding tests
+        tokenizer = self.get_tokenizer()
+        tokenizer.padding_side = "left"
+        sequences = [
+            "Testing batch encode plus",
+            "Testing batch encode plus with different sequence lengths",
+            "Testing batch encode plus with different sequence lengths correctly pads",
+        ]
+
+        max_length = 100
+        encoded_sequences = [
+            tokenizer.encode_plus(sequence, pad_to_max_length=True, max_length=max_length) for sequence in sequences
+        ]
+        encoded_sequences_batch = tokenizer.batch_encode_plus(sequences, pad_to_max_length=True, max_length=max_length)
+        self.assertListEqual(
+            encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
+        )
