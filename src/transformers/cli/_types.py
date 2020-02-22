@@ -18,7 +18,7 @@ class SupportedFormat(str, Enum):
     PIPE = "pipe"
 
 
-class SupportedTask(str, Enum):
+class PipelineTask(str, Enum):
     FEATURE_EXTRACTION = "feature-extraction"
     SENTIMENT_ANALYSIS = "sentiment-analysis"
     NER = "ner"

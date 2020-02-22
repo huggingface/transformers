@@ -3,7 +3,7 @@ from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
 import typer
-from transformers.cli._types import SupportedTask
+from transformers.cli._types import PipelineTask
 from transformers.pipelines import SUPPORTED_TASKS, Pipeline, PipelineDataFormat, pipeline
 
 try:
@@ -62,7 +62,7 @@ class ServeForwardResult(BaseModel):
 
 
 def serve(
-    task: SupportedTask,
+    task: PipelineTask,
     model: str = typer.Option(None, help="Name or path to the model to instantiate."),
     config: str = typer.Option(None, help="Name or path to the model's config to instantiate."),
     tokenizer: str = typer.Option(None, help="Name of the tokenizer to use. (default: same as model)"),

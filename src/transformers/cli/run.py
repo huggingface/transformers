@@ -3,12 +3,12 @@ import logging
 from pathlib import Path
 
 import typer
-from transformers.cli._types import SupportedFormat, SupportedTask
+from transformers.cli._types import SupportedFormat, PipelineTask
 from transformers.pipelines import SUPPORTED_TASKS, PipelineDataFormat, pipeline
 
 
 def run(
-    task: SupportedTask,
+    task: PipelineTask,
     input_path: Path,
     output_path: Path,
     model: str = typer.Option(None, help="Name or path to the model to instantiate."),

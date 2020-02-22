@@ -16,7 +16,7 @@ from transformers.cli.serving import serve
 from transformers.cli.train import train
 from transformers.cli.user import login, logout, s3_app, upload, whoami
 
-app = typer.Typer(name=NAME, no_args_is_help=True)
+app = typer.Typer(no_args_is_help=True)
 app.command()(convert)
 app.command()(download)
 app.command()(env)

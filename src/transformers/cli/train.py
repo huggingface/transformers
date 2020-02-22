@@ -24,9 +24,9 @@ def train(
     ),
     validation_data: str = typer.Option(None, help="path to validation dataset."),
     validation_split: float = typer.Option(
-    0.1,
-    help="if validation dataset is not provided, fraction of train dataset "
-            "to use as validation dataset."
+        0.1,
+        help="if validation dataset is not provided, fraction of train dataset "
+             "to use as validation dataset."
     ),
     output: str = typer.Option(..., help="Path to the file that will be used post to write results."),
     column_label: int = typer.Option(0, help="Column of the dataset csv file with example labels."),
