@@ -470,10 +470,6 @@ class BartDecoder(nn.Module):
         """
         # embed positions
         positions = self.embed_positions(input_ids)
-
-        if decoder_cached_states is not None:
-            input_ids = input_ids[:, -1:]
-            positions = positions[:, -1:]
         x = self.embed_tokens(input_ids)
 
         if positions is not None:
@@ -944,11 +940,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
     @staticmethod
     def prepare_inputs_for_generation(input_ids, past, **kwargs):
-        return {
-            "input_ids": input_ids,
-            "decoder_cached_states": past,
-            "decoder_input_ids": input_ids,  # FIXME(SS)
-        }
+        return {"input_ids": input_ids, "decoder_cached_states": past, "decoder_input_ids": input_ids[:, -1:]}
 
     def get_output_embeddings(self):
         return self.lm_head
