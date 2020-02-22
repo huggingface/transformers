@@ -23,6 +23,7 @@ import logging
 
 import numpy as np
 import torch
+import typer
 
 from transformers import (
     CTRLLMHeadModel,
@@ -71,11 +72,11 @@ the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famo
 with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
 
-def set_seed(args):
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
+def set_seed(seed: int, n_gpu: int):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if n_gpu > 0:
+        torch.cuda.manual_seed_all(seed)
 
 
 #
@@ -83,8 +84,9 @@ def set_seed(args):
 #
 
 
-def prepare_ctrl_input(args, _, tokenizer, prompt_text):
-    if args.temperature > 0.7:
+def prepare_ctrl_input(_, tokenizer, prompt_text, **kwargs):
+    temperature = kwargs.get("temperature")
+    if temperature > 0.7:
         logger.info("CTRL typically works better with lower temperatures (and lower top_k).")
 
     encoded_prompt = tokenizer.encode(prompt_text, add_special_tokens=False)
@@ -93,15 +95,16 @@ def prepare_ctrl_input(args, _, tokenizer, prompt_text):
     return prompt_text
 
 
-def prepare_xlm_input(args, model, tokenizer, prompt_text):
+def prepare_xlm_input(model, tokenizer, prompt_text, **kwargs):
     # kwargs = {"language": None, "mask_token_id": None}
 
     # Set the language
+    xlm_language = kwargs.get("xlm_language")
     use_lang_emb = hasattr(model.config, "use_lang_emb") and model.config.use_lang_emb
     if hasattr(model.config, "lang2id") and use_lang_emb:
         available_languages = model.config.lang2id.keys()
-        if args.xlm_language in available_languages:
-            language = args.xlm_language
+        if xlm_language in available_languages:
+            language = xlm_language
         else:
             language = None
             while language not in available_languages:
@@ -119,13 +122,15 @@ def prepare_xlm_input(args, model, tokenizer, prompt_text):
     return prompt_text
 
 
-def prepare_xlnet_input(args, _, tokenizer, prompt_text):
-    prompt_text = (args.padding_text if args.padding_text else PADDING_TEXT) + prompt_text
+def prepare_xlnet_input(_, tokenizer, prompt_text, **kwargs):
+    padding_text = kwargs.get("padding_text")
+    prompt_text = (padding_text if padding_text else PADDING_TEXT) + prompt_text
     return prompt_text
 
 
-def prepare_transfoxl_input(args, _, tokenizer, prompt_text):
-    prompt_text = (args.padding_text if args.padding_text else PADDING_TEXT) + prompt_text
+def prepare_transfoxl_input(_, tokenizer, prompt_text, **kwargs):
+    padding_text = kwargs.get("padding_text")
+    prompt_text = (padding_text if padding_text else PADDING_TEXT) + prompt_text
     return prompt_text
 
 
@@ -147,87 +152,64 @@ def adjust_length_to_model(length, max_sequence_length):
     return length
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model_type",
-        default=None,
-        type=str,
-        required=True,
-        help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
-    )
-    parser.add_argument(
-        "--model_name_or_path",
-        default=None,
-        type=str,
-        required=True,
-        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
-    )
+def main(model_type: str = typer.Option(..., help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys())),
+         model_name_or_path: str = typer.Option(
+             ...,
+             help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
+         ),
+         prompt: str = "",
+         length: int = 20,
+         stop_token: str = typer.Option(None, help="Token at which text generation is stopped"),
+         temperature: float = typer.Option(1.0, help="temperature of 1.0 has no effect, lower tend toward greedy sampling"),
+         repetition_penalty: float = typer.Option(1.0, help="primarily useful for CTRL model; in that case, use 1.2"),
+         k: int = 0,
+         p: float = 0.9,
+         padding_text: str = typer.Option("", help="Padding text for Transfo-XL and XLNet."),
+         xlm_language: str = typer.Option("", help="Optional language when used with the XLM model"),
+         seed: int = typer.Option(42, help="random seed for initialization"),
+         cuda: bool = typer.Option(True, help="Use CUDA if available."),
+         num_return_sequences: int = typer.Option(1, help="The number of samples to generate.")):
+     
+    device = torch.device("cuda" if torch.cuda.is_available() and cuda else "cpu")
+    n_gpu = torch.cuda.device_count()
 
-    parser.add_argument("--prompt", type=str, default="")
-    parser.add_argument("--length", type=int, default=20)
-    parser.add_argument("--stop_token", type=str, default=None, help="Token at which text generation is stopped")
-
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=1.0,
-        help="temperature of 1.0 has no effect, lower tend toward greedy sampling",
-    )
-    parser.add_argument(
-        "--repetition_penalty", type=float, default=1.0, help="primarily useful for CTRL model; in that case, use 1.2"
-    )
-    parser.add_argument("--k", type=int, default=0)
-    parser.add_argument("--p", type=float, default=0.9)
-
-    parser.add_argument("--padding_text", type=str, default="", help="Padding text for Transfo-XL and XLNet.")
-    parser.add_argument("--xlm_language", type=str, default="", help="Optional language when used with the XLM model.")
-
-    parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
-    parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
-    parser.add_argument("--num_return_sequences", type=int, default=1, help="The number of samples to generate.")
-    args = parser.parse_args()
-
-    args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    args.n_gpu = torch.cuda.device_count()
-
-    set_seed(args)
+    set_seed(seed, n_gpu)
 
     # Initialize the model and tokenizer
     try:
-        args.model_type = args.model_type.lower()
-        model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
+        model_class, tokenizer_class = MODEL_CLASSES[model_type.lower()]
     except KeyError:
-        raise KeyError("the model {} you specified is not supported. You are welcome to add it and open a PR :)")
+        raise KeyError(
+            "the model {} you specified is not supported. You are welcome to add it and open a PR :)"
+        )
 
-    tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
-    model = model_class.from_pretrained(args.model_name_or_path)
-    model.to(args.device)
+    tokenizer = tokenizer_class.from_pretrained(model_name_or_path)
+    model = model_class.from_pretrained(model_name_or_path)
+    model.to(device)
 
-    args.length = adjust_length_to_model(args.length, max_sequence_length=model.config.max_position_embeddings)
-    logger.info(args)
+    length = adjust_length_to_model(length, max_sequence_length=model.config.max_position_embeddings)
 
-    prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")
+    prompt_text = prompt if prompt else input("Model prompt >>> ")
 
     # Different models need different input formatting and/or extra arguments
-    requires_preprocessing = args.model_type in PREPROCESSING_FUNCTIONS.keys()
+    requires_preprocessing = model_type in PREPROCESSING_FUNCTIONS.keys()
     if requires_preprocessing:
-        prepare_input = PREPROCESSING_FUNCTIONS.get(args.model_type)
-        preprocessed_prompt_text = prepare_input(args, model, tokenizer, prompt_text)
+        prepare_input = PREPROCESSING_FUNCTIONS.get(model_type)
+        preprocessed_prompt_text = prepare_input(model, tokenizer, prompt_text, xlm_language=xlm_language, padding_text=padding_text)
         encoded_prompt = tokenizer.encode(preprocessed_prompt_text, add_special_tokens=False, return_tensors="pt")
     else:
         encoded_prompt = tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors="pt")
-    encoded_prompt = encoded_prompt.to(args.device)
+    encoded_prompt = encoded_prompt.to(device)
 
     output_sequences = model.generate(
         input_ids=encoded_prompt,
-        max_length=args.length + len(encoded_prompt[0]),
-        temperature=args.temperature,
-        top_k=args.k,
-        top_p=args.p,
-        repetition_penalty=args.repetition_penalty,
+        max_length=length + len(encoded_prompt[0]),
+        temperature=temperature,
+        top_k=k,
+        top_p=p,
+        repetition_penalty=repetition_penalty,
         do_sample=True,
-        num_return_sequences=args.num_return_sequences,
+        num_return_sequences=num_return_sequences,
     )
 
     # Remove the batch dimension when returning multiple sequences
@@ -244,7 +226,7 @@ def main():
         text = tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
 
         # Remove all text after the stop token
-        text = text[: text.find(args.stop_token) if args.stop_token else None]
+        text = text[: text.find(stop_token) if stop_token else None]
 
         # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
         total_sequence = (
@@ -254,8 +236,6 @@ def main():
         generated_sequences.append(total_sequence)
         print(total_sequence)
 
-    return generated_sequences
-
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)
