@@ -562,3 +562,45 @@ class TokenizerTesterMixin:
         for word, ind in vocab.items():
             self.assertEqual(tokenizer.convert_tokens_to_ids(word), ind)
             self.assertEqual(tokenizer.convert_ids_to_tokens(ind), word)
+
+    def test_batch_encode_plus_batch_sequence_length(self):
+        # Tests that all encoded values have the correct size
+        tokenizer = self.get_tokenizer()
+        sequences = [
+            "Testing batch encode plus",
+            "Testing batch encode plus with different sequence lengths",
+            "Testing batch encode plus with different sequence lengths correctly pads",
+        ]
+
+        # Switch from batch_encode_plus format:   {'input_ids': [[...], [...]], ...}
+        # to the concatenated encode_plus format: [{'input_ids': [...], ...}, {'input_ids': [...], ...}]
+        def switch_dict_list_order(batch_encode_plus_sequences):
+            return [
+                {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences.keys()}
+                for i in range(len(batch_encode_plus_sequences))
+            ]
+
+        encoded_sequences = [tokenizer.encode_plus(sequence, pad_to_max_length=False) for sequence in sequences]
+        encoded = tokenizer.batch_encode_plus(sequences)
+        self.assertListEqual(encoded_sequences, switch_dict_list_order(encoded))
+
+        maximum_length = len(max([encoded_sequence["input_ids"] for encoded_sequence in encoded_sequences], key=len))
+
+        encoded_sequences_padded = [
+            tokenizer.encode_plus(sequence, pad_to_max_length=True, max_length=maximum_length)
+            for sequence in sequences
+        ]
+        encoded_padded = tokenizer.batch_encode_plus(sequences, pad_to_max_length=True)
+        self.assertListEqual(encoded_sequences_padded, switch_dict_list_order(encoded_padded))
+
+    def test_batch_encode_plus_add_special_tokens(self):
+        print("nice")
+
+    def test_batch_encode_plus_padding(self):
+        print("nice")
+
+    def test_batch_encode_plus_truncation_strategy(self):
+        print("nice")
+
+    def test_batch_encode_plus_optional_returns(self):
+        print("nice")

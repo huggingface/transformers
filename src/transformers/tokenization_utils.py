@@ -1020,13 +1020,14 @@ class PreTrainedTokenizer(object):
     def batch_encode_plus(
         self,
         batch_text_or_text_pairs=None,
-        add_special_tokens=False,
+        add_special_tokens=True,
         max_length=None,
         stride=0,
         truncation_strategy="longest_first",
+        pad_to_max_length=False,
         return_tensors=None,
         return_input_lengths=False,
-        return_attention_masks=False,
+        return_attention_masks=True,
         return_offsets_mapping=False,
         **kwargs
     ):
@@ -1050,6 +1051,12 @@ class PreTrainedTokenizer(object):
                 - 'only_first': Only truncate the first sequence
                 - 'only_second': Only truncate the second sequence
                 - 'do_not_truncate': Does not truncate (raise an error if the input sequence is longer than max_length)
+            pad_to_max_length: if set to True, the returned sequences will be padded according to the model's padding side and
+                padding index, up to their max length. If no max length is specified, the padding is done up to the model's max length.
+                The tokenizer padding sides are handled by the class attribute `padding_side` which can be set to the following strings:
+                - 'left': pads on the left of the sequences
+                - 'right': pads on the right of the sequences
+                Defaults to False: no padding.
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
             return_input_lengths: (optional) If set the resulting dictionary will include the length of each sample
@@ -1057,6 +1064,19 @@ class PreTrainedTokenizer(object):
             return_offsets_mapping: (optional) Not available, should be set to False or it will throw NotImplementError
             **kwargs: passed to the `self.tokenize()` method
         """
+
+        def get_input_ids(text):
+            if isinstance(text, str):
+                tokens = self.tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
+                return self.convert_tokens_to_ids(tokens)
+            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
+                return self.convert_tokens_to_ids(text)
+            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
+                return text
+            else:
+                raise ValueError(
+                    "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
+                )
 
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -1067,21 +1087,45 @@ class PreTrainedTokenizer(object):
                 "https://github.com/huggingface/transformers/pull/2674"
             )
 
-        batch_outputs = {}
+        input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
             if isinstance(ids_or_pair_ids, (list, tuple)):
                 assert len(ids_or_pair_ids) == 2
                 ids, pair_ids = ids_or_pair_ids
             else:
                 ids, pair_ids = ids_or_pair_ids, None
-            outputs = self.encode_plus(
-                ids,
-                pair_ids,
-                add_special_tokens=add_special_tokens,
+
+            first_ids = get_input_ids(ids)
+            second_ids = get_input_ids(pair_ids) if pair_ids is not None else None
+            input_ids.append((first_ids, second_ids))
+
+        if max_length is None and pad_to_max_length:
+
+            def total_sequence_length(input_pairs):
+                first_ids, second_ids = input_pairs
+                if second_ids is not None:
+                    return len(first_ids) + len(second_ids) + self.max_len - self.max_len_sentences_pair
+                else:
+                    return len(first_ids) + self.max_len - self.max_len_single_sentence
+
+            max_length = max([total_sequence_length(ids) for ids in input_ids])
+            print("nice")
+
+        batch_outputs = {}
+        for first_ids, second_ids in input_ids:
+            outputs = self.prepare_for_model(
+                first_ids,
+                pair_ids=second_ids,
                 max_length=max_length,
+                pad_to_max_length=pad_to_max_length,
+                add_special_tokens=add_special_tokens,
                 stride=stride,
                 truncation_strategy=truncation_strategy,
-                return_tensors=None,
+                return_tensors=return_tensors,
+                return_attention_mask=return_attention_masks,
+                # # TODO LD return_token_type_ids=return_token_type_ids,
+                # # TODO LD return_overflowing_tokens=return_overflowing_tokens,
+                # # TODO LD return_special_tokens_mask=return_special_tokens_mask,
             )
 
             # Append the non-padded length to the output
@@ -1095,10 +1139,6 @@ class PreTrainedTokenizer(object):
 
         # Compute longest sequence size
         max_seq_len = max(map(len, batch_outputs["input_ids"]))
-
-        if return_attention_masks:
-            # Allow the model to not give any special attention to padded input
-            batch_outputs["attention_mask"] = [[0] * len(v) for v in batch_outputs["input_ids"]]
 
         if return_tensors is not None:
 
@@ -1124,13 +1164,6 @@ class PreTrainedTokenizer(object):
                             return_tensors
                         )
                     )
-
-        # encoder_attention_mask requires 1 for real token, 0 for padding, just invert value
-        if return_attention_masks:
-            if is_tf_available():
-                batch_outputs["attention_mask"] = tf.abs(batch_outputs["attention_mask"] - 1)
-            else:
-                batch_outputs["attention_mask"] = torch.abs(batch_outputs["attention_mask"] - 1)
 
         return batch_outputs
 
