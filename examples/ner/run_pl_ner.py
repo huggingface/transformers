@@ -138,8 +138,10 @@ class NERTransformer(BaseTransformer):
     def load_and_cache_examples(self, labels, pad_token_label_id, mode):
         args = self.hparams
         tokenizer = self.tokenizer
-        logger.info("Rank is %s", self.proc_rank)
-        
+        global xm
+        import torch_xla.core.xla_model as xm
+        logger.info("Rank %s %s / %s", xm.get_local_ordinal(), xm.get_ordinal(), xm.xrt_world_size())
+
         if self.proc_rank not in [-1, 0] and mode == "train" and not self.is_tpu:
             # Make sure only the first process in distributed training process the dataset, and the others will use the cache
             torch.distributed.barrier()
