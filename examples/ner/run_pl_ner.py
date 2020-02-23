@@ -12,7 +12,8 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Tenso
 from transformer_base import BaseTransformer, add_generic_args, generic_train
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
-
+import torch_xla.core.xla_model as xm
+        
 logger = logging.getLogger(__name__)
 
 
@@ -138,13 +139,14 @@ class NERTransformer(BaseTransformer):
     def load_and_cache_examples(self, labels, pad_token_label_id, mode):
         args = self.hparams
         tokenizer = self.tokenizer
-        global xm
-        import torch_xla.core.xla_model as xm
-        logger.info("Rank %s %s / %s", xm.get_local_ordinal(), xm.get_ordinal(), xm.xrt_world_size())
 
-        if self.proc_rank not in [-1, 0] and mode == "train" and not self.is_tpu:
-            # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-            torch.distributed.barrier()
+        if self.trainer.proc_rank not in [-1, 0] and mode == "train":
+            if not self.is_tpu:
+                # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+                torch.distributed.barrier()
+            else:
+                xm.rendezvous("transformer.ner.cache_examples")
+
 
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(
@@ -174,13 +176,16 @@ class NERTransformer(BaseTransformer):
                 pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
                 pad_token_label_id=pad_token_label_id,
             )
-            if self.proc_rank in [-1, 0]:
+            if self.trainer.proc_rank in [-1, 0]:
                 logger.info("Saving features into cached file %s", cached_features_file)
                 torch.save(features, cached_features_file)
 
-        if self.proc_rank == 0 and mode == "train" and not self.is_tpu:
-            torch.distributed.barrier()
-
+        if self.trainer.proc_rank == 0 and mode == "train":
+            if not self.is_tpu:
+                torch.distributed.barrier()
+            else:
+                xm.rendezvous("transformer.ner.cache_examples")
+                
 
         # Convert to Tensors and build dataset
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)

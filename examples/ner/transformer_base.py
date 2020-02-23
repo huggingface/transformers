@@ -87,11 +87,6 @@ class BaseTransformer(pl.LightningModule):
         self.proc_rank = -1
         self.is_tpu = False
         if self.hparams.n_tpu > 0:
-            global xm
-            import torch_xla.core.xla_model as xm
-            self.proc_rank = xm.get_ordinal()
-            logger.info("Rank %s %s / %s", xm.get_local_ordinal(), self.proc_rank, xm.xrt_world_size())
-
             self.is_tpu = True
 
     def is_logger(self):
@@ -152,10 +147,6 @@ class BaseTransformer(pl.LightningModule):
     @pl.data_loader
     def test_dataloader(self):
         return self.load_dataset("test", self.hparams.eval_batch_size)
-
-    def init_ddp_connection(self, proc_rank, world_size):
-        self.proc_rank = proc_rank
-        super(BaseTransformer, self).init_ddp_connection(proc_rank, world_size)
 
     def train_sampler(self, dataset):
         if self.hparams.n_tpu >= 1:
