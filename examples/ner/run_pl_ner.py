@@ -55,11 +55,18 @@ class NERTransformer(BaseTransformer):
         labels = get_labels(self.hparams.labels)
         self.pad_token_label_id = CrossEntropyLoss().ignore_index
         dataset = self.load_and_cache_examples(labels, self.pad_token_label_id, mode)
+
+        logger.info("train_samplers")
+                        
         if mode == "train" or mode == "dev":
             sampler = self.train_sampler(dataset)
         else:
             sampler = SequentialSampler(dataset)
+
+        logger.info("data loaders")
         dataloader = DataLoader(dataset, sampler=sampler, batch_size=batch_size)
+        logger.info("data loaders")
+
         return dataloader
 
     def validation_step(self, batch, batch_nb):
