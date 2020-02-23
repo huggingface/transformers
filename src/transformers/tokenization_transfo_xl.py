@@ -299,15 +299,17 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def prepare_for_tokenization(self, text, **kwargs):
 
-        look_ahead_for_special_token = '(?=[{}])'.format(self.punctuation_symbols)
-        look_ahead_to_match_all_except_space = '(?=[^\s])'  # noqa: W605
-        punction_without_space_before = '[^\s][{}]'.format(self.punctuation_symbols)  # noqa: W605
+        look_ahead_for_special_token = "(?=[{}])".format(self.punctuation_symbols)
+        look_ahead_to_match_all_except_space = "(?=[^\s])"  # noqa: W605
+        punction_without_space_before = "[^\s][{}]".format(self.punctuation_symbols)  # noqa: W605
         # add spaces before punctuation symbols as should be done in transfo-xl
         if "add_space_before_punct_symbol" in kwargs and kwargs["add_space_before_punct_symbol"]:
-            text = re.sub(r'' + look_ahead_for_special_token + look_ahead_to_match_all_except_space, r' ', text)
+            text = re.sub(r"" + look_ahead_for_special_token + look_ahead_to_match_all_except_space, r" ", text)
         elif re.search(punction_without_space_before, text):
             # searches until the first occurence of a punctuation symbol without surrounding spaces
-            logger.warning('You might want to consider setting `add_space_before_punct_symbol=True` as an argument to the `tokenizer.encode()` to avoid tokenizing words with punctuation symbols to the `<unk>` token')
+            logger.warning(
+                "You might want to consider setting `add_space_before_punct_symbol=True` as an argument to the `tokenizer.encode()` to avoid tokenizing words with punctuation symbols to the `<unk>` token"
+            )
         return text
 
 
