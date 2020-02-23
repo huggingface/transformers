@@ -152,6 +152,18 @@ class PreTrainedTokenizer(object):
 
     padding_side = "right"
 
+    NO_PAD_TOKEN_FOR_BATCH_MSG = (
+        "No padding token is set for this model, therefore no batch can be made with uneven "
+        "sequences. Set a padding token or adjust the lengths of the sequences building the "
+        "batch so that every sequence is of the same length."
+    )
+
+    UNEVEN_SEQUENCES_FOR_BATCH_MSG = (
+        "The sequences building the batch are not of the same size, no tensor "
+        "can be built. Set `pad_to_max_length=True` to pad the smaller sequences"
+        "up to the larger sequence's length."
+    )
+
     @property
     def bos_token(self):
         """ Beginning of sentence token (string). Log an error if used while not having been set. """
@@ -1065,6 +1077,27 @@ class PreTrainedTokenizer(object):
             return_attention_masks: (optional) Set to True to return the attention mask (default False)
             return_offsets_mapping: (optional) Not available, should be set to False or it will throw NotImplementError
             **kwargs: passed to the `self.tokenize()` method
+
+        Return:
+            A Dictionary of shape::
+
+                {
+                    input_ids: list[List[int]],
+                    token_type_ids: list[List[int]] if return_token_type_ids is True (default)
+                    attention_mask: list[List[int]] if return_attention_mask is True (default)
+                    overflowing_tokens: list[List[int]] if a ``max_length`` is specified and return_overflowing_tokens is True
+                    num_truncated_tokens: List[int] if a ``max_length`` is specified and return_overflowing_tokens is True
+                    special_tokens_mask: list[List[int]] if ``add_special_tokens`` if set to ``True`` and return_special_tokens_mask is True
+                }
+
+            With the fields:
+                ``input_ids``: list of token ids to be fed to a model
+                ``token_type_ids``: list of token type ids to be fed to a model
+                ``attention_mask``: list of indices specifying which tokens should be attended to by the model
+                ``overflowing_tokens``: list of overflowing tokens if a max length is specified.
+                ``num_truncated_tokens``: number of overflowing tokens a ``max_length`` is specified
+                ``special_tokens_mask``: if adding special tokens, this is a list of [0, 1], with 0 specifying special added
+                tokens and 1 specifying sequence tokens.
         """
 
         def get_input_ids(text):
@@ -1114,6 +1147,9 @@ class PreTrainedTokenizer(object):
 
         batch_outputs = {}
         for first_ids, second_ids in input_ids:
+            # Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by
+            # the model. It adds special tokens, truncates sequences if overflowing while taking into account
+            # the special tokens and manages a window stride for overflowing tokens
             outputs = self.prepare_for_model(
                 first_ids,
                 pair_ids=second_ids,
@@ -1149,35 +1185,17 @@ class PreTrainedTokenizer(object):
                         batch_outputs[key] = tf.constant(value)
                     except ValueError:
                         if None in [item for sequence in value for item in sequence]:
-                            raise ValueError(
-                                "No padding token is set for this model, therefore no batch can be made"
-                                "with uneven sequences. Set a padding token or adjust the lengths of the"
-                                "sequences building the batch so that every sequence is of the same "
-                                "length."
-                            )
+                            raise ValueError(self.NO_PAD_TOKEN_FOR_BATCH_MSG)
                         else:
-                            raise ValueError(
-                                "The sequences building the batch are not of the same size, no tensor "
-                                "can be built. Set `pad_to_max_length=True` to pad the smaller sequences"
-                                "up to the larger sequence's length."
-                            )
+                            raise ValueError(self.UNEVEN_SEQUENCES_FOR_BATCH_MSG)
                 elif return_tensors == "pt" and is_torch_available():
                     try:
                         batch_outputs[key] = torch.tensor(value)
                     except ValueError:
-                        raise ValueError(
-                            "The sequences building the batch are not of the same size, no tensor can be "
-                            "built. Set `pad_to_max_length=True` to pad the smaller sequences up to the"
-                            "larger sequence's length."
-                        )
+                        raise ValueError(self.UNEVEN_SEQUENCES_FOR_BATCH_MSG)
                     except RuntimeError:
                         if None in [item for sequence in value for item in sequence]:
-                            raise ValueError(
-                                "No padding token is set for this model, therefore no batch can be made"
-                                "with uneven sequences. Set a padding token or adjust the lengths of the"
-                                "sequences building the batch so that every sequence is of the same "
-                                "length."
-                            )
+                            raise ValueError(self.NO_PAD_TOKEN_FOR_BATCH_MSG)
                         else:
                             raise
                 elif return_tensors is not None:
