@@ -6,7 +6,8 @@ configurations and a great versatility in use-cases. The most simple ones are pr
 for tasks such as question answering, sequence classification, named entity recognition and others.
 
 These examples leverage auto-models, which are classes that will instantiate a model according to a given checkpoint,
-automatically selecting the correct model architecture
+automatically selecting the correct model architecture. Please check the :class:`~transformers.AutoModel` documentation
+for more information.
 Feel free to modify the code to be more specific and adapt it to your specific use-case.
 
 In order for a model to perform well on a task, it must be loaded from a checkpoint corresponding to that task. These
@@ -23,8 +24,9 @@ following:
 
 In order to do an inference on a task, several mechanisms are made available by the library:
 
-- Pipelines
-- Using a model directly with a tokenizer (PyTorch/TensorFlow)
+- Pipelines: very easy-to-use abstractions, which require as little as two lines of code.
+- Using a model directly with a tokenizer (PyTorch/TensorFlow): the full inference using the model. Less abstraction,
+  but much more powerful.
 
 Both approaches are showcased here.
 
@@ -34,7 +36,7 @@ Both approaches are showcased here.
     checkpoint that was not fine-tuned on a specific task would load only the base transformer layers and not the
     additional head that is used for the task, initializing the weights of that head randomly.
 
-    This produces random output.
+    This would produce random output.
 
 Sequence Classification
 --------------------------
@@ -57,7 +59,7 @@ It leverages a fine-tuned model on sst2, which is a GLUE task.
     print(nlp("I hate you"))
     print(nlp("I love you"))
 
-This should return a label ("POSITIVE" or "NEGATIVE") alongside a score, as follows:
+This returns a label ("POSITIVE" or "NEGATIVE") alongside a score, as follows:
 
 ::
 
@@ -139,7 +141,7 @@ of each other. The process is the following:
     for i in range(len(classes)):
         print(f"{classes[i]}: {round(not_paraphrase_results[i] * 100)}%")
 
-This should output the following results:
+This outputs the following results:
 
 ::
 
@@ -176,7 +178,7 @@ It leverages a fine-tuned model on SQuAD.
     print(nlp(question="What is extractive question answering?", context=context))
     print(nlp(question="What is a good example of a question answering dataset?", context=context))
 
-This should return an answer extracted from the text, a confidence score, alongside "start" and "end" values which
+This returns an answer extracted from the text, a confidence score, alongside "start" and "end" values which
 are the positions of the extracted answer in the text.
 
 ::
@@ -274,7 +276,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
         print(f"Question: {question}")
         print(f"Answer: {answer}\n")
 
-This should output the questions followed by the answers:
+This outputs the questions followed by the predicted answers:
 
 ::
 
@@ -318,7 +320,7 @@ Here is an example of using pipelines to replace a mask from a sequence:
     nlp = pipeline("fill-mask")
     print(nlp(f"HuggingFace is creating a {nlp.tokenizer.mask_token} that the community uses to solve NLP tasks."))
 
-This should output the sequences with the mask filled, the confidence score as well as the token id in the tokenizer
+This outputs the sequences with the mask filled, the confidence score as well as the token id in the tokenizer
 vocabulary:
 
 ::
@@ -384,7 +386,7 @@ Here is an example doing masked language modeling using a model and a tokenizer.
     for token in top_5_tokens:
         print(sequence.replace(tokenizer.mask_token, tokenizer.decode([token])))
 
-This should print five sequences, with the top 5 tokens predicted by the model:
+This prints five sequences, with the top 5 tokens predicted by the model:
 
 ::
 
