@@ -201,9 +201,6 @@ class NERTransformer(BaseTransformer):
         all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
 
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-        if self.is_tpu:
-            xm.rendezvous("transformer.ner.cache_examples.finish")
-
         return dataset
 
     @staticmethod
