@@ -95,11 +95,6 @@ class BaseTransformer(pl.LightningModule):
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
         model = self.model
-        t_total = (
-            len(self.train_dataloader())
-            // self.hparams.gradient_accumulation_steps
-            * float(self.hparams.num_train_epochs)
-        )
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
@@ -112,18 +107,8 @@ class BaseTransformer(pl.LightningModule):
             },
         ]
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
-        )
-        self.lr_scheduler = scheduler
+        self.opt = optimizer
         return [optimizer]
-
-    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx, second_order_closure=None):
-
-        # Step each time.
-        optimizer.step()
-        self.lr_scheduler.step()
-        optimizer.zero_grad()
 
     def get_tqdm_dict(self):
         tqdm_dict = {"loss": "{:.3f}".format(self.trainer.avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
@@ -138,7 +123,19 @@ class BaseTransformer(pl.LightningModule):
 
     @pl.data_loader
     def train_dataloader(self):
-        return self.load_dataset("train", self.hparams.train_batch_size)
+        dataset = self.load_dataset("train", self.hparams.train_batch_size)
+        t_total = (
+            len(dataset)
+            // self.hparams.gradient_accumulation_steps
+            * float(self.hparams.num_train_epochs)
+        )
+        scheduler = get_linear_schedule_with_warmup(
+            self.opt,
+            num_warmup_steps=self.hparams.warmup_steps,
+            num_training_steps=t_total
+        )
+        self.lr_scheduler = scheduler
+        return dataset
 
     @pl.data_loader
     def val_dataloader(self):
@@ -147,6 +144,10 @@ class BaseTransformer(pl.LightningModule):
     @pl.data_loader
     def test_dataloader(self):
         return self.load_dataset("test", self.hparams.eval_batch_size)
+
+    def init_ddp_connection(self, proc_rank, world_size):
+        self.proc_rank = proc_rank
+        super(BaseTransformer, self).init_ddp_connection(proc_rank, world_size)
 
     def train_sampler(self, dataset):
         if self.hparams.n_tpu >= 1:
