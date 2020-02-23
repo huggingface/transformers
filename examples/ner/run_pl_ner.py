@@ -152,8 +152,10 @@ class NERTransformer(BaseTransformer):
                 # Make sure only the first process in distributed training process the dataset, and the others will use the cache
                 torch.distributed.barrier()
             else:
+                logger.info("***** rendezvous1 *****")
                 xm.rendezvous("transformer.ner.cache_examples")
 
+        logger.info("***** start *****")
 
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(
@@ -191,6 +193,8 @@ class NERTransformer(BaseTransformer):
             if not self.is_tpu:
                 torch.distributed.barrier()
             else:
+                logger.info("***** rendezvous2 *****")
+
                 xm.rendezvous("transformer.ner.cache_examples")
                 
 
