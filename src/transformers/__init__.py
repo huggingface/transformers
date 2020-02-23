@@ -256,6 +256,7 @@ if is_torch_available():
         AlbertForMaskedLM,
         AlbertForSequenceClassification,
         AlbertForQuestionAnswering,
+        AlbertForTokenClassification,
         load_tf_weights_in_albert,
         ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
