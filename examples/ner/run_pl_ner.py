@@ -147,13 +147,13 @@ class NERTransformer(BaseTransformer):
         args = self.hparams
         tokenizer = self.tokenizer
 
-        if self.trainer.proc_rank not in [-1, 0] and mode == "train":
-            if not self.is_tpu:
-                # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-                torch.distributed.barrier()
-            else:
-                logger.info("***** rendezvous1 *****")
-                xm.rendezvous("transformer.ner.cache_examples")
+        # if self.trainer.proc_rank not in [-1, 0] and mode == "train":
+            # if not self.is_tpu:
+            #     # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+            #     torch.distributed.barrier()
+            # else:
+            #     logger.info("***** rendezvous1 *****")
+            #     xm.rendezvous("transformer.ner.cache_examples")
 
         logger.info("***** start *****")
 
@@ -189,15 +189,15 @@ class NERTransformer(BaseTransformer):
                 logger.info("Saving features into cached file %s", cached_features_file)
                 torch.save(features, cached_features_file)
 
-        if self.trainer.proc_rank == 0 and mode == "train":
-            if not self.is_tpu:
-                torch.distributed.barrier()
-            else:
-                logger.info("***** rendezvous2 *****")
+        # if self.trainer.proc_rank == 0 and mode == "train":
+        #     if not self.is_tpu:
+        #         torch.distributed.barrier()
+        #     else:
+        #         logger.info("***** rendezvous2 *****")
 
-                xm.rendezvous("transformer.ner.cache_examples")
+        #         xm.rendezvous("transformer.ner.cache_examples")
                 
-        logger.info("***** convert *****")
+        # logger.info("***** convert *****")
 
         # Convert to Tensors and build dataset
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
