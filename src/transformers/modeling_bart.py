@@ -870,13 +870,16 @@ class BartModel(PretrainedBartModel):
 class BartForMaskedLM(PretrainedBartModel):
     base_model_prefix = "model"
 
-    def __init__(self, config: BartConfig, base_model=None):
+    def __init__(self, config: BartConfig):
         super().__init__(config)
-        if base_model is None:
-            base_model = BartModel(config)
-        assert isinstance(base_model, BartModel)
+        # if base_model is None:
+        base_model = BartModel(config)
+        # assert isinstance(base_model, BartModel)
         self.model = base_model
         self.lm_head = _make_linear_from_emb(self.model.shared)
+
+    def tie_weights(self):
+        pass
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def forward(

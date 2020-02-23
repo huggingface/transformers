@@ -88,11 +88,12 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
 
     if checkpoint_path == "bart.large.cnn":  # generate doesnt work yet
         model = BartForMaskedLM(config, base_model=model)
+        assert "lm_head.weight" in model.state_dict()
+        assert model.lm_head.out_features == config.max_position_embeddings
         model.eval()
         our_outputs = model.model.forward(tokens)[0]
     else:
         our_outputs = model.forward(tokens)[0]
-
     assert their_output.shape == our_outputs.shape
     assert (their_output == our_outputs).all().item()
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
