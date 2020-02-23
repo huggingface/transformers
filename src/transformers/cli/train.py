@@ -19,14 +19,11 @@ def train(
     model: str = typer.Option("bert-base-uncased", help="Name or path to the model to instantiate."),
     train_data: str = typer.Option(
         ...,
-        help="path to train (and optionally evaluation) dataset as a csv with "
-             "tab separated labels and sentences."
+        help="path to train (and optionally evaluation) dataset as a csv with " "tab separated labels and sentences.",
     ),
     validation_data: str = typer.Option(None, help="path to validation dataset."),
     validation_split: float = typer.Option(
-        0.1,
-        help="if validation dataset is not provided, fraction of train dataset "
-             "to use as validation dataset."
+        0.1, help="if validation dataset is not provided, fraction of train dataset " "to use as validation dataset."
     ),
     output: str = typer.Option(..., help="Path to the file that will be used post to write results."),
     column_label: int = typer.Option(0, help="Column of the dataset csv file with example labels."),
@@ -36,14 +33,14 @@ def train(
     train_batch_size: int = 32,
     valid_batch_size: int = 64,
     learning_rate: float = 3e-5,
-    adam_epsilon: float = 1e-08
+    adam_epsilon: float = 1e-08,
 ):
 
     """Train a new model on TASK."""
-        
+
     logger = getLogger("transformers-cli/training")
     os.makedirs(output, exist_ok=True)
-    
+
     logger.info("Loading {} pipeline for {}".format(task, model))
 
     if task == "text_classification":

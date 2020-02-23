@@ -26,7 +26,6 @@ except (ImportError, AttributeError):
 logger = logging.getLogger("transformers-cli/serving")
 
 
-
 class ServeModelInfoResult(BaseModel):
     """
     Expose model information
@@ -60,7 +59,6 @@ class ServeForwardResult(BaseModel):
     output: Any
 
 
-
 def serve(
     task: PipelineTask,
     model: str = typer.Option(None, help="Name or path to the model to instantiate."),
@@ -69,18 +67,13 @@ def serve(
     host: str = "localhost",
     port: int = 8888,
     workers: int = typer.Option(1, help="Number of HTTP workers"),
-    device: int = typer.Option(-1, help="Indicate the device to run onto, -1 indicates CPU, >= 0 indicates GPU (default: -1)")
+    device: int = typer.Option(
+        -1, help="Indicate the device to run onto, -1 indicates CPU, >= 0 indicates GPU (default: -1)"
+    ),
 ):
-    
     """CLI tool to run inference requests through REST and GraphQL endpoints."""
-    
-    nlp = pipeline(
-        task=task.value,
-        model=model if model else None,
-        config=config,
-        tokenizer=tokenizer,
-        device=device,
-    )
+
+    nlp = pipeline(task=task.value, model=model if model else None, config=config, tokenizer=tokenizer, device=device,)
 
     if not _serve_dependencies_installed:
         raise RuntimeError(
@@ -150,11 +143,7 @@ def serve(
         app = FastAPI(
             routes=[
                 APIRoute(
-                    "/",
-                    model_info,
-                    response_model=ServeModelInfoResult,
-                    response_class=JSONResponse,
-                    methods=["GET"],
+                    "/", model_info, response_model=ServeModelInfoResult, response_class=JSONResponse, methods=["GET"],
                 ),
                 APIRoute(
                     "/tokenize",
@@ -182,4 +171,3 @@ def serve(
         )
 
         uvicorn.run(app, host=host, port=port, workers=workers)
-        typer.launch(f'{host}:{port}/docs')
