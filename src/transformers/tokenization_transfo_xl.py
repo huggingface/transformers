@@ -295,6 +295,15 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         else:
             return symbols
 
+    def prepare_for_tokenization(self, text, **kwargs):
+        if "add_space_before_punct_symbol" in kwargs and kwargs["add_space_before_punct_symbol"]:
+            import re
+            punctuation = '!"#$%&\()*+,-./:;<=>?@[\\]^_`{|}~'  # noqa: W605
+            look_ahead_for_special_token = '(?=[{}])'.format(punctuation)
+            look_ahead_to_match_all_except_space = '(?=[^\s])'  # noqa: W605
+            text = re.sub(r'' + look_ahead_for_special_token + look_ahead_to_match_all_except_space, r' ', text)
+        return text
+
 
 class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
     def __init__(
