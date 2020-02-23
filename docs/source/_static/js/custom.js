@@ -99,7 +99,6 @@ function platformToggle() {
     };
 
     const createFrameworkButtons = sample => {
-            console.log(sample);
             const pytorchButton = document.createElement("button");
             pytorchButton.innerText = "PyTorch";
 
@@ -112,6 +111,7 @@ function platformToggle() {
             selectorDiv.appendChild(tensorflowButton);
             sample.element.parentElement.prepend(selectorDiv);
 
+            // Init on PyTorch
             sample.element.innerHTML = sample.pytorchSample;
             pytorchButton.classList.add("selected");
             tensorflowButton.classList.remove("selected");
@@ -128,13 +128,11 @@ function platformToggle() {
             });
         };
 
-    const samples = codeBlocks
+    codeBlocks
         .map(element => {return {element: element.firstChild, innerText: element.innerText}})
         .filter(codeBlock => codeBlock.innerText.includes(pytorchIdentifier) && codeBlock.innerText.includes(tensorflowIdentifier))
         .map(getFrameworkSpans)
         .forEach(createFrameworkButtons);
-
-    console.log(samples)
 }
 
 
