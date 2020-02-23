@@ -12,7 +12,6 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Tenso
 from transformer_base import BaseTransformer, add_generic_args, generic_train
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
-global xm
 import torch_xla.core.xla_model as xm
         
 logger = logging.getLogger(__name__)
@@ -34,7 +33,11 @@ class NERTransformer(BaseTransformer):
     def training_step(self, batch, batch_num):
         "Compute loss"
         # Temporary fix.
+        logger.info("***** start *****")
+
         self.lr_scheduler.step(epoch=self.global_step)        
+        logger.info("***** mid *****")
+
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
@@ -43,6 +46,7 @@ class NERTransformer(BaseTransformer):
 
         outputs = self.forward(**inputs)
         loss = outputs[0]
+        logger.info("***** log *****")
         
         tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
         return {"loss": loss, "log": tensorboard_logs}
