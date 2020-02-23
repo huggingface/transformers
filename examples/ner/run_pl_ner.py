@@ -197,7 +197,7 @@ class NERTransformer(BaseTransformer):
 
         #         xm.rendezvous("transformer.ner.cache_examples")
                 
-        # logger.info("***** convert *****")
+        logger.info("***** convert *****")
 
         # Convert to Tensors and build dataset
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
@@ -208,7 +208,7 @@ class NERTransformer(BaseTransformer):
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
         if self.is_tpu:
             logger.info("***** ret *****")
-            xm.rendezvous("transformer.train_dataloader.end")
+            xm.rendezvous("transformer_end")
             logger.info("***** ret2 *****")
 
         return dataset
