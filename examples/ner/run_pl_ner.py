@@ -61,18 +61,14 @@ class NERTransformer(BaseTransformer):
                 batch[2] if self.hparams.model_type in ["bert", "xlnet"] else None
             )  # XLM and RoBERTa don"t use segment_ids
         outputs = self.forward(**inputs)
-        logger.info("valid mid")
         tmp_eval_loss, logits = outputs[:2]
         preds = logits.detach().cpu().numpy()
         out_label_ids = inputs["labels"].detach().cpu().numpy()
-        logger.info("valid ret")
         return {"val_loss": tmp_eval_loss.detach().cpu(),
                 "pred": preds, "target": out_label_ids}
 
     def _eval_end(self, outputs):
         "Task specific validation"
-        logger.info("evalid start")
-
         val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean()
         preds = np.concatenate([x["pred"] for x in outputs], axis=0)
         preds = np.argmax(preds, axis=2)
@@ -96,7 +92,6 @@ class NERTransformer(BaseTransformer):
         }
 
         if self.is_logger():
-            logger.info(self.proc_rank)
             logger.info("***** Eval results *****")
             for key in sorted(results.keys()):
                 logger.info("  %s = %s", key, str(results[key]))
@@ -143,8 +138,9 @@ class NERTransformer(BaseTransformer):
     def load_and_cache_examples(self, labels, pad_token_label_id, mode):
         args = self.hparams
         tokenizer = self.tokenizer
-        if not self.is_tpu and self.proc_rank not in [-1, 0] and mode == "train":
-            torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+        if self.proc_rank not in [-1, 0] and mode == "train" and not self.is_tpu:
+            # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+            torch.distributed.barrier()
 
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(
@@ -178,10 +174,9 @@ class NERTransformer(BaseTransformer):
                 logger.info("Saving features into cached file %s", cached_features_file)
                 torch.save(features, cached_features_file)
 
-        if not self.is_tpu and self.proc_rank == 0 and mode == "train":
-            torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+        if self.proc_rank == 0 and mode == "train" and not self.is_tpu:
+            torch.distributed.barrier()
 
-        logger.info("making datest")
 
         # Convert to Tensors and build dataset
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
