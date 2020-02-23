@@ -145,10 +145,6 @@ class BaseTransformer(pl.LightningModule):
     def test_dataloader(self):
         return self.load_dataset("test", self.hparams.eval_batch_size)
 
-    def init_ddp_connection(self, proc_rank, world_size):
-        self.proc_rank = proc_rank
-        super(BaseTransformer, self).init_ddp_connection(proc_rank, world_size)
-
     def train_sampler(self, dataset):
         if self.hparams.n_tpu >= 1:
             return DistributedSampler(dataset,
