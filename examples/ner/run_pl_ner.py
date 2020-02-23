@@ -197,6 +197,7 @@ class NERTransformer(BaseTransformer):
 
                 xm.rendezvous("transformer.ner.cache_examples")
                 
+        logger.info("***** convert *****")
 
         # Convert to Tensors and build dataset
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
