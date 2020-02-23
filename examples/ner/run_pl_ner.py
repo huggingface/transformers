@@ -156,6 +156,10 @@ class NERTransformer(BaseTransformer):
             #     xm.rendezvous("transformer.ner.cache_examples")
 
         logger.info("***** start *****")
+        if self.is_tpu:
+            logger.info("***** rendezvous *****")
+            xm.rendezvous("transformer.train_dataloader.start")
+            logger.info("***** complete *****")
 
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(
@@ -167,6 +171,8 @@ class NERTransformer(BaseTransformer):
         if os.path.exists(cached_features_file) and not args.overwrite_cache:
             logger.info("Loading features from cached file %s", cached_features_file)
             features = torch.load(cached_features_file)
+            logger.info("***** convert *****")
+
         else:
             logger.info("Creating features from dataset file at %s", args.data_dir)
             examples = read_examples_from_file(args.data_dir, mode)
