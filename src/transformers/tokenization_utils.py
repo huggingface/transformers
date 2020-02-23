@@ -1173,9 +1173,6 @@ class PreTrainedTokenizer(object):
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
 
-        # Compute longest sequence size
-        max_seq_len = max(map(len, batch_outputs["input_ids"]))
-
         if return_tensors is not None:
 
             # Do the tensor conversion in batch
