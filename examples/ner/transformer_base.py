@@ -9,6 +9,8 @@ import logging
 from torch.utils.data import RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 
+import torch_xla.core.xla_model as xm
+
 from transformers import (
     AdamW,
     BertConfig,
