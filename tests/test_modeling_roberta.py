@@ -34,6 +34,7 @@ if is_torch_available():
     )
     from transformers.modeling_roberta import RobertaEmbeddings, RobertaForMultipleChoice, RobertaForQuestionAnswering
     from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_utils import create_position_ids_from_input_ids
 
 
 @require_torch
@@ -291,7 +292,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
             [[0 + model.padding_idx + 1, 1 + model.padding_idx + 1, 2 + model.padding_idx + 1, model.padding_idx]]
         )
 
-        position_ids = model.create_position_ids_from_input_ids(input_ids)
+        position_ids = create_position_ids_from_input_ids(input_ids, model.padding_idx)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 

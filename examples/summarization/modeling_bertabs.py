@@ -303,7 +303,7 @@ class TransformerDecoderLayer(nn.Module):
         self.layer_norm_2 = nn.LayerNorm(d_model, eps=1e-6)
         self.drop = nn.Dropout(dropout)
         mask = self._get_attn_subsequent_mask(MAX_SIZE)
-        # Register self.mask as a buffer in TransformerDecoderLayer, so
+        # Register self.mask as a saved_state in TransformerDecoderLayer, so
         # it gets TransformerDecoderLayer's cuda behavior automatically.
         self.register_buffer("mask", mask)
 

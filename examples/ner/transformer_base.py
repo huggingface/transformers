@@ -8,6 +8,7 @@ import logging
 
 from torch.utils.data import RandomSampler
 from torch.utils.data.distributed import DistributedSampler
+
 from transformers import (
     AdamW,
     BertConfig,
@@ -97,7 +98,6 @@ class BaseTransformer(pl.LightningModule):
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
         model = self.model
-        logger.info("config opt")
         t_total = (
             len(self.train_dataloader())
             // self.hparams.gradient_accumulation_steps
@@ -114,12 +114,10 @@ class BaseTransformer(pl.LightningModule):
                 "weight_decay": 0.0,
             },
         ]
-        logger.info("config opt 2")
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
         scheduler = get_linear_schedule_with_warmup(
             optimizer, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
         )
-        logger.info("config opt 3")
         self.lr_scheduler = scheduler
         return [optimizer]
 
@@ -273,7 +271,8 @@ def generic_train(model, args):
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5
     )
-    d = dict(
+
+    train_params = dict(
         accumulate_grad_batches=args.gradient_accumulation_steps,
         gpus=args.n_gpu,
         max_epochs=args.num_train_epochs,
@@ -281,19 +280,20 @@ def generic_train(model, args):
         checkpoint_callback=checkpoint_callback,
     )
 
-    if args.n_gpu > 1:
-        d["distributed_backend"]= "ddp"
-
-    if args.n_tpu > 0:
-        d["num_tpu_cores"] = args.n_tpu
-        d["gpus"] = 0
 
     if args.fp16:
-        d["use_amp"]=args.fp16,
-        d["amp_level"]=args.fp16_opt_level,
+        train_params["use_amp"] = args.fp16
+        train_params["amp_level"] = args.fp16_opt_level
 
+    if args.n_tpu > 0:
+        train_params["num_tpu_cores"] = args.n_tpu
+        train_params["gpus"] = 0
 
-    trainer = pl.Trainer(**d)
+    if args.n_gpu > 1:
+        train_params["distributed_backend"] = "ddp"
+
+    trainer = pl.Trainer(**train_params)
+
     if args.do_train:
         trainer.fit(model)
 

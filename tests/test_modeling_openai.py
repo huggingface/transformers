@@ -39,6 +39,9 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel) if is_torch_available() else ()
     )
+    all_generative_model_classes = (
+        (OpenAIGPTLMHeadModel,) if is_torch_available() else ()
+    )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
 
     class OpenAIGPTModelTester(object):
         def __init__(

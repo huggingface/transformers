@@ -31,7 +31,6 @@ class NERTransformer(BaseTransformer):
 
     def training_step(self, batch, batch_num):
         "Compute loss"
-        logger.info("train start")
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
@@ -56,7 +55,6 @@ class NERTransformer(BaseTransformer):
         return dataloader
 
     def validation_step(self, batch, batch_nb):
-        logger.info("valid start")
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
@@ -102,7 +100,6 @@ class NERTransformer(BaseTransformer):
             logger.info("***** Eval results *****")
             for key in sorted(results.keys()):
                 logger.info("  %s = %s", key, str(results[key]))
-        logger.info("evalid end")
 
         tensorboard_logs = results
         ret = {k: v for k, v in results.items()}
@@ -159,7 +156,6 @@ class NERTransformer(BaseTransformer):
         if os.path.exists(cached_features_file) and not args.overwrite_cache:
             logger.info("Loading features from cached file %s", cached_features_file)
             features = torch.load(cached_features_file)
-            logger.info("Done load")
         else:
             logger.info("Creating features from dataset file at %s", args.data_dir)
             examples = read_examples_from_file(args.data_dir, mode)
@@ -193,9 +189,7 @@ class NERTransformer(BaseTransformer):
         all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
         all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
 
-        logger.info("finishing dataset")
         dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-        logger.info("finished data")
 
         return dataset
 
@@ -234,8 +228,6 @@ class NERTransformer(BaseTransformer):
 
 
 if __name__ == "__main__":
-
-
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
     parser = NERTransformer.add_model_specific_args(parser, os.getcwd())
