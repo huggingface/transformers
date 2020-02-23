@@ -90,6 +90,8 @@ class BaseTransformer(pl.LightningModule):
             global xm
             import torch_xla.core.xla_model as xm
             self.proc_rank = xm.get_ordinal()
+            logger.info("Rank %s / %s", self.proc_rank, xm.xrt_world_size())
+
             self.is_tpu = True
 
     def is_logger(self):
