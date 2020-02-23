@@ -24,6 +24,7 @@ else:
     gelu = F.gelu
 
 
+@torch.jit.script
 def gelu_new(x):
     """ Implementation of the gelu activation function currently in Google Bert repo (identical to OpenAI GPT).
         Also see https://arxiv.org/abs/1606.08415
