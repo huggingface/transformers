@@ -1,5 +1,4 @@
 FROM nvidia/cuda:10.1-cudnn7-runtime-ubuntu18.04
-FROM ubuntu:18.04
 
 ARG PYTHON_VERSION=3.7
 ARG TRANSFORMERS_VERSION=2.5.0
