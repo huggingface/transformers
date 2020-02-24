@@ -261,16 +261,54 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-def prepare_gpt2_generation_special_tokens():
+def prepare_generation_special_tokens():
     return {"bos_token_id": 50256, "eos_token_id": 50256}
 
 
 class GPT2ModelLanguageGenerationTest(unittest.TestCase):
+
+    special_tokens = prepare_generation_special_tokens()
+
+    @slow
+    def test_lm_generate_gpt2(self):
+        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        input_ids = torch.Tensor([[464, 3290, 318, 13779]]).long()  # The dog is cute
+        expected_output_ids = [
+            464,
+            3290,
+            318,
+            13779,
+            1165,
+            13,
+            632,
+            7832,
+            284,
+            6437,
+            319,
+            502,
+            290,
+            318,
+            922,
+            329,
+            502,
+            357,
+            1169,
+            3290,
+        ]  # The dog is cute too. It likes to rub on me and is good for me (the dog
+        torch.manual_seed(0)
+
+        output_ids = model.generate(
+            input_ids,
+            bos_token_id=self.special_tokens["bos_token_id"],
+            eos_token_ids=self.special_tokens["eos_token_id"],
+        )
+
+        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+
     @slow
     def test_lm_generate_distilgpt2(self):
         model = GPT2LMHeadModel.from_pretrained("distilgpt2")
-        input_ids = torch.Tensor([[464, 3290, 318, 13779]]).long()
-        special_tokens = prepare_gpt2_generation_special_tokens()
+        input_ids = torch.Tensor([[464, 3290, 318, 13779]]).long()  # The dog is cute
         expected_output_ids = [
             464,
             3290,
@@ -296,7 +334,9 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         torch.manual_seed(0)
 
         output_ids = model.generate(
-            input_ids, bos_token_id=special_tokens["bos_token_id"], eos_token_ids=special_tokens["eos_token_id"]
+            input_ids,
+            bos_token_id=self.special_tokens["bos_token_id"],
+            eos_token_ids=self.special_tokens["eos_token_id"],
         )
 
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
