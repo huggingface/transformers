@@ -1704,6 +1704,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_offsets_mapping=False,
         **kwargs
     ):
+        if not add_special_tokens:
+            logger.warning(
+                "Fast tokenizers add special tokens by default. To remove special tokens, please specify"
+                "`add_special_tokens=False` during the initialisation rather than when calling `encode`,"
+                "`encode_plus` or `batch_encode_plus`."
+            )
+
         # Needed if we have to return a tensor
         pad_to_max_length = pad_to_max_length or (return_tensors is not None)
 
