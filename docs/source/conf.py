@@ -20,13 +20,13 @@ sys.path.insert(0, os.path.abspath('../../src'))
 # -- Project information -----------------------------------------------------
 
 project = u'transformers'
-copyright = u'2019, huggingface'
+copyright = u'2020, huggingface'
 author = u'huggingface'
 
 # The short X.Y version
 version = u''
 # The full version, including alpha/beta/rc tags
-release = u'2.4.1'
+release = u'2.5.1'
 
 
 # -- General configuration ---------------------------------------------------
@@ -104,6 +104,12 @@ html_static_path = ['_static']
 # 'searchbox.html']``.
 #
 # html_sidebars = {}
+
+# This must be the name of an image file (path relative to the configuration 
+# directory) that is the favicon of the docs. Modern browsers use this as 
+# the icon for tabs, windows and bookmarks. It should be a Windows-style 
+# icon file (.ico).
+html_favicon = 'favicon.ico'
 
 
 # -- Options for HTMLHelp output ---------------------------------------------
