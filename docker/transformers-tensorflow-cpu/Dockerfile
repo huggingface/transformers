@@ -1,6 +1,6 @@
 FROM ubuntu:18.04
 
-ARG PYTHON_VERSION=3.8
+ARG PYTHON_VERSION=3.7
 ARG TRANSFORMERS_VERSION=2.5.0
 RUN apt update && \
     apt install -y bash \
