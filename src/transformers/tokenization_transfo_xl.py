@@ -125,7 +125,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             for key, value in vocab_dict.items():
                 if key not in self.__dict__:
                     self.__dict__[key] = value
-        except:
+        except Exception:
             raise ValueError(
                 "Unable to parse file {}. Unknown format. "
                 "If you tried to load a model saved through TransfoXLTokenizerFast,"
@@ -345,7 +345,7 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
         try:
             tokenizer = WordLevel.from_files(vocab_file, unk_token=unk_token)
             tokenizer = Tokenizer(tokenizer)
-        except Exception as e:
+        except Exception:
             raise ValueError(
                 "Unable to parse file {}. Unknown format. "
                 "If you tried to load a model saved through TransfoXLTokenizer,"
