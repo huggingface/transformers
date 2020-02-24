@@ -236,7 +236,7 @@ class BartHeadTests(unittest.TestCase):
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
 
-    def test_generate(self):
+    def test_generate_beam_search(self):
         input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long()
         config = BartConfig(
             vocab_size=self.vocab_size,
@@ -252,9 +252,14 @@ class BartHeadTests(unittest.TestCase):
         )
         lm_model = BartForMaskedLM(config)
         lm_model.eval()
+
+
+        new_input_ids = lm_model.generate(input_ids, num_return_sequences=2, num_beams=2)
+        self.assertEqual(new_input_ids.shape, (input_ids.shape[0]*2, 20))
+
+        # No Beam Search
         new_input_ids = lm_model.generate(input_ids)
         self.assertEqual(new_input_ids.shape, (input_ids.shape[0], 20))
-        new_input_ids = lm_model.generate(input_ids, num_return_sequences=2, num_beams=2)
 
     def test_shift_tokens_right(self):
         input_ids = torch.Tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]]).long()

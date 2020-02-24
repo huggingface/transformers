@@ -49,16 +49,16 @@ BART_START_DOCSTRING = r"""
 
 BART_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        src_tokens (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
                Indices of input sequence tokens in the vocabulary. Use BartTokenizer.encode to produce them.
             Padding will be ignored by default should you provide it.
             Indices can be obtained using :class:`transformers.BartTokenizer.encode(text)`.
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Mask to avoid performing attention on padding token indices in input_ids.
+            Mask to avoid performing attention on padding token indices in src_tokens.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
-            Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
+            Provide for translation and summarization training. By default, the model will create this tensor by shifting the src_tokens right, following the paper.
         decoder_attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, 1, tgt_seq_len, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens and future tokens, as in the paper.
             If you want to change padding behavior, you should read :func:`~transformers.modeling_bart._prepare_decoder_inputs` and modify.
@@ -124,7 +124,7 @@ class PretrainedBartModel(PreTrainedModel):
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": input_ids.ne(pad_token),
-            "input_ids": input_ids,
+            "src_tokens": input_ids,
             "decoder_attention_mask": decoder_attn_mask,
         }
         return dummy_inputs
@@ -774,7 +774,7 @@ def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
 
 
 def fill_with_neg_inf(t):
-    """FP16-compatible function that fills a input_ids with -inf."""
+    """FP16-compatible function that fills a src_tokens with -inf."""
     return t.float().fill_(float("-inf")).type_as(t)
 
 
@@ -782,6 +782,7 @@ def _filter_out_falsey_values(tup) -> Tuple:
     """Remove entries that are None or [] from an iterable."""
     return tuple(x for x in tup if isinstance(x, torch.Tensor) or x)
 
+from .modeling_utils import BeamHypotheses, top_k_top_p_filtering
 
 RET_DOCSTRING = r"""
     Return:
@@ -900,7 +901,7 @@ class BartForMaskedLM(PretrainedBartModel):
         r"""
         masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
-            Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
+            Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``src_tokens`` docstring).
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
             with labels
             in ``[0, ..., config.vocab_size]``.
@@ -927,8 +928,8 @@ class BartForMaskedLM(PretrainedBartModel):
 
             tokenizer = BartTokenizer.from_pretrained('bart-large')
             model = BartForMaskedLM.from_pretrained('bart-large')
-            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-            outputs = model(input_ids=input_ids, lm_labels=input_ids)
+            src_tokens = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
+            outputs = model(src_tokens=src_tokens, lm_labels=src_tokens)
             loss, prediction_scores = outputs[:2]
         """
         outputs = self.model.forward(
@@ -960,8 +961,9 @@ class BartForMaskedLM(PretrainedBartModel):
         return {
             "input_ids": input_ids,
             "layer_state": decoder_cached_states,
-            "decoder_input_ids": input_ids[:, -1:],
+            "decoder_input_ids": kwargs.get('decoder_input_ids', input_ids[:, -1:]),
             "encoder_outputs": encoder_outputs,
+            #"input_ids":
         }
 
     @staticmethod
@@ -984,6 +986,224 @@ class BartForMaskedLM(PretrainedBartModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def _generate_beam_search(
+        self,
+        src_tokens,
+        cur_len,
+        max_length,
+        do_sample,
+        temperature,
+        top_k,
+        top_p,
+        repetition_penalty,
+        pad_token_id,
+        eos_token_ids,
+        batch_size,
+        length_penalty,
+        num_beams,
+        vocab_size,
+    ):
+        """ Generate sequences for each example with beam search.
+        """
+        # Expand input to num beams
+        # assert src_tokens.shape == (batch_size * num_beams, cur_len)
+        src_tokens = src_tokens.unsqueeze(1).expand(batch_size, num_beams, cur_len)
+        src_tokens = src_tokens.contiguous().view(batch_size * num_beams, cur_len)  # (batch_size * num_beams, cur_len)
+
+        # generated hypotheses
+        generated_hyps = [
+            BeamHypotheses(num_beams, max_length, length_penalty, early_stopping=False) for _ in range(batch_size)
+        ]
+
+        # scores for each sentence in the beam
+        beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=src_tokens.device)
+        beam_scores[:, 1:] = -1e9
+        beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
+
+        # decoder tokens
+        prev_output_tokens = src_tokens.new(batch_size * num_beams, 2).long().fill_(-1)
+        prev_output_tokens[:, 0] = 2 #  HARDCODED BOS, FIXME(SS)
+        prev_output_tokens[:, 1] = 0  # HARDCODED BOS, FIXME(SS)
+        # cache compute states
+        past = None
+
+        # done sentences
+        done = [False for _ in range(batch_size)]
+        step= -1
+        while cur_len < max_length:
+            step+=1
+            print(f'step: {step}')
+            decoder_input_ids = prev_output_tokens[:, :step+1]
+            model_inputs = self.prepare_inputs_for_generation(src_tokens, past, decoder_input_ids=decoder_input_ids,)
+            print(f"called at step {step} with: {model_inputs['decoder_input_ids']}")
+            outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
+            scores = F.log_softmax(outputs[0][:, -1, :], dim=1)  # (batch_size * num_beams, vocab_size)
+            assert pad_token_id is not None, 'should break circleci'
+            print(scores.shape)
+            scores[:, pad_token_id] = -1e5  # fairseq has this
+            scores[:, eos_token_ids] = -1e5
+            # unk is 3?
+            # they do unk
+
+            # if model has past, then set the past variable to speed up decoding
+            if self._do_output_past(outputs):
+                past = outputs[1]
+
+            # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
+            if repetition_penalty != 1.0:
+                for i in range(batch_size * num_beams):
+                    for previous_token in set(src_tokens[i].tolist()):
+                        # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
+                        if scores[i, previous_token] < 0:
+                            scores[i, previous_token] *= repetition_penalty
+                        else:
+                            scores[i, previous_token] /= repetition_penalty
+
+            if do_sample:
+                # Temperature (higher temperature => more likely to sample low probability tokens)
+                if temperature != 1.0:
+                    scores = scores / temperature
+                # Top-p/top-k filtering
+                scores = top_k_top_p_filtering(
+                    scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2
+                )  # (batch_size * num_beams, vocab_size)
+                # Sample 2 next words for each beam (so we have some spare tokens and match output of greedy beam search)
+                next_words = torch.multinomial(F.softmax(scores, dim=-1), num_samples=2)  # (batch_size * num_beams, 2)
+                # Compute next scores
+                _scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
+                _scores = torch.gather(_scores, -1, next_words)  # (batch_size * num_beams, 2)
+                next_scores = _scores + beam_scores[:, None].expand_as(_scores)  # (batch_size * num_beams, 2)
+                # Match shape of greedy beam search
+                next_words = next_words.view(batch_size, 2 * num_beams)  # (batch_size, 2 * num_beams)
+                next_scores = next_scores.view(batch_size, 2 * num_beams)  # (batch_size, 2 * num_beams)
+            else:
+                # do greedy beam search
+                scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
+                assert scores.size() == (batch_size * num_beams, vocab_size)
+                # Add the log prob of the new beams to the log prob of the beginning of the sequence (sum of logs == log of the product)
+                _scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * num_beams, vocab_size)
+                # re-organize to group the beam together (we are keeping top hypothesis accross beams)
+                _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
+                next_scores, next_words = torch.topk(_scores, 2 * num_beams, dim=1, largest=True, sorted=True)
+            print(next_scores, next_words)
+
+            assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
+
+            # next batch beam content
+            # list of (batch_size * num_beams) tuple(next hypothesis score, next word, current position in the batch)
+            next_batch_beam = []
+
+            # for each sentence
+            for batch_idx in range(batch_size):
+
+                # if we are done with this sentence
+                done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
+                    next_scores[batch_idx].max().item()
+                )
+                if done[batch_idx]:
+                    raise ValueError('done')
+                    assert (
+                        len(generated_hyps[batch_idx]) >= num_beams
+                    ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
+                    assert (
+                        eos_token_ids is not None and pad_token_id is not None
+                    ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
+                    next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
+                    continue
+
+                # next sentence beam content
+                next_sent_beam = []
+
+                # next words for this sentence
+                for idx, score in zip(next_words[batch_idx], next_scores[batch_idx]):
+
+                    # get beam and word IDs
+                    beam_id = idx // vocab_size
+                    word_id = idx % vocab_size
+
+                    # add to generated hypotheses if end of sentence or last iteration
+                    if eos_token_ids is not None and word_id.item() in eos_token_ids:
+                        generated_hyps[batch_idx].add(
+                            src_tokens[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item()
+                        )
+                    else:
+                        # add next predicted word if it is not eos_token
+                        next_sent_beam.append((score, word_id, batch_idx * num_beams + beam_id))
+
+                    # the beam for next step is full
+                    if len(next_sent_beam) == num_beams:
+                        break
+
+                # update next beam content
+
+                assert len(next_sent_beam) == num_beams, "Beam should always be full"
+                next_batch_beam.extend(next_sent_beam)
+                assert len(next_batch_beam) == num_beams * (batch_idx + 1)
+                print(f'next_sent_beam: {next_sent_beam}')
+
+            # sanity check / prepare next batch
+            assert len(next_batch_beam) == batch_size * num_beams
+            beam_scores = beam_scores.new([x[0] for x in next_batch_beam])
+            beam_words = src_tokens.new([x[1] for x in next_batch_beam])
+            beam_idx = src_tokens.new([x[2] for x in next_batch_beam])
+            print(f'beam words: {beam_words}')
+
+            # re-order batch
+
+            prev_output_tokens = prev_output_tokens[beam_idx, :]
+            prev_output_tokens = torch.cat([prev_output_tokens, beam_words.unsqueeze(1)], dim=-1)
+            print(f'prev_output_tokens: {prev_output_tokens}')
+
+            # re-order internal states
+            if past:
+                past = self._reorder_cache(past, beam_idx)
+
+            # update current length
+            cur_len = cur_len + 1
+
+            # stop when we are done with each sentence
+            if all(done):
+                break
+
+        for batch_idx in range(batch_size):
+            # Add all open beam hypothesis to generated_hyps
+            if not done[batch_idx]:
+                for idx, score in zip(next_words[batch_idx], next_scores[batch_idx]):
+
+                    # get beam and word IDs
+                    beam_id = idx // vocab_size
+                    word_id = idx % vocab_size
+                    generated_hyps[batch_idx].add(
+                        src_tokens[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item()
+                    )
+
+        # select the best hypotheses
+        sent_lengths = src_tokens.new(batch_size)
+        best = []
+
+        for i, hypotheses in enumerate(generated_hyps):
+            best_hyp = max(hypotheses.beams, key=lambda x: x[0])[1]
+            sent_lengths[i] = len(best_hyp)
+            best.append(best_hyp)
+
+        # shorter batches are filled with pad_token
+        if sent_lengths.min().item() != sent_lengths.max().item():
+            assert pad_token_id is not None, "`Pad_token_id` has to be defined"
+            sent_max_len = min(sent_lengths.max().item() + 1, max_length)
+            decoded = src_tokens.new(batch_size, sent_max_len).fill_(pad_token_id)
+
+            # fill with hypothesis and eos_token_id if necessary
+            for i, hypo in enumerate(best):
+                decoded[i, : sent_lengths[i]] = hypo
+                if sent_lengths[i] < max_length:
+                    decoded[i, sent_lengths[i]] = eos_token_ids[0]
+        else:
+            # none of the hypotheses have an eos_token
+            assert (len(hypo) == max_length for hypo in best)
+            decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
+
+        return decoded
 
 
 @add_start_docstrings(
@@ -1039,10 +1259,10 @@ class BartForSequenceClassification(PretrainedBartModel):
 
         tokenizer = BartTokenizer.from_pretrained('bart-large')
         model = BartForSequenceClassification.from_pretrained('bart-large')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute",
+        src_tokens = torch.tensor(tokenizer.encode("Hello, my dog is cute",
         add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, labels=labels)
+        outputs = model(src_tokens, labels=labels)
         loss, logits = outputs[:2]
 
         """

@@ -926,11 +926,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         # done sentences
         done = [False for _ in range(batch_size)]
-
         while cur_len < max_length:
+            print(f'step: {cur_len}')
+
             model_inputs = self.prepare_inputs_for_generation(input_ids, past=past)
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             scores = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
+            assert pad_token_id is not None, 'should break circleci'
+            scores[:, pad_token_id] = -1e5  # fairseq has thisa
+            scores[:, eos_token_ids] = -1e5
 
             # if model has past, then set the past variable to speed up decoding
             if self._do_output_past(outputs):
