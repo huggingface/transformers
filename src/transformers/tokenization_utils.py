@@ -395,6 +395,7 @@ class PreTrainedTokenizer(object):
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
+        local_files_only = kwargs.pop("local_files_only", False)
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
@@ -462,6 +463,7 @@ class PreTrainedTokenizer(object):
                         force_download=force_download,
                         proxies=proxies,
                         resume_download=resume_download,
+                        local_files_only=local_files_only,
                     )
         except EnvironmentError:
             if pretrained_model_name_or_path in s3_models:

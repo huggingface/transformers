@@ -198,6 +198,7 @@ class PretrainedConfig(object):
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
+        local_files_only = kwargs.pop("local_files_only", False)
 
         if pretrained_config_archive_map is None:
             pretrained_config_archive_map = cls.pretrained_config_archive_map
@@ -219,6 +220,7 @@ class PretrainedConfig(object):
                 force_download=force_download,
                 proxies=proxies,
                 resume_download=resume_download,
+                local_files_only=local_files_only,
             )
             # Load config dict
             if resolved_config_file is None:
