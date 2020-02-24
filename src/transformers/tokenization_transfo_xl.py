@@ -45,6 +45,7 @@ if is_torch_available():
 logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {"pretrained_vocab_file": "vocab.bin", "vocab_file": "vocab.txt"}
+VOCAB_FILES_NAMES_FAST = {"pretrained_vocab_file": "vocab.json", "vocab_file": "vocab.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "pretrained_vocab_file": {
@@ -119,13 +120,23 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.punction_without_space_before_pattern = re.compile(r"[^\s][{}]".format(self.punctuation_symbols))
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
 
-        if pretrained_vocab_file is not None:
-            # Hack because, honestly this tokenizer was not made to be used
-            # in a library like ours, at all.
-            vocab_dict = torch.load(pretrained_vocab_file)
-            for key, value in vocab_dict.items():
-                if key not in self.__dict__:
-                    self.__dict__[key] = value
+        try:
+            if pretrained_vocab_file is not None:
+                # Hack because, honestly this tokenizer was not made to be used
+                # in a library like ours, at all.
+                vocab_dict = torch.load(pretrained_vocab_file)
+                for key, value in vocab_dict.items():
+                    if key not in self.__dict__:
+                        self.__dict__[key] = value
+
+            if vocab_file is not None:
+                self.build_vocab()
+        except Exception:
+            raise ValueError(
+                "Unable to parse file {}. Unknown format. "
+                "If you tried to load a model saved through TransfoXLTokenizerFast,"
+                "please note they are not compatible.".format(pretrained_vocab_file)
+            )
 
         if vocab_file is not None:
             self.build_vocab()
@@ -179,6 +190,12 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, vocab_path):
         """Save the tokenizer vocabulary to a directory or file."""
+
+        logger.warning(
+            "Please note you will not be able to load the save vocabulary in"
+            " Rust-based TransfoXLTokenizerFast as they don't share the same structure."
+        )
+
         if os.path.isdir(vocab_path):
             vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES["pretrained_vocab_file"])
         else:
@@ -331,8 +348,15 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
         normalization: Optional[str] = None,
     ):
 
-        tokenizer = WordLevel.from_files(vocab_file, unk_token=unk_token)
-        tokenizer = Tokenizer(tokenizer)
+        try:
+            tokenizer = WordLevel.from_files(vocab_file, unk_token=unk_token)
+            tokenizer = Tokenizer(tokenizer)
+        except Exception:
+            raise ValueError(
+                "Unable to parse file {}. Unknown format. "
+                "If you tried to load a model saved through TransfoXLTokenizer,"
+                "please note they are not compatible.".format(vocab_file)
+            )
 
         # Create the correct normalization path
         normalizer = []
@@ -379,7 +403,7 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
 
 class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
 
-    vocab_files_names = VOCAB_FILES_NAMES
+    vocab_files_names = VOCAB_FILES_NAMES_FAST
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP_FAST
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
@@ -418,6 +442,14 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
+
+    def save_pretrained(self, save_directory):
+        logger.warning(
+            "Please note you will not be able to load the vocabulary in"
+            " Python-based TransfoXLTokenizer as they don't share the same structure."
+        )
+
+        return super().save_pretrained(save_directory)
 
 
 class LMOrderedIterator(object):
