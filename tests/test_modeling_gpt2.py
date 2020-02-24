@@ -37,9 +37,7 @@ if is_torch_available():
 class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
-    all_generative_model_classes = (
-        (GPT2LMHeadModel,) if is_torch_available() else ()
-    )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
+    all_generative_model_classes = (GPT2LMHeadModel,) if is_torch_available() else ()  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
 
     class GPT2ModelTester(object):
         def __init__(
@@ -165,7 +163,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 "presents": presents,
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size],
             )
             self.parent.assertEqual(len(result["presents"]), config.n_layer)
 
@@ -180,7 +178,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size],
             )
 
         def create_and_check_double_lm_head_model(
@@ -208,7 +206,8 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["lm_logits"].size()), [self.batch_size, self.num_choices, self.seq_length, self.vocab_size]
+                list(result["lm_logits"].size()),
+                [self.batch_size, self.num_choices, self.seq_length, self.vocab_size],
             )
             self.parent.assertListEqual(list(result["mc_logits"].size()), [self.batch_size, self.num_choices])
 
@@ -227,7 +226,11 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 choice_labels,
             ) = config_and_inputs
 
-            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
+            inputs_dict = {
+                "input_ids": input_ids,
+                "token_type_ids": token_type_ids,
+                "head_mask": head_mask,
+            }
 
             return config, inputs_dict
 
@@ -255,3 +258,34 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in list(GPT2_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = GPT2Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
+GPT2_PRETRAINED_MODEL_GENERATION_TEST_CASES = {
+    "distilgpt2": {
+        "seed": 0,
+        "input": [[464, 3290, 318, 13779]],  # The dog is cute
+        "exp_output": [
+            464,
+            3290,
+            318,
+            13779,
+            996,
+            339,
+            460,
+            3360,
+            655,
+            2513,
+            287,
+            262,
+            3952,
+            13,
+            632,
+            318,
+            407,
+            845,
+            3621,
+            #  284,
+            0,  # TODO(PVP): 0 is due to previous problems with pad_token. Should be changed to 284 once PR #2885 is merged
+        ],  # The dog is cute though he can sometimes just walk in the park. It is not very nice to
+    }
+}
