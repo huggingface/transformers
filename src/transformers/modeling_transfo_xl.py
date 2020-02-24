@@ -645,7 +645,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         else:
             return None
 
-    def _update_mems(self, hids, mems, qlen, mlen):
+    def _update_mems(self, hids, mems, mlen, qlen):
         # does not deal with None
         if mems is None:
             return None
