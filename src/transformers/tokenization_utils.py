@@ -1138,10 +1138,11 @@ class PreTrainedTokenizer(object):
 
             def total_sequence_length(input_pairs):
                 first_ids, second_ids = input_pairs
-                if second_ids is not None:
-                    return len(first_ids) + len(second_ids) + self.max_len - self.max_len_sentences_pair
-                else:
-                    return len(first_ids) + self.max_len - self.max_len_single_sentence
+                return len(first_ids) + (
+                    self.num_added_tokens()
+                    if second_ids is None
+                    else (len(second_ids) + self.num_added_tokens(pair=True))
+                )
 
             max_length = max([total_sequence_length(ids) for ids in input_ids])
 
