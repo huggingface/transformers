@@ -216,7 +216,6 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class CTRLModelLanguageGenerationTest(unittest.TestCase):
-
     @slow
     def test_lm_generate_ctrl(self):
         model = CTRLLMHeadModel.from_pretrained("ctrl")

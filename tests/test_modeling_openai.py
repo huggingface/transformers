@@ -212,7 +212,6 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
-
     @slow
     def test_lm_generate_openai_gpt(self):
         model = OpenAIGPTLMHeadModel.from_pretrained("openai-gpt")
