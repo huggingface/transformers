@@ -121,10 +121,16 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
 
         try:
-            vocab_dict = torch.load(pretrained_vocab_file)
-            for key, value in vocab_dict.items():
-                if key not in self.__dict__:
-                    self.__dict__[key] = value
+            if pretrained_vocab_file is not None:
+                # Hack because, honestly this tokenizer was not made to be used
+                # in a library like ours, at all.
+                vocab_dict = torch.load(pretrained_vocab_file)
+                for key, value in vocab_dict.items():
+                    if key not in self.__dict__:
+                        self.__dict__[key] = value
+
+            if vocab_file is not None:
+                self.build_vocab()
         except Exception:
             raise ValueError(
                 "Unable to parse file {}. Unknown format. "
