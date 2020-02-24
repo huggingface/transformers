@@ -641,10 +641,6 @@ class ModelTesterMixin:
 global_rng = random.Random()
 
 
-def list_to_torch_tensor(tokens_list):
-    return torch.tensor(tokens_list, dtype=torch.long, device=torch_device)
-
-
 def ids_tensor(shape, vocab_size, rng=None, name=None):
     #  Creates a random int32 tensor of the shape within the vocab size
     if rng is None:
