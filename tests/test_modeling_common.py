@@ -641,7 +641,7 @@ global_rng = random.Random()
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None):
-    """Creates a random int32 tensor of the shape within the vocab size."""
+    #  Creates a random int32 tensor of the shape within the vocab size
     if rng is None:
         rng = global_rng
 
