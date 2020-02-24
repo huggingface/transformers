@@ -22,7 +22,7 @@ import unittest
 
 from transformers import is_torch_available
 
-from .utils import require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 if is_torch_available():
