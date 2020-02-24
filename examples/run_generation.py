@@ -152,11 +152,8 @@ def adjust_length_to_model(length, max_sequence_length):
     return length
 
 
-def main(model_type: str = typer.Option(..., help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys())),
-         model_name_or_path: str = typer.Option(
-             ...,
-             help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
-         ),
+def main(model_type: str,
+         model_name_or_path: str,
          prompt: str = "",
          length: int = 20,
          stop_token: str = typer.Option(None, help="Token at which text generation is stopped"),
@@ -167,10 +164,18 @@ def main(model_type: str = typer.Option(..., help="Model type selected in the li
          padding_text: str = typer.Option("", help="Padding text for Transfo-XL and XLNet."),
          xlm_language: str = typer.Option("", help="Optional language when used with the XLM model"),
          seed: int = typer.Option(42, help="random seed for initialization"),
-         cuda: bool = typer.Option(True, help="Use CUDA if available."),
+         no_cuda: bool = typer.Option(False, '--no-cuda', help="Don't use CUDA and run on CPU."),
          num_return_sequences: int = typer.Option(1, help="The number of samples to generate.")):
+    """Generate text based on a prompt using one of
+    [gpt2, ctrl, openai-gpt, xlnet, transfo-xl, xlm] as the model_type
+    and a a supported model name or path for that model_type
+
+    e.g.
+
+        $ python examples/run_generation.py gpt2 distilgpt2
+    """
      
-    device = torch.device("cuda" if torch.cuda.is_available() and cuda else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() and not no_cuda else "cpu")
     n_gpu = torch.cuda.device_count()
 
     set_seed(seed, n_gpu)
@@ -189,7 +194,7 @@ def main(model_type: str = typer.Option(..., help="Model type selected in the li
 
     length = adjust_length_to_model(length, max_sequence_length=model.config.max_position_embeddings)
 
-    prompt_text = prompt if prompt else input("Model prompt >>> ")
+    prompt_text = prompt if prompt else typer.prompt("Model prompt >>> ")
 
     # Different models need different input formatting and/or extra arguments
     requires_preprocessing = model_type in PREPROCESSING_FUNCTIONS.keys()
