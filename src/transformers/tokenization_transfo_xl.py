@@ -22,6 +22,7 @@ import glob
 import logging
 import os
 import pickle
+import re
 from collections import Counter, OrderedDict
 from typing import List, Optional, Tuple, Union
 
@@ -114,6 +115,9 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.delimiter = delimiter
         self.vocab_file = vocab_file
         self.never_split = never_split
+        self.punctuation_symbols = '!"#$%&()*+,-./\:;<=>?@[\\]^_`{|}~'  # noqa: W605
+        self.punction_without_space_before_pattern = re.compile(r"[^\s][{}]".format(self.punctuation_symbols))
+        self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
 
         if pretrained_vocab_file is not None:
             # Hack because, honestly this tokenizer was not made to be used
@@ -125,6 +129,11 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
         if vocab_file is not None:
             self.build_vocab()
+
+    def _compile_space_around_punctuation_pattern(self):
+        look_ahead_for_special_token = "(?=[{}])".format(self.punctuation_symbols)
+        look_ahead_to_match_all_except_space = "(?=[^\s])"  # noqa: W605
+        return re.compile(r"" + look_ahead_for_special_token + look_ahead_to_match_all_except_space)
 
     def count_file(self, path, verbose=False, add_eos=False):
         if verbose:
@@ -294,6 +303,19 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             return symbols + ["<eos>"]
         else:
             return symbols
+
+    def prepare_for_tokenization(self, text, **kwargs):
+        # add spaces before punctuation symbols as should be done in transfo-xl
+
+        if "add_space_before_punct_symbol" in kwargs and kwargs["add_space_before_punct_symbol"]:
+            text = self.punctuation_with_space_around_pattern.sub(r" ", text)
+        elif self.punction_without_space_before_pattern.search(text):
+            # searches until the first occurence of a punctuation symbol without surrounding spaces
+            logger.warning(
+                "You might want to consider setting `add_space_before_punct_symbol=True` as an argument to the `tokenizer.encode()` to avoid tokenizing words with punctuation symbols to the `<unk>` token"
+            )
+
+        return text
 
 
 class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
