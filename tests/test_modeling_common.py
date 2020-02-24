@@ -22,7 +22,7 @@ import unittest
 
 from transformers import is_torch_available
 
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -639,10 +639,6 @@ class ModelTesterMixin:
 
 
 global_rng = random.Random()
-
-
-def list_to_torch_tensor(tokens_list):
-    return torch.tensor(tokens_list, dtype=torch.long, device=torch_device)
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None):

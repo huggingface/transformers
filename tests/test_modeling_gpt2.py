@@ -24,6 +24,7 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 if is_torch_available():
+    import torch
     from transformers import (
         GPT2Config,
         GPT2Model,
@@ -260,32 +261,45 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-GPT2_PRETRAINED_MODEL_GENERATION_TEST_CASES = {
-    "distilgpt2": {
-        "seed": 0,
-        "input": [[464, 3290, 318, 13779]],  # The dog is cute
-        "exp_output": [
-            464,
-            3290,
-            318,
-            13779,
-            996,
-            339,
-            460,
-            3360,
-            655,
-            2513,
-            287,
-            262,
-            3952,
-            13,
-            632,
-            318,
-            407,
-            845,
-            3621,
-            #  284,
-            0,  # TODO(PVP): 0 is due to previous problems with pad_token. Should be changed to 284 once PR #2885 is merged
-        ],  # The dog is cute though he can sometimes just walk in the park. It is not very nice to
-    }
-}
+def prepare_gpt2_generation_special_tokens():
+    return {"bos_token_id": 50256, "eos_token_id": 50256}
+
+
+class GPT2ModelLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_distilgpt2(self):
+        model = GPT2LMHeadModel.from_pretrained("distilgpt2")
+        input_ids = torch.Tensor([[464, 3290, 318, 13779]]).long()
+        special_tokens = prepare_gpt2_generation_special_tokens()
+        expected_output_ids = (
+            [
+                464,
+                3290,
+                318,
+                13779,
+                996,
+                339,
+                460,
+                3360,
+                655,
+                2513,
+                287,
+                262,
+                3952,
+                13,
+                632,
+                318,
+                407,
+                845,
+                3621,
+                #  284,
+                50256,  # TODO(PVP): 50256 is due to previous problems with pad_token. Should be changed to 284 once PR #2885 is merged
+            ]
+        )  # The dog is cute though he can sometimes just walk in the park. It is not very nice to
+        torch.manual_seed(0)
+
+        output_ids = model.generate(
+            input_ids, bos_token_id=special_tokens["bos_token_id"], eos_token_ids=special_tokens["eos_token_id"]
+        )
+
+        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
