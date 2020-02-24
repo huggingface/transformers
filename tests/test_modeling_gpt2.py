@@ -291,8 +291,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             407,
             845,
             3621,
-            #  284,
-            50256,  # TODO(PVP): 50256 is due to previous problems with pad_token. Should be changed to 284 once PR #2885 is merged
+            284,
         ]  # The dog is cute though he can sometimes just walk in the park. It is not very nice to
         torch.manual_seed(0)
 
