@@ -957,7 +957,7 @@ class BartForMaskedLM(PretrainedBartModel):
             encoder_outputs, decoder_cached_states = None, None
         else:
             encoder_outputs, decoder_cached_states = past
-
+        #bsz, tgt_len = decoder_input_ids.size()[:2]
         return {
             "input_ids": input_ids,
             "layer_state": decoder_cached_states,
@@ -1023,7 +1023,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
         # decoder tokens
         prev_output_tokens = src_tokens.new(batch_size * num_beams, 2).long().fill_(-1)
-        prev_output_tokens[:, 0] = 2 #  HARDCODED BOS, FIXME(SS)
+        prev_output_tokens[:, 0] = 2 #  HARDCODED EOS, FIXME(SS)
         prev_output_tokens[:, 1] = 0  # HARDCODED BOS, FIXME(SS)
         # cache compute states
         past = None
@@ -1033,9 +1033,11 @@ class BartForMaskedLM(PretrainedBartModel):
         step= -1
         while cur_len < max_length:
             step+=1
-            print(f'step: {step}')
-            decoder_input_ids = prev_output_tokens[:, :step+1]
+
+            decoder_input_ids = prev_output_tokens#[:, :step+1]
             model_inputs = self.prepare_inputs_for_generation(src_tokens, past, decoder_input_ids=decoder_input_ids,)
+            print('***')
+            print(f'STEP: {step}, dci shape {decoder_input_ids.shape}')
             print(f"called at step {step} with: {model_inputs['decoder_input_ids']}")
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             scores = F.log_softmax(outputs[0][:, -1, :], dim=1)  # (batch_size * num_beams, vocab_size)
@@ -1043,8 +1045,7 @@ class BartForMaskedLM(PretrainedBartModel):
             print(scores.shape)
             scores[:, pad_token_id] = -1e5  # fairseq has this
             scores[:, eos_token_ids] = -1e5
-            # unk is 3?
-            # they do unk
+            # unk is 3? they do unk
 
             # if model has past, then set the past variable to speed up decoding
             if self._do_output_past(outputs):
@@ -1096,7 +1097,6 @@ class BartForMaskedLM(PretrainedBartModel):
 
             # for each sentence
             for batch_idx in range(batch_size):
-
                 # if we are done with this sentence
                 done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
                     next_scores[batch_idx].max().item()
@@ -1105,7 +1105,7 @@ class BartForMaskedLM(PretrainedBartModel):
                     raise ValueError('done')
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
-                    ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
+                    ), "Example can only be done if at least {} beams have been generated".format(num_beams)
                     assert (
                         eos_token_ids is not None and pad_token_id is not None
                     ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
@@ -1140,7 +1140,8 @@ class BartForMaskedLM(PretrainedBartModel):
                 assert len(next_sent_beam) == num_beams, "Beam should always be full"
                 next_batch_beam.extend(next_sent_beam)
                 assert len(next_batch_beam) == num_beams * (batch_idx + 1)
-                print(f'next_sent_beam: {next_sent_beam}')
+                #print(f'next_sent_beam: {next_sent_beam}')
+                #print(f'next_batch_beam: {next_batch_beam}')
 
             # sanity check / prepare next batch
             assert len(next_batch_beam) == batch_size * num_beams
@@ -1154,6 +1155,12 @@ class BartForMaskedLM(PretrainedBartModel):
             prev_output_tokens = prev_output_tokens[beam_idx, :]
             prev_output_tokens = torch.cat([prev_output_tokens, beam_words.unsqueeze(1)], dim=-1)
             print(f'prev_output_tokens: {prev_output_tokens}')
+
+
+            # re-order batch
+            #src_tokens = src_tokens[beam_idx, :]
+            #src_tokens = torch.cat([src_tokens, beam_words.unsqueeze(1)], dim=-1)
+
 
             # re-order internal states
             if past:
@@ -1174,18 +1181,22 @@ class BartForMaskedLM(PretrainedBartModel):
                     # get beam and word IDs
                     beam_id = idx // vocab_size
                     word_id = idx % vocab_size
+                    # This may be fucked up because it is only the score of the generated, not the generated conditional on the input_ids
                     generated_hyps[batch_idx].add(
-                        src_tokens[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item()
+                        prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item()
                     )
 
         # select the best hypotheses
         sent_lengths = src_tokens.new(batch_size)
         best = []
-
+        #print(generated_hyps)
         for i, hypotheses in enumerate(generated_hyps):
             best_hyp = max(hypotheses.beams, key=lambda x: x[0])[1]
             sent_lengths[i] = len(best_hyp)
             best.append(best_hyp)
+        print(f'best hypos: {best}')
+        print(f'sent_lengths: {sent_lengths}')
+
 
         # shorter batches are filled with pad_token
         if sent_lengths.min().item() != sent_lengths.max().item():
