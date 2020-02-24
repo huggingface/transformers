@@ -23,6 +23,7 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 if is_torch_available():
+    import torch
     from transformers import CTRLConfig, CTRLModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, CTRLLMHeadModel
 
 
@@ -212,3 +213,36 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in list(CTRL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = CTRLModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
+class CTRLModelLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_ctrl(self):
+        model = CTRLLMHeadModel.from_pretrained("ctrl")
+        input_ids = torch.Tensor([[11859, 586, 20984, 8]]).long()  # Legal My neighbor is
+        expected_output_ids = [
+            11859,
+            586,
+            20984,
+            8,
+            13391,
+            3,
+            980,
+            8258,
+            72,
+            327,
+            148,
+            2,
+            53,
+            29,
+            226,
+            3,
+            780,
+            49,
+            3,
+            980,
+        ]  # Legal My neighbor is refusing to pay rent after 2 years and we are having to force him to pay
+        torch.manual_seed(0)
+
+        output_ids = model.generate(input_ids)
+        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

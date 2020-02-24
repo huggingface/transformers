@@ -24,6 +24,7 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 if is_torch_available():
+    import torch
     from transformers import (
         GPT2Config,
         GPT2Model,
@@ -165,7 +166,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 "presents": presents,
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size],
             )
             self.parent.assertEqual(len(result["presents"]), config.n_layer)
 
@@ -180,7 +181,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["lm_logits"].size()), [self.batch_size, self.seq_length, self.vocab_size],
             )
 
         def create_and_check_double_lm_head_model(
@@ -208,7 +209,8 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["lm_logits"].size()), [self.batch_size, self.num_choices, self.seq_length, self.vocab_size]
+                list(result["lm_logits"].size()),
+                [self.batch_size, self.num_choices, self.seq_length, self.vocab_size],
             )
             self.parent.assertListEqual(list(result["mc_logits"].size()), [self.batch_size, self.num_choices])
 
@@ -227,7 +229,11 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 choice_labels,
             ) = config_and_inputs
 
-            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
+            inputs_dict = {
+                "input_ids": input_ids,
+                "token_type_ids": token_type_ids,
+                "head_mask": head_mask,
+            }
 
             return config, inputs_dict
 
@@ -255,3 +261,84 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in list(GPT2_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = GPT2Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
+def prepare_generation_special_tokens():
+    return {"bos_token_id": 50256, "eos_token_id": 50256}
+
+
+class GPT2ModelLanguageGenerationTest(unittest.TestCase):
+
+    special_tokens = prepare_generation_special_tokens()
+
+    @slow
+    def test_lm_generate_gpt2(self):
+        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        input_ids = torch.Tensor([[464, 3290, 318, 13779]]).long()  # The dog is cute
+        expected_output_ids = [
+            464,
+            3290,
+            318,
+            13779,
+            1165,
+            13,
+            632,
+            7832,
+            284,
+            6437,
+            319,
+            502,
+            290,
+            318,
+            922,
+            329,
+            502,
+            357,
+            1169,
+            3290,
+        ]  # The dog is cute too. It likes to rub on me and is good for me (the dog
+        torch.manual_seed(0)
+
+        output_ids = model.generate(
+            input_ids,
+            bos_token_id=self.special_tokens["bos_token_id"],
+            eos_token_ids=self.special_tokens["eos_token_id"],
+        )
+
+        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+
+    @slow
+    def test_lm_generate_distilgpt2(self):
+        model = GPT2LMHeadModel.from_pretrained("distilgpt2")
+        input_ids = torch.Tensor([[464, 3290, 318, 13779]]).long()  # The dog is cute
+        expected_output_ids = [
+            464,
+            3290,
+            318,
+            13779,
+            996,
+            339,
+            460,
+            3360,
+            655,
+            2513,
+            287,
+            262,
+            3952,
+            13,
+            632,
+            318,
+            407,
+            845,
+            3621,
+            284,
+        ]  # The dog is cute though he can sometimes just walk in the park. It is not very nice to
+        torch.manual_seed(0)
+
+        output_ids = model.generate(
+            input_ids,
+            bos_token_id=self.special_tokens["bos_token_id"],
+            eos_token_ids=self.special_tokens["eos_token_id"],
+        )
+
+        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
