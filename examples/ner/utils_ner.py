@@ -117,7 +117,7 @@ def convert_examples_to_features(
             label_ids.extend([label_map[label]] + [pad_token_label_id] * (len(word_tokens) - 1))
 
         # Account for [CLS] and [SEP] with "- 2" and with "- 3" for RoBERTa.
-        special_tokens_count = 3 if sep_token_extra else 2
+        special_tokens_count = tokenizer.num_added_tokens()
         if len(tokens) > max_seq_length - special_tokens_count:
             tokens = tokens[: (max_seq_length - special_tokens_count)]
             label_ids = label_ids[: (max_seq_length - special_tokens_count)]
