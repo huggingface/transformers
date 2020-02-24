@@ -12,7 +12,7 @@ jobs:
             - checkout
             - run: sudo pip install .[sklearn,tf-cpu,torch,testing]
             - run: sudo pip install codecov pytest-cov
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: python -m pytest -n 4 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
     run_all_tests_torch_and_tf:
         working_directory: ~/transformers
@@ -27,7 +27,7 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install .[mecab,sklearn,tf-cpu,torch,testing]
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/
+            - run: python -m pytest -n 4 --dist=loadfile -s -v ./tests/
             - no_output_timeout: 4h
 
     run_tests_torch:
@@ -42,7 +42,7 @@ jobs:
             - checkout
             - run: sudo pip install .[sklearn,torch,testing]
             - run: sudo pip install codecov pytest-cov
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: python -m pytest -n 4 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
     run_tests_tf:
         working_directory: ~/transformers
@@ -56,7 +56,7 @@ jobs:
             - checkout
             - run: sudo pip install .[sklearn,tf-cpu,testing]
             - run: sudo pip install codecov pytest-cov
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: python -m pytest -n 4 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
@@ -80,7 +80,7 @@ jobs:
             - checkout
             - run: sudo pip install .[sklearn,torch,testing]
             - run: sudo pip install -r examples/requirements.txt
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./examples/
+            - run: python -m pytest -n 4 --dist=loadfile -s -v ./examples/
     deploy_doc:
         working_directory: ~/transformers
         docker:
