@@ -42,7 +42,7 @@ TransfoXLTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TransfoXLTokenizer
-    :members:
+    :members: save_vocabulary
 
 
 TransfoXLModel
