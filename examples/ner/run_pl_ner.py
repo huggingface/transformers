@@ -89,7 +89,8 @@ class NERTransformer(BaseTransformer):
         all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
         all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
-        return DataLoader(TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids))
+        return DataLoader(TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids),
+                          batch_size=batch_size)
 
     def validation_step(self, batch, batch_nb):
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
