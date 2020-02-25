@@ -101,11 +101,35 @@ def get_pairs(word):
 class GPT2Tokenizer(PreTrainedTokenizer):
     """
     GPT-2 BPE tokenizer. Peculiarities:
-        - Byte-level Byte-Pair-Encoding
-        - Requires a space to start the input string => the encoding and tokenize methods should be called with the
-          ``add_prefix_space`` flag set to ``True``.
-          Otherwise, this tokenizer's ``encode``, ``decode``, and ``tokenize`` methods will not conserve
-          the spaces at the beginning of a string: `tokenizer.decode(tokenizer.encode(" Hello")) = "Hello"`
+
+    - Byte-level Byte-Pair-Encoding
+    - Requires a space to start the input string => the encoding methods should be called with the
+      ``add_prefix_space`` flag set to ``True``.
+      Otherwise, this tokenizer ``encode`` and ``decode`` method will not conserve
+      the absence of a space at the beginning of a string:
+
+    ::
+
+        tokenizer.decode(tokenizer.encode("Hello")) = " Hello"
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
+
+    Args:
+        vocab_file (:obj:`str`):
+            Path to the vocabulary file.
+        merges_file (:obj:`str`):
+            Path to the merges file.
+        errors (:obj:`str`, `optional`, defaults to "replace"):
+            Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
+            <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
+        unk_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        bos_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The beginning of sequence token.
+        eos_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The end of sequence token.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -219,7 +243,16 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         return text
 
     def save_vocabulary(self, save_directory):
-        """Save the tokenizer vocabulary and merge files to a directory."""
+        """
+        Save the vocabulary and special tokens file to a directory.
+
+        Args:
+            save_directory (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
