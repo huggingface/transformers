@@ -41,7 +41,7 @@ jobs:
     - name: Run all tests on GPU
       env:
         OMP_NUM_THREADS: 1
-        RUN_SLOW: yes
+        # RUN_SLOW: yes
         RUN_CUSTOM_TOKENIZERS: yes
         USE_CUDA: yes
       run: |
