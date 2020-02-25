@@ -457,7 +457,7 @@ class BartDecoder(nn.Module):
                 - attentions
         """
         # embed positions
-        assert self.generation_mode
+        assert not self.generation_mode
 
         positions = self.embed_positions.forward(input_ids, generation_mode=self.generation_mode)
 
@@ -468,7 +468,7 @@ class BartDecoder(nn.Module):
             assert input_ids.ne(self.padding_idx).any()
 
         print(f'prev_output Shape after neg1slice: {input_ids.shape}')
-        print(f'positions after fun stuff: {positions.shape}, {positions}')
+        print(f'positions after fun stuff: {positions.shape}')
         print(f'enc_out.shape: {encoder_hidden_states.shape}')
 
         print(f'Incremental state is type {type(decoder_cached_states)}')
@@ -476,7 +476,9 @@ class BartDecoder(nn.Module):
             print(f'Incremental state is length {len(decoder_cached_states)}')
 
         x = self.embed_tokens(input_ids)
+
         x += positions
+
 
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -494,6 +496,7 @@ class BartDecoder(nn.Module):
                 continue
 
             layer_state = decoder_cached_states[i] if decoder_cached_states is not None else None
+            import pdb; pdb.set_trace()
             x, layer_self_attn, layer_past = decoder_layer.forward(
                 x,
                 encoder_hidden_states,
@@ -971,11 +974,12 @@ class BartForMaskedLM(PretrainedBartModel):
             encoder_outputs, decoder_cached_states = None, None
         else:
             encoder_outputs, decoder_cached_states = past
-        decoder_input_ids = kwargs.get('decoder_input_ids', input_ids[:, -1:])
+        decoder_cached_states = None #FIXME
+        decoder_input_ids = kwargs.get('decoder_input_ids')
         return {
             "input_ids": input_ids,
             "decoder_cached_states": decoder_cached_states,
-            "decoder_input_ids": kwargs.get('decoder_input_ids', input_ids[:, -1:]),
+            "decoder_input_ids": decoder_input_ids,
             "encoder_outputs": encoder_outputs,
             #"input_ids":
         }
@@ -1013,22 +1017,9 @@ class BartForMaskedLM(PretrainedBartModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
     @torch.no_grad()
-    def generate(
-        self,
-        input_ids=None,
-        max_length=None,
-        do_sample=True,
-        num_beams=None,
-        temperature=None,
-        top_k=None,
-        top_p=None,
-        repetition_penalty=None,
-        bos_token_id=None,
-        pad_token_id=None,
-        eos_token_ids=None,
-        length_penalty=None,
-        num_return_sequences=None,
+    def generate(self, input_ids=None, max_length=None, do_sample=True, num_beams=None, temperature=None, top_k=None, top_p=None, repetition_penalty=None, bos_token_id=None, pad_token_id=None, eos_token_ids=None, length_penalty=None, num_return_sequences=None,
     ):
         r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
         and beam-search.
@@ -1214,23 +1205,7 @@ class BartForMaskedLM(PretrainedBartModel):
         )
         return output
 
-    def _generate_beam_search(
-        self,
-        src_tokens,
-        cur_len,
-        max_length,
-        do_sample,
-        temperature,
-        top_k,
-        top_p,
-        repetition_penalty,
-        pad_token_id,
-        eos_token_ids,
-        batch_size,
-        length_penalty,
-        num_beams,
-        vocab_size,
-    ):
+    def _generate_beam_search(self, src_tokens, cur_len, max_length, do_sample, temperature, top_k, top_p, repetition_penalty, pad_token_id, eos_token_ids, batch_size, length_penalty, num_beams, vocab_size,):
         """ Generate sequences for each example with beam search.
         """
         # Expand input to num beams
@@ -1260,7 +1235,7 @@ class BartForMaskedLM(PretrainedBartModel):
         # done sentences
         done = [False for _ in range(batch_size)]
         step= -1
-        self.model.decoder.generation_mode = True
+        # self.model.decoder.generation_mode = True
         while cur_len < max_length:
             step+=1
 
@@ -1358,6 +1333,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
                     # add to generated hypotheses if end of sentence or last iteration
                     if eos_token_ids is not None and word_id.item() in eos_token_ids:
+                        raise ValueError(f'Found {word_id.item()} in next_words: {next_words}')
                         generated_hyps[batch_idx].add(
                             src_tokens[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item()
                         )
@@ -1382,7 +1358,7 @@ class BartForMaskedLM(PretrainedBartModel):
             beam_scores = beam_scores.new([x[0] for x in next_batch_beam])
             beam_words = src_tokens.new([x[1] for x in next_batch_beam])
             beam_idx = src_tokens.new([x[2] for x in next_batch_beam])
-            print(f'beam words: {beam_words}')
+            print(f'beam words: {beam_words}, beam_idx: {beam_idx}')
 
             # re-order batch
 
