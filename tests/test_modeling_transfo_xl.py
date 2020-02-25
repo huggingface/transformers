@@ -214,13 +214,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-def prepare_generation_special_tokens():
-    return {"eos_token_id": 0}
-
-
 class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
-
-    special_tokens = prepare_generation_special_tokens()
 
     @slow
     def test_lm_generate_transfo_xl_wt103(self):
@@ -578,6 +572,5 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
 
         torch.manual_seed(0)
 
-        output_ids = model.generate(input_ids, eos_token_ids=self.special_tokens["eos_token_id"], max_length=200)
-
+        output_ids = model.generate(input_ids, max_length=200)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
