@@ -81,13 +81,12 @@ class BaseTransformer(pl.LightningModule):
             cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
         )
         self.config, self.tokenizer, self.model = config, tokenizer, model
-        self.proc_rank = -1
         self.is_tpu = False
         if self.hparams.n_tpu_cores > 0:
             self.is_tpu = True
 
     def is_logger(self):
-        return self.proc_rank <= 0
+        return self.trainer.proc_rank <= 0
 
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"

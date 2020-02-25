@@ -1,4 +1,7 @@
-# Require pytorch-lightning=0.6
+# Install newest ptl.
+!pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
+
+
 curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-train.tsv?attredirects=0&d=1' \
 | grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > train.txt.tmp
 curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-dev.tsv?attredirects=0&d=1' \
