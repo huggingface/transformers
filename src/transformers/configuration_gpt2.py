@@ -134,6 +134,8 @@ class GPT2Config(PretrainedConfig):
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
+        bos_token_id=50256,
+        eos_token_id=50256,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -154,6 +156,9 @@ class GPT2Config(PretrainedConfig):
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
+
+        self.bos_token_id = bos_token_id
+        self.eos_token_ids = [eos_token_id]
 
     @property
     def max_position_embeddings(self):
