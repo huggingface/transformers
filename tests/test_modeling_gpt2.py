@@ -264,7 +264,6 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class GPT2ModelLanguageGenerationTest(unittest.TestCase):
-
     @slow
     def test_lm_generate_gpt2(self):
         model = GPT2LMHeadModel.from_pretrained("gpt2")
