@@ -72,6 +72,9 @@ CORPUS_NAME = "corpus.bin"
 class TransfoXLTokenizer(PreTrainedTokenizer):
     """
     Transformer-XL tokenizer adapted from Vocab class in https://github.com/kimiyoung/transformer-xl
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -189,7 +192,16 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             raise ValueError("No <unkown> token in vocabulary")
 
     def save_vocabulary(self, vocab_path):
-        """Save the tokenizer vocabulary to a directory or file."""
+        """
+        Save the vocabulary and special tokens file to a directory.
+
+        Args:
+            vocab_path (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
 
         logger.warning(
             "Please note you will not be able to load the save vocabulary in"
