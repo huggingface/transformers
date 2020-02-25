@@ -5,8 +5,6 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import logging
-import torch_xla
-import torch_xla.debug.metrics as met
 
 from transformers import (
     AdamW,
@@ -114,10 +112,6 @@ class BaseTransformer(pl.LightningModule):
             xm.optimizer_step(optimizer)
         else:
             optimizer.step()
-
-        print(met.metrics_report())
-        #print(torch_xla._XLAC._xla_metrics_report())
-
         optimizer.zero_grad()
         self.lr_scheduler.step()
 
