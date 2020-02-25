@@ -191,7 +191,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     The pad_token_id as it was added to the tokenizer. It is used to
                     make sure that the pad_token_id matches it's corresponding `token_embedding_id`,
                     which is equal to the `new_num_tokens`
-            
+
             Return: ``torch.nn.Embeddings``
                 Pointer to the input tokens Embeddings Module of the model
         """
@@ -206,14 +206,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     def add_bos_token_embedding(self, bos_token_id):
         """ Resizes the token embeddings and sets the pad token id to new token embedding
             The bos_token_id should correspond to the current self.config.vocab_size.
-            This function should be used when a <BOS> token was added to the tokenizer. 
+            This function should be used when a <BOS> token was added to the tokenizer.
 
             Arguments:
                 bos_token_id: int:
-                    The bos_token_id as it was added to the tokenizer. It is used to 
+                    The bos_token_id as it was added to the tokenizer. It is used to
                     make sure that the bos_token_id matches it's corresponding `token_embedding_id`,
                     which is equal to the `new_num_tokens`
-            
+
             Return: ``torch.nn.Embeddings``
                 Pointer to the input tokens Embeddings Module of the model
         """
@@ -228,14 +228,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     def add_eos_token_embedding(self, eos_token_id):
         """ Resizes the token embeddings and sets the pad token id to new token embedding
             The eos_token_id should correspond to the current self.config.vocab_size.
-            This function should be used when a <EOS> token was added to the tokenizer. 
+            This function should be used when a <EOS> token was added to the tokenizer.
 
             Arguments:
                 eos_token_id: int:
-                    The eos_token_id as it was added to the tokenizer. It is used to 
+                    The eos_token_id as it was added to the tokenizer. It is used to
                     make sure that the eos_token_id matches it's corresponding `token_embedding_id`,
                     which is equal to the `new_num_tokens`
-            
+
             Return: ``torch.nn.Embeddings``
                 Pointer to the input tokens Embeddings Module of the model
         """
@@ -741,7 +741,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
-            outputs = model.generate(max_length=40, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id, do_sample=False)  # do greedy decoding
+            outputs = model.generate(max_length=40, do_sample=False)  # do greedy decoding
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
@@ -756,7 +756,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
             input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, bos_token_id=tokenizer.bos_token_id, pad_token_id=tokenizer.pad_token_id, eos_token_ids=tokenizer.eos_token_id, num_return_sequences=3)  # 3 generate sequences using by sampling
+            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3)  # 3 generate sequences using by sampling
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
@@ -834,7 +834,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             pad_token_id is not None
         ), """ <PAD> token has to be defined to generate langugae. For models that don't have a <PAD> token. Please add a <PAD> token to the tokenizer and model before via:
         `tokenizer.add_special_tokens({'pad_token': '<PAD>'})`
-        `model.add_pad_token_embedding(len(tokenizer))`
+        `model.add_pad_token_embedding(pad_token_id=len(tokenizer)-1)`
         ."""
 
         # current position and vocab size
