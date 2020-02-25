@@ -1,8 +1,8 @@
-name: Run all tests on GPU
+name: Run all tests on GPU (self-hosted)
 
 on:
   push:
-  #  branches: ci/*
+  #  branches: ci-*
   repository_dispatch:
   schedule:
     - cron: "0 0 * * *"
