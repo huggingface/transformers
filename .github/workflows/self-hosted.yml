@@ -19,4 +19,8 @@ jobs:
     - name: Current dir
       run: pwd
     - run: nvidia-smi
-
+    - name: Create new python env
+      run: |
+        python -m venv .env
+        source .env/bin/activate
+    - run: which python
