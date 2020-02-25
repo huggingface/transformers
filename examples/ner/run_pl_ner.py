@@ -13,7 +13,7 @@ from transformer_base import BaseTransformer, add_generic_args, generic_train
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
 import torch_xla.core.xla_model as xm
-        
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,6 +25,8 @@ class NERTransformer(BaseTransformer):
     def __init__(self, hparams):
         self.labels = get_labels(hparams.labels)
         num_labels = len(self.labels)
+        self.pad_token_label_id = CrossEntropyLoss().ignore_index
+        args = hparams
         super(NERTransformer, self).__init__(hparams, num_labels)
 
     def forward(self, **inputs):
@@ -32,12 +34,7 @@ class NERTransformer(BaseTransformer):
 
     def training_step(self, batch, batch_num):
         "Compute loss"
-        # Temporary fix.
-        logger.info("***** start *****")
-
-        self.lr_scheduler.step(epoch=self.global_step)        
-        logger.info("***** mid *****")
-
+        self.lr_scheduler.step(epoch=self.global_step)
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
@@ -46,28 +43,54 @@ class NERTransformer(BaseTransformer):
 
         outputs = self.forward(**inputs)
         loss = outputs[0]
-        logger.info("***** log *****")
-        
         tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
         return {"loss": loss, "log": tensorboard_logs}
 
+    def _feature_file(mode):
+        return os.path.join(
+            self.hparams.data_dir,
+            "cached_{}_{}_{}".format(
+                mode, list(filter(None, self.hparams.model_name_or_path.split("/"))).pop(), str(self.hparams.max_seq_length)
+            ),
+        )
+
+    def prepare_data(self):
+        "Called by PTL to initialize data. Use the call to construct features"
+        args = self.hparams
+        for mode in ["train", "dev", "test"]:
+            cached_features_file = self._feature_file(mode)
+            if not os.path.exists(cached_features_file):
+                logger.info("Creating features from dataset file at %s", args.data_dir)
+                examples = read_examples_from_file(args.data_dir, mode)
+                features = convert_examples_to_features(
+                    examples,
+                    self.labels,
+                    args.max_seq_length,
+                    self.tokenizer,
+                    cls_token_at_end=bool(args.model_type in ["xlnet"]),
+                    cls_token=tokenizer.cls_token,
+                    cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
+                    sep_token=tokenizer.sep_token,
+                    sep_token_extra=bool(args.model_type in ["roberta"]),
+                    pad_on_left=bool(args.model_type in ["xlnet"]),
+                    pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
+                    pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
+                    pad_token_label_id=pad_token_label_id,
+                )
+                logger.info("Saving features into cached file %s", cached_features_file)
+                torch.save(features, cached_features_file)
+
+
     def load_dataset(self, mode, batch_size):
-        labels = get_labels(self.hparams.labels)
-        self.pad_token_label_id = CrossEntropyLoss().ignore_index
-        dataset = self.load_and_cache_examples(labels, self.pad_token_label_id, mode)
-
-        logger.info("train_samplers")
-                        
-        if mode == "train" or mode == "dev":
-            sampler = self.train_sampler(dataset)
-        else:
-            sampler = SequentialSampler(dataset)
-
-        logger.info("data loaders")
-        dataloader = DataLoader(dataset, sampler=sampler, batch_size=batch_size)
-        logger.info("data loaders")
-
-        return dataloader
+        "Load datasets. Called after prepare data."
+        cached_features_file = self._feature_file(mode)
+        logger.info("Loading features from cached file %s", cached_features_file)
+        features = torch.load(cached_features_file)
+        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
+        all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+        all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
+        return TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
 
     def validation_step(self, batch, batch_nb):
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
@@ -83,7 +106,7 @@ class NERTransformer(BaseTransformer):
                 "pred": preds, "target": out_label_ids}
 
     def _eval_end(self, outputs):
-        "Task specific validation"
+        "Evaluation called for both Val and Test"
         val_loss_mean = torch.stack([x["val_loss"] for x in outputs]).mean()
         preds = np.concatenate([x["pred"] for x in outputs], axis=0)
         preds = np.argmax(preds, axis=2)
@@ -149,82 +172,6 @@ class NERTransformer(BaseTransformer):
                                 "Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0]
                             )
         return ret
-
-    def load_and_cache_examples(self, labels, pad_token_label_id, mode):
-        args = self.hparams
-        tokenizer = self.tokenizer
-
-        # if self.trainer.proc_rank not in [-1, 0] and mode == "train":
-            # if not self.is_tpu:
-            #     # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-            #     torch.distributed.barrier()
-            # else:
-            #     logger.info("***** rendezvous1 *****")
-            #     xm.rendezvous("transformer.ner.cache_examples")
-
-        logger.info("***** start *****")
-        if self.is_tpu:
-            logger.info("***** rendezvous *****")
-            xm.rendezvous("transformer.train_dataloader.start")
-            logger.info("***** complete *****")
-
-        # Load data features from cache or dataset file
-        cached_features_file = os.path.join(
-            args.data_dir,
-            "cached_{}_{}_{}".format(
-                mode, list(filter(None, args.model_name_or_path.split("/"))).pop(), str(args.max_seq_length)
-            ),
-        )
-        if os.path.exists(cached_features_file) and not args.overwrite_cache:
-            logger.info("Loading features from cached file %s", cached_features_file)
-            features = torch.load(cached_features_file)
-            logger.info("***** convert *****")
-
-        else:
-            logger.info("Creating features from dataset file at %s", args.data_dir)
-            examples = read_examples_from_file(args.data_dir, mode)
-            features = convert_examples_to_features(
-                examples,
-                labels,
-                args.max_seq_length,
-                tokenizer,
-                cls_token_at_end=bool(args.model_type in ["xlnet"]),
-                cls_token=tokenizer.cls_token,
-                cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
-                sep_token=tokenizer.sep_token,
-                sep_token_extra=bool(args.model_type in ["roberta"]),
-                pad_on_left=bool(args.model_type in ["xlnet"]),
-                pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-                pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
-                pad_token_label_id=pad_token_label_id,
-            )
-            if self.trainer.proc_rank in [-1, 0]:
-                logger.info("Saving features into cached file %s", cached_features_file)
-                torch.save(features, cached_features_file)
-
-        # if self.trainer.proc_rank == 0 and mode == "train":
-        #     if not self.is_tpu:
-        #         torch.distributed.barrier()
-        #     else:
-        #         logger.info("***** rendezvous2 *****")
-
-        #         xm.rendezvous("transformer.ner.cache_examples")
-                
-        logger.info("***** convert *****")
-
-        # Convert to Tensors and build dataset
-        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
-
-        dataset = TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids)
-        # if self.is_tpu:
-        #     logger.info("***** ret *****")
-        #     xm.rendezvous("transformer_end")
-        #     logger.info("***** ret2 *****")
-
-        return dataset
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
