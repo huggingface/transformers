@@ -91,7 +91,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages("src"),
     install_requires=[
-        "numpy"
+        "numpy",
         # accessing files from S3 directly
         "boto3",
         # filesystem locks e.g. to prevent parallel downloads
