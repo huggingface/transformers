@@ -400,7 +400,6 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class XLMModelLanguageGenerationTest(unittest.TestCase):
-
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):
         model = XLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
