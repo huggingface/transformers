@@ -20,9 +20,7 @@ import logging
 import os
 import unicodedata
 
-
 from .file_utils import is_tokenizers_available
-
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
@@ -566,7 +564,8 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
     ):
         if not is_tokenizers_available():
             raise ImportError(
-                "Install `tokenizers` to use the fast tokenizers. See https://github.com/huggingface/tokenizers")
+                "Install `tokenizers` to use the fast tokenizers. See https://github.com/huggingface/tokenizers"
+            )
 
         super().__init__(
             BertWordPieceTokenizer(

@@ -37,6 +37,7 @@ from .configuration_auto import (
     XLNetConfig,
 )
 from .configuration_utils import PretrainedConfig
+from .file_utils import is_tokenizers_available
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_bart import BartTokenizer
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
@@ -53,8 +54,6 @@ from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
-
-from .file_utils import is_tokenizers_available
 
 
 logger = logging.getLogger(__name__)

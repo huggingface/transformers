@@ -21,8 +21,11 @@ import os
 import re
 from typing import List, Optional, Union
 
-from .tokenization_bert import BasicTokenizer
 from .file_utils import is_tokenizers_available
+from .tokenization_bert import BasicTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+
+
 if is_tokenizers_available():
     from tokenizers import Tokenizer
     from tokenizers.decoders import BPEDecoder
@@ -37,7 +40,6 @@ else:
     BaseTokenizer = BasicTokenizer
 
 
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -320,7 +322,8 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
         if not is_tokenizers_available():
             raise ImportError(
-                "Install `tokenizers` to use the fast tokenizers. See https://github.com/huggingface/tokenizers")
+                "Install `tokenizers` to use the fast tokenizers. See https://github.com/huggingface/tokenizers"
+            )
 
         kwargs.setdefault("unk_token", unk_token)
         super().__init__(

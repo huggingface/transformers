@@ -16,13 +16,15 @@
 
 
 import logging
+
 from .file_utils import is_tokenizers_available
+from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+
 
 if is_tokenizers_available():
     from tokenizers.processors import RobertaProcessing
 
 
-from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 
 
 logger = logging.getLogger(__name__)

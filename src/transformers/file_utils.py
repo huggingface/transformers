@@ -84,6 +84,7 @@ except (AttributeError, ImportError):
 
 try:
     import tokenizers
+
     _tokenizers_available = True  # pylint: disable=invalid-name
     logger.info("Tokenizers version {} available.".format(tokenizers.__version__))
 except ImportError:
@@ -115,8 +116,10 @@ def is_torch_available():
 def is_tf_available():
     return _tf_available
 
+
 def is_tokenizers_available():
     return _tokenizers_available
+
 
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):

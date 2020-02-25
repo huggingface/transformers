@@ -28,8 +28,11 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from .file_utils import cached_path, is_torch_available, is_tokenizers_available
+from .file_utils import cached_path, is_tokenizers_available, is_torch_available
 from .tokenization_bert import BasicTokenizer
+from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+
+
 if is_tokenizers_available():
     from tokenizers import Encoding, Tokenizer
     from tokenizers.implementations import BaseTokenizer
@@ -44,7 +47,6 @@ else:
     # to pass the tests: 'Encoding' is used in typing
     Encoding = None
 
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
 if is_torch_available():
@@ -436,7 +438,8 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
     ):
         if not is_tokenizers_available():
             raise ImportError(
-                "Install `tokenizers` to use the fast tokenizers. See https://github.com/huggingface/tokenizers")
+                "Install `tokenizers` to use the fast tokenizers. See https://github.com/huggingface/tokenizers"
+            )
         super().__init__(
             _TransfoXLDelimiterLookupTokenizer(
                 vocab_file=vocab_file or pretrained_vocab_file,
