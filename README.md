@@ -136,6 +136,14 @@ make test-examples
 
 For details, refer to the [contributing guide](https://github.com/huggingface/transformers/blob/master/CONTRIBUTING.md#tests).
 
+### Do you want to try out the new, blazingly fast tokenizers?
+
+The [`tokenizers`](https://github.com/huggingface/tokenizers) is currently being integrated into `transformers`. For large parts of the library, you can already try it out! To do so, simply install `tokenizers` and load a _fast_ tokenizer, for instance by using `AutoTokenizer`:
+
+```python
+tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased', use_fast=True)
+``` 
+
 ### Do you want to run a Transformer model on a mobile device?
 
 You should check out our [`swift-coreml-transformers`](https://github.com/huggingface/swift-coreml-transformers) repo.

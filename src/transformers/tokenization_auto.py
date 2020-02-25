@@ -159,7 +159,7 @@ class AutoTokenizer:
                 The proxies are used on each request.
 
             use_fast: (`optional`) boolean, default False:
-                Indicate if transformers should try to load the fast version of the tokenizer (True) or use the Python one (False).
+                Indicate if transformers should try to load the fast version of the tokenizer (True) or use the Python one (False). Requires the ``tokenizers`` library to be installed.
 
             inputs: (`optional`) positional arguments: will be passed to the Tokenizer ``__init__`` method.
 
@@ -175,6 +175,9 @@ class AutoTokenizer:
 
             # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
             tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
+
+            # Use fast tokenizer when available:
+            tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased', use_fast=True)
 
         """
         config = kwargs.pop("config", None)
