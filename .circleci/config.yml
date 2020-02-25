@@ -137,7 +137,7 @@ workflows:
     run_slow_tests:
         triggers:
             - schedule:
-                cron: "0 4 * * 1"
+                cron: "0 4 * * *"
                 filters:
                     branches:
                         only:
