@@ -25,7 +25,7 @@ from torch import Tensor, nn
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
-
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +174,14 @@ def make_padding_mask(input_ids, padding_idx=1):
         padding_mask = None
     return padding_mask
 
+
+def shape_printer(tensor_dct: Dict):
+    if isinstance(tensor_dct, torch.Tensor):
+        return tensor_dct.shape
+    elif tensor_dct is None:
+        return None
+    else:
+        return {k: shape_printer(v) for k,v in tensor_dct.items()}
 
 # Helper Modules
 
@@ -348,22 +356,12 @@ class DecoderLayer(nn.Module):
         Returns:
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
-        if layer_state is None:
-            prev_self_attn_state, prev_attn_state = (None, None)
-            layer_state = {}
-        else:
-            assert len(layer_state) == 3
-            prev_self_attn_state, prev_attn_state = (
-                layer_state["self"],
-                layer_state["encoder_decoder"],
-            )
 
         residual = x
-        if prev_self_attn_state is not None:
-            saved_state = prev_self_attn_state
-            layer_state["self"] = saved_state
         y = x  # TODO(SS): figure out why fairseq did this, then hopefully delete it
 
+        if layer_state is None: layer_state = {}
+        # next line mutates layer state
         x, self_attn_weights = self.self_attn.forward(
             query=x, key=y, value=y, layer_state=layer_state, need_weights=need_attn_weights, attn_mask=attention_mask,
         )
@@ -372,15 +370,13 @@ class DecoderLayer(nn.Module):
         x = self.self_attn_layer_norm(x)
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
-        if prev_attn_state is not None:
-            saved_state = prev_attn_state
-            layer_state["encoder_decoder"] = saved_state
+
         x, encoder_attn_weights = self.encoder_attn.forward(
             query=x,
             key=encoder_hidden_states,  # could be None
             value=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
-            layer_state=layer_state,
+            layer_state=layer_state,  # mutates layer state
             static_kv=True,
             need_weights=False,  # not returning it so why compute it
         )
@@ -401,13 +397,6 @@ class DecoderLayer(nn.Module):
             self_attn_weights,
             layer_state,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
-
-    def _past_to_dict(self, prev_attn_state):
-        prev_key, prev_value = prev_attn_state[:2]
-        saved_state = {"prev_key": prev_key, "prev_value": prev_value}
-        if len(prev_attn_state) >= 3:
-            saved_state["prev_key_padding_mask"] = prev_attn_state[2]
-        return saved_state
 
 
 class BartDecoder(nn.Module):
@@ -436,6 +425,9 @@ class BartDecoder(nn.Module):
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
         self.layernorm_embedding = LayerNorm(config.d_model)
+        self.generation_mode = False
+
+    #def set_generation_mode(self):
 
     def forward(
         self,
@@ -465,11 +457,26 @@ class BartDecoder(nn.Module):
                 - attentions
         """
         # embed positions
-        positions = self.embed_positions(input_ids)
-        x = self.embed_tokens(input_ids)
+        assert self.generation_mode
 
-        if positions is not None:  # TODO(SS): is this from fairseq?
-            x += positions
+        positions = self.embed_positions.forward(input_ids, generation_mode=self.generation_mode)
+
+
+        if self.generation_mode:
+            input_ids = input_ids[:, -1:]
+            positions = positions[:, -1:]  # happens after we embed them
+            assert input_ids.ne(self.padding_idx).any()
+
+        print(f'prev_output Shape after neg1slice: {input_ids.shape}')
+        print(f'positions after fun stuff: {positions.shape}, {positions}')
+        print(f'enc_out.shape: {encoder_hidden_states.shape}')
+
+        print(f'Incremental state is type {type(decoder_cached_states)}')
+        if decoder_cached_states is not None:
+            print(f'Incremental state is length {len(decoder_cached_states)}')
+
+        x = self.embed_tokens(input_ids)
+        x += positions
 
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -634,7 +641,7 @@ class SelfAttention(nn.Module):
 
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
-        if attn_mask is not None:
+        if attn_mask is not None and saved_state is None:
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
@@ -756,9 +763,14 @@ class LearnedPositionalEmbedding(nn.Embedding):
         num_embeddings += padding_idx + 1  # WHY?
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
 
-    def forward(self, input):
+    def forward(self, input, generation_mode=False):
         """Input is expected to be of size [bsz x seqlen]."""
-        positions = create_position_ids_from_input_ids(input, self.padding_idx)
+        if not generation_mode:
+            positions = create_position_ids_from_input_ids(input, self.padding_idx)
+        else:  # the position is our current step in the decoded sequence
+            pos = int(self.padding_idx + input.size(1))
+            print(f'Embedding pos: {pos}')
+            positions = input.data.new(1, 1).fill_(pos)
         return super().forward(positions)
 
 
@@ -801,6 +813,8 @@ RET_DOCSTRING = r"""
 """
 # Public API
 
+def print_shapemax(msg, tensor):
+    print(f'{msg} shape: {tensor.shape}, max: {tensor.max()}')
 
 @add_start_docstrings(
     "The bare BART Model outputting raw hidden-states without any specific head on top.", BART_START_DOCSTRING,
@@ -839,13 +853,13 @@ class BartModel(PretrainedBartModel):
         decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(
             self.config, input_ids, decoder_input_ids=decoder_input_ids, decoder_attn_mask=decoder_attention_mask,
         )
-
         assert decoder_input_ids is not None
         if encoder_outputs is None:
             # TODO(SS): make this caching more usable when overwrite generate
             encoder_outputs = self.encoder.forward(input_ids=input_ids, attention_mask=attention_mask)
         assert isinstance(encoder_outputs, tuple)
         # dec_features, layer_state, dec_hidden, dec_attn
+
         decoder_outputs = self.decoder.forward(
             decoder_input_ids,
             encoder_outputs[0],
@@ -957,14 +971,27 @@ class BartForMaskedLM(PretrainedBartModel):
             encoder_outputs, decoder_cached_states = None, None
         else:
             encoder_outputs, decoder_cached_states = past
-        #bsz, tgt_len = decoder_input_ids.size()[:2]
+        decoder_input_ids = kwargs.get('decoder_input_ids', input_ids[:, -1:])
         return {
             "input_ids": input_ids,
-            "layer_state": decoder_cached_states,
+            "decoder_cached_states": decoder_cached_states,
             "decoder_input_ids": kwargs.get('decoder_input_ids', input_ids[:, -1:]),
             "encoder_outputs": encoder_outputs,
             #"input_ids":
         }
+    @staticmethod
+    def use_prefix_toks(beam_size, lprobs, prefix_tokens, step, pad_token_id):
+        print(f'using prefix tokens: {prefix_tokens} at step {step}')
+        print(f'BEFORE: max lprob: {lprobs.max()}')
+        prefix_toks = prefix_tokens[:, step].unsqueeze(-1).repeat(1, beam_size).view(-1)
+        prefix_lprobs = lprobs.gather(-1, prefix_toks.unsqueeze(-1))
+        prefix_mask = prefix_toks.ne(pad_token_id)
+        assert prefix_mask.all(), prefix_mask.sum()
+        lprobs[prefix_mask] = -math.inf
+        lprobs[prefix_mask] = lprobs[prefix_mask].scatter_(
+            -1, prefix_toks[prefix_mask].unsqueeze(-1), prefix_lprobs[prefix_mask]
+        )
+        return prefix_toks
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
@@ -986,6 +1013,206 @@ class BartForMaskedLM(PretrainedBartModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+    @torch.no_grad()
+    def generate(
+        self,
+        input_ids=None,
+        max_length=None,
+        do_sample=True,
+        num_beams=None,
+        temperature=None,
+        top_k=None,
+        top_p=None,
+        repetition_penalty=None,
+        bos_token_id=None,
+        pad_token_id=None,
+        eos_token_ids=None,
+        length_penalty=None,
+        num_return_sequences=None,
+    ):
+        r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
+        and beam-search.
+
+        Adapted in part from `Facebook's XLM beam search code`_.
+
+        .. _`Facebook's XLM beam search code`:
+           https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529
+
+
+        Parameters:
+
+            input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
+                The sequence used as a prompt for the generation. If `None` the method initializes
+                it as an empty `torch.LongTensor` of shape `(1,)`.
+
+            max_length: (`optional`) int
+                The max length of the sequence to be generated.  Between 1 and infinity. Default to 20.
+
+            do_sample: (`optional`) bool
+                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `True`.
+
+            num_beams: (`optional`) int
+                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
+
+            temperature: (`optional`) float
+                The value used to module the next token probabilities. Must be strictely positive. Default to 1.0.
+
+            top_k: (`optional`) int
+                The number of highest probability vocabulary tokens to keep for top-k-filtering. Between 1 and infinity. Default to 50.
+
+            top_p: (`optional`) float
+                The cumulative probability of parameter highest probability vocabulary tokens to keep for nucleus sampling. Must be between 0 and 1. Default to 1.
+
+            repetition_penalty: (`optional`) float
+                The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
+
+            bos_token_id: (`optional`) int
+                Beginning of sentence token if no prompt is provided. Default to 0.
+
+            eos_token_ids: (`optional`) int or list of int
+                End of sequence token or list of tokens to stop the generation. Default to 0.
+            length_penalty: (`optional`) float
+                Exponential penalty to the length. Default to 1.
+
+            num_return_sequences: (`optional`) int
+                The number of independently computed returned sequences for each element in the batch. Default to 1.
+
+        Return:
+
+            output: `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`
+                sequence_length is either equal to max_length or shorter if all batches finished early due to the `eos_token_id`
+
+        Examples::
+
+            tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
+            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            outputs = model.generate(max_length=40, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id, do_sample=False)  # do greedy decoding
+            print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
+
+            tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
+            model = AutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
+            input_context = 'The dog'
+            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
+            for i in range(3): #  3 output sequences were generated
+                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
+
+            tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
+            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            input_context = 'The dog'
+            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, bos_token_id=tokenizer.bos_token_id, pad_token_id=tokenizer.pad_token_id, eos_token_ids=tokenizer.eos_token_id, num_return_sequences=3)  # 3 generate sequences using by sampling
+            for i in range(3): #  3 output sequences were generated
+                print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
+
+            tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
+            model = AutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
+            input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
+            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences
+            print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
+
+        """
+
+        # We cannot generate if the model does not have a LM head
+        if self.get_output_embeddings() is None:
+            raise AttributeError(
+                "You tried to generate sequences with a model that does not have a LM Head."
+                "Please use another model class (e.g. `OpenAIGPTLMHeadModel`, `XLNetLMHeadModel`, `GPT2LMHeadModel`, `CTRLLMHeadModel`, `T5WithLMHeadModel`, `TransfoXLLMHeadModel`)"
+            )
+
+        max_length = max_length if max_length is not None else self.config.max_length
+        do_sample = do_sample if do_sample is not None else self.config.do_sample
+        num_beams = num_beams if num_beams is not None else self.config.num_beams
+        temperature = temperature if temperature is not None else self.config.temperature
+        top_k = top_k if top_k is not None else self.config.top_k
+        top_p = top_p if top_p is not None else self.config.top_p
+        repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
+        eos_token_ids = eos_token_ids if eos_token_ids is not None else self.config.eos_token_ids
+        length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
+        num_return_sequences = (
+            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+        )
+
+        if input_ids is not None:
+            batch_size = input_ids.shape[0]  # overriden by the input batch_size
+        else:
+            batch_size = 1
+        if isinstance(eos_token_ids, int):
+            eos_token_ids = [eos_token_ids]
+
+        assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictely positive integer."
+        assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
+        assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictely positive integer."
+        assert temperature > 0, "`temperature` should be strictely positive."
+        assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
+        assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
+        assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
+        assert input_ids is not None or (
+            isinstance(bos_token_id, int) and bos_token_id >= 0
+        ), "If input_ids is not defined, `bos_token_id` should be a positive integer."
+        assert pad_token_id is None or (
+            isinstance(pad_token_id, int) and (pad_token_id >= 0)
+        ), "`pad_token_id` should be a positive integer."
+        assert (eos_token_ids is None) or (
+            isinstance(eos_token_ids, (list, tuple)) and ((isinstance(e, int) and e >= 0) for e in eos_token_ids)
+        ), "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
+        assert length_penalty > 0, "`length_penalty` should be strictely positive."
+        assert (
+            isinstance(num_return_sequences, int) and num_return_sequences > 0
+        ), "`num_return_sequences` should be a strictely positive integer."
+
+        if input_ids is None:
+            assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
+                "you should either supply a context to complete as `input_ids` input "
+                "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
+            )
+            input_ids = torch.full(
+                (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device
+            )
+        else:
+            assert input_ids.dim() == 2, "Input prompt should be of shape (batch_size, sequence length)."
+
+        if pad_token_id is None and eos_token_ids is not None:
+            logger.warning(
+                "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_ids[0])
+            )
+            pad_token_id = eos_token_ids[0]
+
+        # current position and vocab size
+        cur_len = input_ids.shape[1]
+        vocab_size = self.config.vocab_size
+
+        if num_return_sequences != 1:
+            # Expand input to num return sequences
+            input_ids = input_ids.unsqueeze(1).expand(batch_size, num_return_sequences, cur_len)
+            input_ids = input_ids.contiguous().view(
+                batch_size * num_return_sequences, cur_len
+            )  # shape: (batch_size * num_return_sequences, cur_len)
+            effective_batch_size = batch_size * num_return_sequences
+        else:
+            effective_batch_size = batch_size
+
+
+        output = self._generate_beam_search(
+            input_ids,
+            cur_len,
+            max_length,
+            do_sample,
+            temperature,
+            top_k,
+            top_p,
+            repetition_penalty,
+            pad_token_id,
+            eos_token_ids,
+            effective_batch_size,
+            length_penalty,
+            num_beams,
+            vocab_size,
+        )
+        return output
 
     def _generate_beam_search(
         self,
@@ -1010,6 +1237,8 @@ class BartForMaskedLM(PretrainedBartModel):
         # assert src_tokens.shape == (batch_size * num_beams, cur_len)
         src_tokens = src_tokens.unsqueeze(1).expand(batch_size, num_beams, cur_len)
         src_tokens = src_tokens.contiguous().view(batch_size * num_beams, cur_len)  # (batch_size * num_beams, cur_len)
+        bos_token_id = 0
+        prefix_tokens = src_tokens.new_zeros((batch_size, 1)).fill_(bos_token_id)
 
         # generated hypotheses
         generated_hyps = [
@@ -1022,32 +1251,49 @@ class BartForMaskedLM(PretrainedBartModel):
         beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
 
         # decoder tokens
-        prev_output_tokens = src_tokens.new(batch_size * num_beams, 2).long().fill_(-1)
+        prev_output_tokens = src_tokens.new(batch_size * num_beams, 1).long().fill_(-1)
         prev_output_tokens[:, 0] = 2 #  HARDCODED EOS, FIXME(SS)
-        prev_output_tokens[:, 1] = 0  # HARDCODED BOS, FIXME(SS)
+        #prev_output_tokens[:, 1] = 0  # HARDCODED BOS, FIXME(SS)
         # cache compute states
         past = None
 
         # done sentences
         done = [False for _ in range(batch_size)]
         step= -1
+        self.model.decoder.generation_mode = True
         while cur_len < max_length:
             step+=1
 
             decoder_input_ids = prev_output_tokens#[:, :step+1]
             model_inputs = self.prepare_inputs_for_generation(src_tokens, past, decoder_input_ids=decoder_input_ids,)
+
             print('***')
             print(f'STEP: {step}, dci shape {decoder_input_ids.shape}')
             print(f"called at step {step} with: {model_inputs['decoder_input_ids']}")
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
-            scores = F.log_softmax(outputs[0][:, -1, :], dim=1)  # (batch_size * num_beams, vocab_size)
+            lprobs = F.log_softmax(outputs[0][:, -1, :], dim=-1)
+            print_shapemax('lprobs', lprobs)
+            print(f'133:{lprobs[:, 133]}')
             assert pad_token_id is not None, 'should break circleci'
-            print(scores.shape)
-            scores[:, pad_token_id] = -1e5  # fairseq has this
-            scores[:, eos_token_ids] = -1e5
+            lprobs[lprobs != lprobs] = -math.inf
+            lprobs[:, pad_token_id] = -math.inf # fairseq has this
+            #lprobs[:, eos_token_ids[0]] = -math.inf
+            scores = lprobs.clone()
+            # if step == 0:
+            #     # mutates lprobs
+            #     print(f'Using prefix_tokens={prefix_tokens}')
+            #     #print(f'Before: max lprob: {lprobs.max()}')
+            #     self.use_prefix_toks(num_beams, lprobs, prefix_tokens, 0, pad_token_id)
+            #     print(f'AFTER: max lprob: {lprobs.max()}')
+
+
+
+            #import pdb; pdb.set_trace()
+
             # unk is 3? they do unk
 
             # if model has past, then set the past variable to speed up decoding
+            assert self._do_output_past(outputs)
             if self._do_output_past(outputs):
                 past = outputs[1]
 
@@ -1061,33 +1307,21 @@ class BartForMaskedLM(PretrainedBartModel):
                         else:
                             scores[i, previous_token] /= repetition_penalty
 
-            if do_sample:
-                # Temperature (higher temperature => more likely to sample low probability tokens)
-                if temperature != 1.0:
-                    scores = scores / temperature
-                # Top-p/top-k filtering
-                scores = top_k_top_p_filtering(
-                    scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2
-                )  # (batch_size * num_beams, vocab_size)
-                # Sample 2 next words for each beam (so we have some spare tokens and match output of greedy beam search)
-                next_words = torch.multinomial(F.softmax(scores, dim=-1), num_samples=2)  # (batch_size * num_beams, 2)
-                # Compute next scores
-                _scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
-                _scores = torch.gather(_scores, -1, next_words)  # (batch_size * num_beams, 2)
-                next_scores = _scores + beam_scores[:, None].expand_as(_scores)  # (batch_size * num_beams, 2)
-                # Match shape of greedy beam search
-                next_words = next_words.view(batch_size, 2 * num_beams)  # (batch_size, 2 * num_beams)
-                next_scores = next_scores.view(batch_size, 2 * num_beams)  # (batch_size, 2 * num_beams)
-            else:
-                # do greedy beam search
-                scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
-                assert scores.size() == (batch_size * num_beams, vocab_size)
-                # Add the log prob of the new beams to the log prob of the beginning of the sequence (sum of logs == log of the product)
-                _scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * num_beams, vocab_size)
-                # re-organize to group the beam together (we are keeping top hypothesis accross beams)
-                _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
-                next_scores, next_words = torch.topk(_scores, 2 * num_beams, dim=1, largest=True, sorted=True)
-            print(next_scores, next_words)
+            assert not do_sample
+            # do greedy beam search
+            #scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
+            assert lprobs.size() == (batch_size * num_beams, vocab_size)
+            # Add the log prob of the new beams to the log prob of the beginning of the sequence (sum of logs == log of the product)
+            #if step == 0:
+            #    _scores = lprobs[:, ::num_beams, :].contiguous()
+            #else:
+            _scores = lprobs + beam_scores[:, None].expand_as(lprobs)  # (batch_size * num_beams, vocab_size)
+            # re-organize to group the beam together (we are keeping top hypothesis accross beams)
+            _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
+            next_scores, next_words = torch.topk(_scores, 2 * num_beams)
+            assert next_words.shape[1] == 2*num_beams
+            #print(f'next_words: {next_words}'}
+            print(f'next_scores: shape: {next_scores.shape}, max {next_scores.max()}')
 
             assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
 
@@ -1140,8 +1374,8 @@ class BartForMaskedLM(PretrainedBartModel):
                 assert len(next_sent_beam) == num_beams, "Beam should always be full"
                 next_batch_beam.extend(next_sent_beam)
                 assert len(next_batch_beam) == num_beams * (batch_idx + 1)
-                #print(f'next_sent_beam: {next_sent_beam}')
-                #print(f'next_batch_beam: {next_batch_beam}')
+                print(f'next_sent_beam: {next_sent_beam}')
+                print(f'next_batch_beam: {next_batch_beam}')
 
             # sanity check / prepare next batch
             assert len(next_batch_beam) == batch_size * num_beams
@@ -1163,8 +1397,8 @@ class BartForMaskedLM(PretrainedBartModel):
 
 
             # re-order internal states
-            if past:
-                past = self._reorder_cache(past, beam_idx)
+
+            past = self._reorder_cache(past, beam_idx)
 
             # update current length
             cur_len = cur_len + 1
