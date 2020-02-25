@@ -98,6 +98,7 @@ class BaseTransformer(pl.LightningModule):
 
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
+
         model = self.model
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
@@ -114,6 +115,14 @@ class BaseTransformer(pl.LightningModule):
         self.opt = optimizer
         return [optimizer]
 
+    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx, second_order_closure=None):
+        if self.trainer.use_tpu:
+            xm.optimizer_step(optimizer)
+        else:
+            optimizer.step()
+        optimizer.zero_grad()
+        self.lr_scheduler.step()
+
     def get_tqdm_dict(self):
         tqdm_dict = {"loss": "{:.3f}".format(self.trainer.avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
 
@@ -126,10 +135,9 @@ class BaseTransformer(pl.LightningModule):
         return self.validation_end(outputs)
 
     def train_dataloader(self):
-        dataset = self.load_dataset("train", self.hparams.train_batch_size)
-
+        dataloader = self.load_dataset("train", self.hparams.train_batch_size)
         t_total = (
-            len(dataset)
+            len(dataloader.dataset)
             // self.hparams.gradient_accumulation_steps
             * float(self.hparams.num_train_epochs)
         )
@@ -139,7 +147,7 @@ class BaseTransformer(pl.LightningModule):
             num_training_steps=t_total
         )
         self.lr_scheduler = scheduler
-        return dataset
+        return dataloader
 
     def val_dataloader(self):
         return self.load_dataset("dev", self.hparams.eval_batch_size)
