@@ -6,8 +6,6 @@ import pytorch_lightning as pl
 import torch
 import logging
 
-import torch_xla.core.xla_model as xm
-
 from transformers import (
     AdamW,
     BertConfig,
@@ -85,7 +83,7 @@ class BaseTransformer(pl.LightningModule):
         self.config, self.tokenizer, self.model = config, tokenizer, model
         self.proc_rank = -1
         self.is_tpu = False
-        if self.hparams.n_tpu > 0:
+        if self.hparams.n_tpu_cores > 0:
             self.is_tpu = True
 
     def is_logger(self):
@@ -130,7 +128,8 @@ class BaseTransformer(pl.LightningModule):
         return self.validation_end(outputs)
 
     def train_dataloader(self):
-        dataloader = self.load_dataset("train", self.hparams.train_batch_size)
+        train_batch_size = self.hparams.train_batch_size * max(1, args.n_gpu, args.n_tpu_cores)
+        dataloader = self.load_dataset("train", train_batch_size)
         t_total = (
             len(dataloader.dataset)
             // self.hparams.gradient_accumulation_steps
@@ -269,8 +268,10 @@ def generic_train(model, args):
         train_params["use_amp"] = args.fp16
         train_params["amp_level"] = args.fp16_opt_level
 
-    if args.n_tpu > 0:
-        train_params["num_tpu_cores"] = args.n_tpu
+    if args.n_tpu_cores > 0:
+        global xm
+        import torch_xla.core.xla_model as xm
+        train_params["num_tpu_cores"] = args.n_tpu_cores
         train_params["gpus"] = 0
 
     if args.n_gpu > 1:

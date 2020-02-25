@@ -7,12 +7,10 @@ import numpy as np
 import torch
 from seqeval.metrics import f1_score, precision_score, recall_score
 from torch.nn import CrossEntropyLoss
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset
 
 from transformer_base import BaseTransformer, add_generic_args, generic_train
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
-
-import torch_xla.core.xla_model as xm
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +24,13 @@ class NERTransformer(BaseTransformer):
         self.labels = get_labels(hparams.labels)
         num_labels = len(self.labels)
         self.pad_token_label_id = CrossEntropyLoss().ignore_index
-        args = hparams
         super(NERTransformer, self).__init__(hparams, num_labels)
 
     def forward(self, **inputs):
         return self.model(**inputs)
 
     def training_step(self, batch, batch_num):
-        "Compute loss"
+        "Compute loss and log."
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
@@ -54,7 +51,7 @@ class NERTransformer(BaseTransformer):
         )
 
     def prepare_data(self):
-        "Called by PTL to initialize data. Use the call to construct features"
+        "Called to initialize data. Use the call to construct features"
         args = self.hparams
         for mode in ["train", "dev", "test"]:
             cached_features_file = self._feature_file(mode)
@@ -93,6 +90,8 @@ class NERTransformer(BaseTransformer):
                           batch_size=batch_size)
 
     def validation_step(self, batch, batch_nb):
+        "Compute validation"
+
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
