@@ -3,6 +3,8 @@
 import os
 import logging
 
+logging.basicConfig(level=logging.INFO)
+
 import tensorflow as tf
 import numpy as np
 
@@ -18,7 +20,6 @@ EPOCHS = 2
 
 tf.config.optimizer.set_jit(USE_XLA)
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": USE_AMP})
-logging.getLogger("transformers.trainer_tf").setLevel(logging.INFO)
 
 kwargs = {
     "pretrained_model_name_or_path": "bert-base-multilingual-cased",

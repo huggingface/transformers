@@ -3,6 +3,8 @@
 import os
 import logging
 
+logging.basicConfig(level=logging.INFO)
+
 import tensorflow as tf
 import tensorflow_datasets
 
@@ -46,7 +48,8 @@ kwargs = {
     "task": TASK,
     "architecture": "TFBertForSequenceClassification",
     "max_len": 128,
-    "metric_name": "sparse_categorical_accuracy"
+    "metric_name": "sparse_categorical_accuracy",
+    "max_grad_norm": 1.0
 }
 
 trainer = TFTrainer(**kwargs)
