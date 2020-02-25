@@ -82,6 +82,14 @@ except (AttributeError, ImportError):
         "PYTORCH_TRANSFORMERS_CACHE", os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
     )
 
+try:
+    import tokenizers
+    _tokenizers_available = True  # pylint: disable=invalid-name
+    logger.info("Tokenizers version {} available.".format(tokenizers.__version__))
+except ImportError:
+    logger.info("Fast tokenizers not available")
+    _tokenizers_available = False  # pylint: disable=invalid-name
+
 PYTORCH_TRANSFORMERS_CACHE = PYTORCH_PRETRAINED_BERT_CACHE  # Kept for backward compatibility
 TRANSFORMERS_CACHE = PYTORCH_PRETRAINED_BERT_CACHE  # Kept for backward compatibility
 
@@ -107,6 +115,8 @@ def is_torch_available():
 def is_tf_available():
     return _tf_available
 
+def is_tokenizers_available():
+    return _tokenizers_available
 
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):
