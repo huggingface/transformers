@@ -19,6 +19,7 @@ import os.path
 import random
 import tempfile
 import unittest
+import ipdb
 
 from transformers import is_torch_available
 
@@ -464,6 +465,65 @@ class ModelTesterMixin:
                 ],
             )
 
+    def test_add_pad_token(self):
+        self._check_add_special_tokens('pad_token_id')
+
+    def test_add_bos_token(self):
+        self._check_add_special_tokens('bos_token_id')
+
+    def test_add_eos_token(self):
+        self._check_add_special_tokens('eos_token_ids')
+
+    def _check_add_special_tokens(self, special_token):
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+
+            if getattr(config, special_token) is not None:
+                setattr(config, special_token, None)
+
+            special_token_id = config.vocab_size
+            model = model_class(config)
+
+            # Retrieve the prev model vocab size and prev embeddings and clone theme
+            prev_model_vocab_size = config.vocab_size
+            prev_model_embed = model.resize_token_embeddings(prev_model_vocab_size)
+            prev_model_embed_weight = prev_model_embed.weight.clone()
+
+            if special_token == 'pad_token_id':
+                model_embed = model.add_pad_token_embedding(special_token_id)
+            elif special_token == 'bos_token_id':
+                model_embed = model.add_bos_token_embedding(special_token_id)
+            elif special_token == 'eos_token_ids':
+                model_embed = model.add_eos_token_embedding(special_token_id)
+            else:
+                raise ValueError('{} does not exist'.format(special_token))
+
+            # Check that special token is correctly set
+            set_special_token = getattr(model.config, special_token)
+            if type(set_special_token) is list:
+                set_special_token = set_special_token[0]
+            self.assertEqual(set_special_token, special_token_id)
+
+            # Check that vocab size was increased by 1
+            self.assertEqual(model.config.vocab_size, prev_model_vocab_size + 1)
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            self.assertEqual(model_embed.weight.shape[0], prev_model_embed_weight.shape[0] + 1)
+
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**inputs_dict)
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(prev_model_embed_weight, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+            self.assertTrue(models_equal)
+
     def test_resize_tokens_embeddings(self):
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
@@ -611,6 +671,7 @@ class ModelTesterMixin:
             if model.config.pad_token_id is None:
                 model.config.pad_token_id = model.config.vocab_size
                 model.resize_token_embeddings(model.config.vocab_size + 1)
+                self.model_tester.vocab_size = model.config.vocab_size
 
             if config.bos_token_id is None:
                 with self.assertRaises(AssertionError):

@@ -242,7 +242,7 @@ class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
 
         # add padding token to avoid assert statement
         model.config.pad_token_id = model.config.vocab_size
-        model.resize_token_embeddings(model.config.pad_token_id + 1)
+        model.add_pad_token_embedding(model.config.pad_token_id)
         output_ids = model.generate(input_ids)
 
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
