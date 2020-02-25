@@ -61,6 +61,7 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     quickstart
     glossary
     pretrained_models
+    usage
     model_sharing
     examples
     notebooks
