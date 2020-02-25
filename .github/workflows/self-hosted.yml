@@ -1,0 +1,22 @@
+name: Run all tests on GPU
+
+on:
+  push:
+  # repository_dispatch:
+  # schedule:
+  #   - cron: "*/5 * * * *"
+
+jobs:
+  gpu:
+    runs-on: self-hosted
+    steps:
+    - uses: actions/checkout@v2
+    - name: Python version
+      run: |
+        which python
+        python --version
+        pip --version
+    - name: Current dir
+      run: pwd
+    - run: nvidia-smi
+
