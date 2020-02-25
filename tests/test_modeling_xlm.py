@@ -399,13 +399,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-def prepare_generation_special_tokens():
-    return {"bos_token_id": 0, "pad_token_id": 2}
-
-
 class XLMModelLanguageGenerationTest(unittest.TestCase):
-
-    special_tokens = prepare_generation_special_tokens()
 
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):
@@ -435,10 +429,6 @@ class XLMModelLanguageGenerationTest(unittest.TestCase):
         ]  # The dog is nothing is it!!!!!!!!!!!! TODO (PVP): this sentence (and others I tried) does not make much sense, there seems to be a problem with xlm language generation.
         torch.manual_seed(0)
 
-        output_ids = model.generate(
-            input_ids,
-            bos_token_id=self.special_tokens["bos_token_id"],
-            pad_token_id=self.special_tokens["pad_token_id"],
-        )
+        output_ids = model.generate(input_ids)
 
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
