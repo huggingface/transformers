@@ -27,14 +27,23 @@ from collections import Counter, OrderedDict
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
-from tokenizers import Encoding, Tokenizer
-from tokenizers.implementations import BaseTokenizer
-from tokenizers.models import WordLevel
-from tokenizers.normalizers import Lowercase, Sequence, unicode_normalizer_from_str
-from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
-from tokenizers.processors import BertProcessing
 
-from .file_utils import cached_path, is_torch_available
+from .file_utils import cached_path, is_torch_available, is_tokenizers_available
+from .tokenization_bert import BasicTokenizer
+if is_tokenizers_available():
+    from tokenizers import Encoding, Tokenizer
+    from tokenizers.implementations import BaseTokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.normalizers import Lowercase, Sequence, unicode_normalizer_from_str
+    from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
+    from tokenizers.processors import BertProcessing
+else:
+    # only to please the tests, BaseTokenizer is never
+    # actually replaced by BasicTokenizer
+    BaseTokenizer = BasicTokenizer
+    # to pass the tests: 'Encoding' is used in typing
+    Encoding = None
+
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
@@ -425,7 +434,9 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
         normalization=None,
         **kwargs
     ):
-
+        if not is_tokenizers_available():
+            raise ImportError(
+                "Install `tokenizers` to use the fast tokenizers. See https://github.com/huggingface/tokenizers")
         super().__init__(
             _TransfoXLDelimiterLookupTokenizer(
                 vocab_file=vocab_file or pretrained_vocab_file,

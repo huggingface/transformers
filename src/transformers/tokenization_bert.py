@@ -20,9 +20,14 @@ import logging
 import os
 import unicodedata
 
-from tokenizers import BertWordPieceTokenizer
+
+from .file_utils import is_tokenizers_available
 
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+
+
+if is_tokenizers_available():
+    from tokenizers import BertWordPieceTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -559,6 +564,10 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         wordpieces_prefix="##",
         **kwargs
     ):
+        if not is_tokenizers_available():
+            raise ImportError(
+                "Install `tokenizers` to use the fast tokenizers. See https://github.com/huggingface/tokenizers")
+
         super().__init__(
             BertWordPieceTokenizer(
                 vocab_file=vocab_file,

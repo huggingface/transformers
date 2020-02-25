@@ -21,15 +21,22 @@ import os
 import re
 from typing import List, Optional, Union
 
-from tokenizers import Tokenizer
-from tokenizers.decoders import BPEDecoder
-from tokenizers.implementations import BaseTokenizer
-from tokenizers.models import BPE
-from tokenizers.normalizers import BertNormalizer, Sequence, unicode_normalizer_from_str
-from tokenizers.pre_tokenizers import BertPreTokenizer
-from tokenizers.trainers import BpeTrainer
-
 from .tokenization_bert import BasicTokenizer
+from .file_utils import is_tokenizers_available
+if is_tokenizers_available():
+    from tokenizers import Tokenizer
+    from tokenizers.decoders import BPEDecoder
+    from tokenizers.implementations import BaseTokenizer
+    from tokenizers.models import BPE
+    from tokenizers.normalizers import BertNormalizer, Sequence, unicode_normalizer_from_str
+    from tokenizers.pre_tokenizers import BertPreTokenizer
+    from tokenizers.trainers import BpeTrainer
+else:
+    # only to please the tests, BaseTokenizer is never
+    # actually replaced by BasicTokenizer
+    BaseTokenizer = BasicTokenizer
+
+
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
@@ -311,6 +318,10 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
+        if not is_tokenizers_available():
+            raise ImportError(
+                "Install `tokenizers` to use the fast tokenizers. See https://github.com/huggingface/tokenizers")
+
         kwargs.setdefault("unk_token", unk_token)
         super().__init__(
             _OpenAIGPTCharBPETokenizer(vocab_file=vocab_file, merges_file=merges_file, unk_token=unk_token), **kwargs
