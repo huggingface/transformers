@@ -9,6 +9,7 @@ import torch
 import torch.autograd as autograd
 import torch.nn as nn
 
+
 # Compute log sum exp in a numerically stable way for the forward algorithm
 def log_sum_exp(vec, m_size):
     """
@@ -47,7 +48,6 @@ class CRF(nn.Module):
         if torch.cuda.is_available():
             init_transitions = init_transitions.cuda(self.gpu)
         self.transitions = nn.Parameter(init_transitions, requires_grad=True)
-
 
     def init_hidden_cell(self, batch_size, layer_hidden_dim):
         return (torch.randn(2, batch_size, layer_hidden_dim // 2),
@@ -278,6 +278,3 @@ class CRF(nn.Module):
         #     return (forward_score - gold_score) / batch_size
         # else:
         return forward_score - gold_score
-
-
-

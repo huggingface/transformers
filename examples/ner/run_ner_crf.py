@@ -15,7 +15,6 @@
 # limitations under the License.
 """ Fine-tuning the library models for named entity recognition on CoNLL-2003 (Bert or Roberta). """
 
-
 import argparse
 import glob
 import logging
@@ -29,7 +28,6 @@ from seqeval.metrics import f1_score, precision_score, recall_score
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-
 
 from transformers import (
     WEIGHTS_NAME,
@@ -60,7 +58,6 @@ try:
 except ImportError:
     from tensorboardX import SummaryWriter
 
-
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum(
@@ -71,10 +68,9 @@ ALL_MODELS = sum(
     (),
 )
 
-
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForTokenClassification, BertTokenizer),
-    "bertcrf":(BertConfig, BertCRFForTokenClassification, BertTokenizer),
+    "bertcrf": (BertConfig, BertCRFForTokenClassification, BertTokenizer),
     "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer),
     "robertacrf": (RobertaConfig, RobertaCRFForTokenClassification, RobertaTokenizer),
     "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer),
@@ -120,7 +116,8 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
     ]
     # for crf might wanna change this to SGD with gradient clipping and my other scheduler **** eskiler adamken bile 1000lerden başlayıp 10lara düşüyo
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps,
+                                                num_training_steps=t_total)
     if args.fp16:
         try:
             from apex import amp
@@ -163,7 +160,8 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                       "attention_mask": batch[1],
                       "labels": batch[3]}
             if args.model_type != "distilbert":
-                inputs["token_type_ids"] = batch[2] if args.model_type in ["bert", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
+                inputs["token_type_ids"] = batch[2] if args.model_type in ["bert",
+                                                                           "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
 
             outputs = model(pad_token_label_id=pad_token_label_id, **inputs)
             loss = outputs[0]  # model outputs are always tuple in pytorch-transformers (see doc)
@@ -206,7 +204,8 @@ def train(args, train_dataset, model, tokenizer, labels, pad_token_label_id):
                     output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
                     if not os.path.exists(output_dir):
                         os.makedirs(output_dir)
-                    model_to_save = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
+                    model_to_save = model.module if hasattr(model,
+                                                            "module") else model  # Take care of distributed/parallel training
                     # model_to_save.save_pretrained(output_dir)
                     # torch.save(args, os.path.join(output_dir, "training_args.bin"))
 
@@ -263,7 +262,8 @@ def evaluate(args, model, tokenizer, labels, pad_token_label_id, mode, prefix=""
                       "attention_mask": batch[1],
                       "labels": batch[3]}
             if args.model_type != "distilbert":
-                inputs["token_type_ids"] = batch[2] if args.model_type in ["bert", "bertcrf", "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
+                inputs["token_type_ids"] = batch[2] if args.model_type in ["bert", "bertcrf",
+                                                                           "xlnet"] else None  # XLM and RoBERTa don"t use segment_ids
             outputs = model(pad_token_label_id=pad_token_label_id, **inputs)
             tmp_eval_loss, logits, best_path = outputs
 
@@ -316,8 +316,10 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, mode):
 
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(args.data_dir, "cached_{}_{}_{}".format(mode,
-        list(filter(None, args.model_name_or_path.split("/"))).pop(),
-        str(args.max_seq_length)))
+                                                                                list(filter(None,
+                                                                                            args.model_name_or_path.split(
+                                                                                                "/"))).pop(),
+                                                                                str(args.max_seq_length)))
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
@@ -364,7 +366,8 @@ def main():
     parser.add_argument("--model_type", default=None, type=str, required=True,
                         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
     parser.add_argument("--model_name_or_path", default=None, type=str, required=True,
-                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS))
+                        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(
+                            ALL_MODELS))
     parser.add_argument("--output_dir", default=None, type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
 
@@ -502,7 +505,6 @@ def main():
         cache_dir=args.cache_dir if args.cache_dir else None,
     )
 
-
     if args.local_rank == 0:
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
@@ -591,4 +593,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

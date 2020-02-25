@@ -84,21 +84,21 @@ def read_examples_from_file(data_dir, mode):
 
 
 def convert_examples_to_features(examples,
-    label_list,
-    max_seq_length,
-    tokenizer,
-    cls_token_at_end=False,
-    cls_token="[CLS]",
-    cls_token_segment_id=1,
-    sep_token="[SEP]",
-    sep_token_extra=False,
-    pad_on_left=False,
-    pad_token=0,
-    pad_token_segment_id=0,
-    pad_token_label_id=-100,
-    sequence_a_segment_id=0,
-    mask_padding_with_zero=True,
-    model_name = None):
+                                 label_list,
+                                 max_seq_length,
+                                 tokenizer,
+                                 cls_token_at_end=False,
+                                 cls_token="[CLS]",
+                                 cls_token_segment_id=1,
+                                 sep_token="[SEP]",
+                                 sep_token_extra=False,
+                                 pad_on_left=False,
+                                 pad_token=0,
+                                 pad_token_segment_id=0,
+                                 pad_token_label_id=-100,
+                                 sequence_a_segment_id=0,
+                                 mask_padding_with_zero=True,
+                                 model_name=None):
     """ Loads a data file into a list of `InputBatch`s
         `cls_token_at_end` define the location of the CLS token:
             - False (Default, BERT/XLM pattern): [CLS] + A + [SEP] + B + [SEP]
@@ -152,7 +152,7 @@ def convert_examples_to_features(examples,
         # used as as the "sentence vector". Note that this only makes sense because
         # the entire model is fine-tuned.
         tokens += [sep_token]
-        label_ids += [pad_token_label_id] # [label_map["X"]]
+        label_ids += [pad_token_label_id]  # [label_map["X"]]
         if sep_token_extra:
             # roberta uses an extra separator b/w pairs of sentences
             tokens += [sep_token]
@@ -213,10 +213,10 @@ def convert_examples_to_features(examples,
             logger.info("label_ids: %s", " ".join([str(x) for x in label_ids]))
 
         features.append(
-                InputFeatures(input_ids=input_ids,
-                              input_mask=input_mask,
-                              segment_ids=segment_ids,
-                              label_ids=label_ids))
+            InputFeatures(input_ids=input_ids,
+                          input_mask=input_mask,
+                          segment_ids=segment_ids,
+                          label_ids=label_ids))
     return features
 
 
@@ -232,7 +232,7 @@ def get_labels(path):
 
 
 def to_crf_pad(org_array, org_mask, pad_label_id):
-    crf_array = [aa[bb] for aa,bb in zip(org_array, org_mask)]
+    crf_array = [aa[bb] for aa, bb in zip(org_array, org_mask)]
     crf_array = pad_sequence(crf_array, batch_first=True, padding_value=pad_label_id)
     crf_pad = (crf_array != pad_label_id)
     # the viterbi decoder function in CRF makes use of multiplicative property of 0, then pads wrong numbers out.
@@ -245,4 +245,3 @@ def unpad_crf(returned_array, returned_mask, org_array, org_mask):
     out_array = org_array.clone().detach()
     out_array[org_mask] = returned_array[returned_mask]
     return out_array
-

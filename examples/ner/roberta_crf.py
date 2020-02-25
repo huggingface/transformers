@@ -60,7 +60,6 @@ class RobertaCRFForTokenClassification(BertPreTrainedModel):
         feats = self.classifier(sequence_output)
         return feats, outputs
 
-
     def forward(self, input_ids=None, attention_mask=None, token_type_ids=None,
                 position_ids=None, head_mask=None, inputs_embeds=None, labels=None, pad_token_label_id=None):
 
