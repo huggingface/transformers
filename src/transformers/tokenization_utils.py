@@ -1752,8 +1752,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         if token_ids_1 is None:
             return token_ids_0
-        else:
-            return token_ids_0 + token_ids_1
+        return token_ids_0 + token_ids_1
 
     def num_added_tokens(self, pair=False):
         return self.tokenizer.num_special_tokens_to_add(pair)
