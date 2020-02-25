@@ -23,4 +23,5 @@ jobs:
       run: |
         python -m venv .env
         source .env/bin/activate
+        which python
     - run: which python
