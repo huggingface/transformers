@@ -36,7 +36,7 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
 
         expected_output_shape = torch.Size((1, 12, 768))  # batch_size, sequence_length, embedding_vector_dim
         expected_output_values_last_dim = torch.tensor(
-            [-0.0101, 0.1218, -0.0803, 0.0801, 0.1327, 0.0776, -0.1215, 0.2383, 0.3338, 0.3106, 0.0300, 0.0252,]
+            [-0.0101, 0.1218, -0.0803, 0.0801, 0.1327, 0.0776, -0.1215, 0.2383, 0.3338, 0.3106, 0.0300, 0.0252]
         ).unsqueeze(0)
         #  xlmr = torch.hub.load('pytorch/fairseq', 'xlmr.base')
         #  xlmr.eval()
@@ -56,7 +56,7 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
 
         expected_output_shape = torch.Size((1, 12, 1024))  # batch_size, sequence_length, embedding_vector_dim
         expected_output_values_last_dim = torch.tensor(
-            [-0.0699, -0.0318, 0.0705, -0.1241, 0.0999, -0.0520, 0.1004, -0.1838, -0.4704, 0.1437, 0.0821, 0.0126,]
+            [-0.0699, -0.0318, 0.0705, -0.1241, 0.0999, -0.0520, 0.1004, -0.1838, -0.4704, 0.1437, 0.0821, 0.0126]
         ).unsqueeze(0)
         #  xlmr = torch.hub.load('pytorch/fairseq', 'xlmr.large')
         #  xlmr.eval()
