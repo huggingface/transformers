@@ -220,7 +220,7 @@ def add_generic_args(parser, root_dir):
     )
 
     parser.add_argument("--n_gpu", type=int, default=1)
-    parser.add_argument("--n_tpu", type=int, default=0)
+    parser.add_argument("--n_tpu_cores", type=int, default=0)
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_predict", action="store_true", help="Whether to run predictions on the test set.")
