@@ -30,3 +30,13 @@ jobs:
       run: |
         source .env/bin/activate
         pip install .[mecab,sklearn,tf,torch,testing]
+    - name: Run all tests on GPU
+      env:
+        OMP_NUM_THREADS: 1
+        RUN_SLOW: yes
+        RUN_CUSTOM_TOKENIZERS: yes
+        USE_CUDA: yes
+      run: |
+        source .env/bin/activate
+        python -m pytest -n 8 --dist=loadfile -s -v ./tests/
+        
