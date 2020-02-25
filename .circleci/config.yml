@@ -27,8 +27,9 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install .[mecab,sklearn,tf-cpu,torch,testing]
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/
-            - no_output_timeout: 4h
+            - run:
+                command: python -m pytest -n 8 --dist=loadfile -s -v ./tests/
+                no_output_timeout: 4h
 
     run_tests_torch:
         working_directory: ~/transformers
