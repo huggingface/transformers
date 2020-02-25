@@ -496,7 +496,6 @@ class BartDecoder(nn.Module):
                 continue
 
             layer_state = decoder_cached_states[i] if decoder_cached_states is not None else None
-            import pdb; pdb.set_trace()
             x, layer_self_attn, layer_past = decoder_layer.forward(
                 x,
                 encoder_hidden_states,
@@ -505,6 +504,7 @@ class BartDecoder(nn.Module):
                 attention_mask=combined_mask,
                 need_attn_weights=self.output_attentions,
             )
+
             if self.output_past:
                 next_decoder_cache.append(layer_past.copy())
             if self.output_hidden_states:
@@ -515,10 +515,12 @@ class BartDecoder(nn.Module):
         # Convert shapes from (seq_len, BS, model_dim) to (BS, seq_len, model_dim)
         all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
         x = x.transpose(0, 1)
+
         if self.output_past:
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
         else:
             next_cache = None
+        import pdb; pdb.set_trace()
         return x, next_cache, all_hidden_states, list(all_self_attns)
 
 
