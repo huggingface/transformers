@@ -54,6 +54,8 @@ from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
 
+from .file_utils import is_tokenizers_available
+
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +188,7 @@ class AutoTokenizer:
         use_fast = kwargs.pop("use_fast", False)
         for config_class, (tokenizer_class_py, tokenizer_class_fast) in TOKENIZER_MAPPING.items():
             if isinstance(config, config_class):
-                if tokenizer_class_fast and use_fast:
+                if tokenizer_class_fast and use_fast and is_tokenizers_available():
                     return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
                 else:
                     return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
