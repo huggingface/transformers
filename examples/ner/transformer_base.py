@@ -6,8 +6,10 @@ import pytorch_lightning as pl
 import torch
 import logging
 
-from torch.utils.data import RandomSampler
-from torch.utils.data.distributed import DistributedSampler
+
+
+# from torch.utils.data import RandomSampler
+# from torch.utils.data.distributed import DistributedSampler
 
 import torch_xla.core.xla_model as xm
 
@@ -137,7 +139,6 @@ class BaseTransformer(pl.LightningModule):
             num_training_steps=t_total
         )
         self.lr_scheduler = scheduler
-
         return dataset
 
     def val_dataloader(self):
