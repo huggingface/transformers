@@ -23,15 +23,18 @@ import re
 from collections import defaultdict
 from contextlib import contextmanager
 
-from tokenizers.implementations import BaseTokenizer
 
-from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
-
+from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available, is_tokenizers_available
 
 if is_tf_available():
     import tensorflow as tf
 if is_torch_available():
     import torch
+if is_tokenizers_available():
+    from tokenizers.implementations import BaseTokenizer
+else:
+    # To make PEP happy
+    BaseTokenizer = object()
 
 logger = logging.getLogger(__name__)
 
@@ -1607,6 +1610,9 @@ class PreTrainedTokenizer(object):
 
 class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def __init__(self, tokenizer: BaseTokenizer, **kwargs):
+        if not is_tokenizers_available():
+            raise ImportError("Install `tokenizers` to use the fast tokenizers. See https://github.com/huggingface/tokenizers")
+
         if tokenizer is None:
             raise ValueError("Provided tokenizer cannot be None")
         self._tokenizer = tokenizer
