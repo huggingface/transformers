@@ -8,6 +8,7 @@ def swish(x):
     return x * torch.sigmoid(x)
 
 
+@torch.jit.script
 def _gelu_python(x):
     """ Original Implementation of the gelu activation function in Google Bert repo when initially created.
         For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
