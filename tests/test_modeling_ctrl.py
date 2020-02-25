@@ -244,5 +244,8 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
         ]  # Legal My neighbor is refusing to pay rent after 2 years and we are having to force him to pay
         torch.manual_seed(0)
 
+        # add padding token to avoid assert statement
+        model.add_pad_token_embedding(model.config.vocab_size)
         output_ids = model.generate(input_ids)
+
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

@@ -19,7 +19,6 @@ import os.path
 import random
 import tempfile
 import unittest
-import ipdb
 
 from transformers import is_torch_available
 
@@ -466,13 +465,13 @@ class ModelTesterMixin:
             )
 
     def test_add_pad_token(self):
-        self._check_add_special_tokens('pad_token_id')
+        self._check_add_special_tokens("pad_token_id")
 
     def test_add_bos_token(self):
-        self._check_add_special_tokens('bos_token_id')
+        self._check_add_special_tokens("bos_token_id")
 
     def test_add_eos_token(self):
-        self._check_add_special_tokens('eos_token_ids')
+        self._check_add_special_tokens("eos_token_ids")
 
     def _check_add_special_tokens(self, special_token):
         original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -493,14 +492,14 @@ class ModelTesterMixin:
             prev_model_embed = model.resize_token_embeddings(prev_model_vocab_size)
             prev_model_embed_weight = prev_model_embed.weight.clone()
 
-            if special_token == 'pad_token_id':
+            if special_token == "pad_token_id":
                 model_embed = model.add_pad_token_embedding(special_token_id)
-            elif special_token == 'bos_token_id':
+            elif special_token == "bos_token_id":
                 model_embed = model.add_bos_token_embedding(special_token_id)
-            elif special_token == 'eos_token_ids':
+            elif special_token == "eos_token_ids":
                 model_embed = model.add_eos_token_embedding(special_token_id)
             else:
-                raise ValueError('{} does not exist'.format(special_token))
+                raise ValueError("{} does not exist".format(special_token))
 
             # Check that special token is correctly set
             set_special_token = getattr(model.config, special_token)
@@ -669,8 +668,7 @@ class ModelTesterMixin:
 
             # if model has no pad_token_id it should be resized before
             if model.config.pad_token_id is None:
-                model.config.pad_token_id = model.config.vocab_size
-                model.resize_token_embeddings(model.config.vocab_size + 1)
+                model.add_pad_token_embedding(model.config.vocab_size)
                 self.model_tester.vocab_size = model.config.vocab_size
 
             if config.bos_token_id is None:
