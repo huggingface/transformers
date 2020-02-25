@@ -129,7 +129,8 @@ class BaseTransformer(pl.LightningModule):
         return self.validation_end(outputs)
 
     def train_dataloader(self):
-        train_batch_size = self.hparams.train_batch_size * max(1, args.n_gpu, args.n_tpu_cores)
+        train_batch_size = self.hparams.train_batch_size * max(1, self.hparams.n_gpu,
+                                                               self.hparams.n_tpu_cores)
         dataloader = self.load_dataset("train", train_batch_size)
         t_total = (
             len(dataloader.dataset)
