@@ -607,6 +607,11 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
 
+            # if model has no pad_token_id it should be resized before
+            if model.config.pad_token_id is None:
+                model.config.pad_token_id = model.config.vocab_size
+                model.resize_token_embeddings(model.config.vocab_size + 1)
+
             if config.bos_token_id is None:
                 with self.assertRaises(AssertionError):
                     model.generate(max_length=5)
