@@ -113,7 +113,10 @@ class BaseTransformer(pl.LightningModule):
         else:
             optimizer.step()
         import torch_xla
-        print(torch_xla._XLAC._xla_metrics_report())
+        import torch_xla.debug.metrics as met
+
+        print(met.metrics_report())
+        #print(torch_xla._XLAC._xla_metrics_report())
 
         optimizer.zero_grad()
         self.lr_scheduler.step()
