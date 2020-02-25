@@ -123,7 +123,6 @@ class BaseTransformer(pl.LightningModule):
     def test_end(self, outputs):
         return self.validation_end(outputs)
 
-    @pl.data_loader
     def train_dataloader(self):
         dataset = self.load_dataset("train", self.hparams.train_batch_size)
 
@@ -141,24 +140,22 @@ class BaseTransformer(pl.LightningModule):
 
         return dataset
 
-    @pl.data_loader
     def val_dataloader(self):
         return self.load_dataset("dev", self.hparams.eval_batch_size)
 
-    @pl.data_loader
     def test_dataloader(self):
         return self.load_dataset("test", self.hparams.eval_batch_size)
 
-    def train_sampler(self, dataset):
-        if self.hparams.n_tpu >= 1:
-            return DistributedSampler(dataset,
-                num_replicas=xm.xrt_world_size(),
-                rank=xm.get_ordinal(),
-                shuffle=True)
-        elif self.hparams.n_gpu > 1:
-            return DistributedSampler(dataset)
-        else:
-            return RandomSampler(dataset)
+    # def train_sampler(self, dataset):
+    #     if self.hparams.n_tpu >= 1:
+    #         return DistributedSampler(dataset,
+    #             num_replicas=xm.xrt_world_size(),
+    #             rank=xm.get_ordinal(),
+    #             shuffle=True)
+    #     elif self.hparams.n_gpu > 1:
+    #         return DistributedSampler(dataset)
+    #     else:
+    #         return RandomSampler(dataset)
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
