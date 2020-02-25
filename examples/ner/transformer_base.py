@@ -126,7 +126,6 @@ class BaseTransformer(pl.LightningModule):
     @pl.data_loader
     def train_dataloader(self):
         dataset = self.load_dataset("train", self.hparams.train_batch_size)
-        logger.info("***** size *****")
 
         t_total = (
             len(dataset)
@@ -139,10 +138,6 @@ class BaseTransformer(pl.LightningModule):
             num_training_steps=t_total
         )
         self.lr_scheduler = scheduler
-        if self.is_tpu:
-            logger.info("***** rendezvous *****")
-            xm.rendezvous("transformer.train_dataloader")
-            logger.info("***** complete *****")
 
         return dataset
 

@@ -46,7 +46,7 @@ class NERTransformer(BaseTransformer):
         tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
         return {"loss": loss, "log": tensorboard_logs}
 
-    def _feature_file(mode):
+    def _feature_file(self, mode):
         return os.path.join(
             self.hparams.data_dir,
             "cached_{}_{}_{}".format(
