@@ -6,11 +6,6 @@ import pytorch_lightning as pl
 import torch
 import logging
 
-
-
-# from torch.utils.data import RandomSampler
-# from torch.utils.data.distributed import DistributedSampler
-
 import torch_xla.core.xla_model as xm
 
 from transformers import (
@@ -154,17 +149,6 @@ class BaseTransformer(pl.LightningModule):
 
     def test_dataloader(self):
         return self.load_dataset("test", self.hparams.eval_batch_size)
-
-    # def train_sampler(self, dataset):
-    #     if self.hparams.n_tpu >= 1:
-    #         return DistributedSampler(dataset,
-    #             num_replicas=xm.xrt_world_size(),
-    #             rank=xm.get_ordinal(),
-    #             shuffle=True)
-    #     elif self.hparams.n_gpu > 1:
-    #         return DistributedSampler(dataset)
-    #     else:
-    #         return RandomSampler(dataset)
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
