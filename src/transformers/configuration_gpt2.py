@@ -73,6 +73,7 @@ class GPT2Config(PretrainedConfig):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:`~transformers.GPT2DoubleHeadsModel`.
                 Is one of the following options:
+
                 - 'last' => take the last token hidden state (like XLNet)
                 - 'first' => take the first token hidden state (like Bert)
                 - 'mean' => take the mean of all tokens hidden states
