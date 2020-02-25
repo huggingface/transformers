@@ -3,12 +3,12 @@ import logging
 from pathlib import Path
 
 import typer
-from transformers.cli._types import SupportedFormat, SupportedTask
+from transformers.cli._types import SupportedFormat, PipelineTask
 from transformers.pipelines import SUPPORTED_TASKS, PipelineDataFormat, pipeline
 
 
 def run(
-    task: SupportedTask,
+    task: PipelineTask,
     input_path: Path,
     output_path: Path,
     model: str = typer.Option(None, help="Name or path to the model to instantiate."),
@@ -24,7 +24,7 @@ def run(
     overwrite: bool = typer.Option(False, help="Allow overwriting the output file."),
 ):
 
-    """CLI tool to run a pipeline TASK in on the data in INPUT_PATH. 
+    """Run a supported pipeline task on a file in a supported format. 
     Save the results to disk at OUTPUT_PATH"""
 
     logger = logging.getLogger(f"transformers-cli/run/{task.value}")

@@ -71,7 +71,7 @@ def serve(
         -1, help="Indicate the device to run onto, -1 indicates CPU, >= 0 indicates GPU (default: -1)"
     ),
 ):
-    """CLI tool to run inference requests through REST and GraphQL endpoints."""
+    """Serve a supported pipeline task as an HTTP API."""
 
     nlp = pipeline(task=task.value, model=model if model else None, config=config, tokenizer=tokenizer, device=device,)
 

@@ -6,7 +6,7 @@ from transformers import is_tf_available, is_torch_available
 
 
 def env():
-    """CLI tool to get information about your current environment. 
+    """Extract information about your current environment. 
     Useful for debugging and reporting issues.
     """
     pt_version = "not installed"

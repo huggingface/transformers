@@ -11,16 +11,16 @@ class ModelType(str, Enum):
     XLM = "xlm"
 
 
-class SupportedFormat(str, Enum):
-    INFER = "infer"
-    JSON = "json"
-    CSV = "csv"
-    PIPE = "pipe"
-
-
 class PipelineTask(str, Enum):
     FEATURE_EXTRACTION = "feature-extraction"
     SENTIMENT_ANALYSIS = "sentiment-analysis"
     NER = "ner"
     QUESTION_ANSWERING = "question-answering"
     FILL_MASK = "fill-mask"
+
+
+class SupportedFormat(str, Enum):
+    INFER = "infer"
+    JSON = "json"
+    CSV = "csv"
+    PIPE = "pipe"

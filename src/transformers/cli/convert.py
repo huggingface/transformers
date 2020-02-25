@@ -1,4 +1,5 @@
 from logging import getLogger
+from pathlib import Path
 
 import typer
 from transformers.cli._types import ModelType
@@ -6,15 +7,20 @@ from transformers.cli._types import ModelType
 
 def convert(
     model_type: ModelType,
-    tf_checkpoint: str = typer.Option(..., help="TensorFlow checkpoint path or folder."),
-    pytorch_dump_output: str = typer.Option(..., help="Path to the PyTorch saved model output."),
+    tf_checkpoint: Path,
+    pytorch_dump_output: Path,
     config: str = typer.Option("", help="Configuration file path or folder."),
     finetuning_task_name: str = typer.Option(
         None, help="Optional fine-tuning task name if the TF model was a finetuned model."
     ),
 ):
-    """CLI tool to run convert model from original author checkpoints 
+    """Convert model from original author checkpoints 
     to Transformers PyTorch checkpoints.
+
+    Usage:
+    ```bash
+    $ transformers convert bert ./tf_checkpoint ./output_dir
+    ```
     """
 
     logger = getLogger("transformers-cli/converting")
