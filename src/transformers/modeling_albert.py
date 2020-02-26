@@ -600,7 +600,7 @@ class AlbertMLMHead(nn.Module):
         hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.decoder(hidden_states)
 
-        prediction_scores = hidden_states + self.bias
+        prediction_scores = hidden_states
 
         return prediction_scores
 
