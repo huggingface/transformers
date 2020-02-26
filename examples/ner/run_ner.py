@@ -474,9 +474,7 @@ def main():
     parser.add_argument(
         "--strip_accents", action="store_const", const=True, help="Set this flag if model is trained without accents."
     )
-    parser.add_argument(
-        "--use_fast", action="store_const", const=True, help="Set this flag to use fast tokenization."
-    )
+    parser.add_argument("--use_fast", action="store_const", const=True, help="Set this flag to use fast tokenization.")
     parser.add_argument("--per_gpu_train_batch_size", default=8, type=int, help="Batch size per GPU/CPU for training.")
     parser.add_argument(
         "--per_gpu_eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation."
