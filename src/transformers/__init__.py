@@ -242,7 +242,7 @@ if is_torch_available():
         CamembertForTokenClassification,
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
-    from .modeling_encoder_decoder import PreTrainedEncoderDecoder, Model2Model
+    from .modeling_encoder_decoder import PreTrainedEncoderDecoder
     from .modeling_t5 import (
         T5PreTrainedModel,
         T5Model,
