@@ -9,7 +9,7 @@ on:
     - cron: "0 0 * * *"
 
 jobs:
-  run_all_tests_torch_and_tf:
+  run_all_tests_torch_and_tf_gpu:
     runs-on: self-hosted
     steps:
     - uses: actions/checkout@v2
