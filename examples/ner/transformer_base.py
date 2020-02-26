@@ -113,6 +113,7 @@ class BaseTransformer(pl.LightningModule):
         else:
             optimizer.step()
         optimizer.zero_grad()
+        logger.info("lr step")
         self.lr_scheduler.step()
 
     def get_tqdm_dict(self):
