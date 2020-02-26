@@ -261,6 +261,7 @@ def generic_train(model, args):
         accumulate_grad_batches=args.gradient_accumulation_steps,
         gpus=args.n_gpu,
         max_epochs=args.num_train_epochs,
+        early_stop_callback=False,
         gradient_clip_val=args.max_grad_norm,
         checkpoint_callback=checkpoint_callback,
     )
