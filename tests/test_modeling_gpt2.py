@@ -197,7 +197,9 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             # test that outputs are equal for slice
             self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-        def create_and_check_gpt2_model_attention_mask_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+        def create_and_check_gpt2_model_attention_mask_past(
+            self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+        ):
             model = GPT2Model(config=config)
             model.to(torch_device)
             model.eval()
