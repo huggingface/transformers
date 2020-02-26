@@ -28,4 +28,4 @@ ENV PATH /opt/conda/envs/huggingface/bin:/opt/conda/bin:$PATH
 WORKDIR /workspace
 RUN chmod -R a+w .
 
-ENTRYPOINT ["jupyter", "notebook", "--allow-root", "--ip", "0.0.0.0"]
+ENTRYPOINT ["/bin/bash"]

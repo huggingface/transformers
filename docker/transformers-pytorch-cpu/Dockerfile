@@ -15,7 +15,7 @@ RUN curl -o Miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-L
     rm Miniconda.sh
 
 RUN /opt/conda/bin/conda update -n base -c defaults conda && \
-     /opt/conda/bin/conda create -n hugginface python==$PYTHON_VERSION && \
+     /opt/conda/bin/conda create -n huggingface python==$PYTHON_VERSION && \
      /opt/conda/bin/conda install -y -n huggingface -c pytorch pytorch cpuonly && \
      /opt/conda/bin/conda install -y -n huggingface jupyter && \
      /opt/conda/bin/conda clean -ya && \
@@ -29,4 +29,4 @@ ENV PATH /opt/conda/envs/hugginface/bin:/opt/conda/bin:$PATH
 WORKDIR /workspace
 RUN chmod -R a+w .
 
-ENTRYPOINT ["jupyter", "notebook", "--allow-root", "--ip", "0.0.0.0"]
+ENTRYPOINT ["/bin/bash"]
