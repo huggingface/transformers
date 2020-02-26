@@ -1,6 +1,11 @@
 name: Self-hosted runner (push)
 
-on: push
+on: 
+  push:
+    branches:
+      - master
+  pull_request:
+
 
 jobs:
   run_tests_torch_and_tf_gpu:

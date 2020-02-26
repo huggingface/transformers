@@ -2,8 +2,8 @@ name: Self-hosted runner (scheduled)
 
 on:
   push:
-    # branches:
-    #   - ci-*
+    branches:
+      - ci-*
   repository_dispatch:
   schedule:
     - cron: "0 0 * * *"
