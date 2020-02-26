@@ -1368,7 +1368,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
             prev_output_tokens = prev_output_tokens[beam_idx]
             prev_output_tokens = torch.cat([prev_output_tokens, beam_words.unsqueeze(1)], dim=-1)
-            #print(f'Updated prev_output_tokens: {prev_output_tokens}')
+
 
 
             # re-order batch
@@ -1386,23 +1386,35 @@ class BartForMaskedLM(PretrainedBartModel):
             # stop when we are done with each sentence
             if all(done):
                 break
+        print('*** FINALIZING ***')
+        print(f'Final prev_output_tokens: {prev_output_tokens}')
+        print(f'Final next_scores: {next_scores}')
+        print(f'Final next_words: {next_words}')
+        print(f'Final beam_scores: {beam_scores}')
 
         for batch_idx in range(batch_size):
             # Add all open beam hypothesis to generated_hyps
-            if not done[batch_idx]:
-                for idx, score in zip(next_words[batch_idx], next_scores[batch_idx]):
+            if done[batch_idx]: continue
+            offset = batch_idx * num_beams
+            for i in range(num_beams):
+                score = beam_scores[offset+i]
+                final_tokens = prev_output_tokens[offset+i]
+                print(f'score: {score.item()}, tokens:{final_tokens}')
 
-                    # get beam and word IDs
-                    beam_id = idx // vocab_size
-                    print(f'beam_id: {beam_id}, word_id: {word_id}')
-                    word_id = idx % vocab_size
-                    # This may be fucked up because it is only the score of the generated, not the generated conditional on the input_ids
-                    #print('po shape', prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].shape)
-                    generated_hyps[batch_idx].add(
-                        prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item()
-                    )
+            # idx_and_score = list(zip(next_words[batch_idx], next_scores[batch_idx]))
+            # print(f'idx_and_score: {idx_and_score}')
+            # for idx, score in idx_and_score:
+            #     # get beam and word IDs
+            #     beam_id = idx // vocab_size
+            #     word_id = idx % vocab_size
+            #     pointed_idx = batch_idx * num_beams + beam_id
+            #     #print(f'beam_id: {beam_id}, word_id: {word_id}, score: {score.item()}, pointed idx: {pointed_idx}')
+            #     #print('po shape', prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].shape)
+                generated_hyps[batch_idx].add(
+                    final_tokens, score.item()
+                )
             print(f'scored beams: {generated_hyps[0].beams}')
-        print('*** FINALIZING ***')
+
         # select the best hypotheses
         sent_lengths = src_tokens.new(batch_size)
         best = []
