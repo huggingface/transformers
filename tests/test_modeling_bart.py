@@ -172,7 +172,7 @@ class BartHeadTests(unittest.TestCase):
     vocab_size = 99
 
     def test_lm_forward(self):
-        input_ids = torch.Tensor(
+        input_ids = torch.tensor(
             [
                 [71, 82, 18, 33, 46, 91, 2],
                 [68, 34, 26, 58, 30, 82, 2],
@@ -187,8 +187,10 @@ class BartHeadTests(unittest.TestCase):
                 [21, 5, 62, 28, 14, 76, 2],
                 [45, 98, 37, 86, 59, 48, 2],
                 [70, 70, 50, 9, 28, 0, 2],
-            ]
-        ).long()
+            ],
+            dtype=torch.long,
+            device=torch_device,
+        )
         batch_size = input_ids.shape[0]
         decoder_lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size)
 
@@ -204,12 +206,14 @@ class BartHeadTests(unittest.TestCase):
             max_position_embeddings=48,
         )
         model = BartForSequenceClassification(config)
+        model.to(torch_device)
         outputs = model.forward(input_ids=input_ids, decoder_input_ids=input_ids)
         logits = outputs[0]
         expected_shape = torch.Size((batch_size, config.num_labels))
         self.assertEqual(logits.shape, expected_shape)
 
         lm_model = BartForMaskedLM(config)
+        lm_model.to(torch_device)
         loss, logits, enc_features = lm_model.forward(
             input_ids=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids
         )
