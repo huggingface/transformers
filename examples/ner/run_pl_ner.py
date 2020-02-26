@@ -31,6 +31,8 @@ class NERTransformer(BaseTransformer):
 
     def training_step(self, batch, batch_num):
         "Compute loss and log."
+        if self.is_logger():
+            logger.info("step %s", self.global_step)
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
