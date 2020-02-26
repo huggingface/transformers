@@ -468,23 +468,15 @@ def main():
     parser.add_argument(
         "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model."
     )
-
     parser.add_argument(
         "--keep_accents", action="store_const", const=True, help="Set this flag if model is trained with accents."
     )
-
     parser.add_argument(
         "--strip_accents", action="store_const", const=True, help="Set this flag if model is trained without accents."
     )
-
     parser.add_argument(
-        "--nouse_fast",
-        action="store_const",
-        dest="use_fast",
-        const=False,
-        help="Set this flag to not use fast tokenization.",
+        "--use_fast", action="store_const", const=True, help="Set this flag to use fast tokenization."
     )
-
     parser.add_argument("--per_gpu_train_batch_size", default=8, type=int, help="Batch size per GPU/CPU for training.")
     parser.add_argument(
         "--per_gpu_eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation."
