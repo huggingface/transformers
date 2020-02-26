@@ -1239,8 +1239,11 @@ class BartForMaskedLM(PretrainedBartModel):
 
         # done sentences
         done = [False for _ in range(batch_size)]
+        finalized = [[] for i in range(batch_size)]
         step= 0
         # self.model.decoder.generation_mode = True
+        eos_idx = src_tokens.new()
+        blacklist = src_tokens.new()
         while cur_len <= max_length:
             decoder_input_ids = prev_output_tokens.clone()
             model_inputs = self.prepare_inputs_for_generation(src_tokens, past, decoder_input_ids=decoder_input_ids,)
@@ -1315,6 +1318,8 @@ class BartForMaskedLM(PretrainedBartModel):
             #print(f'next_words: {next_words}'}
             assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
 
+
+
             # next batch beam content
             # list of (batch_size * num_beams) tuple(next hypothesis score, next word, current position in the batch)
             next_batch_beam = []
@@ -1325,7 +1330,9 @@ class BartForMaskedLM(PretrainedBartModel):
                 done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
                     next_scores[batch_idx].max().item()
                 )
-                if done[batch_idx]:
+
+
+                if done[batch_idx]: # pad all its members
                     raise ValueError('done')
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
@@ -1335,11 +1342,17 @@ class BartForMaskedLM(PretrainedBartModel):
                     ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
                     next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
                     continue
+                _words, _bscores = next_words[batch_idx], next_scores[batch_idx]
+                # EOS LOGIC HERE?
+                eos_mask = _words.eq(self.eos) & _bscores.ne(-math.inf)
+                if eos_mask.any():
+                    eos_scores = _bscores[eos_mask]
+                    eos_scores /= (step + 1) ** self.len_penalty
+                    finalized#FIXME
+
 
                 # next sentence beam content
                 next_sent_beam = []
-
-
                 # add next words for this sentence
                 for idx, score in zip(next_words[batch_idx], next_scores[batch_idx]):
                     beam_id = idx // vocab_size
@@ -1365,16 +1378,8 @@ class BartForMaskedLM(PretrainedBartModel):
             print(f'beam words: {beam_words}, beam_idx: {beam_idx}, beam_scores: {beam_scores}')
 
             # re-order batch
-
             prev_output_tokens = prev_output_tokens[beam_idx]
             prev_output_tokens = torch.cat([prev_output_tokens, beam_words.unsqueeze(1)], dim=-1)
-
-
-
-            # re-order batch
-            #src_tokens = src_tokens[beam_idx, :]
-            #src_tokens = torch.cat([src_tokens, beam_words.unsqueeze(1)], dim=-1)
-
 
             # re-order internal states
             past = self._reorder_cache(past, beam_idx)
@@ -1400,16 +1405,6 @@ class BartForMaskedLM(PretrainedBartModel):
                 score = beam_scores[offset+i]
                 final_tokens = prev_output_tokens[offset+i]
                 print(f'score: {score.item()}, tokens:{final_tokens}')
-
-            # idx_and_score = list(zip(next_words[batch_idx], next_scores[batch_idx]))
-            # print(f'idx_and_score: {idx_and_score}')
-            # for idx, score in idx_and_score:
-            #     # get beam and word IDs
-            #     beam_id = idx // vocab_size
-            #     word_id = idx % vocab_size
-            #     pointed_idx = batch_idx * num_beams + beam_id
-            #     #print(f'beam_id: {beam_id}, word_id: {word_id}, score: {score.item()}, pointed idx: {pointed_idx}')
-            #     #print('po shape', prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].shape)
                 generated_hyps[batch_idx].add(
                     final_tokens, score.item()
                 )
