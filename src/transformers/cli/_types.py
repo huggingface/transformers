@@ -1,4 +1,5 @@
 from enum import Enum
+
 from transformers.pipelines import Pipeline, PipelineDataFormat, pipeline
 
 

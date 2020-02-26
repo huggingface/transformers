@@ -3,8 +3,10 @@ from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
 import typer
+
 from transformers.cli._types import PipelineTask
 from transformers.pipelines import SUPPORTED_TASKS, Pipeline, PipelineDataFormat, pipeline
+
 
 try:
     import uvicorn

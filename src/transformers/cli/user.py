@@ -1,11 +1,11 @@
 import os
 import sys
-from pathlib import Path
 from getpass import getpass
+from pathlib import Path
 from typing import List, Union
 
-from requests.exceptions import HTTPError
 import typer
+from requests.exceptions import HTTPError
 
 from transformers.commands import BaseTransformersCLICommand
 from transformers.hf_api import HfApi, HfFolder

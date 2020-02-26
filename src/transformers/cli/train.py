@@ -1,5 +1,6 @@
 import os
 from logging import getLogger
+
 import typer
 
 from transformers import SingleSentenceClassificationProcessor as Processor

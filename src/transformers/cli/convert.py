@@ -2,6 +2,7 @@ from logging import getLogger
 from pathlib import Path
 
 import typer
+
 from transformers.cli._types import ModelType
 
 

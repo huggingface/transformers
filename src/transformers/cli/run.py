@@ -1,9 +1,10 @@
-from enum import Enum
 import logging
+from enum import Enum
 from pathlib import Path
 
 import typer
-from transformers.cli._types import SupportedFormat, PipelineTask
+
+from transformers.cli._types import PipelineTask, SupportedFormat
 from transformers.pipelines import SUPPORTED_TASKS, PipelineDataFormat, pipeline
 
 
