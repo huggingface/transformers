@@ -1,7 +1,7 @@
 FROM ubuntu:18.04
 
-ARG PYTHON_VERSION=3.7
-ARG TRANSFORMERS_VERSION=2.5.0
+ARG PYTHON_VERSION=3.7.6
+ARG TRANSFORMERS_VERSION=2.5.1
 RUN apt update && \
     apt install -y bash \
                    build-essential \
