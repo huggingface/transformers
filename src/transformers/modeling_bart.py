@@ -1231,7 +1231,7 @@ class BartForMaskedLM(PretrainedBartModel):
         # decoder tokens
         prev_output_tokens = src_tokens.new(batch_size * num_beams, 1).long().fill_(-1)
         prev_output_tokens[:, 0] = 2 #  HARDCODED EOS, FIXME(SS)
-        # prev_output_tokens[:, 1] = 0  # HARDCODED BOS, FIXME(SS)
+        #prev_output_tokens[:, 1] = 0  # HARDCODED BOS, FIXME(SS)
         # Can get proba from model. Make sure EOS doesn't have childrens.
         # cache compute states
         past = None
@@ -1417,7 +1417,7 @@ class BartForMaskedLM(PretrainedBartModel):
             print(best_hyp.shape)
             sent_lengths[i] = len(best_hyp)
             best.append(best_hyp)
-        import pdb; pdb.set_trace()
+
         print(f'best hypos: {best}')
         print(f'sent_lengths: {sent_lengths}')
 
