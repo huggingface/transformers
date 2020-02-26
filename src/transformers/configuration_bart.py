@@ -72,6 +72,7 @@ class BartConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
         self.eos_token_id = eos_token_id
+        self.eos_token_ids = [eos_token_id]
 
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = self.num_hidden_layers = encoder_layers
