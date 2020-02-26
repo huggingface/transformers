@@ -1241,7 +1241,7 @@ class BartForMaskedLM(PretrainedBartModel):
         done = [False for _ in range(batch_size)]
         finalized = [[] for i in range(batch_size)]
         step= 0
-        # self.model.decoder.generation_mode = True
+        self.model.decoder.generation_mode = True
         eos_idx = src_tokens.new()
         blacklist = src_tokens.new()
         while cur_len <= max_length:
@@ -1330,9 +1330,7 @@ class BartForMaskedLM(PretrainedBartModel):
                 done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
                     next_scores[batch_idx].max().item()
                 )
-
-
-                if done[batch_idx]: # pad all its members
+                if done[batch_idx]: # pad all associated hypotheses
                     raise ValueError('done')
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
@@ -1342,14 +1340,6 @@ class BartForMaskedLM(PretrainedBartModel):
                     ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
                     next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
                     continue
-                _words, _bscores = next_words[batch_idx], next_scores[batch_idx]
-                # EOS LOGIC HERE?
-                eos_mask = _words.eq(self.eos) & _bscores.ne(-math.inf)
-                if eos_mask.any():
-                    eos_scores = _bscores[eos_mask]
-                    eos_scores /= (step + 1) ** self.len_penalty
-                    finalized#FIXME
-
 
                 # next sentence beam content
                 next_sent_beam = []
@@ -1357,7 +1347,12 @@ class BartForMaskedLM(PretrainedBartModel):
                 for idx, score in zip(next_words[batch_idx], next_scores[batch_idx]):
                     beam_id = idx // vocab_size
                     word_id = idx % vocab_size
-                    next_sent_beam.append((score, word_id, batch_idx * num_beams + beam_id))
+                    if word_id.item() in eos_token_ids:
+                        generated_hyps[batch_idx].add(
+                            prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item() #/ (step + 1) ** self.len_penalty
+                        )
+                    else:
+                        next_sent_beam.append((score, word_id, batch_idx * num_beams + beam_id))
 
                     if len(next_sent_beam) == num_beams:
                         break
@@ -1399,16 +1394,19 @@ class BartForMaskedLM(PretrainedBartModel):
 
         for batch_idx in range(batch_size):
             # Add all open beam hypothesis to generated_hyps
-            if done[batch_idx]: continue
+            if done[batch_idx]:
+                print(f'hit done for batch {batch_idx}')
+                continue
             offset = batch_idx * num_beams
             for i in range(num_beams):
                 score = beam_scores[offset+i]
                 final_tokens = prev_output_tokens[offset+i]
-                print(f'score: {score.item()}, tokens:{final_tokens}')
+                if score > -math.inf:
+                    print(f'score: {score.item()}, len: {len(final_tokens)}, tokens:{final_tokens}')
                 generated_hyps[batch_idx].add(
                     final_tokens, score.item()
                 )
-            print(f'scored beams: {generated_hyps[0].beams}')
+            #print(f'scored beams: {[}')
 
         # select the best hypotheses
         sent_lengths = src_tokens.new(batch_size)

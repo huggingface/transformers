@@ -314,6 +314,7 @@ TOLERANCE = 1e-4
 
 @require_torch
 class BartModelIntegrationTest(unittest.TestCase):
+
     @slow
     def test_inference_no_head(self):
         model = BartModel.from_pretrained("bart-large").to(torch_device)
@@ -361,3 +362,20 @@ class BartModelIntegrationTest(unittest.TestCase):
         for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys()):
             model = BartModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+    @slow
+    def test_cnn_summarization(self):
+        hf = BartForMaskedLM.from_pretrained('/Users/shleifer/transformers_fork/converted_cnn/',
+                                                   output_past=True,)
+        #hf.model.decoder.generation_mode = True
+
+        text = ' (CNN)The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian'
+        tok = BartTokenizer.from_pretrained('bart-large')
+        tokens = tok.encode(text, return_tensors='pt')
+        extra_len = 20
+        gen_tokens = hf.generate(tokens, num_return_sequences=1, num_beams=4,
+                                 max_length=tokens.shape[1] + extra_len,  # repetition_penalty=10.,
+                                 do_sample=False)
+        expected_result = '<s>The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday.'
+        generated = [tok.decode(g, ) for g in gen_tokens]
+        self.assertEqual(expected_result, generated[0])
