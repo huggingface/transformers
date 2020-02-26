@@ -1259,10 +1259,15 @@ class BartForMaskedLM(PretrainedBartModel):
             assert len(eos_token_ids) == 1
             eos = eos_token_ids[0]
             assert eos == 2
+            assert bos_token_id == 0
 
             if cur_len == max_length: # FORCE EOS
                 lprobs[:, :eos] = -math.inf
                 lprobs[:, eos + 1:] = -math.inf
+            elif step == 0:
+                #lprobs[:, :eos] = -math.inf
+                lprobs[:, bos_token_id + 1:] = -math.inf
+
             #print(f'Num not infinite lprobs: {(lprobs > -1e4).float().sum(1)}')
             # if step == 0:
             #     # mutates lprobs
@@ -1426,7 +1431,7 @@ class BartForMaskedLM(PretrainedBartModel):
             assert (len(hypo) == max_length for hypo in best)
             decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
 
-        return decoded
+        return decoded[:, 1:]  # get rid of starting EOS
 
 
 @add_start_docstrings(
