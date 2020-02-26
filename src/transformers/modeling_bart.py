@@ -457,7 +457,7 @@ class BartDecoder(nn.Module):
                 - attentions
         """
         # embed positions
-        assert not self.generation_mode
+        assert self.generation_mode
 
         positions = self.embed_positions.forward(input_ids, generation_mode=self.generation_mode)
 
@@ -977,7 +977,7 @@ class BartForMaskedLM(PretrainedBartModel):
             encoder_outputs, decoder_cached_states = None, None
         else:
             encoder_outputs, decoder_cached_states = past
-        decoder_cached_states = None #FIXME
+        # decoder_cached_states = None #FIXME
         decoder_input_ids = kwargs.get('decoder_input_ids')
         return {
             "input_ids": input_ids,
@@ -1242,7 +1242,7 @@ class BartForMaskedLM(PretrainedBartModel):
         step= 0
         # self.model.decoder.generation_mode = True
         while cur_len <= max_length:
-            decoder_input_ids = prev_output_tokens#[:, :step+1]
+            decoder_input_ids = prev_output_tokens.clone()
             model_inputs = self.prepare_inputs_for_generation(src_tokens, past, decoder_input_ids=decoder_input_ids,)
 
             print('***')
@@ -1310,7 +1310,7 @@ class BartForMaskedLM(PretrainedBartModel):
             # re-organize to group the beam together (we are keeping top hypothesis accross beams)
             _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
             next_scores, next_words = torch.topk(_scores, 2 * num_beams)
-            print_shapemax('next_scores', next_scores)
+            print(f'next_scores: {next_scores}')
             assert next_words.shape[1] == 2*num_beams
             #print(f'next_words: {next_words}'}
             assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
@@ -1362,13 +1362,13 @@ class BartForMaskedLM(PretrainedBartModel):
             beam_scores = beam_scores.new([x[0] for x in next_batch_beam])
             beam_words = src_tokens.new([x[1] for x in next_batch_beam])
             beam_idx = src_tokens.new([x[2] for x in next_batch_beam])
-            print(f'beam words: {beam_words}, beam_idx: {beam_idx}')
+            print(f'beam words: {beam_words}, beam_idx: {beam_idx}, beam_scores: {beam_scores}')
 
             # re-order batch
 
             prev_output_tokens = prev_output_tokens[beam_idx]
             prev_output_tokens = torch.cat([prev_output_tokens, beam_words.unsqueeze(1)], dim=-1)
-            print(f'Updated prev_output_tokens: {prev_output_tokens}')
+            #print(f'Updated prev_output_tokens: {prev_output_tokens}')
 
 
             # re-order batch
@@ -1394,19 +1394,23 @@ class BartForMaskedLM(PretrainedBartModel):
 
                     # get beam and word IDs
                     beam_id = idx // vocab_size
+                    print(f'beam_id: {beam_id}, word_id: {word_id}')
                     word_id = idx % vocab_size
                     # This may be fucked up because it is only the score of the generated, not the generated conditional on the input_ids
-                    print('po shape', prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].shape)
+                    #print('po shape', prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].shape)
                     generated_hyps[batch_idx].add(
                         prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item()
                     )
+            print(f'scored beams: {generated_hyps[0].beams}')
         print('*** FINALIZING ***')
         # select the best hypotheses
         sent_lengths = src_tokens.new(batch_size)
         best = []
         #print(generated_hyps)
+        print(f'scored beams: {generated_hyps[0].beams}')
         for i, hypotheses in enumerate(generated_hyps):
             best_hyp = max(hypotheses.beams, key=lambda x: x[0])[1]
+
             print(best_hyp.shape)
             sent_lengths[i] = len(best_hyp)
             best.append(best_hyp)
