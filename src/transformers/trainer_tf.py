@@ -4,6 +4,12 @@
 import os
 import logging
 from collections import defaultdict, OrderedDict
+import math
+import itertools
+
+import numpy as np
+
+from sklearn.metrics import classification_report
 
 import tensorflow as tf
 from .optimization_tf import *
@@ -59,7 +65,7 @@ class TFTrainer(object):
 
         assert len(kwargs) == 0, "unrecognized params passed: %s" % ",".join(kwargs.keys())
     
-    def setup_training(self, checkpoint_path, log_path, cache_dir="cache", data_dir=None, training_data=None, validation_data=None):
+    def setup_training(self, checkpoint_path, log_path, cache_dir="cache", data_dir=None, training_data=None, validation_data=None, test_data=None):
         """
         Setup the different steps to train a model:
           - check if all the data are given
@@ -78,19 +84,27 @@ class TFTrainer(object):
             This parameter becomes mandatory if the parameter data_dir is not given.
           validation_data (optional): the validation data, either as a list of example or as a tf.data.Dataset.
             This parameter becomes mandatory if the parameter data_dir is not given.
+          test_data (optional): the test data, either as a list of example or as a tf.data.Dataset.
+            This parameter will take the validation data as value if nothing is given.
         """
 
         if data_dir is None and (training_data is None or validation_data is None):
             raise ValueError(
-                "If the data_dir parameter is None, the parameters training_data and validation_data should be given"
+              "If the data_dir parameter is None, the parameters training_data and validation_data should be given"
             )
-
+        elif data_dir is not None and (training_data is not None or validation_data is not None):
+            raise ValueError(
+              "If the data_dir parameter is not None, the parameters training_data and validation_data should be None"
+            )
+        
         self.datasets["train"] = training_data
         self.datasets["validation"] = validation_data
+        self.datasets["test"] = test_data
 
         if self.distributed:
             self.strategy = tf.distribute.MirroredStrategy()
             self.batch_size *= self.strategy.num_replicas_in_sync
+            self.eval_batch_size *= self.strategy.num_replicas_in_sync
         else:
             if len(tf.config.list_physical_devices('GPU')) >= 1:
                 self.strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
@@ -176,40 +190,56 @@ class TFTrainer(object):
           cache_dir: the directory path where the cached data are.
         """
         if self.data_processor_name == "glue":
-            self.datasets["train"] = glue_convert_examples_to_features(self.datasets["train"], tokenizer, self.max_len, self.task)
-            self.datasets["validation"] = glue_convert_examples_to_features(self.datasets["validation"], tokenizer, self.max_len, self.task)
-        elif self.data_processor_name == "squadv1" or self.data_processor_name == "squadv2":
-            self.datasets["train"] = squad_convert_examples_to_features(self.datasets["train"], tokenizer, self.max_len, self.doc_stride, self.max_query_len, True, return_dataset="tf")
-            self.datasets["validation"] = squad_convert_examples_to_features(self.datasets["validation"], tokenizer, self.max_len, self.doc_stride, self.max_query_len, False, return_dataset="tf")
-        elif self.data_processor_name == "xnli":
-            if data_dir is not None:
-                def to_tensorflow_dataset(lst_features):
-                    """Transform the examples into a Tensorflow Dataset"""
-                    features_as_dict = [feat.to_dict() for feat in lst_features]
-                    tf_features = defaultdict(list)
-                    tf_labels = []
-
-                    for d in features_as_dict:
-                        for key, value in d.items():
-                            if key == "label":
-                                tf_labels.append(value)
-                            else: 
-                                tf_features[key].append(value)
-
-                    tf_features = tf.data.Dataset.from_tensor_slices(dict(tf_features))
-                    tf_labels = tf.data.Dataset.from_tensor_slices(tf_labels)
-
-                    return tf.data.Dataset.zip((tf_features, tf_labels))
-
+            if self.datasets["train"] is None:
                 train_examples = self.processor.get_train_examples(data_dir)
-                self.datasets["train"] = glue_convert_examples_to_features(train_examples, tokenizer, max_length=self.max_len, label_list=self.processor.get_labels(), output_mode=xnli_output_modes[self.task], pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0])
-                self.datasets["train"] = to_tensorflow_dataset(self.datasets["train"])
-                validation_examples = self.processor.get_test_examples(data_dir)
-                self.datasets["validation"] = glue_convert_examples_to_features(validation_examples, tokenizer, max_length=self.max_len, label_list=self.processor.get_labels(), output_mode=xnli_output_modes[self.task], pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0])
-                self.datasets["validation"] = to_tensorflow_dataset(self.datasets["validation"])
+                self.datasets["train"] = glue_convert_examples_to_features(train_examples, tokenizer, self.max_len, self.task, return_dataset="tf")
             else:
-                self.datasets["train"] = glue_convert_examples_to_features(self.datasets["train"], tokenizer, max_length=self.max_len, label_list=self.processor.get_labels(), output_mode=xnli_output_modes[self.task], pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0])
-                self.datasets["validation"] = glue_convert_examples_to_features(self.datasets["validation"], tokenizer, max_length=self.max_len, label_list=self.processor.get_labels(), output_mode=xnli_output_modes[self.task], pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0])
+                self.datasets["train"] = glue_convert_examples_to_features(self.datasets["train"], tokenizer, self.max_len, self.task, return_dataset="tf")
+            
+            if self.datasets["validation"] is None:
+                validation_examples = self.processor.get_dev_examples(data_dir)
+                self.datasets["validation"] = glue_convert_examples_to_features(validation_examples, tokenizer, self.max_len, self.task, return_dataset="tf")
+            else:
+                self.datasets["validation"] = glue_convert_examples_to_features(self.datasets["validation"], tokenizer, self.max_len, self.task, return_dataset="tf")
+
+            if self.datasets["test"] is None:
+                self.datasets["test"] = self.datasets["validation"]
+            else:
+                self.datasets["test"] = glue_convert_examples_to_features(self.datasets["test"], tokenizer, self.max_len, self.task, return_dataset="tf")
+        elif self.data_processor_name == "squadv1" or self.data_processor_name == "squadv2":
+            if self.datasets["train"] is None:
+                train_examples = self.processor.get_train_examples(data_dir)
+                self.datasets["train"] = squad_convert_examples_to_features(train_examples, tokenizer, self.max_len, self.doc_stride, self.max_query_len, True, return_dataset="tf")
+            else:
+                self.datasets["train"] = squad_convert_examples_to_features(self.datasets["train"], tokenizer, self.max_len, self.doc_stride, self.max_query_len, True, return_dataset="tf")
+            
+            if self.datasets["validation"] is None:
+                validation_examples = self.processor.get_dev_examples(data_dir)
+                self.datasets["validation"] = squad_convert_examples_to_features(validation_examples, tokenizer, self.max_len, self.doc_stride, self.max_query_len, False, return_dataset="tf")
+            else:
+                self.datasets["validation"] = squad_convert_examples_to_features(self.datasets["validation"], tokenizer, self.max_len, self.doc_stride, self.max_query_len, False, return_dataset="tf")
+        
+            if self.datasets["test"] is None:
+                self.datasets["test"] = self.datasets["validation"]
+            else:
+                self.datasets["test"] = squad_convert_examples_to_features(self.datasets["test"], tokenizer, self.max_len, self.doc_stride, self.max_query_len, False, return_dataset="tf")
+        elif self.data_processor_name == "xnli":
+            if self.datasets["train"] is None:
+                train_examples = self.processor.get_train_examples(data_dir)
+                self.datasets["train"] = glue_convert_examples_to_features(train_examples, tokenizer, max_length=self.max_len, label_list=self.processor.get_labels(), output_mode=xnli_output_modes[self.task], pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0], return_dataset="tf")
+            else:
+                self.datasets["train"] = glue_convert_examples_to_features(self.datasets["train"], tokenizer, max_length=self.max_len, label_list=self.processor.get_labels(), output_mode=xnli_output_modes[self.task], pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0], return_dataset="tf")
+            
+            if self.datasets["validation"] is None:
+                validation_examples = self.processor.get_test_examples(data_dir)
+                self.datasets["validation"] = glue_convert_examples_to_features(validation_examples, tokenizer, max_length=self.max_len, label_list=self.processor.get_labels(), output_mode=xnli_output_modes[self.task], pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0], return_dataset="tf")
+            else:
+                self.datasets["validation"] = glue_convert_examples_to_features(self.datasets["validation"], tokenizer, max_length=self.max_len, label_list=self.processor.get_labels(), output_mode=xnli_output_modes[self.task], pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0], return_dataset="tf")
+            
+            if self.datasets["test"] is None:
+                self.datasets["test"] = self.datasets["validation"]
+            else:
+                self.datasets["test"] = glue_convert_examples_to_features(self.datasets["test"], tokenizer, max_length=self.max_len, label_list=self.processor.get_labels(), output_mode=xnli_output_modes[self.task], pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0], return_dataset="tf")
     
     def _load_cache(self, cached_file):
         """
@@ -285,12 +315,19 @@ class TFTrainer(object):
                 list(filter(None, self.pretrained_model_name_or_path.split("/"))).pop(), str(self.max_len)
             ),
         )
+        cached_test_features_file = os.path.join(
+            cache_dir, "cached_test_{}_{}.tf_record".format(
+                list(filter(None, self.pretrained_model_name_or_path.split("/"))).pop(), str(self.max_len)
+            ),
+        )
 
         if os.path.exists(cached_training_features_file) and os.path.exists(cached_validation_features_file):
             logger.info("Loading features from cached file %s", cached_training_features_file)
             self.datasets["train"] = self._load_cache(cached_training_features_file)
             logger.info("Loading features from cached file %s", cached_validation_features_file)
             self.datasets["validation"] = self._load_cache(cached_validation_features_file)
+            logger.info("Loading features from cached file %s", cached_test_features_file)
+            self.datasets["test"] = self._load_cache(cached_test_features_file)
         else:
             os.makedirs(cache_dir, exist_ok=True)
             self._create_features(tokenizer, data_dir)
@@ -298,15 +335,17 @@ class TFTrainer(object):
             self._save_cache("train", cached_training_features_file)
             logger.info("Create cache file %s", cached_validation_features_file)
             self._save_cache("validation", cached_validation_features_file)
+            logger.info("Create cache file %s", cached_test_features_file)
+            self._save_cache("test", cached_test_features_file)
         
-        self.train_steps = self.datasets["train"].reduce(0, lambda x, _: x + 1) // self.batch_size
-        self.train_steps = self.train_steps.numpy()
+        self.train_steps = math.ceil(self.datasets["train"].reduce(0, lambda x, _: x + 1).numpy() / self.batch_size)
         self.datasets["train"] = self.datasets["train"].shuffle(128).batch(self.batch_size).repeat(-1)
         self.datasets["train"] = self.strategy.experimental_distribute_dataset(self.datasets["train"])
-        self.validation_steps = self.datasets["validation"].reduce(0, lambda x, _: x + 1) // self.eval_batch_size
-        self.validation_steps = self.validation_steps.numpy()
+        self.validation_steps = math.ceil(self.datasets["validation"].reduce(0, lambda x, _: x + 1).numpy() / self.eval_batch_size)
         self.datasets["validation"] = self.datasets["validation"].batch(self.eval_batch_size)
         self.datasets["validation"] = self.strategy.experimental_distribute_dataset(self.datasets["validation"])
+        self.test_steps = math.ceil(self.datasets["test"].reduce(0, lambda x, _: x + 1).numpy() / (self.eval_batch_size / self.strategy.num_replicas_in_sync))
+        self.datasets["test"] = self.datasets["test"].batch(self.eval_batch_size // self.strategy.num_replicas_in_sync)
 
     def _create_optimizer(self):
         """
@@ -403,7 +442,7 @@ class TFTrainer(object):
                             tf.summary.trace_export(name="training", step=step, profiler_outdir=self.log_path)
 
                     if step % 10 == 0:
-                        logger.info("Epoch {} Step {} Loss {:.4f} Train Accuracy {:.4f}".format(epoch, step.numpy(), total_loss.numpy(), self.train_acc_metric.result()))
+                        logger.info("Epoch {} Step {} Loss {:.4f} Train Accuracy {:.4f}".format(epoch, step.numpy(), total_loss.numpy() / num_batches, self.train_acc_metric.result()))
 
                     if step % 100 == 0:
                         ckpt_save_path = self.model.ckpt_manager.save()
@@ -443,7 +482,6 @@ class TFTrainer(object):
             self.test_loss_metric(loss)
 
         self.strategy.experimental_run_v2(step_fn, args=(dist_inputs,))
-
             
     @tf.function
     def _distributed_train_step(self, dist_inputs):
@@ -462,6 +500,7 @@ class TFTrainer(object):
                 loss = tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.batch_size)
 
             gradients = tape.gradient(loss, self.model.trainable_variables)
+
             if self.optimizer_name == "adamw":
                 self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)), self.max_grad_norm)
             else:
@@ -476,8 +515,31 @@ class TFTrainer(object):
         sum_loss = self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
         return sum_loss
+    
+    def evaluate(self):
+        """
+        Evaluate the model over the test dataset and print a report.
+        """
+        y_true = []
+        results = self.model.predict(self.datasets["test"], steps=self.test_steps)
+
+        for batch in self.datasets["test"]:
+            y_true.extend(batch[1].numpy().tolist())
+        
+        y_pred = np.reshape(np.argmax(results, axis=-1), (-1, 1)).tolist()
+        y_true = list(itertools.chain.from_iterable(y_true))
+        y_pred = list(itertools.chain.from_iterable(y_pred))
+
+        print(classification_report(y_true, y_pred, target_names=self.label2id.keys()))
 
     def save_model(self, save_path):
+        """
+        Save the pretrained model and create a Tensorflow saved model.
+
+        Args:
+          save_path: directory path where the pretrained model and
+            Tensorflow saved model will be saved
+        """
         logger.info("Saving model in {}".format(save_path))
 
         path = os.path.join(save_path, "saved_model")

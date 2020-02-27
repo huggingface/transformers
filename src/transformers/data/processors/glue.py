@@ -39,6 +39,7 @@ def glue_convert_examples_to_features(
     pad_token=0,
     pad_token_segment_id=0,
     mask_padding_with_zero=True,
+    return_dataset=False
 ):
     """
     Loads a data file into a list of ``InputFeatures``
@@ -56,6 +57,9 @@ def glue_convert_examples_to_features(
         mask_padding_with_zero: If set to ``True``, the attention mask will be filled by ``1`` for actual values
             and by ``0`` for padded values. If set to ``False``, inverts it (``1`` for padded values, ``0`` for
             actual values)
+        return_dataset: Default False. Either 'pt' or 'tf'.
+            if 'pt': returns a torch.data.TensorDataset,
+            if 'tf': returns a tf.data.Dataset
 
     Returns:
         If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset``
@@ -137,7 +141,7 @@ def glue_convert_examples_to_features(
             )
         )
 
-    if is_tf_available() and is_tf_dataset:
+    if is_tf_available() and (is_tf_dataset or return_dataset == "tf"):
 
         def gen():
             for ex in features:

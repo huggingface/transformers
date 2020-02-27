@@ -29,7 +29,6 @@ else:
 
 tf.config.optimizer.set_jit(USE_XLA)
 tf.config.optimizer.set_experimental_options({"auto_mixed_precision": USE_AMP})
-logging.getLogger("transformers.trainer_tf").setLevel(logging.INFO)
 
 # Load dataset via TensorFlow Datasets
 data = tensorflow_datasets.load(f"glue/{TFDS_TASK}")
@@ -56,7 +55,7 @@ trainer = TFTrainer(**kwargs)
 trainer.setup_training("checkpoints", "logs", training_data=data["train"], validation_data=data["validation"])
 trainer.train()
 trainer.save_model("save")
-
+trainer.evaluate()
 
 if TASK == "mrpc":
     # Load the TensorFlow model in PyTorch for inspection
