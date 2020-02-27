@@ -1171,17 +1171,23 @@ class BeamHypotheses(object):
             else:
                 self.worst_score = min(score, self.worst_score)
 
-    def is_done(self, best_sum_logprobs):
+    def is_done(self, best_sum_logprobs, cur_len=None):
         """
         If there are enough hypotheses and that none of the hypotheses being generated
         can become better than the worst one in the heap, then we are done with this sentence.
         """
+
         if len(self) < self.num_beams:
             return False
         elif self.early_stopping:
             return True
         else:
-            return self.worst_score >= best_sum_logprobs / self.max_length ** self.length_penalty
+            if cur_len is None: cur_len = self.max_length
+            print(f'checking worst_score {self.worst_score} against {best_sum_logprobs}, with len: {cur_len}')
+            cur_score =  best_sum_logprobs / cur_len ** self.length_penalty
+            ret =  self.worst_score >= cur_score
+            return ret
+
 
 
 class Conv1D(nn.Module):

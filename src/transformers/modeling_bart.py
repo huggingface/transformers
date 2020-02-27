@@ -1385,10 +1385,9 @@ class BartForMaskedLM(PretrainedBartModel):
             for batch_idx in range(batch_size):
                 # if we are done with this sentence
                 done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
-                    next_scores[batch_idx].max().item()
+                    next_scores[batch_idx].max().item(), step
                 )
                 if done[batch_idx]:  # pad all associated hypotheses
-                    raise ValueError("done")
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
                     ), "Example can only be done if at least {} beams have been generated".format(num_beams)
