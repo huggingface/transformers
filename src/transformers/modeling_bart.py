@@ -822,8 +822,8 @@ class BartModel(PretrainedBartModel):
         if attention_mask is not None:
             assert attention_mask.dim() == 2
 
-            attention_mask = (1.0 - attention_mask.long()) * -10000.0
-            assert attention_mask.max() <= 0
+            attention_mask = (1.0 - attention_mask.long()).bool()  # * -10000.0
+            assert attention_mask.max() <= 1
 
         # make masks if user doesn't supply
         decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(
