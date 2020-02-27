@@ -42,6 +42,10 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else None
     )
+    all_generative_model_classes = (
+        (DistilBertForMaskedLM,) if is_torch_available() else ()
+    )
+
     test_pruning = True
     test_torchscript = True
     test_resize_embeddings = True
