@@ -1,5 +1,5 @@
 # Install newest ptl.
-!pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
+pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
 
 
 curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-train.tsv?attredirects=0&d=1' \

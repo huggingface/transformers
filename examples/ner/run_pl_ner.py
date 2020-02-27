@@ -11,7 +11,6 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from transformer_base import BaseTransformer, add_generic_args, generic_train
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
-import gc
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +141,6 @@ class NERTransformer(BaseTransformer):
 
     def validation_end(self, outputs):
         ret, preds, targets = self._eval_end(outputs)
-        gc.collect()
         return ret
 
     def test_end(self, outputs):
