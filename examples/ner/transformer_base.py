@@ -108,7 +108,7 @@ class BaseTransformer(pl.LightningModule):
         return [optimizer]
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx, second_order_closure=None):
-
+        
         if self.trainer.use_tpu:
             xm.optimizer_step(optimizer)
         else:
@@ -116,6 +116,8 @@ class BaseTransformer(pl.LightningModule):
         optimizer.zero_grad()
         # logger.info("lr step %s", self.lr_scheduler.get_last_lr()[-1])
         self.lr_scheduler.step()
+        import torch_xla.debug.metrics as met
+        print(met.metrics_report())
 
     def get_tqdm_dict(self):
         tqdm_dict = {"loss": "{:.3f}".format(self.trainer.avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
@@ -131,8 +133,6 @@ class BaseTransformer(pl.LightningModule):
     def train_dataloader(self):
         train_batch_size = self.hparams.train_batch_size
         dataloader = self.load_dataset("train", train_batch_size)
-        
-
         
         t_total = (
             (len(dataloader.dataset) // (train_batch_size  * max(1, self.hparams.n_gpu)))
