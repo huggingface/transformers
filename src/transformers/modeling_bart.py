@@ -457,8 +457,6 @@ class BartDecoder(nn.Module):
                 - attentions
         """
         # embed positions
-        assert self.generation_mode
-
         positions = self.embed_positions.forward(input_ids, generation_mode=self.generation_mode)
 
 
@@ -1023,7 +1021,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
     @torch.no_grad()
     def generate(self, input_ids=None, max_length=None, do_sample=True, num_beams=None, temperature=None, top_k=None, top_p=None, repetition_penalty=None, bos_token_id=None, pad_token_id=None, eos_token_ids=None, length_penalty=None, num_return_sequences=None,
-    ):
+    min_len=0, no_repeat_ngram_size=0):
         r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
         and beam-search.
 
@@ -1205,19 +1203,19 @@ class BartForMaskedLM(PretrainedBartModel):
             length_penalty,
             num_beams,
             vocab_size,
+            min_len=min_len,
+            no_repeat_ngram_size=no_repeat_ngram_size,
         )
         return output
 
-    def _generate_beam_search(self, src_tokens, cur_len, max_length, do_sample, temperature, top_k, top_p, repetition_penalty, pad_token_id, eos_token_ids, batch_size, length_penalty, num_beams, vocab_size,):
+    def _generate_beam_search(self, src_tokens, cur_len, max_length, do_sample, temperature, top_k, top_p, repetition_penalty, pad_token_id, eos_token_ids, batch_size, length_penalty, num_beams, vocab_size, min_len=0, no_repeat_ngram_size=0):
         """ Generate sequences for each example with beam search.
         """
         # Expand input to num beams
-        # assert src_tokens.shape == (batch_size * num_beams, cur_len)
+
         src_tokens = src_tokens.unsqueeze(1).expand(batch_size, num_beams, cur_len)
         src_tokens = src_tokens.contiguous().view(batch_size * num_beams, cur_len)  # (batch_size * num_beams, cur_len)
         bos_token_id = 0
-        prefix_tokens = src_tokens.new_zeros((batch_size, 1)).fill_(bos_token_id)
-        assert not do_sample
 
         # generated hypotheses
         generated_hyps = [
@@ -1242,8 +1240,6 @@ class BartForMaskedLM(PretrainedBartModel):
         finalized = [[] for i in range(batch_size)]
         step= 0
         self.model.decoder.generation_mode = True
-        eos_idx = src_tokens.new()
-        blacklist = src_tokens.new()
         while cur_len <= max_length:
             decoder_input_ids = prev_output_tokens.clone()
             model_inputs = self.prepare_inputs_for_generation(src_tokens, past, decoder_input_ids=decoder_input_ids,)
@@ -1254,7 +1250,7 @@ class BartForMaskedLM(PretrainedBartModel):
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             lprobs = F.log_softmax(outputs[0][:, -1, :], dim=-1)
             print_shapemax('lprobs', lprobs)
-            print(f'133:{lprobs[:, 133]}')
+
             assert pad_token_id is not None, 'should break circleci'
             lprobs[lprobs != lprobs] = -math.inf
             lprobs[:, pad_token_id] = -math.inf # fairseq has this
@@ -1270,6 +1266,9 @@ class BartForMaskedLM(PretrainedBartModel):
             elif step == 0:
                 #lprobs[:, :eos] = -math.inf
                 lprobs[:, bos_token_id + 1:] = -math.inf
+
+            if step < min_len:
+                lprobs[:, eos] = -math.inf
 
             #print(f'Num not infinite lprobs: {(lprobs > -1e4).float().sum(1)}')
             # if step == 0:
@@ -1292,16 +1291,35 @@ class BartForMaskedLM(PretrainedBartModel):
 
             # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
-                raise ValueError('hit')
                 for i in range(batch_size * num_beams):
-                    for previous_token in set(src_tokens[i].tolist()):
+                    for previous_token in set(prev_output_tokens[i].tolist()):
                         # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
                         if lprobs[i, previous_token] < 0:
                             lprobs[i, previous_token] *= repetition_penalty
                         else:
                             lprobs[i, previous_token] /= repetition_penalty
+            num_hypos = batch_size * num_beams
+            if no_repeat_ngram_size > 0:  # copied from fairseq
+                # for each beam and batch sentence, generate a list of previous ngrams
+                gen_ngrams = [{} for _ in range(num_hypos)]
+                for bbsz_idx in range(num_hypos):
+                    gen_tokens = prev_output_tokens[bbsz_idx].tolist()
+                    for ngram in zip(*[gen_tokens[i:] for i in range(no_repeat_ngram_size)]):
+                        gen_ngrams[bbsz_idx][tuple(ngram[:-1])] = gen_ngrams[bbsz_idx].get(tuple(ngram[:-1]), []) + [ngram[-1]]
 
+                def calculate_banned_tokens(bbsz_idx):
+                    # before decoding the next token, prevent decoding of ngrams that have already appeared
+                    ngram_index = tuple(prev_output_tokens[bbsz_idx, step + 2 - no_repeat_ngram_size :step + 1].tolist())
+                    return gen_ngrams[bbsz_idx].get(ngram_index, [])
 
+                if step + 2 - no_repeat_ngram_size >= 0:
+                    # no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
+                    banned_tokens = [calculate_banned_tokens(bbsz_idx) for bbsz_idx in range(num_hypos)]
+                else:
+                    banned_tokens = [[] for _ in range(num_hypos)]
+
+                for bbsz_idx in range(num_hypos):
+                    lprobs[bbsz_idx, banned_tokens[bbsz_idx]] = -math.inf
             # do greedy beam search
             #scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
             assert lprobs.size() == (batch_size * num_beams, vocab_size)
@@ -1310,6 +1328,7 @@ class BartForMaskedLM(PretrainedBartModel):
             #    _scores = lprobs[:, ::num_beams, :].contiguous()
             #else:
             _scores = lprobs + beam_scores[:, None].expand_as(lprobs)  # (batch_size * num_beams, vocab_size)
+
             # re-organize to group the beam together (we are keeping top hypothesis accross beams)
             _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
             next_scores, next_words = torch.topk(_scores, 2 * num_beams)

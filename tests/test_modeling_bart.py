@@ -258,7 +258,7 @@ class BartHeadTests(unittest.TestCase):
         lm_model.eval()
 
 
-        new_input_ids = lm_model.generate(input_ids.clone(), num_return_sequences=1, num_beams=2)
+        new_input_ids = lm_model.generate(input_ids.clone(), num_return_sequences=1, num_beams=2, no_repeat_ngram_size=3)
         self.assertEqual(new_input_ids.shape, (input_ids.shape[0]*2, 20))
 
         # No Beam Search
