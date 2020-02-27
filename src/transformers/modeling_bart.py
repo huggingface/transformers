@@ -1257,7 +1257,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
         # generated hypotheses
         generated_hyps = [
-            BeamHypotheses(num_beams, max_length, length_penalty, early_stopping=False) for _ in range(batch_size)
+            BeamHypotheses(num_beams, max_length, length_penalty, early_stopping=True) for _ in range(batch_size)
         ]
 
         # scores for each sentence in the beam
@@ -1383,11 +1383,10 @@ class BartForMaskedLM(PretrainedBartModel):
 
             # for each sentence, mark done if impossible to improve
             for batch_idx in range(batch_size):
-                # if we are done with this sentence
-                done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
-                    next_scores[batch_idx].max().item(), step
-                )
+                # if we are done with this sentence (because we can't improve)
+                if done[batch_idx]: continue
                 if done[batch_idx]:  # pad all associated hypotheses
+                    print(f'DONE BATCH {batch_idx} at step {step}')
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
                     ), "Example can only be done if at least {} beams have been generated".format(num_beams)
@@ -1403,9 +1402,10 @@ class BartForMaskedLM(PretrainedBartModel):
                 for idx, score in zip(next_words[batch_idx], next_scores[batch_idx]):
                     beam_id = idx // vocab_size
                     word_id = idx % vocab_size
+                    assert prev_output_tokens.shape[1] == (step+1), f'{prev_output_tokens.shape[1]} != {step+1}'
                     if word_id.item() in eos_token_ids:
                         generated_hyps[batch_idx].add(
-                            prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].clone(),
+                            prev_output_tokens[batch_idx * num_beams + beam_id].clone(),
                             score.item(),  # / (step + 1) ** self.len_penalty
                         )
                     else:
@@ -1414,6 +1414,10 @@ class BartForMaskedLM(PretrainedBartModel):
                     if len(next_sent_beam) == num_beams:
                         break
 
+                done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
+                    next_scores[batch_idx].max().item(), cur_len=step + 1,
+                )
+
                 # update next beam content
                 # if step == 3: pdb.set_trace()
                 assert len(next_sent_beam) == num_beams, "Beam should always be full"
@@ -1421,6 +1425,10 @@ class BartForMaskedLM(PretrainedBartModel):
                 assert len(next_batch_beam) == num_beams * (batch_idx + 1)
                 print(f"next_sent_beam: {next_sent_beam}")
                 print(f"next_batch_beam: {next_batch_beam}")
+
+            # stop when we are done with each sentence
+            if all(done):
+                break
 
             # sanity check / prepare next batch
             assert len(next_batch_beam) == batch_size * num_beams
@@ -1440,9 +1448,7 @@ class BartForMaskedLM(PretrainedBartModel):
             cur_len += 1
             step += 1
 
-            # stop when we are done with each sentence
-            if all(done):
-                break
+
         print("*** FINALIZING ***")
         print(f"Final prev_output_tokens: {prev_output_tokens}")
         print(f"Final next_scores: {next_scores}")
@@ -1467,11 +1473,9 @@ class BartForMaskedLM(PretrainedBartModel):
         sent_lengths = src_tokens.new(batch_size)
         best = []
         # print(generated_hyps)
-        print(f"scored beams: {generated_hyps[0].beams}")
+        print(f"scored beams: {[(x[0], x[1].shape) for x in generated_hyps[0].beams]}")
         for i, hypotheses in enumerate(generated_hyps):
             best_hyp = max(hypotheses.beams, key=lambda x: x[0])[1]
-
-            print(best_hyp.shape)
             sent_lengths[i] = len(best_hyp)
             best.append(best_hyp)
 
