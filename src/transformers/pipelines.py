@@ -1010,11 +1010,13 @@ def pipeline(
     """
     Utility factory method to build a pipeline.
     Pipeline are made of:
-        A Tokenizer instance in charge of mapping raw textual input to token
-        A Model instance
-        Some (optional) post processing for enhancing model's output
 
-    Examples:
+        - A Tokenizer instance in charge of mapping raw textual input to token
+        - A Model instance
+        - Some (optional) post processing for enhancing model's output
+
+    Examples::
+
         pipeline('sentiment-analysis')
         pipeline('question-answering', model='distilbert-base-cased-distilled-squad', tokenizer='bert-base-cased')
         pipeline('ner', model=AutoModel.from_pretrained(...), tokenizer=AutoTokenizer.from_pretrained(...)
