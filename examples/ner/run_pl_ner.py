@@ -47,7 +47,9 @@ class NERTransformer(BaseTransformer):
         return os.path.join(
             self.hparams.data_dir,
             "cached_{}_{}_{}".format(
-                mode, list(filter(None, self.hparams.model_name_or_path.split("/"))).pop(), str(self.hparams.max_seq_length)
+                mode,
+                list(filter(None, self.hparams.model_name_or_path.split("/"))).pop(),
+                str(self.hparams.max_seq_length),
             ),
         )
 
@@ -77,7 +79,6 @@ class NERTransformer(BaseTransformer):
                 logger.info("Saving features into cached file %s", cached_features_file)
                 torch.save(features, cached_features_file)
 
-
     def load_dataset(self, mode, batch_size):
         "Load datasets. Called after prepare data."
         cached_features_file = self._feature_file(mode)
@@ -87,8 +88,9 @@ class NERTransformer(BaseTransformer):
         all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
         all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
-        return DataLoader(TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids),
-                          batch_size=batch_size)
+        return DataLoader(
+            TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids), batch_size=batch_size
+        )
 
     def validation_step(self, batch, batch_nb):
         "Compute validation"
@@ -102,8 +104,7 @@ class NERTransformer(BaseTransformer):
         tmp_eval_loss, logits = outputs[:2]
         preds = logits.detach().cpu().numpy()
         out_label_ids = inputs["labels"].detach().cpu().numpy()
-        return {"val_loss": tmp_eval_loss.detach().cpu(),
-                "pred": preds, "target": out_label_ids}
+        return {"val_loss": tmp_eval_loss.detach().cpu(), "pred": preds, "target": out_label_ids}
 
     def _eval_end(self, outputs):
         "Evaluation called for both Val and Test"

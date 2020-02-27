@@ -128,14 +128,12 @@ class BaseTransformer(pl.LightningModule):
         dataloader = self.load_dataset("train", train_batch_size)
 
         t_total = (
-            (len(dataloader.dataset) // (train_batch_size  * max(1, self.hparams.n_gpu)))
+            (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.n_gpu)))
             // self.hparams.gradient_accumulation_steps
             * float(self.hparams.num_train_epochs)
         )
         scheduler = get_linear_schedule_with_warmup(
-            self.opt,
-            num_warmup_steps=self.hparams.warmup_steps,
-            num_training_steps=t_total
+            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
         )
         self.lr_scheduler = scheduler
         return dataloader
@@ -261,7 +259,6 @@ def generic_train(model, args):
         checkpoint_callback=checkpoint_callback,
     )
 
-
     if args.fp16:
         train_params["use_amp"] = args.fp16
         train_params["amp_level"] = args.fp16_opt_level
@@ -269,6 +266,7 @@ def generic_train(model, args):
     if args.n_tpu_cores > 0:
         global xm
         import torch_xla.core.xla_model as xm
+
         train_params["num_tpu_cores"] = args.n_tpu_cores
         train_params["gpus"] = 0
 
