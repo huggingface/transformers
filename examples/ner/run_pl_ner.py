@@ -31,13 +31,14 @@ class NERTransformer(BaseTransformer):
 
     def training_step(self, batch, batch_num):
         "Compute loss and log."
-        if self.is_logger():
-            logger.info("step %s", self.global_step)
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
                 batch[2] if self.hparams.model_type in ["bert", "xlnet"] else None
             )  # XLM and RoBERTa don"t use segment_ids
+        if self.is_logger():
+            logger.info("step %s", self.global_step)
+            logger.info("sizes %s %s %s", batch[0].shape, batch[1].shape, batch[3].shape)
 
         outputs = self.forward(**inputs)
         loss = outputs[0]
