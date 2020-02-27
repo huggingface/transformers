@@ -24,7 +24,6 @@ import run_generation
 import run_glue
 import run_squad
 
-
 logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger()
@@ -98,3 +97,6 @@ class ExamplesTests(unittest.TestCase):
         with patch.object(sys, "argv", testargs + [model_type, model_name]):
             result = run_generation.main()
             self.assertGreaterEqual(len(result[0]), 10)
+
+
+
