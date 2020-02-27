@@ -636,7 +636,7 @@ class NerPipeline(Pipeline):
                 if self.model.config.id2label[label_idx] not in self.ignore_labels:
                     answer += [
                         {
-                            "word": self.tokenizer.decode([int(input_ids[idx])]),
+                            "word": self.tokenizer.convert_ids_to_tokens(int(input_ids[idx])),
                             "score": score[idx][label_idx].item(),
                             "entity": self.model.config.id2label[label_idx],
                         }
