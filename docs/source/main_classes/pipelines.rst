@@ -14,6 +14,9 @@ There are two categories of pipeline abstractions to be aware about:
 The pipeline abstraction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+The `pipeline` abstraction is a wrapper around all the other available pipelines. It is instantiated as any
+other pipeline but requires an additional argument which is the `task`.
+
 .. autoclass:: transformers.pipeline
     :members:
 

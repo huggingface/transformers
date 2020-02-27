@@ -575,6 +575,16 @@ class FillMaskPipeline(Pipeline):
 class NerPipeline(Pipeline):
     """
     Named Entity Recognition pipeline using ModelForTokenClassification head.
+
+    The models that this pipeline can use are models that have been fine-tuned on a token classification task.
+    See the list of available community models fine-tuned on such a task on
+    `huggingface.co/models <https://huggingface.co/models?search=&filter=token-classification>`__.
+
+    Below are some usage examples.
+
+    Example::
+
+        from transformers import pi
     """
 
     default_input_names = "sequences"
@@ -1009,19 +1019,71 @@ def pipeline(
 ) -> Pipeline:
     """
     Utility factory method to build a pipeline.
+
     Pipeline are made of:
 
         - A Tokenizer instance in charge of mapping raw textual input to token
         - A Model instance
         - Some (optional) post processing for enhancing model's output
 
+
+    Args:
+        task (:obj:`str`):
+            The task defining which pipeline will be returned. Currently accepted tasks are:
+
+            - "feature-extraction": will return a :class:`~transformers.FeatureExtractionPipeline`
+            - "sentiment-analysis": will return a :class:`~transformers.TextClassificationPipeline`
+            - "ner": will return a :class:`~transformers.NerPipeline`
+            - "question-answering": will return a :class:`~transformers.QuestionAnsweringPipeline`
+            - "fill-mask": will return a :class:`~transformers.FillMaskPipeline`
+        model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`, defaults to :obj:`None`):
+            The model that will be used by the pipeline to make predictions. This can be :obj:`None`, a string
+            checkpoint identifier or an actual pre-trained model inheriting from
+            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
+            TensorFlow.
+
+            If :obj:`None`, the default of the pipeline will be loaded.
+        config (:obj:`str` or :obj:`~transformers.PretrainedConfig`, `optional`, defaults to :obj:`None`):
+            The configuration that will be used by the pipeline to instantiate the model. This can be :obj:`None`,
+            a string checkpoint identifier or an actual pre-trained model configuration inheriting from
+            :class:`~transformers.PretrainedConfig`.
+
+            If :obj:`None`, the default of the pipeline will be loaded.
+        tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`, defaults to :obj:`None`):
+            The tokenizer that will be used by the pipeline to encode data for the model. This can be :obj:`None`,
+            a string checkpoint identifier or an actual pre-trained tokenizer inheriting from
+            :class:`~transformers.PreTrainedTokenizer`.
+
+            If :obj:`None`, the default of the pipeline will be loaded.
+        modelcard (:obj:`str` or :obj:`~transformers.ModelCard`, `optional`, defaults to :obj:`None`):
+            The model modelcard.
+        framework (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The framework to use, either "pt" for PyTorch or "tf" for TensorFlow. The specified framework must be
+            installed.
+
+            If no framework is specified, will default to the one currently installed. If no framework is specified
+            and both frameworks are installed, will default to PyTorch.
+
+
     Examples::
 
+        from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
+
+        # Sentiment analysis pipeline
         pipeline('sentiment-analysis')
+
+        # Question answering pipeline, specifying the checkpoint identifier
         pipeline('question-answering', model='distilbert-base-cased-distilled-squad', tokenizer='bert-base-cased')
-        pipeline('ner', model=AutoModel.from_pretrained(...), tokenizer=AutoTokenizer.from_pretrained(...)
-        pipeline('ner', model='dbmdz/bert-large-cased-finetuned-conll03-english', tokenizer='bert-base-cased')
-        pipeline('ner', model='https://...pytorch-model.bin', config='https://...config.json', tokenizer='bert-base-cased')
+
+        # Named entity recognition pipeline, passing in a specific model and tokenizer
+        model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+        pipeline('ner', model=model, tokenizer=tokenizer)
+
+        # Named entity recognition pipeline, passing a model and configuration with a HTTPS URL.
+        model_url = "https://s3.amazonaws.com/models.huggingface.co/bert/dbmdz/bert-large-cased-finetuned-conll03-english/pytorch_model.bin"
+        config_url = "https://s3.amazonaws.com/models.huggingface.co/bert/dbmdz/bert-large-cased-finetuned-conll03-english/config.json"
+        pipeline('ner', model=model_url, config=config_url, tokenizer='bert-base-cased')
     """
     # Retrieve the task
     if task not in SUPPORTED_TASKS:
