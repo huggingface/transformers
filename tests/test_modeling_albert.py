@@ -29,6 +29,7 @@ if is_torch_available():
         AlbertModel,
         AlbertForMaskedLM,
         AlbertForSequenceClassification,
+        AlbertForTokenClassification,
         AlbertForQuestionAnswering,
     )
     from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
