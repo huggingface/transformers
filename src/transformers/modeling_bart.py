@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch BART model, ported from the fairseq repo."""
-import pdb
 import logging
+import math
+import pdb
 import random
 from typing import Dict, List, Optional, Tuple
 
@@ -24,8 +25,8 @@ from torch import Tensor, nn
 
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
-import math
+from .modeling_utils import BeamHypotheses, PreTrainedModel, create_position_ids_from_input_ids, top_k_top_p_filtering
+
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +182,8 @@ def shape_printer(tensor_dct: Dict):
     elif tensor_dct is None:
         return None
     else:
-        return {k: shape_printer(v) for k,v in tensor_dct.items()}
+        return {k: shape_printer(v) for k, v in tensor_dct.items()}
+
 
 # Helper Modules
 
@@ -360,7 +362,8 @@ class DecoderLayer(nn.Module):
         residual = x
         y = x  # TODO(SS): figure out why fairseq did this, then hopefully delete it
 
-        if layer_state is None: layer_state = {}
+        if layer_state is None:
+            layer_state = {}
         # next line mutates layer state
         x, self_attn_weights = self.self_attn.forward(
             query=x, key=y, value=y, layer_state=layer_state, need_weights=need_attn_weights, attn_mask=attention_mask,
@@ -427,7 +430,7 @@ class BartDecoder(nn.Module):
         self.layernorm_embedding = LayerNorm(config.d_model)
         self.generation_mode = False
 
-    #def set_generation_mode(self):
+    # def set_generation_mode(self):
 
     def forward(
         self,
@@ -459,24 +462,22 @@ class BartDecoder(nn.Module):
         # embed positions
         positions = self.embed_positions.forward(input_ids, generation_mode=self.generation_mode)
 
-
         if self.generation_mode:
             input_ids = input_ids[:, -1:]
             positions = positions[:, -1:]  # happens after we embed them
             assert input_ids.ne(self.padding_idx).any()
 
-        print(f'prev_output Shape after neg1slice: {input_ids.shape}')
-        print(f'positions after fun stuff: {positions.shape}')
-        print(f'enc_out.shape: {encoder_hidden_states.shape}')
+        print(f"prev_output Shape after neg1slice: {input_ids.shape}")
+        print(f"positions after fun stuff: {positions.shape}")
+        print(f"enc_out.shape: {encoder_hidden_states.shape}")
 
-        print(f'Incremental state is type {type(decoder_cached_states)}')
+        print(f"Incremental state is type {type(decoder_cached_states)}")
         if decoder_cached_states is not None:
-            print(f'Incremental state is length {len(decoder_cached_states)}')
+            print(f"Incremental state is length {len(decoder_cached_states)}")
 
         x = self.embed_tokens(input_ids)
 
         x += positions
-
 
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -518,7 +519,7 @@ class BartDecoder(nn.Module):
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
         else:
             next_cache = None
-        #import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         return x, next_cache, all_hidden_states, list(all_self_attns)
 
 
@@ -773,7 +774,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
             positions = create_position_ids_from_input_ids(input, self.padding_idx)
         else:  # the position is our current step in the decoded sequence
             pos = int(self.padding_idx + input.size(1))
-            print(f'Embedding pos: {pos}')
+            print(f"Embedding pos: {pos}")
             positions = input.data.new(1, 1).fill_(pos)
         return super().forward(positions)
 
@@ -798,7 +799,6 @@ def _filter_out_falsey_values(tup) -> Tuple:
     """Remove entries that are None or [] from an iterable."""
     return tuple(x for x in tup if isinstance(x, torch.Tensor) or x)
 
-from .modeling_utils import BeamHypotheses, top_k_top_p_filtering
 
 RET_DOCSTRING = r"""
     Return:
@@ -817,8 +817,10 @@ RET_DOCSTRING = r"""
 """
 # Public API
 
+
 def print_shapemax(msg, tensor):
-    print(f'{msg} shape: {tensor.shape}, max: {tensor.max()}')
+    print(f"{msg} shape: {tensor.shape}, max: {tensor.max()}")
+
 
 @add_start_docstrings(
     "The bare BART Model outputting raw hidden-states without any specific head on top.", BART_START_DOCSTRING,
@@ -969,25 +971,27 @@ class BartForMaskedLM(PretrainedBartModel):
         return outputs
 
     @staticmethod
-    def prepare_inputs_for_generation(input_ids, past, **kwargs):
+    def prepare_inputs_for_generation(input_ids, past, attention_mask=None, **kwargs):
 
         if past is None:
             encoder_outputs, decoder_cached_states = None, None
         else:
             encoder_outputs, decoder_cached_states = past
         # decoder_cached_states = None #FIXME
-        decoder_input_ids = kwargs.get('decoder_input_ids')
+        decoder_input_ids = kwargs.get("decoder_input_ids")
         return {
             "input_ids": input_ids,
             "decoder_cached_states": decoder_cached_states,
             "decoder_input_ids": decoder_input_ids,
             "encoder_outputs": encoder_outputs,
-            #"input_ids":
+            "attention_mask": attention_mask,
+            # "input_ids":
         }
+
     @staticmethod
     def use_prefix_toks(beam_size, lprobs, prefix_tokens, step, pad_token_id):
-        print(f'using prefix tokens: {prefix_tokens} at step {step}')
-        print(f'BEFORE: max lprob: {lprobs.max()}')
+        print(f"using prefix tokens: {prefix_tokens} at step {step}")
+        print(f"BEFORE: max lprob: {lprobs.max()}")
         prefix_toks = prefix_tokens[:, step].unsqueeze(-1).repeat(1, beam_size).view(-1)
         prefix_lprobs = lprobs.gather(-1, prefix_toks.unsqueeze(-1))
         prefix_mask = prefix_toks.ne(pad_token_id)
@@ -1020,8 +1024,25 @@ class BartForMaskedLM(PretrainedBartModel):
         return self.lm_head
 
     @torch.no_grad()
-    def generate(self, input_ids=None, max_length=None, do_sample=True, num_beams=None, temperature=None, top_k=None, top_p=None, repetition_penalty=None, bos_token_id=None, pad_token_id=None, eos_token_ids=None, length_penalty=None, num_return_sequences=None,
-    min_len=0, no_repeat_ngram_size=0):
+    def generate(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        max_length=None,
+        do_sample=True,
+        num_beams=None,
+        temperature=None,
+        top_k=None,
+        top_p=None,
+        repetition_penalty=None,
+        bos_token_id=None,
+        pad_token_id=None,
+        eos_token_ids=None,
+        length_penalty=None,
+        num_return_sequences=None,
+        min_len=0,
+        no_repeat_ngram_size=0,
+    ):
         r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
         and beam-search.
 
@@ -1135,10 +1156,10 @@ class BartForMaskedLM(PretrainedBartModel):
         if isinstance(eos_token_ids, int):
             eos_token_ids = [eos_token_ids]
 
-        assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictely positive integer."
+        assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictly positive integer."
         assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
-        assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictely positive integer."
-        assert temperature > 0, "`temperature` should be strictely positive."
+        assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictly positive integer."
+        assert temperature > 0, "`temperature` should be strictly positive."
         assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
         assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
@@ -1187,7 +1208,6 @@ class BartForMaskedLM(PretrainedBartModel):
         else:
             effective_batch_size = batch_size
 
-
         output = self._generate_beam_search(
             input_ids,
             cur_len,
@@ -1208,7 +1228,25 @@ class BartForMaskedLM(PretrainedBartModel):
         )
         return output
 
-    def _generate_beam_search(self, src_tokens, cur_len, max_length, do_sample, temperature, top_k, top_p, repetition_penalty, pad_token_id, eos_token_ids, batch_size, length_penalty, num_beams, vocab_size, min_len=0, no_repeat_ngram_size=0):
+    def _generate_beam_search(
+        self,
+        src_tokens,
+        cur_len,
+        max_length,
+        do_sample,
+        temperature,
+        top_k,
+        top_p,
+        repetition_penalty,
+        pad_token_id,
+        eos_token_ids,
+        batch_size,
+        length_penalty,
+        num_beams,
+        vocab_size,
+        min_len=0,
+        no_repeat_ngram_size=0,
+    ):
         """ Generate sequences for each example with beam search.
         """
         # Expand input to num beams
@@ -1229,8 +1267,8 @@ class BartForMaskedLM(PretrainedBartModel):
 
         # decoder tokens
         prev_output_tokens = src_tokens.new(batch_size * num_beams, 1).long().fill_(-1)
-        prev_output_tokens[:, 0] = 2 #  HARDCODED EOS, FIXME(SS)
-        #prev_output_tokens[:, 1] = 0  # HARDCODED BOS, FIXME(SS)
+        prev_output_tokens[:, 0] = 2  #  HARDCODED EOS, FIXME(SS)
+        # prev_output_tokens[:, 1] = 0  # HARDCODED BOS, FIXME(SS)
         # Can get proba from model. Make sure EOS doesn't have children.
         # cache compute states
         past = None
@@ -1238,39 +1276,39 @@ class BartForMaskedLM(PretrainedBartModel):
         # done sentences
         done = [False for _ in range(batch_size)]
         finalized = [[] for i in range(batch_size)]
-        step= 0
+        step = 0
         self.model.decoder.generation_mode = True
         while cur_len <= max_length:
             decoder_input_ids = prev_output_tokens.clone()
             model_inputs = self.prepare_inputs_for_generation(src_tokens, past, decoder_input_ids=decoder_input_ids,)
 
-            print('***')
-            print(f'STEP: {step}, dci shape {decoder_input_ids.shape}')
+            print("***")
+            print(f"STEP: {step}, dci shape {decoder_input_ids.shape}")
             print(f"called at step {step} with: {model_inputs['decoder_input_ids']}")
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             lprobs = F.log_softmax(outputs[0][:, -1, :], dim=-1)
-            print_shapemax('lprobs', lprobs)
+            print_shapemax("lprobs", lprobs)
 
-            assert pad_token_id is not None, 'should break circleci'
+            assert pad_token_id is not None, "should break circleci"
             lprobs[lprobs != lprobs] = -math.inf
-            lprobs[:, pad_token_id] = -math.inf # fairseq has this
-            #lprobs[:, eos_token_ids[0]] = -math.inf
+            lprobs[:, pad_token_id] = -math.inf  # fairseq has this
+            # lprobs[:, eos_token_ids[0]] = -math.inf
             assert len(eos_token_ids) == 1
             eos = eos_token_ids[0]
             assert eos == 2
             assert bos_token_id == 0
 
-            if cur_len == max_length: # FORCE EOS
+            if cur_len == max_length:  # FORCE EOS
                 lprobs[:, :eos] = -math.inf
-                lprobs[:, eos + 1:] = -math.inf
+                lprobs[:, eos + 1 :] = -math.inf
             elif step == 0:
-                #lprobs[:, :eos] = -math.inf
-                lprobs[:, bos_token_id + 1:] = -math.inf
+                # lprobs[:, :eos] = -math.inf
+                lprobs[:, bos_token_id + 1 :] = -math.inf
 
             if step < min_len:
                 lprobs[:, eos] = -math.inf
 
-            #print(f'Num not infinite lprobs: {(lprobs > -1e4).float().sum(1)}')
+            # print(f'Num not infinite lprobs: {(lprobs > -1e4).float().sum(1)}')
             # if step == 0:
             #     # mutates lprobs
             #     print(f'Using prefix_tokens={prefix_tokens}')
@@ -1278,9 +1316,7 @@ class BartForMaskedLM(PretrainedBartModel):
             #     self.use_prefix_toks(num_beams, lprobs, prefix_tokens, 0, pad_token_id)
             #     print(f'AFTER: max lprob: {lprobs.max()}')
 
-
-
-            #import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
 
             # unk is 3? they do unk
 
@@ -1305,11 +1341,15 @@ class BartForMaskedLM(PretrainedBartModel):
                 for bbsz_idx in range(num_hypos):
                     gen_tokens = prev_output_tokens[bbsz_idx].tolist()
                     for ngram in zip(*[gen_tokens[i:] for i in range(no_repeat_ngram_size)]):
-                        gen_ngrams[bbsz_idx][tuple(ngram[:-1])] = gen_ngrams[bbsz_idx].get(tuple(ngram[:-1]), []) + [ngram[-1]]
+                        gen_ngrams[bbsz_idx][tuple(ngram[:-1])] = gen_ngrams[bbsz_idx].get(tuple(ngram[:-1]), []) + [
+                            ngram[-1]
+                        ]
 
                 def calculate_banned_tokens(bbsz_idx):
                     # before decoding the next token, prevent decoding of ngrams that have already appeared
-                    ngram_index = tuple(prev_output_tokens[bbsz_idx, step + 2 - no_repeat_ngram_size :step + 1].tolist())
+                    ngram_index = tuple(
+                        prev_output_tokens[bbsz_idx, step + 2 - no_repeat_ngram_size : step + 1].tolist()
+                    )
                     return gen_ngrams[bbsz_idx].get(ngram_index, [])
 
                 if step + 2 - no_repeat_ngram_size >= 0:
@@ -1321,23 +1361,21 @@ class BartForMaskedLM(PretrainedBartModel):
                 for bbsz_idx in range(num_hypos):
                     lprobs[bbsz_idx, banned_tokens[bbsz_idx]] = -math.inf
             # do greedy beam search
-            #scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
+            # scores = F.log_softmax(scores, dim=-1)  # (batch_size * num_beams, vocab_size)
             assert lprobs.size() == (batch_size * num_beams, vocab_size)
             # Add the log prob of the new beams to the log prob of the beginning of the sequence (sum of logs == log of the product)
-            #if step == 0:
+            # if step == 0:
             #    _scores = lprobs[:, ::num_beams, :].contiguous()
-            #else:
+            # else:
             _scores = lprobs + beam_scores[:, None].expand_as(lprobs)  # (batch_size * num_beams, vocab_size)
 
             # re-organize to group the beam together (we are keeping top hypothesis accross beams)
             _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
             next_scores, next_words = torch.topk(_scores, 2 * num_beams)
-            print(f'next_scores: {next_scores}')
-            assert next_words.shape[1] == 2*num_beams
-            #print(f'next_words: {next_words}'}
+            print(f"next_scores: {next_scores}")
+            assert next_words.shape[1] == 2 * num_beams
+            # print(f'next_words: {next_words}'}
             assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
-
-
 
             # next batch beam content
             # list of (batch_size * num_beams) tuple(next hypothesis score, next word, current position in the batch)
@@ -1349,8 +1387,8 @@ class BartForMaskedLM(PretrainedBartModel):
                 done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
                     next_scores[batch_idx].max().item()
                 )
-                if done[batch_idx]: # pad all associated hypotheses
-                    raise ValueError('done')
+                if done[batch_idx]:  # pad all associated hypotheses
+                    raise ValueError("done")
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
                     ), "Example can only be done if at least {} beams have been generated".format(num_beams)
@@ -1368,7 +1406,8 @@ class BartForMaskedLM(PretrainedBartModel):
                     word_id = idx % vocab_size
                     if word_id.item() in eos_token_ids:
                         generated_hyps[batch_idx].add(
-                            prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].clone(), score.item() #/ (step + 1) ** self.len_penalty
+                            prev_output_tokens[batch_idx * num_beams + beam_id, :cur_len].clone(),
+                            score.item(),  # / (step + 1) ** self.len_penalty
                         )
                     else:
                         next_sent_beam.append((score, word_id, batch_idx * num_beams + beam_id))
@@ -1377,19 +1416,19 @@ class BartForMaskedLM(PretrainedBartModel):
                         break
 
                 # update next beam content
-                #if step == 3: pdb.set_trace()
+                # if step == 3: pdb.set_trace()
                 assert len(next_sent_beam) == num_beams, "Beam should always be full"
                 next_batch_beam.extend(next_sent_beam)
                 assert len(next_batch_beam) == num_beams * (batch_idx + 1)
-                print(f'next_sent_beam: {next_sent_beam}')
-                print(f'next_batch_beam: {next_batch_beam}')
+                print(f"next_sent_beam: {next_sent_beam}")
+                print(f"next_batch_beam: {next_batch_beam}")
 
             # sanity check / prepare next batch
             assert len(next_batch_beam) == batch_size * num_beams
             beam_scores = beam_scores.new([x[0] for x in next_batch_beam])
             beam_words = src_tokens.new([x[1] for x in next_batch_beam])
             beam_idx = src_tokens.new([x[2] for x in next_batch_beam])
-            print(f'beam words: {beam_words}, beam_idx: {beam_idx}, beam_scores: {beam_scores}')
+            print(f"beam words: {beam_words}, beam_idx: {beam_idx}, beam_scores: {beam_scores}")
 
             # re-order batch
             prev_output_tokens = prev_output_tokens[beam_idx]
@@ -1405,33 +1444,31 @@ class BartForMaskedLM(PretrainedBartModel):
             # stop when we are done with each sentence
             if all(done):
                 break
-        print('*** FINALIZING ***')
-        print(f'Final prev_output_tokens: {prev_output_tokens}')
-        print(f'Final next_scores: {next_scores}')
-        print(f'Final next_words: {next_words}')
-        print(f'Final beam_scores: {beam_scores}')
+        print("*** FINALIZING ***")
+        print(f"Final prev_output_tokens: {prev_output_tokens}")
+        print(f"Final next_scores: {next_scores}")
+        print(f"Final next_words: {next_words}")
+        print(f"Final beam_scores: {beam_scores}")
 
         for batch_idx in range(batch_size):
             # Add all open beam hypothesis to generated_hyps
             if done[batch_idx]:
-                print(f'hit done for batch {batch_idx}')
+                print(f"hit done for batch {batch_idx}")
                 continue
             offset = batch_idx * num_beams
             for i in range(num_beams):
-                score = beam_scores[offset+i]
-                final_tokens = prev_output_tokens[offset+i]
+                score = beam_scores[offset + i]
+                final_tokens = prev_output_tokens[offset + i]
                 if score > -math.inf:
-                    print(f'score: {score.item()}, len: {len(final_tokens)}, tokens:{final_tokens}')
-                generated_hyps[batch_idx].add(
-                    final_tokens, score.item()
-                )
-            #print(f'scored beams: {[}')
+                    print(f"score: {score.item()}, len: {len(final_tokens)}, tokens:{final_tokens}")
+                generated_hyps[batch_idx].add(final_tokens, score.item())
+            # print(f'scored beams: {[}')
 
         # select the best hypotheses
         sent_lengths = src_tokens.new(batch_size)
         best = []
-        #print(generated_hyps)
-        print(f'scored beams: {generated_hyps[0].beams}')
+        # print(generated_hyps)
+        print(f"scored beams: {generated_hyps[0].beams}")
         for i, hypotheses in enumerate(generated_hyps):
             best_hyp = max(hypotheses.beams, key=lambda x: x[0])[1]
 
@@ -1439,9 +1476,8 @@ class BartForMaskedLM(PretrainedBartModel):
             sent_lengths[i] = len(best_hyp)
             best.append(best_hyp)
 
-        print(f'best hypos: {best}')
-        print(f'sent_lengths: {sent_lengths}')
-
+        print(f"best hypos: {best}")
+        print(f"sent_lengths: {sent_lengths}")
 
         # shorter batches are filled with pad_token
         if sent_lengths.min().item() != sent_lengths.max().item():

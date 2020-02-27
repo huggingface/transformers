@@ -1,9 +1,6 @@
 import torch
 
-from transformers import (
-    BartForMaskedLM,
-    BartTokenizer,
-)
+from transformers import BartForMaskedLM, BartTokenizer
 
 
 hf = BartForMaskedLM.from_pretrained("/Users/shleifer/transformers_fork/converted_cnn/", output_past=True,)
@@ -45,11 +42,12 @@ def batch_input_ids(article_texts, device=torch_device, pad_token_id=PAD_TOKEN_I
     else:
         encoded = [tok.encode_plus(s, max_length=1023)["input_ids"] for s in article_texts]
         n_pad = [max(0, 1023 - x) * [PAD_TOKEN_ID] for x in enc_lens]
-        input_ids = torch.tensor([[0] + n_pad[i] + encoded[i] for i in range(len(enc_lens))],
-                                 device=device, dtype=torch.long)
+        input_ids = torch.tensor(
+            [[0] + n_pad[i] + encoded[i] for i in range(len(enc_lens))], device=device, dtype=torch.long
+        )
 
-    # attention_mask = batch.ne(PAD_TOKEN_ID).to(device)
-    return input_ids
+    attention_mask = input_ids.ne(PAD_TOKEN_ID).to(device)
+    return input_ids, attention_mask
 
 
 def main(source_file=SOURCE, out_file=OUTPUT, bsz=2):

@@ -247,10 +247,9 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
         output_ids = model.generate(input_ids)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
-
     def test_lm_generate_batch(self):
         model = CTRLLMHeadModel.from_pretrained("ctrl")
-        input_ids = torch.Tensor([[11859, 586, 20984, 8], ]).long()  # Legal My neighbor is
+        input_ids = torch.Tensor([[11859, 586, 20984, 8],]).long()  # Legal My neighbor is
         expected_output_ids = [
             11859,
             586,
