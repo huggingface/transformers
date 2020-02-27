@@ -626,7 +626,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
 
             temperature: (`optional`) float
-                The value used to module the next token probabilities. Must be strictely positive. Default to 1.0.
+                The value used to module the next token probabilities. Must be strictly positive. Default to 1.0.
 
             top_k: (`optional`) int
                 The number of highest probability vocabulary tokens to keep for top-k-filtering. Between 1 and infinity. Default to 50.
@@ -714,10 +714,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         if isinstance(eos_token_ids, int):
             eos_token_ids = [eos_token_ids]
 
-        assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictely positive integer."
+        assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictly positive integer."
         assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
-        assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictely positive integer."
-        assert temperature > 0, "`temperature` should be strictely positive."
+        assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictly positive integer."
+        assert temperature > 0, "`temperature` should be strictly positive."
         assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
         assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
@@ -730,10 +730,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert (eos_token_ids is None) or (
             isinstance(eos_token_ids, (list, tuple)) and ((isinstance(e, int) and e >= 0) for e in eos_token_ids)
         ), "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
-        assert length_penalty > 0, "`length_penalty` should be strictely positive."
+        assert length_penalty > 0, "`length_penalty` should be strictly positive."
         assert (
             isinstance(num_return_sequences, int) and num_return_sequences > 0
-        ), "`num_return_sequences` should be a strictely positive integer."
+        ), "`num_return_sequences` should be a strictly positive integer."
 
         if input_ids is None:
             assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
