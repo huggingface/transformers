@@ -364,7 +364,7 @@ class BartModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_cnn_summarization(self):
-        hf = BartForMaskedLM.from_pretrained("/Users/shleifer/transformers_fork/converted_cnn/", output_past=True,)
+        hf = BartForMaskedLM.from_pretrained("bart-large-cnn", output_past=True,)
         # hf.model.decoder.generation_mode = True
 
         text = " (CNN)The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian"

@@ -857,9 +857,10 @@ class BartModel(PretrainedBartModel):
             assert attention_mask.max() <= 0
 
         # make masks if user doesn't supply
-        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(
-            self.config, input_ids, decoder_input_ids=decoder_input_ids, decoder_attn_mask=decoder_attention_mask,
-        )
+        if not self.decoder.generation_mode:
+            decoder_input_ids, decoder_attention_mask = _prepare_bart_decoder_inputs(
+                self.config, input_ids, decoder_input_ids=decoder_input_ids, decoder_attn_mask=decoder_attention_mask,
+            )
         assert decoder_input_ids is not None
         if encoder_outputs is None:
             # TODO(SS): make this caching more usable when overwrite generate
@@ -871,7 +872,7 @@ class BartModel(PretrainedBartModel):
             decoder_input_ids,
             encoder_outputs[0],
             attention_mask,
-            decoder_attn_mask,
+            decoder_attention_mask,
             decoder_cached_states=decoder_cached_states,
         )
         # Attention and hidden_states will be [] or None if they aren't needed
@@ -972,14 +973,16 @@ class BartForMaskedLM(PretrainedBartModel):
         return outputs
 
     @staticmethod
-    def prepare_inputs_for_generation(input_ids, past, attention_mask=None, **kwargs):
-
+    def prepare_inputs_for_generation(input_ids, past, attention_mask=None, decoder_input_ids=None, **kwargs):
+        if decoder_input_ids is None: raise ValueError('Must specify decoder input ids')
         if past is None:
             encoder_outputs, decoder_cached_states = None, None
         else:
             encoder_outputs, decoder_cached_states = past
         # decoder_cached_states = None #FIXME
-        decoder_input_ids = kwargs.get("decoder_input_ids")
+        #bsz, tgt_len = decoder_input_ids.shape
+        #new_shape = (bsz, tgt_len, tgt_len)
+        #new_shape = (bsz, tgt_len, tgt_len)
         return {
             "input_ids": input_ids,
             "decoder_cached_states": decoder_cached_states,
