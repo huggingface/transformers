@@ -1,3 +1,4 @@
+import logging
 import os
 import random
 
@@ -24,6 +25,9 @@ from transformers import (
     XLMRobertaTokenizer,
     get_linear_schedule_with_warmup,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 ALL_MODELS = sum(
@@ -77,20 +81,14 @@ class BaseTransformer(pl.LightningModule):
             cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
         )
         self.config, self.tokenizer, self.model = config, tokenizer, model
-        self.proc_rank = -1
 
     def is_logger(self):
-        return self.proc_rank <= 0
+        return self.trainer.proc_rank <= 0
 
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
-        model = self.model
 
-        t_total = (
-            len(self.train_dataloader())
-            // self.hparams.gradient_accumulation_steps
-            * float(self.hparams.num_train_epochs)
-        )
+        model = self.model
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
@@ -103,18 +101,16 @@ class BaseTransformer(pl.LightningModule):
             },
         ]
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
-        )
-        self.lr_scheduler = scheduler
+        self.opt = optimizer
         return [optimizer]
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx, second_order_closure=None):
-
-        # Step each time.
-        optimizer.step()
-        self.lr_scheduler.step()
+        if self.trainer.use_tpu:
+            xm.optimizer_step(optimizer)
+        else:
+            optimizer.step()
         optimizer.zero_grad()
+        self.lr_scheduler.step()
 
     def get_tqdm_dict(self):
         tqdm_dict = {"loss": "{:.3f}".format(self.trainer.avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
@@ -127,21 +123,26 @@ class BaseTransformer(pl.LightningModule):
     def test_end(self, outputs):
         return self.validation_end(outputs)
 
-    @pl.data_loader
     def train_dataloader(self):
-        return self.load_dataset("train", self.hparams.train_batch_size)
+        train_batch_size = self.hparams.train_batch_size
+        dataloader = self.load_dataset("train", train_batch_size)
 
-    @pl.data_loader
+        t_total = (
+            (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.n_gpu)))
+            // self.hparams.gradient_accumulation_steps
+            * float(self.hparams.num_train_epochs)
+        )
+        scheduler = get_linear_schedule_with_warmup(
+            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
+        )
+        self.lr_scheduler = scheduler
+        return dataloader
+
     def val_dataloader(self):
         return self.load_dataset("dev", self.hparams.eval_batch_size)
 
-    @pl.data_loader
     def test_dataloader(self):
         return self.load_dataset("test", self.hparams.eval_batch_size)
-
-    def init_ddp_connection(self, proc_rank, world_size):
-        self.proc_rank = proc_rank
-        super(BaseTransformer, self).init_ddp_connection(proc_rank, world_size)
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
@@ -213,6 +214,7 @@ def add_generic_args(parser, root_dir):
     )
 
     parser.add_argument("--n_gpu", type=int, default=1)
+    parser.add_argument("--n_tpu_cores", type=int, default=0)
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_predict", action="store_true", help="Whether to run predictions on the test set.")
@@ -252,12 +254,21 @@ def generic_train(model, args):
         accumulate_grad_batches=args.gradient_accumulation_steps,
         gpus=args.n_gpu,
         max_epochs=args.num_train_epochs,
+        early_stop_callback=False,
         gradient_clip_val=args.max_grad_norm,
         checkpoint_callback=checkpoint_callback,
     )
+
     if args.fp16:
         train_params["use_amp"] = args.fp16
         train_params["amp_level"] = args.fp16_opt_level
+
+    if args.n_tpu_cores > 0:
+        global xm
+        import torch_xla.core.xla_model as xm
+
+        train_params["num_tpu_cores"] = args.n_tpu_cores
+        train_params["gpus"] = 0
 
     if args.n_gpu > 1:
         train_params["distributed_backend"] = "ddp"
