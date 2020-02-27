@@ -114,7 +114,7 @@ class BaseTransformer(pl.LightningModule):
         else:
             optimizer.step()
         optimizer.zero_grad()
-        logger.info("lr step %s", self.lr_scheduler.get_last_lr()[-1])
+        # logger.info("lr step %s", self.lr_scheduler.get_last_lr()[-1])
         self.lr_scheduler.step()
 
     def get_tqdm_dict(self):
@@ -129,14 +129,13 @@ class BaseTransformer(pl.LightningModule):
         return self.validation_end(outputs)
 
     def train_dataloader(self):
-        train_batch_size = self.hparams.train_batch_size * max(1, self.hparams.n_gpu,
-                                                               self.hparams.n_tpu_cores)
+        train_batch_size = self.hparams.train_batch_size
         dataloader = self.load_dataset("train", train_batch_size)
         
 
         
         t_total = (
-            (len(dataloader.dataset) // train_batch_size)
+            (len(dataloader.dataset) // (train_batch_size  * max(1, self.hparams.n_gpu)))
             // self.hparams.gradient_accumulation_steps
             * float(self.hparams.num_train_epochs)
         )
