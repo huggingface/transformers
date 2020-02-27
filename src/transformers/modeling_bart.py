@@ -68,12 +68,11 @@ LARGE_NEGATIVE = -1e4
 
 
 def _prepare_bart_decoder_inputs(
-    config, input_ids, decoder_input_ids=None, decoder_attn_mask=None,
+    config, input_ids, decoder_input_ids=None, decoder_attn_mask=None, pad_token_id=None,
 ):
     """Prepare masks that ignore padding tokens  decoder and a causal lm mask for the decoder if
     none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
     """
-    pad_token_id = config.pad_token_id
     need_causal_mask = not config.output_past
     if decoder_input_ids is None:
         decoder_input_ids = shift_tokens_right(input_ids, pad_token_id)
@@ -965,6 +964,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         labels=None,
+        eos_token_id=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1010,7 +1010,7 @@ class BartForSequenceClassification(PretrainedBartModel):
             encoder_outputs=encoder_outputs,
         )
         x = outputs[0]  # last hidden state
-        eos_mask = input_ids.eq(self.config.eos_token_id)
+        eos_mask = input_ids.eq(eos_token_id)
         if len(torch.unique(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
         sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
