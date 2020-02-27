@@ -3,7 +3,6 @@ from typing import Iterable, List, Optional
 
 from transformers import pipeline
 from transformers.pipelines import (
-    SUPPORTED_TASKS,
     FeatureExtractionPipeline,
     FillMaskPipeline,
     NerPipeline,
