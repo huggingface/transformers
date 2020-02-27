@@ -633,12 +633,13 @@ class SelfAttention(nn.Module):
 
         if saved_state is not None:
             k, v, key_padding_mask = self._use_saved_state(k, v, saved_state, key_padding_mask, static_kv, bsz)
+        #assert self.cache_key != 'encoder_decoder' or key_padding_mask is None
 
         # Update cache
         layer_state[self.cache_key] = {
             "prev_key": k.view(bsz, self.num_heads, -1, self.head_dim),
             "prev_value": v.view(bsz, self.num_heads, -1, self.head_dim),
-            "prev_key_padding_mask": key_padding_mask,
+            "prev_key_padding_mask": key_padding_mask if not static_kv else None,
         }
 
         assert k is not None
@@ -647,14 +648,14 @@ class SelfAttention(nn.Module):
 
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
-        if attn_mask is not None and saved_state is None:
+        if attn_mask is not None:
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
             key_padding_mask = None
-        assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len)
+        assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len), f'{key_padding_mask.size()} != {(bsz, src_len)}'
 
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
@@ -715,7 +716,6 @@ class SelfAttention(nn.Module):
         # During incremental decoding, as the padding token enters and
         # leaves the frame, there will be a time when prev or current is None
         elif prev_key_padding_mask is not None:
-
             filler = torch.zeros(batch_size, src_len - prev_key_padding_mask.size(1))
             if prev_key_padding_mask.is_cuda:
                 filler = filler.cuda()
@@ -975,20 +975,22 @@ class BartForMaskedLM(PretrainedBartModel):
     @staticmethod
     def prepare_inputs_for_generation(input_ids, past, attention_mask=None, decoder_input_ids=None, **kwargs):
         if decoder_input_ids is None: raise ValueError('Must specify decoder input ids')
+        if attention_mask is not None:
+            attention_mask = attention_mask.expand(decoder_input_ids.shape[0], attention_mask.shape[1])
         if past is None:
             encoder_outputs, decoder_cached_states = None, None
         else:
             encoder_outputs, decoder_cached_states = past
-        # decoder_cached_states = None #FIXME
+            #import ipdb; ipdb.set_trace()
         #bsz, tgt_len = decoder_input_ids.shape
-        #new_shape = (bsz, tgt_len, tgt_len)
-        #new_shape = (bsz, tgt_len, tgt_len)
+        #decoder_attention_mask = torch.zeros((bsz, 1, tgt_len, tgt_len)).to(decoder_input_ids.device)
         return {
-            "input_ids": input_ids,
+            "input_ids": input_ids, # ignored after first pass
             "decoder_cached_states": decoder_cached_states,
             "decoder_input_ids": decoder_input_ids,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
+            #"decoder_attention_mask": decoder_attention_mask,
         }
 
     @staticmethod
@@ -1213,6 +1215,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
         output = self._generate_beam_search(
             input_ids,
+            attention_mask,
             cur_len,
             max_length,
             do_sample,
@@ -1234,6 +1237,7 @@ class BartForMaskedLM(PretrainedBartModel):
     def _generate_beam_search(
         self,
         src_tokens,
+        attention_mask,
         cur_len,
         max_length,
         do_sample,
@@ -1283,7 +1287,7 @@ class BartForMaskedLM(PretrainedBartModel):
         self.model.decoder.generation_mode = True
         while cur_len <= max_length:
             decoder_input_ids = prev_output_tokens.clone()
-            model_inputs = self.prepare_inputs_for_generation(src_tokens, past, decoder_input_ids=decoder_input_ids,)
+            model_inputs = self.prepare_inputs_for_generation(src_tokens, past, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids,)
 
             print("***")
             print(f"STEP: {step}, dci shape {decoder_input_ids.shape}")
