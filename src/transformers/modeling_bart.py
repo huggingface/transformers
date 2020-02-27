@@ -985,7 +985,6 @@ class BartForMaskedLM(PretrainedBartModel):
             "decoder_input_ids": decoder_input_ids,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
-            # "input_ids":
         }
 
     @staticmethod
