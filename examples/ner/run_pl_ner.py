@@ -37,7 +37,7 @@ class NERTransformer(BaseTransformer):
             inputs["token_type_ids"] = (
                 batch[2] if self.hparams.model_type in ["bert", "xlnet"] else None
             )  # XLM and RoBERTa don"t use segment_ids
-        if self.is_logger():
+        if True or self.is_logger():
             logger.info("step %s", self.global_step)
             logger.info("sizes %s %s %s", batch[0].shape, batch[1].shape, batch[3].shape)
 
