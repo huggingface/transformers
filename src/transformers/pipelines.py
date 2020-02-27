@@ -321,10 +321,11 @@ class Pipeline(_ScikitCompat):
     """
 
     default_input_names = None
+    task = None
 
     def __init__(
         self,
-        model,
+        model: Optional = None,
         tokenizer: PreTrainedTokenizer = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
@@ -335,6 +336,8 @@ class Pipeline(_ScikitCompat):
 
         if framework is None:
             framework = get_framework()
+
+        model, tokenizer = self.get_defaults(model, tokenizer, framework)
 
         self.model = model
         self.tokenizer = tokenizer
@@ -467,15 +470,37 @@ class Pipeline(_ScikitCompat):
         else:
             return predictions.numpy()
 
+    def get_defaults(self, model, tokenizer, framework):
+        task_defaults = SUPPORTED_TASKS[self.task]
+        if model is None:
+            if framework == "tf":
+                model = task_defaults["tf"].from_pretrained(task_defaults["default"]["model"]["tf"])
+            elif framework == "pt":
+                model = task_defaults["pt"].from_pretrained(task_defaults["default"]["model"]["pt"])
+            else:
+                raise ValueError("Provided framework should be either 'tf' for TensorFlow or 'pt' for PyTorch.")
+
+        if tokenizer is None:
+            default_tokenizer = task_defaults["default"]["tokenizer"]
+            if isinstance(default_tokenizer, tuple):
+                # For tuple we have (tokenizer name, {kwargs})
+                tokenizer = AutoTokenizer.from_pretrained(default_tokenizer[0], **default_tokenizer[1])
+            else:
+                tokenizer = AutoTokenizer.from_pretrained(default_tokenizer)
+
+        return model, tokenizer
+
 
 class FeatureExtractionPipeline(Pipeline):
     """
     Feature extraction pipeline using Model head.
     """
 
+    task = "feature-extraction"
+
     def __init__(
         self,
-        model,
+        model: Optional = None,
         tokenizer: PreTrainedTokenizer = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
@@ -501,6 +526,8 @@ class TextClassificationPipeline(Pipeline):
     Text classification pipeline using ModelForTextClassification head.
     """
 
+    task = "sentiment-analysis"
+
     def __call__(self, *args, **kwargs):
         outputs = super().__call__(*args, **kwargs)
         scores = np.exp(outputs) / np.exp(outputs).sum(-1)
@@ -512,9 +539,11 @@ class FillMaskPipeline(Pipeline):
     Masked language modeling prediction pipeline using ModelWithLMHead head.
     """
 
+    task = "fill-mask"
+
     def __init__(
         self,
-        model,
+        model: Optional = None,
         tokenizer: PreTrainedTokenizer = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
@@ -588,10 +617,11 @@ class NerPipeline(Pipeline):
     """
 
     default_input_names = "sequences"
+    task = "ner"
 
     def __init__(
         self,
-        model,
+        model: Optional = None,
         tokenizer: PreTrainedTokenizer = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
@@ -730,11 +760,12 @@ class QuestionAnsweringPipeline(Pipeline):
     """
 
     default_input_names = "question,context"
+    task = "question-answering"
 
     def __init__(
         self,
-        model,
-        tokenizer: Optional[PreTrainedTokenizer],
+        model: Optional = None,
+        tokenizer: Optional[PreTrainedTokenizer] = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         device: int = -1,
