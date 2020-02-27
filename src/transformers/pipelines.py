@@ -1013,7 +1013,6 @@ def pipeline(
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
-    modelcard: Optional[Union[str, ModelCard]] = None,
     framework: Optional[str] = None,
     **kwargs
 ) -> Pipeline:
@@ -1055,8 +1054,6 @@ def pipeline(
             :class:`~transformers.PreTrainedTokenizer`.
 
             If :obj:`None`, the default of the pipeline will be loaded.
-        modelcard (:obj:`str` or :obj:`~transformers.ModelCard`, `optional`, defaults to :obj:`None`):
-            The model modelcard.
         framework (:obj:`str`, `optional`, defaults to :obj:`None`):
             The framework to use, either "pt" for PyTorch or "tf" for TensorFlow. The specified framework must be
             installed.
@@ -1112,13 +1109,12 @@ def pipeline(
                 "Please provided a PretrainedTokenizer class or a path/url/shortcut name to a pretrained tokenizer."
             )
 
+    modelcard = None
     # Try to infer modelcard from model or config name (if provided as str)
-    if modelcard is None:
-        # Try to fallback on one of the provided string for model or config (will replace the suffix)
-        if isinstance(model, str):
-            modelcard = model
-        elif isinstance(config, str):
-            modelcard = config
+    if isinstance(model, str):
+        modelcard = model
+    elif isinstance(config, str):
+        modelcard = config
 
     # Instantiate tokenizer if needed
     if isinstance(tokenizer, (str, tuple)):
