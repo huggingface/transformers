@@ -975,8 +975,8 @@ class BartForMaskedLM(PretrainedBartModel):
     @staticmethod
     def prepare_inputs_for_generation(input_ids, past, attention_mask=None, decoder_input_ids=None, **kwargs):
         if decoder_input_ids is None: raise ValueError('Must specify decoder input ids')
-        if attention_mask is not None:
-            attention_mask = attention_mask.expand(decoder_input_ids.shape[0], attention_mask.shape[1])
+        # if attention_mask is not None:
+        #     attention_mask = attention_mask.expand(decoder_input_ids.shape[0], attention_mask.shape[1])
         if past is None:
             encoder_outputs, decoder_cached_states = None, None
         else:
@@ -1259,7 +1259,10 @@ class BartForMaskedLM(PretrainedBartModel):
         # Expand input to num beams
 
         src_tokens = src_tokens.unsqueeze(1).expand(batch_size, num_beams, cur_len)
+
         src_tokens = src_tokens.contiguous().view(batch_size * num_beams, cur_len)  # (batch_size * num_beams, cur_len)
+
+        attention_mask = attention_mask.unsqueeze(1).expand(batch_size, num_beams, cur_len).contiguous().view(batch_size * num_beams, cur_len)  #RESHAPE
         bos_token_id = 0
 
         # generated hypotheses
@@ -1291,7 +1294,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
             print("***")
             print(f"STEP: {step}, dci shape {decoder_input_ids.shape}")
-            print(f"called at step {step} with: {model_inputs['decoder_input_ids']}")
+            #print(f"called at step {step} with: {model_inputs['decoder_input_ids']}")
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             lprobs = F.log_softmax(outputs[0][:, -1, :], dim=-1)
             print_shapemax("lprobs", lprobs)
@@ -1299,7 +1302,6 @@ class BartForMaskedLM(PretrainedBartModel):
             assert pad_token_id is not None, "should break circleci"
             lprobs[lprobs != lprobs] = -math.inf
             lprobs[:, pad_token_id] = -math.inf  # fairseq has this
-            # lprobs[:, eos_token_ids[0]] = -math.inf
             assert len(eos_token_ids) == 1
             eos = eos_token_ids[0]
             assert eos == 2
@@ -1391,7 +1393,7 @@ class BartForMaskedLM(PretrainedBartModel):
             # for each sentence, mark done if impossible to improve
             for batch_idx in range(batch_size):
                 # if we are done with this sentence (because we can't improve)
-                if done[batch_idx]: continue
+                #if done[batch_idx]: continue
                 if done[batch_idx]:  # pad all associated hypotheses
                     print(f'DONE BATCH {batch_idx} at step {step}')
                     assert (
