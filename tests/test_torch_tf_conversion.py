@@ -20,49 +20,40 @@ import numpy as np
 
 from transformers import is_tf_available, is_torch_available
 
-from .utils import require_tf, require_torch, torch_device
+from .utils import torch_device
 
 
 sys.path.insert(1, "../src")
 
-if is_torch_available():
+if is_torch_available() and is_tf_available():
     import torch
     from transformers.modeling_utils import top_k_top_p_filtering  # noqa: E402
-
-if is_tf_available():
     import tensorflow as tf
     from transformers.modeling_tf_utils import tf_top_k_top_p_filtering  # noqa: E402
 
+    def to_tf(np_tensor, dtype=tf.float32):
+        return tf.convert_to_tensor(np_tensor, dtype=dtype)
 
-@require_torch
-@require_tf
-class TorchTFConversionTest(unittest.TestCase):
-    def test_top_k_top_p_filtering(self):
-        np_logits = get_random_numpy_array((1, 50257), upper_limit=50.0, lower_limit=-100.0)
-        pt_logits = to_pt(np_logits)
-        tf_logits = to_tf(np_logits)
+    def to_pt(np_tensor, dtype=torch.float32):
+        return torch.from_numpy(np_tensor).to(torch_device).type(dtype)
 
-        # check with all arguments used
-        top_k, top_p, min_tokens_to_keep = 50, 0.6, 10
-        filtered_logits_pt = top_k_top_p_filtering(
-            pt_logits, top_k=top_k, top_p=top_p, min_tokens_to_keep=min_tokens_to_keep
-        )
-        filtered_logits_tf = tf_top_k_top_p_filtering(
-            tf_logits, top_k=top_k, top_p=top_p, min_tokens_to_keep=min_tokens_to_keep
-        )
+    class TorchTFConversionTest(unittest.TestCase):
+        def test_top_k_top_p_filtering(self):
+            np_logits = get_random_numpy_array((1, 50257), upper_limit=50.0, lower_limit=-100.0)
+            pt_logits = to_pt(np_logits)
+            tf_logits = to_tf(np_logits)
 
-        self.assertTrue(np.allclose(filtered_logits_pt, filtered_logits_tf))
+            # check with all arguments used
+            top_k, top_p, min_tokens_to_keep = 50, 0.6, 10
+            filtered_logits_pt = top_k_top_p_filtering(
+                pt_logits, top_k=top_k, top_p=top_p, min_tokens_to_keep=min_tokens_to_keep,
+            )
+            filtered_logits_tf = tf_top_k_top_p_filtering(
+                tf_logits, top_k=top_k, top_p=top_p, min_tokens_to_keep=min_tokens_to_keep,
+            )
+
+            self.assertTrue(np.allclose(filtered_logits_pt, filtered_logits_tf))
 
 
 def get_random_numpy_array(shape, upper_limit=1, lower_limit=-1):
     return (upper_limit - lower_limit) * np.random.random(shape) + lower_limit
-
-
-@require_torch
-def to_pt(np_tensor, dtype=torch.float32):
-    return torch.from_numpy(np_tensor).to(torch_device).type(dtype)
-
-
-@require_tf
-def to_tf(np_tensor, dtype=tf.float32):
-    return tf.convert_to_tensor(np_tensor, dtype=dtype)
