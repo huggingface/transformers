@@ -3,9 +3,6 @@ import torch
 from transformers import BartForMaskedLM, BartTokenizer
 
 
-
-
-
 SOURCE = "/Users/shleifer/fairseq/cnn_dm/test.source"
 OUTPUT = "cnn_test_output.hypo"
 
@@ -14,6 +11,7 @@ torch_device = "cuda" if torch.cuda.is_available() else "cpu"
 PAD_TOKEN_ID = 1
 hf = BartForMaskedLM.from_pretrained("/Users/shleifer/transformers_fork/converted_cnn/", output_past=True,)
 tok = BartTokenizer.from_pretrained("bart-large")
+
 
 def batch_input_ids(article_texts, device=torch_device, pad_token_id=PAD_TOKEN_ID):
     """Very gross!"""
@@ -75,5 +73,5 @@ def main(source_file=SOURCE, out_file=OUTPUT, bsz=2):
                 fout.flush()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

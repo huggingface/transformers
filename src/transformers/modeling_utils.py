@@ -583,6 +583,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         return False
 
     def enforce_repetition_penalty_(self, lprobs, batch_size, num_beams, prev_output_tokens, repetition_penalty):
+        """repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858). """
         for i in range(batch_size * num_beams):
             for previous_token in set(prev_output_tokens[i].tolist()):
                 # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
@@ -1159,7 +1160,6 @@ class BeamHypotheses(object):
         """
         score = sum_logprobs / len(hyp) ** self.length_penalty
         if len(self) < self.num_beams or score > self.worst_score:
-            print(f"adding hyp shaped: {hyp.shape}")
             self.beams.append((score, hyp))
             if len(self) > self.num_beams:
                 sorted_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.beams)])
@@ -1179,12 +1179,11 @@ class BeamHypotheses(object):
         elif self.early_stopping:
             return True
         else:
-            if cur_len is None: cur_len = self.max_length
-            print(f'checking worst_score {self.worst_score} against {best_sum_logprobs}, with len: {cur_len}')
-            cur_score =  best_sum_logprobs / cur_len ** self.length_penalty
-            ret =  self.worst_score >= cur_score
+            if cur_len is None:
+                cur_len = self.max_length
+            cur_score = best_sum_logprobs / cur_len ** self.length_penalty
+            ret = self.worst_score >= cur_score
             return ret
-
 
 
 class Conv1D(nn.Module):
