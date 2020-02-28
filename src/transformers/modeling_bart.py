@@ -1116,7 +1116,9 @@ class BartForMaskedLM(PretrainedBartModel):
                     beam_id = idx // vocab_size
                     word_id = idx % vocab_size
                     assert prev_output_tokens.shape[1] == (step + 1)
-                    if word_id.item() == eos and i < num_beams:
+                    if word_id.item() == eos:
+                        if i >= num_beams:
+                            continue
                         finalized_hyps[batch_idx].add(
                             prev_output_tokens[batch_idx * num_beams + beam_id].clone(), score.item(),
                         )
