@@ -944,8 +944,6 @@ class BartForMaskedLM(PretrainedBartModel):
 
     @staticmethod
     def prepare_inputs_for_generation(input_ids, past, decoder_input_ids, attention_mask):
-        if decoder_input_ids is None:
-            raise ValueError("Must specify decoder input ids")
         if past is None:  # first step
             encoder_outputs, decoder_cached_states = None, None
         else:
@@ -1127,7 +1125,7 @@ class BartForMaskedLM(PretrainedBartModel):
 
                     if len(next_sent_beam) == num_beams:  # TODO(SS): can we delete this?
                         break
-                # Check if were done again so that we can save a pad step if all(done)
+                # Check if were done so that we can save a pad step if all(done)
                 done[batch_idx] = done[batch_idx] or finalized_hyps[batch_idx].is_done(
                     next_scores[batch_idx].max().item(), cur_len=step + 1,
                 )

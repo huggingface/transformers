@@ -972,7 +972,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 # re-organize to group the beam together (we are keeping top hypothesis accross beams)
                 _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
                 next_scores, next_words = torch.topk(_scores, 2 * num_beams, dim=1, largest=True, sorted=True)
-            print(next_scores, next_words)
 
             assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
 
