@@ -20,7 +20,7 @@ import numpy as np
 
 from transformers import is_tf_available, is_torch_available
 
-from .utils import require_torch, require_tf, torch_device
+from .utils import require_tf, require_torch, torch_device
 
 
 if is_torch_available():
