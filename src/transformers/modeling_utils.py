@@ -835,7 +835,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
-            print(f"Next_token_logits max: { next_token_logits.max()}")
 
             # if model has past, then set the past variable to speed up decoding
             if self._do_output_past(outputs):
