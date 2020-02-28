@@ -176,15 +176,6 @@ def make_padding_mask(input_ids, padding_idx=1):
     return padding_mask
 
 
-def shape_printer(tensor_dct: Dict):
-    if isinstance(tensor_dct, torch.Tensor):
-        return tensor_dct.shape
-    elif tensor_dct is None:
-        return None
-    else:
-        return {k: shape_printer(v) for k, v in tensor_dct.items()}
-
-
 # Helper Modules
 
 
