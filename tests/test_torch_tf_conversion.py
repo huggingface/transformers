@@ -18,9 +18,12 @@ import unittest
 
 import numpy as np
 
-from transformers import is_torch_available, is_tf_available
+from transformers import is_tf_available, is_torch_available
+from transformers.modeling_tf_utils import tf_top_k_top_p_filtering  # noqa: E402
+from transformers.modeling_utils import top_k_top_p_filtering  # noqa: E402
 
 from .utils import require_torch, torch_device
+
 
 if is_torch_available():
     import torch
@@ -30,8 +33,6 @@ if is_tf_available():
 
 sys.path.insert(1, "../src")
 
-from transformers.modeling_tf_utils import tf_top_k_top_p_filtering  # noqa: E402
-from transformers.modeling_utils import top_k_top_p_filtering  # noqa: E402
 
 
 @require_torch
