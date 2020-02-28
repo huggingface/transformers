@@ -30,17 +30,15 @@ from .utils import require_torch, torch_device
 sys.path.insert(1, "../src")
 
 
-
 @require_torch
 class TorchTFConversionTest(unittest.TestCase):
     def test_top_k_top_p_filtering(self):
-        np_logits = get_random_numpy_array((5, 100))
+        np_logits = get_random_numpy_array((1, 50257), upper_limit=50.0, lower_limit=-100.0)
         pt_logits = to_pt(np_logits)
         tf_logits = to_tf(np_logits)
 
         # check with all arguments used
-        top_k, top_p, min_tokens_to_keep = 10, 0.5, 6
-
+        top_k, top_p, min_tokens_to_keep = 50, 0.6, 10
         filtered_logits_pt = top_k_top_p_filtering(
             pt_logits, top_k=top_k, top_p=top_p, min_tokens_to_keep=min_tokens_to_keep
         )
@@ -51,16 +49,13 @@ class TorchTFConversionTest(unittest.TestCase):
         self.assertTrue(np.allclose(filtered_logits_pt, filtered_logits_tf))
 
 
-# TODO: think about dtype
 def get_random_numpy_array(shape, upper_limit=1, lower_limit=-1):
     return (upper_limit - lower_limit) * np.random.random(shape) + lower_limit
 
 
-# TODO: think about dtype and device
-def to_pt(np_tensor):
-    return torch.from_numpy(np_tensor)
+def to_pt(np_tensor, dtype=torch.float32):
+    return torch.from_numpy(np_tensor).to(torch_device).type(dtype)
 
 
-# TODO: think about dtype
-def to_tf(np_tensor):
-    return tf.convert_to_tensor(np_tensor)
+def to_tf(np_tensor, dtype=tf.float32):
+    return tf.convert_to_tensor(np_tensor, dtype=dtype)

@@ -666,8 +666,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 # Top-p/top-k filtering
                 next_token_logits = tf_top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
                 # Sample
-                next_token_probs = tf.nn.softmax(next_token_logits, axis=-1)
-                next_token = tf.squeeze(tf.random.categorical(next_token_probs, dtype=tf.int32, num_samples=1), axis=1)
+                next_token = tf.squeeze(
+                    tf.random.categorical(next_token_logits, dtype=tf.int32, num_samples=1), axis=1
+                )
             else:
                 # Greedy decoding
                 next_token = tf.math.argmax(next_token_logits, axis=-1, output_type=tf.int32)
@@ -785,7 +786,7 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
         # Shift the indices to the right to keep also the first token above the threshold
         sorted_indices_to_remove = tf.roll(sorted_indices_to_remove, 1, axis=-1)
         sorted_indices_to_remove = tf.concat(
-            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, 1:],], -1,
+            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, 1:]], -1,
         )
         # scatter sorted tensors to original indexing
         indices_to_remove = scatter_values_on_batch_indices(sorted_indices_to_remove, sorted_indices)
