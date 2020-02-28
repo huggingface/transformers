@@ -23,6 +23,8 @@ from transformers import is_tf_available, is_torch_available
 from .utils import require_tf, require_torch, torch_device
 
 
+sys.path.insert(1, "../src")
+
 if is_torch_available():
     import torch
     from transformers.modeling_utils import top_k_top_p_filtering  # noqa: E402
@@ -30,8 +32,6 @@ if is_torch_available():
 if is_tf_available():
     import tensorflow as tf
     from transformers.modeling_tf_utils import tf_top_k_top_p_filtering  # noqa: E402
-
-sys.path.insert(1, "../src")
 
 
 @require_torch
