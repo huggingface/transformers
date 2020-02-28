@@ -505,6 +505,13 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.input_embeddings
 
+    def prepare_inputs_for_generation(self, inputs, past, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if past:
+            inputs = tf.expand_dims(inputs[:, -1], -1)
+
+        return {"inputs": inputs, "past": past}
+
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
         r"""

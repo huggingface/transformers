@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
+import ipdb
 from .activations import gelu_new, swish
 from .configuration_xlnet import XLNetConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
@@ -935,7 +936,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_loss
 
-    def prepare_inputs_for_generation(self, input_ids, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past, **model_kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
@@ -958,9 +959,10 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         inputs = {"input_ids": input_ids, "perm_mask": perm_mask, "target_mapping": target_mapping}
 
         # if past is defined in model kwargs then use it for faster decoding
-        if "past" in model_kwargs and model_kwargs["past"]:
-            inputs["mems"] = model_kwargs["past"]
+        if past:
+            inputs["mems"] = past
 
+        ipdb.set_trace()
         return inputs
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
