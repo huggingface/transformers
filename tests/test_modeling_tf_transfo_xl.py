@@ -37,6 +37,8 @@ if is_tf_available():
 class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (TFTransfoXLModel, TFTransfoXLLMHeadModel) if is_tf_available() else ()
+#    all_generative_model_classes = (TFTransfoXLLMHeadModel,) if is_tf_available() else ()
+    # TODO: add this test when TFTransfoXLLMHead has a linear output layer implemented
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
@@ -62,6 +64,7 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
             num_hidden_layers=5,
             scope=None,
             seed=1,
+            eos_token_id=0,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -82,6 +85,7 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
             self.num_hidden_layers = num_hidden_layers
             self.scope = scope
             self.seed = seed
+            self.eos_token_id = eos_token_id
 
         def prepare_config_and_inputs(self):
             input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -103,6 +107,7 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
                 d_inner=self.d_inner,
                 div_val=self.div_val,
                 n_layer=self.num_hidden_layers,
+                eos_token_ids=self.eos_token_id,
             )
 
             return (config, input_ids_1, input_ids_2, lm_labels)
