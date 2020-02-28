@@ -1261,8 +1261,8 @@ class BartForMaskedLM(PretrainedBartModel):
         src_tokens = src_tokens.unsqueeze(1).expand(batch_size, num_beams, cur_len)
 
         src_tokens = src_tokens.contiguous().view(batch_size * num_beams, cur_len)  # (batch_size * num_beams, cur_len)
-
-        attention_mask = attention_mask.unsqueeze(1).expand(batch_size, num_beams, cur_len).contiguous().view(batch_size * num_beams, cur_len)  #RESHAPE
+        if attention_mask is not None:
+            attention_mask = attention_mask.unsqueeze(1).expand(batch_size, num_beams, cur_len).contiguous().view(batch_size * num_beams, cur_len)  #RESHAPE
         bos_token_id = 0
 
         # generated hypotheses
