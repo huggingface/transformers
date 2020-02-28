@@ -34,11 +34,12 @@ if is_tf_available():
 sys.path.insert(1, "../src")
 
 
-
 @require_torch
 class TorchTFConversionTest(unittest.TestCase):
     def test_top_k_top_p_filtering(self):
-        np_logits = get_random_numpy_array((1, 50257), upper_limit=50.0, lower_limit=-100.0)
+        np_logits = get_random_numpy_array(
+            (1, 50257), upper_limit=50.0, lower_limit=-100.0
+        )
         pt_logits = to_pt(np_logits)
         tf_logits = to_tf(np_logits)
 
