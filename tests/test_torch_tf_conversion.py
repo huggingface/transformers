@@ -17,19 +17,17 @@ import sys
 import unittest
 
 import numpy as np
-
 from transformers import is_tf_available, is_torch_available
-from transformers.modeling_tf_utils import tf_top_k_top_p_filtering  # noqa: E402
-from transformers.modeling_utils import top_k_top_p_filtering  # noqa: E402
-
 from .utils import require_torch, torch_device
 
 
 if is_torch_available():
     import torch
+    from transformers.modeling_utils import top_k_top_p_filtering  # noqa: E402
 
 if is_tf_available():
     import tensorflow as tf
+    from transformers.modeling_tf_utils import tf_top_k_top_p_filtering  # noqa: E402
 
 sys.path.insert(1, "../src")
 
