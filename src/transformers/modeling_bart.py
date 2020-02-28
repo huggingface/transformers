@@ -1112,11 +1112,11 @@ class BartForMaskedLM(PretrainedBartModel):
                 # Otherwise generate some next word choices
                 next_sent_beam = []
                 # add next words for this sentence
-                for idx, score in zip(next_words[batch_idx], next_scores[batch_idx]):
+                for i, (idx, score) in enumerate(zip(next_words[batch_idx], next_scores[batch_idx])):
                     beam_id = idx // vocab_size
                     word_id = idx % vocab_size
                     assert prev_output_tokens.shape[1] == (step + 1)
-                    if word_id.item() == eos:
+                    if word_id.item() == eos and i < num_beams:
                         finalized_hyps[batch_idx].add(
                             prev_output_tokens[batch_idx * num_beams + beam_id].clone(), score.item(),
                         )
