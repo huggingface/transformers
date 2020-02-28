@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
+import ipdb
 from .activations import gelu_new, swish
 from .configuration_xlnet import XLNetConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
@@ -961,6 +962,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         if past:
             inputs["mems"] = past
 
+        ipdb.set_trace()
         return inputs
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
