@@ -399,7 +399,7 @@ class BartModelIntegrationTest(unittest.TestCase):
             min_len=55,
             no_repeat_ngram_size=3,
         )
-        decoded = [tok.decode(g, skip_special_tokens=True) for g in hypotheses_batch]
+        decoded = [tok.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in hypotheses_batch]
         self.assertListEqual(
             [EXPECTED_SUMMARY_FRANCE, EXPECTED_SUMMARY_SHORTER, EXPECTED_SUMMARY_IRAN, EXPECTED_SUMMARY_SUBWAY],
             decoded,
