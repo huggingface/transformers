@@ -260,7 +260,7 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     special_tokens = prepare_generation_special_tokens()
 
-    #    @slow
+    @slow
     def test_lm_generate_distilgpt2(self):
         model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
         input_ids = tf.convert_to_tensor([[464, 1893]], dtype=tf.int32)  # The president
