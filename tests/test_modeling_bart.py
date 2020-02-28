@@ -379,8 +379,7 @@ class BartModelIntegrationTest(unittest.TestCase):
         dct = tok.batch_encode_plus(
             [FRANCE_ARTICLE, SHORTER_ARTICLE], max_length=1024, pad_to_max_length=True, return_tensors="pt"
         )
-        n_words = dct["input_ids"].shape[1]
-        self.assertEqual(n_words, 1024)
+        self.assertEqual(1024, dct["input_ids"].shape[1])
         hypotheses_batch = hf.generate(
             input_ids=dct["input_ids"].to(torch_device),
             attention_mask=dct["attention_mask"].to(torch_device),
@@ -392,3 +391,5 @@ class BartModelIntegrationTest(unittest.TestCase):
         )
         decoded = [tok.decode(g, skip_special_tokens=True) for g in hypotheses_batch]
         self.assertListEqual([EXPECTED_SUMMARY_FRANCE, EXPECTED_SUMMARY_SHORTER], decoded)
+        # TODO(SS): run fairseq again with num_beams=2, min_len=20.
+        # TODO(SS): add test case that hits max_length
