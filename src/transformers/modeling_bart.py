@@ -1171,7 +1171,7 @@ class BartForMaskedLM(PretrainedBartModel):
         # shorter batches are filled with pad_token
         if sent_lengths.min().item() != sent_lengths.max().item():
             # TODO(SS): decoded = torch.rnn.utils.pad_sequence(best, batch_first=True, padding_value=pad_token_id)
-            sent_max_len = min(sent_lengths.max().item(), max_length)
+            sent_max_len = min(sent_lengths.max().item() + 1, max_length + 1)  # TODO(SS): same as step?
             decoded = input_ids.new(batch_size, sent_max_len).fill_(pad_token_id)
             # fill with hypothesis and eos_token_id if necessary
             for i, hypo in enumerate(best):

@@ -605,7 +605,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         repetition_penalty=None,
         bos_token_id=None,
         pad_token_id=None,
-        eos_token_id=None,
+        eos_token_ids=None,
         length_penalty=None,
         num_return_sequences=None,
     ):
@@ -707,9 +707,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         top_k = top_k if top_k is not None else self.config.top_k
         top_p = top_p if top_p is not None else self.config.top_p
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
-        bos_token_id = self.config.bos_token_id
-        pad_token_id = self.config.pad_token_id
-        eos_token_ids = self.config.eos_token_id
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
+        eos_token_ids = eos_token_ids if eos_token_ids is not None else self.config.eos_token_ids
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
