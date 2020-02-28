@@ -582,6 +582,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             return True
         return False
 
+    def enforce_repetition_penalty_(self, lprobs, batch_size, num_beams, prev_output_tokens, repetition_penalty):
+        for i in range(batch_size * num_beams):
+            for previous_token in set(prev_output_tokens[i].tolist()):
+                # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
+                if lprobs[i, previous_token] < 0:
+                    lprobs[i, previous_token] *= repetition_penalty
+                else:
+                    lprobs[i, previous_token] /= repetition_penalty
+
     @torch.no_grad()
     def generate(
         self,
@@ -595,7 +604,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         repetition_penalty=None,
         bos_token_id=None,
         pad_token_id=None,
-        eos_token_ids=None,
+        eos_token_id=None,
         length_penalty=None,
         num_return_sequences=None,
     ):
@@ -697,9 +706,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         top_k = top_k if top_k is not None else self.config.top_k
         top_p = top_p if top_p is not None else self.config.top_p
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
-        bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
-        pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
-        eos_token_ids = eos_token_ids if eos_token_ids is not None else self.config.eos_token_ids
+        bos_token_id = self.config.bos_token_id
+        pad_token_id = self.config.pad_token_id
+        eos_token_ids = self.config.eos_token_id
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
@@ -833,13 +842,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
-                for i in range(batch_size):
-                    for previous_token in set(input_ids[i].tolist()):
-                        # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
-                        if next_token_logits[i, previous_token] < 0:
-                            next_token_logits[i, previous_token] *= repetition_penalty
-                        else:
-                            next_token_logits[i, previous_token] /= repetition_penalty
+                self.enforce_repetition_penalty_(next_token_logits, batch_size, 1, input_ids, repetition_penalty)
 
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
@@ -941,13 +944,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
-                for i in range(batch_size * num_beams):
-                    for previous_token in set(input_ids[i].tolist()):
-                        # if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
-                        if scores[i, previous_token] < 0:
-                            scores[i, previous_token] *= repetition_penalty
-                        else:
-                            scores[i, previous_token] /= repetition_penalty
+                self.enforce_repetition_penalty_(scores, batch_size, num_beams, input_ids, repetition_penalty)
 
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)

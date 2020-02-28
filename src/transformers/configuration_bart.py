@@ -59,6 +59,8 @@ class BartConfig(PretrainedConfig):
         classifier_dropout=0.0,
         output_past=False,
         num_labels=3,
+        bos_token_id=0,
+
         **common_kwargs
     ):
         r"""
@@ -67,13 +69,11 @@ class BartConfig(PretrainedConfig):
                 config = BartConfig.from_pretrained('bart-large')
                 model = BartModel(config)
         """
-        super().__init__(num_labels=num_labels, output_past=output_past, pad_token_id=pad_token_id, **common_kwargs)
-
+        super().__init__(num_labels=num_labels, output_past=output_past, pad_token_id=pad_token_id,
+                         bos_token_id=bos_token_id,  **common_kwargs)
         self.vocab_size = vocab_size
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
         self.eos_token_id = eos_token_id
-        self.eos_token_ids = [eos_token_id]
-
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = self.num_hidden_layers = encoder_layers
         self.encoder_attention_heads = encoder_attention_heads
