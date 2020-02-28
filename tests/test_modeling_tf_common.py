@@ -56,6 +56,7 @@ class TFModelTesterMixin:
 
     model_tester = None
     all_model_classes = ()
+    all_generative_model_classes = ()
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
@@ -375,8 +376,6 @@ class TFModelTesterMixin:
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
 
             if config.bos_token_id is None:
                 with self.assertRaises(AssertionError):

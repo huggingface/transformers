@@ -37,7 +37,7 @@ if is_tf_available():
 class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel, TFGPT2DoubleHeadsModel) if is_tf_available() else ()
-    # all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel) if is_tf_available() else ()
+    all_generative_model_classes = (TFGPT2LMHeadModel, ) if is_tf_available() else ()
 
     class TFGPT2ModelTester(object):
         def __init__(
