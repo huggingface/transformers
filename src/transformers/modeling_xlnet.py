@@ -19,7 +19,6 @@
 
 import logging
 
-import ipdb
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
@@ -962,7 +961,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         if past:
             inputs["mems"] = past
 
-        ipdb.set_trace()
         return inputs
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
