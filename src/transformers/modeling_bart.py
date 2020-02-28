@@ -633,7 +633,7 @@ class SelfAttention(nn.Module):
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
             key_padding_mask = None
-        assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len, )
+        assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len,)
 
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
@@ -943,7 +943,7 @@ class BartForMaskedLM(PretrainedBartModel):
         return outputs
 
     @staticmethod
-    def prepare_inputs_for_generation(input_ids, past,  decoder_input_ids, attention_mask):
+    def prepare_inputs_for_generation(input_ids, past, decoder_input_ids, attention_mask):
         if decoder_input_ids is None:
             raise ValueError("Must specify decoder input ids")
         if past is None:  # first step
@@ -1170,25 +1170,23 @@ class BartForMaskedLM(PretrainedBartModel):
 
         # shorter batches are filled with pad_token
         if sent_lengths.min().item() != sent_lengths.max().item():
-            assert pad_token_id is not None, "`Pad_token_id` has to be defined"
+            # TODO(SS): decoded = torch.rnn.utils.pad_sequence(best, batch_first=True, padding_value=pad_token_id)
             sent_max_len = min(sent_lengths.max().item(), max_length)
             decoded = input_ids.new(batch_size, sent_max_len).fill_(pad_token_id)
-
             # fill with hypothesis and eos_token_id if necessary
             for i, hypo in enumerate(best):
                 decoded[i, : sent_lengths[i]] = hypo
                 if sent_lengths[i] < max_length:
                     decoded[i, sent_lengths[i]] = eos
         else:
-            # none of the hypotheses have an eos_token
             assert (len(hypo) == max_length for hypo in best)
             decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
-
         return decoded[:, 1:]  # get rid of starting EOS
 
     @staticmethod
     def calc_banned_tokens(prev_output_tokens, num_hypos, no_repeat_ngram_size, step):
         """Copied from fairseq for no_repeat_ngram in beam_search"""
+        # TODO(SS): this can go on parent if there is demand
         if step + 2 < no_repeat_ngram_size:
             return [
                 [] for _ in range(num_hypos)
