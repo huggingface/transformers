@@ -359,12 +359,12 @@ class BartModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_cnn_summarization_same_as_fairseq(self):
-        hf = BartForMaskedLM.from_pretrained("bart-large-cnn", output_past=True,)
+        hf = BartForMaskedLM.from_pretrained("bart-large-cnn", output_past=True,).to(torch_device)
         # hf.model.decoder.generation_mode = True
 
         text = " (CNN)The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian"
         tok = BartTokenizer.from_pretrained("bart-large")
-        tokens = tok.encode(text, return_tensors="pt")
+        tokens = tok.encode(text, return_tensors="pt").to(torch_device)
         extra_len = 20
         gen_tokens = hf.generate(
             tokens, num_return_sequences=1, num_beams=4, max_length=extra_len,  # repetition_penalty=10.,
@@ -384,8 +384,8 @@ class BartModelIntegrationTest(unittest.TestCase):
         n_words = dct["input_ids"].shape[1]
         self.assertEqual(n_words, 1024)
         hypotheses_batch = hf.generate(
-            input_ids=dct["input_ids"],
-            attention_mask=dct["attention_mask"],
+            input_ids=dct["input_ids"].to(torch_device),
+            attention_mask=dct["attention_mask"].to(torch_device),
             num_beams=4,
             length_penalty=2.0,
             max_length=140,
