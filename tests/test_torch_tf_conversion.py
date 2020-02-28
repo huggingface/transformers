@@ -20,7 +20,7 @@ import numpy as np
 
 from transformers import is_tf_available, is_torch_available
 
-from .utils import require_torch, torch_device
+from .utils import require_torch, require_tf, torch_device
 
 
 if is_torch_available():
@@ -35,6 +35,7 @@ sys.path.insert(1, "../src")
 
 
 @require_torch
+@require_tf
 class TorchTFConversionTest(unittest.TestCase):
     def test_top_k_top_p_filtering(self):
         np_logits = get_random_numpy_array((1, 50257), upper_limit=50.0, lower_limit=-100.0)
@@ -57,9 +58,11 @@ def get_random_numpy_array(shape, upper_limit=1, lower_limit=-1):
     return (upper_limit - lower_limit) * np.random.random(shape) + lower_limit
 
 
+@require_torch
 def to_pt(np_tensor, dtype=torch.float32):
     return torch.from_numpy(np_tensor).to(torch_device).type(dtype)
 
 
+@require_tf
 def to_tf(np_tensor, dtype=tf.float32):
     return tf.convert_to_tensor(np_tensor, dtype=dtype)
