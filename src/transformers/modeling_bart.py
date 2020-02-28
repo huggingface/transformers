@@ -421,8 +421,6 @@ class BartDecoder(nn.Module):
         self.layernorm_embedding = LayerNorm(config.d_model)
         self.generation_mode = False
 
-    # def set_generation_mode(self):
-
     def forward(
         self,
         input_ids,
@@ -501,7 +499,6 @@ class BartDecoder(nn.Module):
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
         else:
             next_cache = None
-        # import pdb; pdb.set_trace()
         return x, next_cache, all_hidden_states, list(all_self_attns)
 
 
@@ -636,10 +633,7 @@ class SelfAttention(nn.Module):
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
             key_padding_mask = None
-        assert key_padding_mask is None or key_padding_mask.size()[:2] == (
-            bsz,
-            src_len,
-        ), f"{key_padding_mask.size()} != {(bsz, src_len)}"
+        assert key_padding_mask is None or key_padding_mask.size()[:2] == (bsz, src_len, )
 
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
@@ -755,11 +749,11 @@ class LearnedPositionalEmbedding(nn.Embedding):
 
     def forward(self, input, generation_mode=False):
         """Input is expected to be of size [bsz x seqlen]."""
-        if not generation_mode:
-            positions = create_position_ids_from_input_ids(input, self.padding_idx)
-        else:  # the position is our current step in the decoded sequence
+        if generation_mode:  # the position is our current step in the decoded sequence
             pos = int(self.padding_idx + input.size(1))
             positions = input.data.new(1, 1).fill_(pos)
+        else:
+            positions = create_position_ids_from_input_ids(input, self.padding_idx)
         return super().forward(positions)
 
 
@@ -878,7 +872,6 @@ class BartForMaskedLM(PretrainedBartModel):
         super().__init__(config)
         # if base_model is None:
         base_model = BartModel(config)
-        # assert isinstance(base_model, BartModel)
         self.model = base_model
         self.lm_head = _make_linear_from_emb(self.model.shared)
 
@@ -950,18 +943,13 @@ class BartForMaskedLM(PretrainedBartModel):
         return outputs
 
     @staticmethod
-    def prepare_inputs_for_generation(input_ids, past, attention_mask=None, decoder_input_ids=None, **kwargs):
+    def prepare_inputs_for_generation(input_ids, past,  decoder_input_ids, attention_mask):
         if decoder_input_ids is None:
             raise ValueError("Must specify decoder input ids")
-        # if attention_mask is not None:
-        #     attention_mask = attention_mask.expand(decoder_input_ids.shape[0], attention_mask.shape[1])
-        if past is None:
+        if past is None:  # first step
             encoder_outputs, decoder_cached_states = None, None
         else:
             encoder_outputs, decoder_cached_states = past
-            # import ipdb; ipdb.set_trace()
-        # bsz, tgt_len = decoder_input_ids.shape
-        # decoder_attention_mask = torch.zeros((bsz, 1, tgt_len, tgt_len)).to(decoder_input_ids.device)
         return {
             "input_ids": input_ids,  # ignored after first pass
             "decoder_cached_states": decoder_cached_states,
@@ -1075,15 +1063,15 @@ class BartForMaskedLM(PretrainedBartModel):
         for step in range(max_length + 1):
             decoder_input_ids = prev_output_tokens.clone()
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, decoder_cache, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids,
+                input_ids, decoder_cache, decoder_input_ids, attention_mask,
             )
             outputs = self(**model_inputs)
             lprobs = F.log_softmax(outputs[0][:, -1, :], dim=-1)
 
             assert pad_token_id is not None, "should break circleci"
-            lprobs[lprobs != lprobs] = -math.inf
-            lprobs[:, pad_token_id] = -math.inf  # fairseq has this
-            # unk is 3? fairseq also takes out every step, and has unk at slot 3
+            lprobs[lprobs != lprobs] = -math.inf  # kill nans
+            lprobs[:, pad_token_id] = -math.inf
+            # TODO(SS): unk is 3? fairseq also takes out every step, and has unk at slot 3
 
             assert bos_token_id == 0, "configurable bos_token_id not yet supported"
             if step == max_length:  # FORCE EOS to be chosen
@@ -1113,7 +1101,7 @@ class BartForMaskedLM(PretrainedBartModel):
             assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
 
             # list of (batch_size * num_beams)
-            next_batch_beam = []  # t Tuple(next score, next word, current position in the batch)
+            next_batch_beam = []  # Tuple(next score, next word, current position in the batch)
             for batch_idx in range(batch_size):
                 # if we are done with this sentence (because we can't improve)
                 if done[batch_idx]:  # then pad all associated hypotheses
@@ -1137,7 +1125,7 @@ class BartForMaskedLM(PretrainedBartModel):
                     else:
                         next_sent_beam.append((score, word_id, batch_idx * num_beams + beam_id))
 
-                    if len(next_sent_beam) == num_beams:
+                    if len(next_sent_beam) == num_beams:  # TODO(SS): can we delete this?
                         break
                 # Check if were done again so that we can save a pad step if all(done)
                 done[batch_idx] = done[batch_idx] or finalized_hyps[batch_idx].is_done(
@@ -1162,10 +1150,6 @@ class BartForMaskedLM(PretrainedBartModel):
             # re-order internal states
             decoder_cache = self._reorder_cache(decoder_cache, beam_idx)
 
-            # update current length
-            cur_len += 1
-            step += 1
-
         for batch_idx in range(batch_size):
             # Add all open beam hypothesis to generated_hyps
             if done[batch_idx]:
@@ -1187,7 +1171,7 @@ class BartForMaskedLM(PretrainedBartModel):
         # shorter batches are filled with pad_token
         if sent_lengths.min().item() != sent_lengths.max().item():
             assert pad_token_id is not None, "`Pad_token_id` has to be defined"
-            sent_max_len = min(sent_lengths.max().item() + 1, max_length)
+            sent_max_len = min(sent_lengths.max().item(), max_length)
             decoded = input_ids.new(batch_size, sent_max_len).fill_(pad_token_id)
 
             # fill with hypothesis and eos_token_id if necessary

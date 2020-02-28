@@ -30,7 +30,7 @@ BartForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BartForMaskedLM
-    :members: forward
+    :members: forward, generate
 
 
 BartForSequenceClassification
