@@ -383,23 +383,24 @@ class TFModelTesterMixin:
                 # batch_size = 1
                 self._check_generated_tokens(model.generate(input_ids))
                 # batch_size = 1, num_beams > 1
-#                self._check_generated_tokens(model.generate(input_ids, num_beams=3))  #TODO: beam_search will be implemented at a later stage
+            #                self._check_generated_tokens(model.generate(input_ids, num_beams=3))  #TODO: beam_search will be implemented at a later stage
             else:
                 # batch_size = 1
                 self._check_generated_tokens(model.generate(max_length=5))
                 # batch_size = 1, num_beams > 1
-#                self._check_generated_tokens(model.generate(max_length=5, num_beams=3))  #TODO: beam_search will be implemented at a later stage
+            #                self._check_generated_tokens(model.generate(max_length=5, num_beams=3))  #TODO: beam_search will be implemented at a later stage
 
             # batch_size > 1, sample
             self._check_generated_tokens(model.generate(input_ids, num_return_sequences=3))
             # batch_size > 1, greedy
             self._check_generated_tokens(model.generate(input_ids, do_sample=False, num_return_sequences=3))
             # batch_size > 1, num_beams > 1, sample
-#            self._check_generated_tokens(model.generate(input_ids, num_beams=3, num_return_sequences=3,))  #TODO: beam_search will be implemented at a later stage
-            # batch_size > 1, num_beams > 1, greedy
-#            self._check_generated_tokens(
-#                model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3)
-#            )  #TODO: beam_search will be implemented at a later stage
+
+    #            self._check_generated_tokens(model.generate(input_ids, num_beams=3, num_return_sequences=3,))  #TODO: beam_search will be implemented at a later stage
+    # batch_size > 1, num_beams > 1, greedy
+    #            self._check_generated_tokens(
+    #                model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3)
+    #            )  #TODO: beam_search will be implemented at a later stage
 
     def _check_generated_tokens(self, output_ids):
         for token_id in output_ids[0].numpy().tolist():

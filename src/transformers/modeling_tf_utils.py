@@ -635,7 +635,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 logit_penalized = logits[i].numpy()[prev_input_id]
                 # if previous logit score is < 0 then multiply repetition penalty else divide
                 logit_penalized[logit_penalized < 0] = repetition_penalty
-                logit_penalized[logit_penalized > 0] = (1 / repetition_penalty)
+                logit_penalized[logit_penalized > 0] = 1 / repetition_penalty
                 np.put(token_penalties[i], prev_input_id, logit_penalized)
             return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
 
@@ -685,8 +685,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 for eos_token_id in eos_token_ids:
                     eos_in_sents = tokens_to_add == eos_token_id
                     # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
-                    is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(unfinished_sents, tf.cast(eos_in_sents, tf.int32))
-                    sent_lengths = sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos) + cur_len * is_sents_unfinished_and_token_to_add_is_eos
+                    is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(
+                        unfinished_sents, tf.cast(eos_in_sents, tf.int32)
+                    )
+                    sent_lengths = (
+                        sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
+                        + cur_len * is_sents_unfinished_and_token_to_add_is_eos
+                    )
                     # unfinished_sents is set to zero if eos in sentence
                     unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
 
@@ -705,8 +710,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             padding = tf.ones([batch_size, max_sent_length.numpy()], dtype=tf.int32) * pad_token_id
 
             # create length masks for tf.where operation
-            broad_casted_sent_lengths = tf.broadcast_to(tf.expand_dims(sent_lengths, -1), [batch_size, max_sent_length])
-            broad_casted_range = tf.transpose(tf.broadcast_to(tf.expand_dims(tf.range(max_length), -1), [max_length, batch_size]))
+            broad_casted_sent_lengths = tf.broadcast_to(
+                tf.expand_dims(sent_lengths, -1), [batch_size, max_sent_length]
+            )
+            broad_casted_range = tf.transpose(
+                tf.broadcast_to(tf.expand_dims(tf.range(max_length), -1), [max_length, batch_size])
+            )
 
             decoded = tf.where(broad_casted_range < broad_casted_sent_lengths, input_ids, padding)
         else:
@@ -734,9 +743,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         pass
 
 
-def tf_top_k_top_p_filtering(
-    logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1
-):
+def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
             logits: logits distribution shape (batch size, vocabulary size)
@@ -760,9 +767,7 @@ def tf_top_k_top_p_filtering(
             logits, sorted_indices, axis=-1, batch_dims=1
         )  # expects logits to be of dim (batch_size, vocab_size)
 
-        cumulative_probs = tf.math.cumsum(
-            tf.nn.softmax(sorted_logits, axis=-1), axis=-1
-        )
+        cumulative_probs = tf.math.cumsum(tf.nn.softmax(sorted_logits, axis=-1), axis=-1)
 
         # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
         sorted_indices_to_remove = cumulative_probs > top_p
@@ -780,11 +785,7 @@ def tf_top_k_top_p_filtering(
         # Shift the indices to the right to keep also the first token above the threshold
         sorted_indices_to_remove = tf.roll(sorted_indices_to_remove, 1, axis=-1)
         sorted_indices_to_remove = tf.concat(
-            [
-                tf.zeros_like(sorted_indices_to_remove[:, :1]),
-                sorted_indices_to_remove[:, 1:],
-            ],
-            -1,
+            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, 1:],], -1,
         )
         # scatter sorted tensors to original indexing
         indices_to_remove = scatter_values_on_batch_indices(sorted_indices_to_remove, sorted_indices)
@@ -795,13 +796,9 @@ def tf_top_k_top_p_filtering(
 def scatter_values_on_batch_indices(values, batch_indices):
     shape = batch_indices.shape
     # broadcast batch dim to shape
-    broad_casted_batch_dims = tf.reshape(
-        tf.broadcast_to(tf.expand_dims(tf.range(shape[0]), axis=-1), shape), [1, -1]
-    )
+    broad_casted_batch_dims = tf.reshape(tf.broadcast_to(tf.expand_dims(tf.range(shape[0]), axis=-1), shape), [1, -1])
     # transform batch_indices to pair_indices
-    pair_indices = tf.transpose(
-        tf.concat([broad_casted_batch_dims, tf.reshape(batch_indices, [1, -1])], 0)
-    )
+    pair_indices = tf.transpose(tf.concat([broad_casted_batch_dims, tf.reshape(batch_indices, [1, -1])], 0))
     # scatter values to pair indices
     return tf.scatter_nd(pair_indices, tf.reshape(values, [-1]), shape)
 
