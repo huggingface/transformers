@@ -45,4 +45,3 @@ jobs:
       run: |
         source .env/bin/activate
         python -m pytest -n 8 --dist=loadfile -s -v ./tests/
-
