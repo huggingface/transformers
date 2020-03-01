@@ -21,8 +21,6 @@ import sys
 import tempfile
 import unittest
 
-import ipdb
-
 from transformers import is_tf_available, is_torch_available
 
 from .utils import _tf_gpu_memory_limit, require_tf
@@ -528,7 +526,6 @@ class UtilsFunctionsTest(unittest.TestCase):
             output = tf_top_k_top_p_filtering(logits, top_k=10, top_p=0.6, min_tokens_to_keep=4)
 
             non_inf_output = output[output != -float("inf")]
-            ipdb.set_trace()
             non_inf_idx = tf.cast(
                 tf.where(tf.not_equal(output, tf.constant(-float("inf"), dtype=tf.float32))), dtype=tf.int32,
             )
