@@ -36,7 +36,7 @@ if is_torch_available():
         BertModel,
         BertConfig,
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        top_k_top_p_filtering
+        top_k_top_p_filtering,
     )
 
 
