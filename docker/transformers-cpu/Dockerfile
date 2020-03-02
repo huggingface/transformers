@@ -1,4 +1,6 @@
 FROM ubuntu:18.04
+LABEL maintainer="Hugging Face"
+LABEL repository="transformers"
 
 ARG TRANSFORMERS_VERSION=2.5.1
 RUN apt update && \
