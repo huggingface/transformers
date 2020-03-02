@@ -39,7 +39,7 @@ def find_all_links(file_paths):
     for path in file_paths:
         links += scan_code_for_links(path)
 
-    return [l for l in links if l != S3_BUCKET_PREFIX]
+    return [link for link in links if link != S3_BUCKET_PREFIX]
 
 
 def scan_code_for_links(source):
