@@ -996,24 +996,22 @@ class BartForMaskedLM(PretrainedBartModel):
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
         bos_token_id = self.config.bos_token_id
         pad_token_id = self.config.pad_token_id
-        eos = self.config.eos_token_id
+        eos_token_id = self.config.eos_token_id
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
         batch_size, cur_len = input_ids.shape
-
+        assert input_ids is not None
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictly positive integer."
         assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictly positive integer."
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
-        assert pad_token_id is not None
+        assert isinstance(pad_token_id, int)
+        assert bos_token_id == 0, "configurable bos_token_id not yet supported"
         assert length_penalty > 0, "`length_penalty` should be strictly positive."
         assert (
             isinstance(num_return_sequences, int) and num_return_sequences > 0
         ), "`num_return_sequences` should be a positive integer."
-
-        if input_ids is None:
-            raise ValueError("Not how this works")
 
         # current position and vocab size
         cur_len = input_ids.shape[1]
@@ -1039,7 +1037,6 @@ class BartForMaskedLM(PretrainedBartModel):
                 .contiguous()
                 .view(batch_size * num_beams, cur_len)
             )  # RESHAPE
-        assert bos_token_id == 0
 
         # generated hypotheses
         finalized_hyps = [  # they end in EOS and we wont work on them more!
@@ -1066,35 +1063,34 @@ class BartForMaskedLM(PretrainedBartModel):
             outputs = self(**model_inputs)
             lprobs = F.log_softmax(outputs[0][:, -1, :], dim=-1)
 
-            assert pad_token_id is not None, "should break circleci"
-            lprobs[lprobs != lprobs] = -math.inf  # kill nans
+            lprobs[lprobs != lprobs] = -math.inf  # block nans
             lprobs[:, pad_token_id] = -math.inf
-            # TODO(SS): unk is 3? fairseq also takes out every step, and has unk at slot 3
+            # TODO(SS): fairseq also takes out <unk> every step, and has unk at slot 3
 
-            assert bos_token_id == 0, "configurable bos_token_id not yet supported"
-            if step == max_length:  # FORCE EOS to be chosen
-                lprobs[:, :eos] = -math.inf
-                lprobs[:, eos + 1 :] = -math.inf
-            elif step == 0:  # Force BOS to be chosen
+            if step == 0:  # Force BOS to be chosen
                 lprobs[:, bos_token_id + 1 :] = -math.inf
-            if step < min_len:
-                lprobs[:, eos] = -math.inf
+            elif step < min_len:  # Prevent EOS from being chosen
+                lprobs[:, eos_token_id] = -math.inf
+            elif step == max_length:  # FORCE EOS to be chosen
+                lprobs[:, :eos_token_id] = -math.inf
+                lprobs[:, eos_token_id + 1 :] = -math.inf
             assert self._do_output_past(outputs)
             decoder_cache = outputs[1]
             if repetition_penalty != 1.0:
                 self.enforce_repetition_penalty_(lprobs, batch_size, num_beams, prev_output_tokens, repetition_penalty)
             num_hypos = batch_size * num_beams
             if no_repeat_ngram_size > 0:  # copied from fairseq
-                # for each beam and batch sentence, generate a list of previous ngrams
+                # for each sentence, calculate a list of banned tokens to prevent repetitively generating the same ngrams
                 banned_tokens = self.calc_banned_tokens(prev_output_tokens, num_hypos, no_repeat_ngram_size, step)
-                # then set their probabilities to -inf
-                for bbsz_idx in range(num_hypos):
-                    lprobs[bbsz_idx, banned_tokens[bbsz_idx]] = -math.inf
+                # then set their probabilities tof -inf
+                for idx in range(num_hypos):
+                    lprobs[idx, banned_tokens[idx]] = -math.inf
             assert lprobs.size() == (batch_size * num_beams, vocab_size)
             _scores = lprobs + beam_scores[:, None].expand_as(lprobs)  # (batch_size * num_beams, vocab_size)
 
             # re-organize to group the beam together (we are keeping top hypothesis across beams)
             _scores = _scores.view(batch_size, num_beams * vocab_size)  # (batch_size, num_beams * vocab_size)
+            # Take the best 2 x beam_size predictions for each example, we'll choose the first beam_size of these which don't predict eos to continue with.
             next_scores, next_words = torch.topk(_scores, 2 * num_beams)
             assert next_scores.size() == next_words.size() == (batch_size, 2 * num_beams)
 
@@ -1116,7 +1112,7 @@ class BartForMaskedLM(PretrainedBartModel):
                     beam_id = idx // vocab_size
                     word_id = idx % vocab_size
                     assert prev_output_tokens.shape[1] == (step + 1)
-                    if word_id.item() == eos:
+                    if word_id.item() == eos_token_id:
                         if i >= num_beams:
                             continue
                         finalized_hyps[batch_idx].add(
@@ -1177,7 +1173,7 @@ class BartForMaskedLM(PretrainedBartModel):
             for i, hypo in enumerate(best):
                 decoded[i, : sent_lengths[i]] = hypo
                 if sent_lengths[i] < max_length:
-                    decoded[i, sent_lengths[i]] = eos
+                    decoded[i, sent_lengths[i]] = eos_token_id
         else:
             assert (len(hypo) == max_length for hypo in best)
             decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
@@ -1198,12 +1194,12 @@ class BartForMaskedLM(PretrainedBartModel):
                 k = tuple(ngram[:-1])
                 gen_ngrams[idx][k] = gen_ngrams[idx].get(k, []) + [ngram[-1]]
 
-        def calculate_banned_tokens(bbsz_idx):
+        def _get_generated_ngrams(hypo_idx):
             """Before decoding the next token, prevent decoding of ngrams that have already appeared"""
-            ngram_index = tuple(prev_output_tokens[bbsz_idx, step + 2 - no_repeat_ngram_size : step + 1].tolist())
-            return gen_ngrams[bbsz_idx].get(ngram_index, [])
+            ngram_index = tuple(prev_output_tokens[hypo_idx, step + 2 - no_repeat_ngram_size : step + 1].tolist())
+            return gen_ngrams[hypo_idx].get(ngram_index, [])
 
-        banned_tokens = [calculate_banned_tokens(bbsz_idx) for bbsz_idx in range(num_hypos)]
+        banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
         return banned_tokens
 
 
