@@ -1012,6 +1012,12 @@ class PreTrainedTokenizer(object):
                 "https://github.com/huggingface/transformers/pull/2674"
             )
 
+        # Throw an error if we can pad because there is no padding token
+        if pad_to_max_length and self.pad_token_id is None:
+            raise ValueError(
+                "Unable to set proper padding strategy as the tokenizer does not have a padding token. In this case please set the `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` or add a new pad token via the function add_special_tokens if you want to use a padding strategy"
+            )
+
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
 
@@ -1116,7 +1122,6 @@ class PreTrainedTokenizer(object):
                 )
 
         # Throw an error if we can pad because there is no padding token
-
         if pad_to_max_length and self.pad_token_id is None:
             raise ValueError(
                 "Unable to set proper padding strategy as the tokenizer does not have a padding token. In this case please set the `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` or add a new pad token via the function add_special_tokens if you want to use a padding strategy"
