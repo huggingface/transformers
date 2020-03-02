@@ -6,7 +6,7 @@ language: french
 
 ## Description
 
-A baseline model for question-answering in french ([CamemBERT](hhttps://camembert-model.fr/) model fine-tuned on [french-translated SQuAD 1.1 dataset](https://github.com/Alikabbadj/French-SQuAD))
+A baseline model for question-answering in french ([CamemBERT](https://camembert-model.fr/) model fine-tuned on [french-translated SQuAD 1.1 dataset](https://github.com/Alikabbadj/French-SQuAD))
 
 ## Training hyperparameters
 

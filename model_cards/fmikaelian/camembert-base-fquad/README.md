@@ -6,7 +6,7 @@ language: french
 
 ## Description
 
-A baseline model for question-answering in french ([CamemBERT](hhttps://camembert-model.fr/) model fine-tuned on [FQuAD](https://fquad.illuin.tech/))
+A baseline model for question-answering in french ([CamemBERT](https://camembert-model.fr/) model fine-tuned on [FQuAD](https://fquad.illuin.tech/))
 
 ## Training hyperparameters
 
