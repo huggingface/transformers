@@ -395,9 +395,7 @@ class TFModelTesterMixin:
             # batch_size > 1, sample
             self._check_generated_tokens(model.generate(input_ids, num_return_sequences=3))
             # batch_size > 1, greedy
-            self._check_generated_tokens(
-                model.generate(input_ids, do_sample=False, num_return_sequences=3)
-            )
+            self._check_generated_tokens(model.generate(input_ids, do_sample=False, num_return_sequences=3))
 
     def _check_generated_tokens(self, output_ids):
         for token_id in output_ids[0].numpy().tolist():
