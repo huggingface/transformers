@@ -863,7 +863,8 @@ class BartModel(PretrainedBartModel):
 
 
 @add_start_docstrings(
-    "The bare BART Model with a language modeling head. This is the model used for summarization.", BART_START_DOCSTRING,
+    "The bare BART Model with a language modeling head. This is the model used for summarization.",
+    BART_START_DOCSTRING,
 )
 class BartForMaskedLM(PretrainedBartModel):
     base_model_prefix = "model"
