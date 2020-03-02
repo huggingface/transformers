@@ -35,7 +35,7 @@ if is_tf_available():
         for gpu in gpus:
             # Restrict TensorFlow to only allocate x GB of memory on the GPUs
             try:
-                tf.config.set_virtual_device_configuration(
+                tf.config.experimental.set_virtual_device_configuration(
                     gpu, [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=_tf_gpu_memory_limit)]
                 )
                 logical_gpus = tf.config.experimental.list_logical_devices("GPU")
