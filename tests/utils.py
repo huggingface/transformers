@@ -29,8 +29,22 @@ def parse_flag_from_env(key, default=False):
     return _value
 
 
+def parse_int_from_env(key, default=None):
+    try:
+        value = os.environ[key]
+    except KeyError:
+        _value = default
+    else:
+        try:
+            _value = int(value)
+        except ValueError:
+            raise ValueError("If set, {} must be a int.".format(key))
+    return _value
+
+
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
+_tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 
 
 def slow(test_case):
