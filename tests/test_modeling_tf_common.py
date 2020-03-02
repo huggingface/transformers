@@ -379,6 +379,7 @@ class TFModelTesterMixin:
         )  # TODO (PVP): ugly workaround to make code work for t5 for the moment - has to changed when t5 is fixed.
 
         for model_class in self.all_generative_model_classes:
+            # TODO (PVP): add beam search tests when beam search is implemented
             model = model_class(config)
 
             if config.bos_token_id is None:
@@ -502,7 +503,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         )  # expected non filtered idx as noted above
 
         non_inf_expected_output = tf.convert_to_tensor(
-            [8.222099, 7.3534126, 8.432078, 7.4402075, 9.38451, 6.271159, 8.827531, 5.4402995, 7.3857956, 9.677023,],
+            [8.222099, 7.3534126, 8.432078, 7.4402075, 9.38451, 6.271159, 8.827531, 5.4402995, 7.3857956, 9.677023],
             dtype=tf.float32,
         )  # expected non filtered values as noted above
 
