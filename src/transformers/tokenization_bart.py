@@ -19,11 +19,7 @@ from .tokenization_roberta import RobertaTokenizer
 # vocab and merges same as roberta
 vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json"
 merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
-_all_bart_models = [
-    "bart-large",
-    "bart-large-mnli",
-    # "bart-large-cnn"
-]
+_all_bart_models = ["bart-large", "bart-large-mnli", "bart-large-cnn"]
 
 
 class BartTokenizer(RobertaTokenizer):
