@@ -30,8 +30,6 @@ if is_tf_available():
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
-        print("toto")
-        print(gpus)
         for gpu in gpus:
             # Restrict TensorFlow to only allocate x GB of memory on the GPUs
             try:

@@ -45,6 +45,5 @@ jobs:
         OMP_NUM_THREADS: 1
         USE_CUDA: yes
       run: |
-        env
         source .env/bin/activate
         python -m pytest -n 2 --dist=loadfile -s -v ./tests/
