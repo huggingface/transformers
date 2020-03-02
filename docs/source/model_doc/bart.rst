@@ -14,11 +14,12 @@ The authors released their code `here <https://github.com/pytorch/fairseq/tree/m
 `BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension`
 
 
-Notes:
+Notes
+~~~~~
 - Bart doesn't use :obj:`token_type_ids`, for sequence classification just use BartTokenizer.encode to get the proper splitting.
 - Inputs to the decoder are created by BartModel.forward if they are not passed. This is different than some other model APIs.
 - Model predictions are intended to be identical to the original implementation. This only works, however, if the string you pass to fairseq.encode starts with a space.
-
+- Decoder inputs are created automatically by the helper function ``transformers.modeling_bart._prepare_bart_decoder_inputs``
 BartModel
 ~~~~~~~~~~~~~~~~~~~~
 

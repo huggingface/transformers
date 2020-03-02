@@ -863,7 +863,7 @@ class BartModel(PretrainedBartModel):
 
 
 @add_start_docstrings(
-    "The bare BART Model with a language modeling head", BART_START_DOCSTRING,
+    "The bare BART Model with a language modeling head. This is the model used for summarization.", BART_START_DOCSTRING,
 )
 class BartForMaskedLM(PretrainedBartModel):
     base_model_prefix = "model"
@@ -983,26 +983,70 @@ class BartForMaskedLM(PretrainedBartModel):
         self,
         input_ids,
         attention_mask=None,
-        max_length=None,
-        num_beams=None,
-        repetition_penalty=None,
-        length_penalty=None,
-        num_return_sequences=None,
+        max_length=20,
+        num_beams=1,
+        repetition_penalty=1.0,
+        length_penalty=1.0,
+        num_return_sequences=1,
         min_len=0,
         no_repeat_ngram_size=0,
     ):
-        max_length = max_length if max_length is not None else self.config.max_length
-        num_beams = num_beams if num_beams is not None else self.config.num_beams
-        repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
+        r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
+        and beam-search.
+
+        Adapted in part from Facebook's `XLM beam search code`_ and `Fairseq beam search code`_.
+
+        .. _`XLM beam search code`:
+           https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529
+        .. _`Fairseq beam search code`:
+           https://github.com/pytorch/fairseq/blob/master/fairseq/sequence_generator.py
+
+
+        Parameters:
+
+            input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
+                The sequence used as a prompt for the generation. If `None` the method initializes
+                it as an empty `torch.LongTensor` of shape `(1,)`.
+
+            max_length: (`optional`) int
+                The max length of the sequence to be generated. Does not include tokens in input_ids.
+
+            num_beams: (`optional`) int
+                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
+
+            repetition_penalty: (`optional`) float
+                The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
+
+            length_penalty: (`optional`) float
+                Exponential penalty to the length. Default to 1.
+
+            num_return_sequences: (`optional`) int
+                The number of independently computed returned sequences for each element in the batch. Default to 1.
+
+            min_len: (`optional`) int
+
+        Returns:
+            `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`
+                sequence_length is <= max_length (examples can finish early)
+
+        Examples::
+
+            config = BartConfig(vocab_size=50264, output_past=True)
+            model = AutoModelWithLMHead.from_pretrained('bart-large-cnn', config=config)
+            tokenizer = AutoTokenizer.from_pretrained('bart-large-cnn')
+            ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+            inputs = tokenizer.batch_encode_plus([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+            # Generate Summary
+            generated_ids = model.generate(inputs['input_ids'], attention_mask=inputs['attention_mask'], num_beams=4, max_length=5)
+            print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in generated_ids])
+
+        """
         bos_token_id = self.config.bos_token_id
         pad_token_id = self.config.pad_token_id
         eos_token_id = self.config.eos_token_id
-        length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
-        num_return_sequences = (
-            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
-        )
         batch_size, cur_len = input_ids.shape
         assert input_ids is not None
+        assert self.config.output_past, "Generating with bart requires instantiating a config with output_past=True"
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictly positive integer."
         assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictly positive integer."
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
