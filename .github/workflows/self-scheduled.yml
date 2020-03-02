@@ -41,7 +41,7 @@ jobs:
 
     - name: Run all tests on GPU
       env:
-        TF_FORCE_GPU_ALLOW_GROWTH: yes
+        TF_FORCE_GPU_ALLOW_GROWTH: "true"
         OMP_NUM_THREADS: 1
         RUN_SLOW: yes
         USE_CUDA: yes

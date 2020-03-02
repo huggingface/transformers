@@ -21,14 +21,26 @@ import tempfile
 
 from transformers import is_tf_available, is_torch_available
 
-from .utils import require_tf
+from .utils import _tf_gpu_memory_limit, require_tf
 
 
 if is_tf_available():
     import tensorflow as tf
     import numpy as np
 
-    # from transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    if _tf_gpu_memory_limit is not None:
+        gpus = tf.config.list_physical_devices("GPU")
+        for gpu in gpus:
+            # Restrict TensorFlow to only allocate x GB of memory on the GPUs
+            try:
+                tf.config.experimental.set_virtual_device_configuration(
+                    gpu, [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=_tf_gpu_memory_limit)]
+                )
+                logical_gpus = tf.config.experimental.list_logical_devices("GPU")
+                print("Logical GPUs", logical_gpus)
+            except RuntimeError as e:
+                # Virtual devices must be set before GPUs have been initialized
+                print(e)
 
 
 def _config_zero_init(config):
