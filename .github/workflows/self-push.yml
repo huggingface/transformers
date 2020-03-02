@@ -40,8 +40,8 @@ jobs:
 
     - name: Run all non-slow tests on GPU
       env:
-        TF_FORCE_GPU_ALLOW_GROWTH: yes
-        TF_GPU_MEMORY_LIMIT: 4096
+        TF_FORCE_GPU_ALLOW_GROWTH: "true"
+        # TF_GPU_MEMORY_LIMIT: 4096
         OMP_NUM_THREADS: 1
         USE_CUDA: yes
       run: |
