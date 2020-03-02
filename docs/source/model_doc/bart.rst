@@ -23,13 +23,7 @@ Implementation Notes
 - Model predictions are intended to be identical to the original implementation. This only works, however, if the string you pass to fairseq.encode starts with a space.
 - Decoder inputs are created automatically by the helper function ``transformers.modeling_bart._prepare_bart_decoder_inputs``
 BartModel
-- ``MaskedLM.generate`` should be used for summarization, see the example in that docstring
-
-Pretrained Checkpoints
-~~~~~~~~~~~~~~~~~~~~~~
-- ``bart-large`` is the base pretrained model
-- ``bart-large-cnn`` is finetuned on summarization of news articles  (see ``BartForMaskedLM`` for instantiation code)
-- ``bart-large-mnli`` is finetuned on the MNLI classification task
+- ``MaskedLM.generate`` should be used for summarization, see the example in that docstrings
 
 
 BartModel
