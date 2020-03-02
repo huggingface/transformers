@@ -16,8 +16,8 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def main(source_path, out_file, batch_size=8, device=DEFAULT_DEVICE):
-    lns = [" " + x.rstrip() for x in open(source_path).readlines()]
+def generate_summaries(lns, out_file, batch_size=8, device=DEFAULT_DEVICE):
+
     fout = Path(out_file).open("w")
     model = BartForMaskedLM.from_pretrained("bart-large-cnn", output_past=True,)
     tok = BartTokenizer.from_pretrained("bart-large")
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         "-source_path", type=str, required=True, help="like cnn_dm/test.source",
     )
     parser.add_argument(
-        "-outfile", type=str, required=True, help="where to save summaries",
+        "-output_path", type=str, required=True, help="where to save summaries",
     )
     parser.add_argument(
         "--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.",
@@ -52,5 +52,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch_size", type=int, default=8, required=False, help="How many to summarize at a time",
     )
-
-    main()
+    args = parser.parse_args()
+    lns = [" " + x.rstrip() for x in open(args.source_path).readlines()]
+    generate_summaries(lns, args.output_path, batch_size=args.batch_size, device=args.device)
