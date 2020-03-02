@@ -15,9 +15,11 @@ RUN apt update && \
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install \
     mkl \
-    torch \
-    transformers==$TRANSFORMERS_VERSION
+    torch
 
+COPY . /workspace/transformers
+RUN cd /workspace/transformers && \
+    python3 -m pip install .
 
 WORKDIR /workspace
 RUN chmod -R a+w .

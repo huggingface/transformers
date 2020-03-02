@@ -2,7 +2,6 @@ FROM nvidia/cuda:10.1-cudnn7-runtime-ubuntu18.04
 LABEL maintainer="Hugging Face"
 LABEL repository="transformers"
 
-ARG TRANSFORMERS_VERSION=2.5.1
 RUN apt update && \
     apt install -y bash \
                    build-essential \
@@ -15,10 +14,11 @@ RUN apt update && \
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install \
     mkl \
-    tensorflow-cpu \
-    torch \
-    transformers==$TRANSFORMERS_VERSION
+    torch
 
+COPY . /workspace/transformers
+RUN cd /workspace/transformers && \
+    python3 -m pip install .
 
 WORKDIR /workspace
 RUN chmod -R a+w .

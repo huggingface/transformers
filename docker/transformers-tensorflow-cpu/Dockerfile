@@ -15,9 +15,11 @@ RUN apt update && \
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install \
     mkl \
-    tensorflow-cpu \
-    transformers==$TRANSFORMERS_VERSION
+    tensorflow-cpu
 
+COPY . /workspace/transformers
+RUN cd /workspace/transformers && \
+    python3 -m pip install .
 
 WORKDIR /workspace
 RUN chmod -R a+w .
