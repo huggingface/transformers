@@ -37,8 +37,8 @@ if is_tf_available():
 class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (TFTransfoXLModel, TFTransfoXLLMHeadModel) if is_tf_available() else ()
-    #    all_generative_model_classes = (TFTransfoXLLMHeadModel,) if is_tf_available() else ()
-    # TODO: add this test when TFTransfoXLLMHead has a linear output layer implemented
+    all_generative_model_classes = () if is_tf_available() else ()
+    # TODO: add TFTransfoXLLMHead when it has a linear output layer implemented
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
