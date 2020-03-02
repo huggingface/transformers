@@ -759,12 +759,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 # no_beam_search greedy generation conditions
                 assert (
                     num_return_sequences == 1
-                ), "When doing greedy no beam search generation num_return_sequences > 1 would return the same generated sequences -> set num_return_sequences = 1"
+                ), "Greedy decoding will always produce the same output for num_beams == 1 and num_return_sequences > 1. Please set num_return_sequences = 1"
+
             else:
                 # beam_search greedy generation conditions
                 assert (
                     num_beams >= num_return_sequences
-                ), "When doing greedy beam search generation, make sure that num_beams >= num_return_sequences"
+                ), "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams >= num_return_sequences"
 
         if pad_token_id is None and eos_token_ids is not None:
             logger.warning(
