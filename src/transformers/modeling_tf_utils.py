@@ -692,11 +692,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                         sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
                         + cur_len * is_sents_unfinished_and_token_to_add_is_eos
                     )
-<<<<<<< HEAD
-                    is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(unfinished_sents, tf.cast(eos_in_sents, tf.int32))
-                    sent_lengths = sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos) + cur_len * is_sents_unfinished_and_token_to_add_is_eos
-=======
->>>>>>> make style
+
                     # unfinished_sents is set to zero if eos in sentence
                     unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
 
