@@ -24,7 +24,7 @@ import tensorflow as tf
 
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, shape_list
+from .modeling_tf_utils import TFMainLayer, TFPreTrainedModel, TFSharedEmbeddings, get_initializer, shape_list
 
 
 logger = logging.getLogger(__name__)
@@ -397,9 +397,9 @@ class TFTransformer(tf.keras.layers.Layer):
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 
-class TFDistilBertMainLayer(tf.keras.layers.Layer):
+class TFDistilBertMainLayer(TFMainLayer):
     def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(config, **kwargs)
         self.num_hidden_layers = config.num_hidden_layers
 
         self.embeddings = TFEmbeddings(config, name="embeddings")  # Embeddings

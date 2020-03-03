@@ -25,7 +25,7 @@ import tensorflow as tf
 
 from .configuration_t5 import T5Config
 from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list
+from .modeling_tf_utils import TFMainLayer, TFPreTrainedModel, TFSharedEmbeddings, shape_list
 
 
 logger = logging.getLogger(__name__)
@@ -359,9 +359,9 @@ class TFT5Block(tf.keras.layers.Layer):
 # The full model without a specific pretrained or finetuning head is
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
-class TFT5MainLayer(tf.keras.layers.Layer):
+class TFT5MainLayer(TFMainLayer):
     def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(config, **kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.is_decoder = config.is_decoder
