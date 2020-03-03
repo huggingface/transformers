@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 # ------------
 
 
-class SummarizationDataset(Dataset):
+class CNNDMDataset(Dataset):
     """ Abstracts the dataset used to train seq2seq models.
 
     The class will process the documents that are located in the specified
@@ -62,11 +62,11 @@ class SummarizationDataset(Dataset):
 def process_story(raw_story):
     """ Extract the story and summary from a story file.
 
-    Attributes:
+    Arguments:
         raw_story (str): content of the story file as an utf-8 encoded string.
 
     Raises:
-        IndexError: If the stoy is empty or contains no highlights.
+        IndexError: If the story is empty or contains no highlights.
     """
     nonempty_lines = list(filter(lambda x: len(x) != 0, [line.strip() for line in raw_story.split("\n")]))
 
@@ -107,7 +107,7 @@ def _add_missing_period(line):
 # --------------------------
 
 
-def fit_to_block_size(sequence, block_size, pad_token_id):
+def truncate_or_pad(sequence, block_size, pad_token_id):
     """ Adapt the source and target sequences' lengths to the block size.
     If the sequence is shorter we append padding token to the right of the sequence.
     """
