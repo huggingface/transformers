@@ -536,3 +536,225 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Check the number of returned files for save_vocabulary
             self.assert_save_pretrained(tokenizer_r, tokenizer_p)
+
+    def test_embedded_special_tokens(self):
+        sentence = "A, <mask> AllenNLP sentence."
+        from transformers import AutoTokenizer
+        tokenizer_r = AutoTokenizer.from_pretrained(
+            "roberta-base",
+            add_special_tokens=True,
+            use_fast=True)
+        tokenizer_p = AutoTokenizer.from_pretrained(
+            "roberta-base",
+            use_fast=False)
+
+        tokens_r = tokenizer_r.encode_plus(
+            sentence,
+            return_attention_mask=False,
+            return_token_type_ids=True)
+        tokens_p = tokenizer_p.encode_plus(
+            sentence,
+            add_special_tokens=True,
+            return_attention_mask=False,
+            return_token_type_ids=True)
+        type_ids_r = tokens_r['token_type_ids']
+        type_ids_p = tokens_p['token_type_ids']
+
+        expected_tokens = [
+            "<s>",
+            "A",
+            ",",
+            "Ġ",
+            "<mask>",
+            "ĠAllen",
+            "N",
+            "LP",
+            "Ġsentence",
+            ".",
+            "</s>",
+        ]
+
+        tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r['input_ids'])
+        tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p['input_ids'])
+        self.assertEqual(expected_tokens, tokens_r)
+        self.assertEqual(expected_tokens, tokens_p)
+
+        self.assertEqual([0] * len(expected_tokens), type_ids_r)
+        self.assertEqual([0] * len(expected_tokens), type_ids_p)
+
+    def test_embedded_special_tokens_pair(self):
+        sentence_1 = "A, [MASK] AllenNLP sentence."
+        sentence_2 = "A sentence."
+        from transformers import AutoTokenizer
+        tokenizer_r = AutoTokenizer.from_pretrained(
+            "bert-base-cased",
+            add_special_tokens=True,
+            use_fast=True)
+        tokenizer_p = AutoTokenizer.from_pretrained(
+            "bert-base-cased",
+            use_fast=False)
+
+        tokens_r = tokenizer_r.encode_plus(
+            sentence_1, sentence_2,
+            return_attention_mask=False,
+            return_token_type_ids=True)
+        tokens_p = tokenizer_p.encode_plus(
+            sentence_1, sentence_2,
+            add_special_tokens=True,
+            return_attention_mask=False,
+            return_token_type_ids=True)
+        type_ids_r = tokens_r['token_type_ids']
+        type_ids_p = tokens_p['token_type_ids']
+
+        expected_result = [
+            (0, "[CLS]"),
+            (0, "A"),
+            (0, ","),
+            (0, "[MASK]"),
+            (0, "Allen"),
+            (0, "##NL"),
+            (0, "##P"),
+            (0, "sentence"),
+            (0, "."),
+            (0, "[SEP]"),
+            (1, "A"),
+            (1, "sentence"),
+            (1, "."),
+            (1, "[SEP]"),
+        ]
+
+        tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r['input_ids'])
+        tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p['input_ids'])
+        self.assertEqual([e[1] for e in expected_result], tokens_r)
+        self.assertEqual([e[1] for e in expected_result], tokens_p)
+
+        self.assertEqual([e[0] for e in expected_result], type_ids_r)
+        self.assertEqual([e[0] for e in expected_result], type_ids_p)
+
+    def test_embedded_special_tokens_pair_roberta(self):
+        sentence_1 = "A, <mask> AllenNLP sentence."
+        sentence_2 = "A sentence."
+        from transformers import AutoTokenizer
+        tokenizer_r = AutoTokenizer.from_pretrained(
+            "roberta-base",
+            add_special_tokens=True,
+            use_fast=True)
+        tokenizer_p = AutoTokenizer.from_pretrained(
+            "roberta-base",
+            use_fast=False)
+
+        tokens_r = tokenizer_r.encode_plus(
+            sentence_1, sentence_2,
+            return_attention_mask=False,
+            return_token_type_ids=True)
+        tokens_p = tokenizer_p.encode_plus(
+            sentence_1, sentence_2,
+            add_special_tokens=True,
+            return_attention_mask=False,
+            return_token_type_ids=True)
+        type_ids_r = tokens_r['token_type_ids']
+        type_ids_p = tokens_p['token_type_ids']
+
+        expected_tokens = [
+            "<s>",
+            "A",
+            ",",
+            "Ġ",
+            "<mask>",
+            "ĠAllen",
+            "N",
+            "LP",
+            "Ġsentence",
+            ".",
+            "</s>",
+            "</s>",
+            "A",
+            "Ġsentence",
+            ".",
+            "</s>",
+        ]
+
+        tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r['input_ids'])
+        tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p['input_ids'])
+        self.assertEqual(expected_tokens, tokens_r)
+        self.assertEqual(expected_tokens, tokens_p)
+
+        self.assertEqual([0] * len(expected_tokens), type_ids_r)
+        self.assertEqual([0] * len(expected_tokens), type_ids_p)
+
+    def test_offsets_with_special_characters(self):
+        from transformers import AutoTokenizer
+        sentence = "A, naïve [MASK] AllenNLP sentence."
+        for model in ["bert-base-cased", "bert-base-uncased"]:
+            with self.subTest(model=model):
+                tokenizer = AutoTokenizer.from_pretrained(
+                    model,
+                    add_special_tokens=True,
+                    use_fast=True)
+
+                tokens = tokenizer.encode_plus(
+                    sentence,
+                    return_attention_mask=False,
+                    return_token_type_ids=False,
+                    return_offsets_mapping=True)
+
+                expected_results = [
+                    (None, "[CLS]"),
+                    ((0, 1), "A"),
+                    ((1, 2), ","),
+                    ((3, 8), "naive"),  # BERT normalizes this away
+                    ((9, 15), "[MASK]"),
+                    ((16, 21), "Allen"),
+                    ((22, 24), "##NL"),
+                    ((24, 25), "##P"),
+                    ((26, 34), "sentence"),
+                    ((35, 36), "."),
+                    (None, "[SEP]")
+                ]
+
+                self.assertEqual(
+                    [e[1] for e in expected_results],
+                    tokenizer.convert_ids_to_tokens(tokens["input_ids"])
+                )
+                self.assertEqual(
+                    [e[0] for e in expected_results],
+                    tokens["offset_mapping"]
+                )
+
+    def test_offsets_with_special_characters_roberta(self):
+        from transformers import AutoTokenizer
+        sentence = "A, naïve <mask> AllenNLP sentence."
+        tokenizer = AutoTokenizer.from_pretrained(
+            "roberta-base",
+            add_special_tokens=True,
+            use_fast=True)
+
+        tokens = tokenizer.encode_plus(
+            sentence,
+            return_attention_mask=False,
+            return_token_type_ids=False,
+            return_offsets_mapping=True)
+
+        expected_results = [
+            (None, "<s>"),
+            ((0, 1), "A"),
+            ((1, 2), ","),
+            ((3, 8), "ĠnaÃ¯ve"),    # RoBERTa mangles this
+            ((8, 9), "Ġ"),
+            ((9, 15), "<mask>"),
+            ((16, 21), "ĠAllen"),
+            ((22, 23), "N"),
+            ((23, 25), "LP"),
+            ((26, 34), "Ġsentence"),
+            ((35, 36), "."),
+            (None, "</s>")
+        ]
+
+        self.assertEqual(
+            [e[1] for e in expected_results],
+            tokenizer.convert_ids_to_tokens(tokens["input_ids"])
+        )
+        self.assertEqual(
+            [e[0] for e in expected_results],
+            tokens["offset_mapping"]
+        )
