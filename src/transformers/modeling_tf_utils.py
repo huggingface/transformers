@@ -521,7 +521,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         )
 
         if input_ids is not None:
-            batch_size = input_ids.shape[0]  # overriden by the input batch_size
+            batch_size = shape_list(input_ids)[0]  # overriden by the input batch_size
         else:
             batch_size = 1
         if isinstance(eos_token_ids, int):
@@ -555,7 +555,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             )
             input_ids = tf.fill((batch_size, 1), bos_token_id)
         else:
-            assert input_ids.shape.rank == 2, "Input prompt should be of shape (batch_size, sequence length)."
+            assert len(shape_list(input_ids)) == 2, "Input prompt should be of shape (batch_size, sequence length)."
 
         if pad_token_id is None and eos_token_ids is not None:
             logger.warning(
@@ -564,7 +564,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             pad_token_id = eos_token_ids[0]
 
         # current position and vocab size
-        cur_len = input_ids.shape[1]
+        cur_len = shape_list(input_ids)[1]
         vocab_size = self.config.vocab_size
 
         if num_return_sequences != 1:
@@ -629,7 +629,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         def _create_next_token_logits_penalties(input_ids, logits):
             # create logit penalties for already seen input_ids
-            token_penalties = np.ones(logits.shape)
+            token_penalties = np.ones(shape_list(logits))
             prev_input_ids = [np.unique(input_id) for input_id in input_ids.numpy()]
             for i, prev_input_id in enumerate(prev_input_ids):
                 logit_penalized = logits[i].numpy()[prev_input_id]
@@ -755,7 +755,7 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
             Make sure we keep at least min_tokens_to_keep per batch example in the output
         From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
-    logits_shape = logits.shape
+    logits_shape = shape_list(logits)
 
     if top_k > 0:
         top_k = min(max(top_k, min_tokens_to_keep), logits_shape[-1])  # Safety check
@@ -796,7 +796,7 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
 
 
 def scatter_values_on_batch_indices(values, batch_indices):
-    shape = batch_indices.shape
+    shape = shape_list(batch_indices)
     # broadcast batch dim to shape
     broad_casted_batch_dims = tf.reshape(tf.broadcast_to(tf.expand_dims(tf.range(shape[0]), axis=-1), shape), [1, -1])
     # transform batch_indices to pair_indices
