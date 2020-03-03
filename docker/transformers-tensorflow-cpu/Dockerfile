@@ -25,4 +25,4 @@ RUN cd /workspace/transformers && \
 WORKDIR /workspace
 RUN chmod -R a+w .
 
-ENTRYPOINT ["/bin/bash"]
+CMD ["/bin/bash"]

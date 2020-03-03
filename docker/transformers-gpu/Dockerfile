@@ -14,7 +14,7 @@ RUN apt update && \
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     python3 -m pip install --no-cache-dir \
-    mkl \
+    jupyter \
     tensorflow \
     torch
 
@@ -25,4 +25,4 @@ RUN cd /workspace/transformers && \
 WORKDIR /workspace
 RUN chmod -R a+w .
 
-ENTRYPOINT ["/bin/bash"]
+CMD ["/bin/bash"]
