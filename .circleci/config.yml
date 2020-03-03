@@ -14,22 +14,6 @@ jobs:
             - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
-    run_all_tests_torch_and_tf:
-        working_directory: ~/transformers
-        docker:
-            - image: circleci/python:3.5
-        environment:
-            OMP_NUM_THREADS: 1
-            RUN_SLOW: yes
-            RUN_CUSTOM_TOKENIZERS: yes
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - run: sudo pip install .[mecab,sklearn,tf-cpu,torch,testing]
-            - run:
-                command: python -m pytest -n 8 --dist=loadfile -s -v ./tests/
-                no_output_timeout: 4h
 
     run_tests_torch:
         working_directory: ~/transformers
@@ -134,13 +118,3 @@ workflows:
             - run_tests_torch
             - run_tests_tf
             - deploy_doc: *workflow_filters
-    run_slow_tests:
-        triggers:
-            - schedule:
-                cron: "0 4 * * *"
-                filters:
-                    branches:
-                        only:
-                            - master
-        jobs:
-            - run_all_tests_torch_and_tf
