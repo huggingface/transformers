@@ -874,9 +874,9 @@ MASK_FILL_EXAMPLE = """
             values, predictions = probs.topk(10)
 """
 
+
 @add_start_docstrings(
-    "The bare BART Model with a language modeling head.",
-    BART_START_DOCSTRING,
+    "The bare BART Model with a language modeling head.", BART_START_DOCSTRING,
 )
 class BartForMaskedLM(PretrainedBartModel):
     base_model_prefix = "model"
@@ -930,12 +930,14 @@ class BartForMaskedLM(PretrainedBartModel):
             heads.
 
     Examples::
-
-            tokenizer = BartTokenizer.from_pretrained('bart-large')
-            model = BartForMaskedLM.from_pretrained('bart-large')
-            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-            outputs = model(input_ids=input_ids, lm_labels=input_ids)
-            loss, prediction_scores = outputs[:2]
+        tokenizer = AutoTokenizer.from_pretrained('bart-large')
+        model = BartForMaskedLM.from_pretrained('bart-large')
+        TXT = "My friends are <mask> but they eat too many carbs."
+        input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
+        logits = model(input_ids)[0]
+        masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        probs = logits[0, masked_index].softmax(dim=0)
+        values, predictions = probs.topk(10)
         """
         outputs = self.model(
             input_ids,
@@ -1004,7 +1006,7 @@ class BartForMaskedLM(PretrainedBartModel):
         min_len=0,
         no_repeat_ngram_size=0,
     ):
-        r""" Generates summaries using the lm-head using greedy beam search
+        r""" Generates summaries using the lm-head and greedy beam search
 
         Adapted in part from Facebook's `XLM beam search code`_ and `Fairseq beam search code`_.
 
@@ -1040,6 +1042,17 @@ class BartForMaskedLM(PretrainedBartModel):
         Returns:
             `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`
                 sequence_length is <= max_length (examples can finish early)
+
+        Examples::
+
+            config = BartConfig(vocab_size=50264, output_past=True)
+            model = BartForMaskedLM.from_pretrained('bart-large-cnn', config=config)
+            tokenizer = BartTokenizer.from_pretrained('bart-large-cnn')
+            ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+            inputs = tokenizer.batch_encode_plus([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+            # Generate Summary
+            summary_ids = model.generate(inputs['input_ids'], attention_mask=inputs['attention_mask'], num_beams=4, max_length=5)
+            print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
         """
         bos_token_id = self.config.bos_token_id
         pad_token_id = self.config.pad_token_id
@@ -1246,14 +1259,14 @@ class BartForMaskedLM(PretrainedBartModel):
         banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
         return banned_tokens
 
+
 @add_start_docstrings(
-    "The bare BART Model with a language modeling head that can be used for summarization",
+    "The bare BART Model with a language modeling head that can be used for summarization. This is an alias of BartForMaskedLM",
     BART_START_DOCSTRING,
 )
 class BartForSummarization(BartForMaskedLM):
 
     pass
-
 
 
 @add_start_docstrings(

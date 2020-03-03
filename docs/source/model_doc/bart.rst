@@ -22,8 +22,8 @@ Implementation Notes
 - Inputs to the decoder are created by BartModel.forward if they are not passed. This is different than some other model APIs.
 - Model predictions are intended to be identical to the original implementation. This only works, however, if the string you pass to fairseq.encode starts with a space.
 - Decoder inputs are created automatically by the helper function ``transformers.modeling_bart._prepare_bart_decoder_inputs``
-BartModel
-- ``MaskedLM.generate`` should be used for summarization, see the example in that docstrings
+- ``BartForSummarization.generate`` should be used for summarization, see the example in that docstring.
+- the 'bart-large-cnn' weights do not have a mask token, so cannot be used for mask filling
 
 
 BartModel
@@ -42,10 +42,9 @@ BartForMaskedLM
 
 BartForSummarization
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
-(Note: This is an alias for BartForMaskedLM)
 
 .. autoclass:: transformers.BartForSummarization
-    :members: generate, forward
+    :members: generate
 
 
 BartForSequenceClassification
