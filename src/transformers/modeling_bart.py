@@ -862,19 +862,6 @@ class BartModel(PretrainedBartModel):
         return _make_linear_from_emb(self.shared)  # make it on the fly
 
 
-MASK_FILL_EXAMPLE = """
-        Examples::
-            tokenizer = AutoTokenizer.from_pretrained('bart-large')
-            TXT = "My friends are <mask> but they eat too many carbs."
-            model = BartForMaskedLM.from_pretrained('bart-large')
-            input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
-            logits = model(input_ids)[0]
-            masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            probs = logits[0, masked_index].softmax(dim=0)
-            values, predictions = probs.topk(10)
-"""
-
-
 @add_start_docstrings(
     "The bare BART Model with a language modeling head.", BART_START_DOCSTRING,
 )
@@ -1046,7 +1033,7 @@ class BartForMaskedLM(PretrainedBartModel):
         Examples::
 
             config = BartConfig(vocab_size=50264, output_past=True)
-            model = BartForMaskedLM.from_pretrained('bart-large-cnn', config=config)
+            model = BartForSummarization.from_pretrained('bart-large-cnn', config=config)
             tokenizer = BartTokenizer.from_pretrained('bart-large-cnn')
             ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
             inputs = tokenizer.batch_encode_plus([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
