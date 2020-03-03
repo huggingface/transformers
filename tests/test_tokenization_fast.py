@@ -717,3 +717,11 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
         self.assertEqual([e[1] for e in expected_results], tokenizer.convert_ids_to_tokens(tokens["input_ids"]))
         self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
+
+    def test_encode_plus_with_ids(self):
+        from transformers import AutoTokenizer
+        for fast in [False, True]:
+            with self.subTest(fast=fast):
+                tokenizer = AutoTokenizer.from_pretrained("bert-base-cased", use_fast=fast)
+                results = tokenizer.encode_plus([1000])
+                self.assertEqual([101, 1000, 102], results['input_ids'])
