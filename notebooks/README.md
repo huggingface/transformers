@@ -11,6 +11,6 @@ Pull Request and we'll review it so it can be included here.
 
 | Notebook     |      Description      |   |
 |:----------|:-------------:|------:|
-| [Getting Started Tokenizers](01-tokenizers.ipynb)  | How to train and use your very own tokenizer  |[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/transformers/blob/docker-notebooks/notebooks/01-training-tokenizers.ipynb) |
+| [Getting Started Tokenizers](01-training_tokenizers.ipynb)  | How to train and use your very own tokenizer  |[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/transformers/blob/docker-notebooks/notebooks/01-training-tokenizers.ipynb) |
 | [Getting Started Transformers](02-transformers.ipynb)   | How to easily start using transformers  | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/transformers/blob/docker-notebooks/notebooks/01-training-tokenizers.ipynb) |
 | [How to use Pipelines](03-pipelines.ipynb)  | Simple and efficient way to use State-of-the-Art models on downstream tasks through transformers | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/transformers/blob/docker-notebooks/notebooks/01-training-tokenizers.ipynb) |
