@@ -1102,7 +1102,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # retrieve best hypotheses
         for i, hypotheses in enumerate(generated_hyps):
             sorted_hyps = sorted(hypotheses.beams, key=lambda x: x[0])
-            print("Sorted hyps: {}".format([x[1] for x in sorted_hyps]))
             for j in range(output_num_return_sequences_per_batch):
                 effective_batch_idx = output_num_return_sequences_per_batch * i + j
                 best_hyp = sorted_hyps.pop()[1]
