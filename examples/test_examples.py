@@ -24,7 +24,6 @@ import evaluate_bart_cnn
 import run_generation
 import run_glue
 import run_squad
-from transformers.tests import slow
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -100,7 +99,6 @@ class ExamplesTests(unittest.TestCase):
             result = run_generation.main()
             self.assertGreaterEqual(len(result[0]), 10)
 
-    @slow
     def test_bart_cnn_summarization(self):
         articles = [
             ' New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York.'
