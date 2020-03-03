@@ -198,7 +198,6 @@ class TFBlock(tf.keras.layers.Layer):
         return outputs  # x, (attentions)
 
 
-@keras_serializable
 class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
