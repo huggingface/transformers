@@ -41,5 +41,5 @@ from files2rouge import files2rouge
 from files2rouge import settings
 files2rouge.run(<path_to_tokenized_hypo>,
                 <path_to_tokenized_target>,
-               saveto='fs_rouge_output.txt')
+               saveto='rouge_output.txt')
 ```
