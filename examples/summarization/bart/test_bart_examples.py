@@ -8,7 +8,7 @@ from unittest.mock import patch
 from . import evaluate_cnn
 
 
-articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, "]
+articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
 
 logging.basicConfig(level=logging.DEBUG)
 
