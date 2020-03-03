@@ -30,14 +30,13 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xlm_roberta_base(self):
         model = XLMRobertaModel.from_pretrained("xlm-roberta-base")
-        input_ids = torch.tensor([0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]).unsqueeze(
-            0
-        )  # The dog is cute and lives in the garden house
+        input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
+        # The dog is cute and lives in the garden house
 
         expected_output_shape = torch.Size((1, 12, 768))  # batch_size, sequence_length, embedding_vector_dim
         expected_output_values_last_dim = torch.tensor(
-            [-0.0101, 0.1218, -0.0803, 0.0801, 0.1327, 0.0776, -0.1215, 0.2383, 0.3338, 0.3106, 0.0300, 0.0252]
-        ).unsqueeze(0)
+            [[-0.0101, 0.1218, -0.0803, 0.0801, 0.1327, 0.0776, -0.1215, 0.2383, 0.3338, 0.3106, 0.0300, 0.0252]]
+        )
         #  xlmr = torch.hub.load('pytorch/fairseq', 'xlmr.base')
         #  xlmr.eval()
         #  expected_output_values_last_dim = xlmr.extract_features(input_ids[0])[:, :, -1]
@@ -50,14 +49,13 @@ class XLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xlm_roberta_large(self):
         model = XLMRobertaModel.from_pretrained("xlm-roberta-large")
-        input_ids = torch.tensor([0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]).unsqueeze(
-            0
-        )  # The dog is cute and lives in the garden house
+        input_ids = torch.tensor([[0, 581, 10269, 83, 99942, 136, 60742, 23, 70, 80583, 18276, 2]])
+        # The dog is cute and lives in the garden house
 
         expected_output_shape = torch.Size((1, 12, 1024))  # batch_size, sequence_length, embedding_vector_dim
         expected_output_values_last_dim = torch.tensor(
-            [-0.0699, -0.0318, 0.0705, -0.1241, 0.0999, -0.0520, 0.1004, -0.1838, -0.4704, 0.1437, 0.0821, 0.0126]
-        ).unsqueeze(0)
+            [[-0.0699, -0.0318, 0.0705, -0.1241, 0.0999, -0.0520, 0.1004, -0.1838, -0.4704, 0.1437, 0.0821, 0.0126]]
+        )
         #  xlmr = torch.hub.load('pytorch/fairseq', 'xlmr.large')
         #  xlmr.eval()
         #  expected_output_values_last_dim = xlmr.extract_features(input_ids[0])[:, :, -1]
