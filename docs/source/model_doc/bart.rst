@@ -37,7 +37,15 @@ BartForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BartForMaskedLM
-    :members: forward, generate
+    :members: forward
+
+
+BartForSummarization
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+(Note: This is an alias for BartForMaskedLM)
+
+.. autoclass:: transformers.BartForSummarization
+    :members: generate, forward
 
 
 BartForSequenceClassification
