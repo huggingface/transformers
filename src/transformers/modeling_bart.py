@@ -825,7 +825,7 @@ class BartModel(PretrainedBartModel):
     ):
         if attention_mask is not None:
             assert attention_mask.dim() == 2
-            attention_mask = (1.0 - attention_mask.long()).bool()
+            attention_mask = (1.0 - attention_mask.long()).to(torch.bool)
             assert attention_mask.max() <= 1
 
         # make masks if user doesn't supply
