@@ -18,10 +18,9 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     tensorflow-cpu \
     torch
 
-COPY . /workspace/transformers
-RUN cd /workspace/transformers && \
-    python3 -m pip install --no-cache-dir .
-
 WORKDIR /workspace
+COPY . transformers/
+RUN cd transformers/ && \
+    python3 -m pip install --no-cache-dir .
 
 CMD ["/bin/bash"]

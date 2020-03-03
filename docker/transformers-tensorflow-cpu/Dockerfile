@@ -2,7 +2,6 @@ FROM ubuntu:18.04
 LABEL maintainer="Hugging Face"
 LABEL repository="transformers"
 
-ARG TRANSFORMERS_VERSION=2.5.1
 RUN apt update && \
     apt install -y bash \
                    build-essential \
@@ -18,11 +17,9 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip && \
     mkl \
     tensorflow-cpu
 
-COPY . /workspace/transformers
-RUN cd /workspace/transformers && \
-    python3 -m pip install --no-cache-dir .
-
 WORKDIR /workspace
-RUN chmod -R a+w .
+COPY . transformers/
+RUN cd transformers/ && \
+    python3 -m pip install --no-cache-dir .
 
 CMD ["/bin/bash"]
