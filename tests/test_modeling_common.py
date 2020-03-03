@@ -20,7 +20,7 @@ import random
 import tempfile
 import unittest
 
-from transformers import is_torch_available, top_k_top_p_filtering
+from transformers import is_torch_available
 
 from .utils import require_torch, slow, torch_device
 
@@ -36,6 +36,7 @@ if is_torch_available():
         BertModel,
         BertConfig,
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        top_k_top_p_filtering
     )
 
 

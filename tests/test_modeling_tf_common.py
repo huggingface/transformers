@@ -20,7 +20,7 @@ import random
 import tempfile
 import unittest
 
-from transformers import is_tf_available, is_torch_available, tf_top_k_top_p_filtering
+from transformers import is_tf_available, is_torch_available
 
 from .utils import _tf_gpu_memory_limit, require_tf
 
@@ -28,6 +28,10 @@ from .utils import _tf_gpu_memory_limit, require_tf
 if is_tf_available():
     import tensorflow as tf
     import numpy as np
+
+    from transformers import (
+        tf_top_k_top_p_filtering
+    )
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
