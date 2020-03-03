@@ -720,16 +720,18 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
     def test_encode_plus_with_ids(self):
         from transformers import AutoTokenizer
+
         for fast in [False, True]:
             with self.subTest(fast=fast):
                 tokenizer = AutoTokenizer.from_pretrained("bert-base-cased", use_fast=fast)
                 results = tokenizer.encode_plus([1000])
-                self.assertEqual([101, 1000, 102], results['input_ids'])
+                self.assertEqual([101, 1000, 102], results["input_ids"])
 
     def test_empty_input(self):
         from transformers import AutoTokenizer
+
         for fast in [False, True]:
             with self.subTest(fast=fast):
                 tokenizer = AutoTokenizer.from_pretrained("bert-base-cased", use_fast=fast, add_special_tokens=False)
                 results = tokenizer.encode_plus(" ", add_special_tokens=False)
-                self.assertEqual([], results['input_ids'])
+                self.assertEqual([], results["input_ids"])
