@@ -11,12 +11,13 @@ from tqdm import tqdm
 
 from modeling_bertabs import BertAbs, build_predictor
 from transformers import BertTokenizer
-from utils_summarization import (
-    SummarizationDataset,
+
+from .utils_summarization import (
+    CNNDMDataset,
     build_mask,
     compute_token_type_ids,
     encode_for_summarization,
-    fit_to_block_size,
+    truncate_or_pad,
 )
 
 
@@ -194,7 +195,7 @@ def build_data_iterator(args, tokenizer):
 
 
 def load_and_cache_examples(args, tokenizer):
-    dataset = SummarizationDataset(args.documents_dir)
+    dataset = CNNDMDataset(args.documents_dir)
     return dataset
 
 
@@ -211,7 +212,7 @@ def collate(data, tokenizer, block_size, device):
 
     encoded_text = [encode_for_summarization(story, summary, tokenizer) for _, story, summary in data]
     encoded_stories = torch.tensor(
-        [fit_to_block_size(story, block_size, tokenizer.pad_token_id) for story, _ in encoded_text]
+        [truncate_or_pad(story, block_size, tokenizer.pad_token_id) for story, _ in encoded_text]
     )
     encoder_token_type_ids = compute_token_type_ids(encoded_stories, tokenizer.cls_token_id)
     encoder_mask = build_mask(encoded_stories, tokenizer.pad_token_id)
