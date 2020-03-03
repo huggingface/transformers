@@ -47,6 +47,23 @@ class TFModelUtilsMixin:
             return self.count_params()
 
 
+class TFMainLayer(tf.keras.layers.Layer):
+    """
+    A common superclass for main layers of models, to support `get_config` and thus Keras JSON serialization.
+    """
+
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        if isinstance(config, dict):
+            config = PretrainedConfig.from_dict(config)
+        self._transformers_config = config
+
+    def get_config(self):
+        cfg = super().get_config()
+        cfg["config"] = self._transformers_config.to_dict()
+        return cfg
+
+
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
     r""" Base class for all TF models.
 

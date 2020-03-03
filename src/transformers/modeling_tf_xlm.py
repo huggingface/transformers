@@ -25,7 +25,14 @@ import tensorflow as tf
 
 from .configuration_xlm import XLMConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, get_initializer, shape_list
+from .modeling_tf_utils import (
+    TFMainLayer,
+    TFPreTrainedModel,
+    TFSequenceSummary,
+    TFSharedEmbeddings,
+    get_initializer,
+    shape_list,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -196,9 +203,9 @@ class TFTransformerFFN(tf.keras.layers.Layer):
         return x
 
 
-class TFXLMMainLayer(tf.keras.layers.Layer):
+class TFXLMMainLayer(TFMainLayer):
     def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(config, **kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 

@@ -25,6 +25,7 @@ from .configuration_openai import OpenAIGPTConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
     TFConv1D,
+    TFMainLayer,
     TFPreTrainedModel,
     TFSequenceSummary,
     TFSharedEmbeddings,
@@ -197,7 +198,7 @@ class TFBlock(tf.keras.layers.Layer):
         return outputs  # x, (attentions)
 
 
-class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
+class TFOpenAIGPTMainLayer(TFMainLayer):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.output_hidden_states = config.output_hidden_states
