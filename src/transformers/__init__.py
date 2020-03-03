@@ -137,7 +137,7 @@ if is_sklearn_available():
 
 # Modeling
 if is_torch_available():
-    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D
+    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D, top_k_top_p_filtering
     from .modeling_auto import (
         AutoModel,
         AutoModelForPreTraining,
@@ -292,7 +292,13 @@ if is_torch_available():
 
 # TensorFlow
 if is_tf_available():
-    from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
+    from .modeling_tf_utils import (
+        TFPreTrainedModel,
+        TFSharedEmbeddings,
+        TFSequenceSummary,
+        shape_list,
+        tf_top_k_top_p_filtering,
+    )
     from .modeling_tf_auto import (
         TFAutoModel,
         TFAutoModelForPreTraining,

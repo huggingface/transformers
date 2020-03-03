@@ -375,30 +375,29 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_distilgpt2(self):
         model = GPT2LMHeadModel.from_pretrained("distilgpt2")
-        input_ids = torch.Tensor([[464, 3290, 318, 13779]]).long()  # The dog is cute
+        input_ids = torch.Tensor([[464, 1893]]).long()  # The president
         expected_output_ids = [
             464,
-            3290,
-            318,
-            13779,
-            996,
-            339,
-            460,
-            3360,
-            655,
-            2513,
+            1893,
+            286,
+            262,
+            1578,
+            1829,
+            11,
+            290,
+            262,
+            1893,
+            286,
+            262,
+            1578,
+            7526,
+            11,
+            423,
+            587,
             287,
             262,
-            3952,
-            13,
-            632,
-            318,
-            407,
-            845,
-            3621,
-            284,
-        ]  # The dog is cute though he can sometimes just walk in the park. It is not very nice to
-        torch.manual_seed(0)
+            2635,
+        ]  # The president of the United States, and the president of the United Kingdom, have been in the White
 
         output_ids = model.generate(input_ids)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
