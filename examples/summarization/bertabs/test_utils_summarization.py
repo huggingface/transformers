@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 import torch
 
-from .utils_summarization import build_mask, compute_token_type_ids, truncate_or_pad, process_story
+from .utils_summarization import build_mask, compute_token_type_ids, process_story, truncate_or_pad
 
 
 class SummarizationDataProcessingTest(unittest.TestCase):

@@ -20,10 +20,10 @@ import sys
 import unittest
 from unittest.mock import patch
 
-import evaluate_bart_cnn
 import run_generation
 import run_glue
 import run_squad
+
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -98,9 +98,3 @@ class ExamplesTests(unittest.TestCase):
         with patch.object(sys, "argv", testargs + [model_type, model_name]):
             result = run_generation.main()
             self.assertGreaterEqual(len(result[0]), 10)
-
-    def test_bart_cnn_summarization(self):
-        articles = [
-            ' New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York.'
-        ]
-        evaluate_bart_cnn.generate_summaries(articles, "summaries.txt", batch_size=1)
