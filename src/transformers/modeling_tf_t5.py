@@ -25,7 +25,7 @@ import tensorflow as tf
 
 from .configuration_t5 import T5Config
 from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings
-from .modeling_tf_utils import TFMainLayer, TFPreTrainedModel, TFSharedEmbeddings, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, keras_serializable, shape_list
 
 
 logger = logging.getLogger(__name__)
@@ -359,9 +359,10 @@ class TFT5Block(tf.keras.layers.Layer):
 # The full model without a specific pretrained or finetuning head is
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
-class TFT5MainLayer(TFMainLayer):
+@keras_serializable
+class TFT5MainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.is_decoder = config.is_decoder
@@ -383,14 +384,21 @@ class TFT5MainLayer(TFMainLayer):
 
     def call(
         self,
-        hidden_states,
+        inputs,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         head_mask=None,
         training=False,
     ):
-
+        if isinstance(inputs, (tuple, list)):
+            hidden_states = inputs[0]
+            assert len(inputs) <= 1, "Too many inputs."
+        elif isinstance(inputs, dict):
+            hidden_states = inputs["hidden_states"]
+            assert len(inputs) <= 1, "Too many inputs."
+        else:
+            hidden_states = inputs
         batch_size, seq_length = shape_list(hidden_states)[:2]
         if attention_mask is None:
             attention_mask = tf.fill((batch_size, seq_length), 1)

@@ -25,11 +25,11 @@ import tensorflow as tf
 from .configuration_xlnet import XLNetConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
-    TFMainLayer,
     TFPreTrainedModel,
     TFSequenceSummary,
     TFSharedEmbeddings,
     get_initializer,
+    keras_serializable,
     shape_list,
 )
 
@@ -349,9 +349,10 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFXLNetMainLayer(TFMainLayer):
+@keras_serializable
+class TFXLNetMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.output_past = config.output_past
