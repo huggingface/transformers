@@ -138,6 +138,7 @@ class PreTrainedTokenizer(object):
     pretrained_vocab_files_map = {}
     pretrained_init_configuration = {}
     max_model_input_sizes = {}
+    skip_outputs = []
 
     SPECIAL_TOKENS_ATTRIBUTES = [
         "bos_token",
@@ -316,6 +317,7 @@ class PreTrainedTokenizer(object):
 
         # Padding side is right by default and over-riden in subclasses. If specified in the kwargs, it is changed.
         self.padding_side = kwargs.pop("padding_side", self.padding_side)
+        self.skip_outputs = kwargs.pop("skip_outputs", self.skip_outputs)
 
         # Added tokens
         self.added_tokens_encoder = {}
@@ -1407,6 +1409,9 @@ class PreTrainedTokenizer(object):
                     return_tensors
                 )
             )
+
+        for output_to_skip in self.skip_outputs:
+            del encoded_inputs[output_to_skip]
 
         return encoded_inputs
 
