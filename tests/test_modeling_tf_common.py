@@ -102,8 +102,9 @@ class TFModelTesterMixin:
             for module_member_name in dir(module)
             if module_member_name.endswith("MainLayer")
             for module_member in (getattr(module, module_member_name),)
-            if isinstance(module_member, type) and tf.keras.layers.Layer in module_member.__bases__
-            and getattr(module_member, '_keras_serializable', False)
+            if isinstance(module_member, type)
+            and tf.keras.layers.Layer in module_member.__bases__
+            and getattr(module_member, "_keras_serializable", False)
         )
         for main_layer_class in tf_main_layer_classes:
             main_layer = main_layer_class(config)
