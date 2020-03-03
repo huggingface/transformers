@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 import logging
 import sys
 import tempfile
@@ -7,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from summarization.bart.evaluate_cnn import _run_generate
+from .evaluate_cnn import _run_generate
 
 
 articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
