@@ -1,4 +1,3 @@
-import argparse
 import logging
 import sys
 import tempfile
@@ -7,7 +6,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from . import evaluate_cnn
-from .evaluate_cnn import generate_summaries
 
 
 articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, "]
@@ -24,15 +22,10 @@ class TestBartExamples(unittest.TestCase):
         tmp = Path(tempfile.gettempdir()) / "utest_generations.hypo"
         with tmp.open("w") as f:
             f.write("\n".join(articles))
-        testargs = [
-            "evaluate_cnn.py",
-            str(tmp),
-            "output.txt",
-        ]
-        # model_type, model_name = ("--model_type=openai-gpt", "--model_name_or_path=openai-gpt")
+        testargs = ["evaluate_cnn.py", str(tmp), "output.txt"]
         with patch.object(sys, "argv", testargs):
-            result = evaluate_cnn.main()
-            # self.assertGreaterEqual(len(result[0]), 10)
+            evaluate_cnn.main()
+            self.assertTrue(Path("output.txt").exists())
 
 
 if __name__ == "__main__":
