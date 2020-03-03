@@ -203,7 +203,6 @@ class TFTransformerFFN(tf.keras.layers.Layer):
         return x
 
 
-@keras_serializable
 class TFXLMMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
