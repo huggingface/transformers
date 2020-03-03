@@ -17,6 +17,7 @@
 
 import logging
 from collections import OrderedDict
+from importlib import import_module
 
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
@@ -98,6 +99,20 @@ class AutoConfig:
         raise EnvironmentError(
             "AutoConfig is designed to be instantiated "
             "using the `AutoConfig.from_pretrained(pretrained_model_name_or_path)` method."
+        )
+
+    @classmethod
+    def config_class_for_model_class(cls, model_class):
+        module = import_module(model_class.__module__)
+        return next(
+            (
+                module_attribute
+                for module_attribute_name in dir(module)
+                if module_attribute_name.endswith("Config")
+                for module_attribute in (getattr(module, module_attribute_name),)
+                if issubclass(module_attribute, PretrainedConfig)
+            ),
+            None,
         )
 
     @classmethod

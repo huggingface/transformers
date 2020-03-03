@@ -47,21 +47,31 @@ class TFModelUtilsMixin:
             return self.count_params()
 
 
-class TFMainLayer(tf.keras.layers.Layer):
-    """
-    A common superclass for main layers of models, to support `get_config` and thus Keras JSON serialization.
-    """
+def keras_serializable(cls):
+    initializer = cls.__init__
 
-    def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
+    def wrapped_init(self, config, *args, **kwargs):
         if isinstance(config, dict):
-            config = PretrainedConfig.from_dict(config)
+            from transformers import AutoConfig
+
+            config = AutoConfig.config_class_for_model_class(cls).from_dict(config)
+        initializer(self, config, *args, **kwargs)
         self._transformers_config = config
 
-    def get_config(self):
-        cfg = super().get_config()
-        cfg["config"] = self._transformers_config.to_dict()
-        return cfg
+    cls.__init__ = wrapped_init
+
+    if not hasattr(cls, "get_config"):
+        raise TypeError("Only use @keras_serializable on tf.keras.layers.Layer subclasses")
+    if hasattr(cls.get_config, "_is_default"):
+
+        def get_config(self):
+            cfg = super(cls, self).get_config()
+            cfg["config"] = self._transformers_config.to_dict()
+            return cfg
+
+        cls.get_config = get_config
+
+    return tf.keras.utils.register_keras_serializable()(cls)
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
