@@ -17,7 +17,7 @@ import unittest
 import numpy as np
 import torch
 
-from utils_summarization import build_mask, compute_token_type_ids, fit_to_block_size, process_story
+from .utils_summarization import build_mask, compute_token_type_ids, process_story, truncate_or_pad
 
 
 class SummarizationDataProcessingTest(unittest.TestCase):
@@ -28,19 +28,19 @@ class SummarizationDataProcessingTest(unittest.TestCase):
         """ Pad the sequence with 0 if the sequence is smaller than the block size."""
         sequence = [1, 2, 3, 4]
         expected_output = [1, 2, 3, 4, 0, 0, 0, 0, 0, 0]
-        self.assertEqual(fit_to_block_size(sequence, self.block_size, 0), expected_output)
+        self.assertEqual(truncate_or_pad(sequence, self.block_size, 0), expected_output)
 
     def test_fit_to_block_sequence_fit_exactly(self):
         """ Do nothing if the sequence is the right size. """
         sequence = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         expected_output = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        self.assertEqual(fit_to_block_size(sequence, self.block_size, 0), expected_output)
+        self.assertEqual(truncate_or_pad(sequence, self.block_size, 0), expected_output)
 
     def test_fit_to_block_sequence_too_big(self):
         """ Truncate the sequence if it is too long. """
         sequence = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
         expected_output = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-        self.assertEqual(fit_to_block_size(sequence, self.block_size, 0), expected_output)
+        self.assertEqual(truncate_or_pad(sequence, self.block_size, 0), expected_output)
 
     def test_process_story_no_highlights(self):
         """ Processing a story with no highlights returns an empty list for the summary.
