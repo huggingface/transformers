@@ -500,6 +500,13 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
     def get_output_embeddings(self):
         return self.transformer.wte
 
+    def prepare_inputs_for_generation(self, inputs, past, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if past:
+            inputs = tf.expand_dims(inputs[:, -1], -1)
+
+        return {"inputs": inputs, "past": past}
+
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
         r"""
