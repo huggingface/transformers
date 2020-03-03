@@ -39,6 +39,9 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel, TFOpenAIGPTDoubleHeadsModel) if is_tf_available() else ()
     )
+    all_generative_model_classes = (
+        (TFOpenAIGPTLMHeadModel,) if is_tf_available() else ()
+    )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
 
     class TFOpenAIGPTModelTester(object):
         def __init__(

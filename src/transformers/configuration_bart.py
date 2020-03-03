@@ -22,10 +22,9 @@ from .configuration_utils import PretrainedConfig
 
 logger = logging.getLogger(__name__)
 
-_bart_large_url = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json"
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bart-large": _bart_large_url,
-    "bart-large-mnli": _bart_large_url,  # fine as same
+    "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json",
+    "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",
     "bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
 }
 
