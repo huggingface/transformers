@@ -29,7 +29,6 @@ from .modeling_tf_utils import (
     TFSequenceSummary,
     TFSharedEmbeddings,
     get_initializer,
-    keras_serializable,
     shape_list,
 )
 
