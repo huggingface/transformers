@@ -138,7 +138,7 @@ class ModelTesterMixin:
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length,],
             )
             out_len = len(outputs)
 
@@ -157,7 +157,7 @@ class ModelTesterMixin:
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length,],
                 )
 
             # Check attention is always last and order is fine
@@ -176,7 +176,7 @@ class ModelTesterMixin:
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length,],
             )
 
     def test_torchscript(self):
@@ -729,7 +729,7 @@ class UtilsFunctionsTest(unittest.TestCase):
             logits = torch.tensor(
                 [
                     [
-                        8.2220991,
+                        8.2220991,  # 3rd highest value; idx. 0
                         -0.5620044,
                         5.23229752,
                         4.0386393,
@@ -738,8 +738,8 @@ class UtilsFunctionsTest(unittest.TestCase):
                         -3.2012153,
                         2.92777176,
                         1.88171953,
-                        7.35341276,
-                        8.43207833,
+                        7.35341276,  # 5th highest value; idx. 9
+                        8.43207833,  # 2nd highest value; idx. 10
                         -9.85711836,
                         -5.96209236,
                         -1.13039161,
@@ -754,12 +754,12 @@ class UtilsFunctionsTest(unittest.TestCase):
                         -6.99778438,
                         4.71551189,
                         -0.18771637,
-                        7.44020759,
-                        9.38450987,
+                        7.44020759,  # 4th highest value; idx. 25
+                        9.38450987,  # 1st highest value; idx. 26
                         2.12662941,
                         -9.32562038,
                         2.35652522,
-                    ],
+                    ],  # cummulative prob of 5 highest values <= 0.6
                     [
                         0.58425518,
                         4.53139238,
@@ -774,37 +774,57 @@ class UtilsFunctionsTest(unittest.TestCase):
                         0.03907799,
                         0.67231762,
                         -8.88206726,
-                        6.27115922,
+                        6.27115922,  # 4th highest value; idx. 13
                         2.28520723,
                         4.82767506,
                         4.30421368,
-                        8.8275313,
-                        5.44029958,
+                        8.8275313,  # 2nd highest value; idx. 17
+                        5.44029958,  # 5th highest value; idx. 18
                         -4.4735794,
-                        7.38579536,
+                        7.38579536,  # 3rd highest value; idx. 20
                         -2.91051663,
                         2.61946077,
                         -2.5674762,
                         -9.48959302,
                         -4.02922645,
                         -1.35416918,
-                        9.67702323,
+                        9.67702323,  # 1st highest value; idx. 27
                         -5.89478553,
                         1.85370467,
-                    ],
+                    ],  # cummulative prob of 5 highest values <= 0.6
                 ],
-                dtype=torch.long,
+                dtype=torch.float,
                 device=torch_device,
             )
 
-            non_inf_expected_output = torch.tensor(
-                [8.2221, 7.3534, 8.4321, 7.4402, 9.3845, 6.2712, 8.8275, 5.4403, 7.3858, 9.6770],
+            non_inf_expected_idx = torch.tensor(
+                [[0, 0], [0, 9], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 18], [1, 20], [1, 27],],
                 dtype=torch.long,
+            )  # expected non filtered idx as noted above
+
+            non_inf_expected_output = torch.tensor(
+                [
+                    8.2221,
+                    7.3534,
+                    8.4321,
+                    7.4402,
+                    9.3845,
+                    6.2712,
+                    8.8275,
+                    5.4403,
+                    7.3858,
+                    9.6770,
+                ],  # expected non filtered values as noted above
+                dtype=torch.float,
                 device=torch_device,
             )
 
             output = top_k_top_p_filtering(logits, top_k=10, top_p=0.6, min_tokens_to_keep=4)
             non_inf_output = output[output != -float("inf")]
+            non_inf_idx = (output != -float("inf")).nonzero()
+
             self.assertTrue(torch.allclose(non_inf_expected_output, non_inf_output, atol=1e-12))
+            self.assertTrue(torch.all(torch.eq(non_inf_expected_idx, non_inf_idx)))
+
         else:
             pass
