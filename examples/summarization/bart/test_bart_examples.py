@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from . import evaluate_cnn
+from .evaluate_cnn import main
 
 
 articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
@@ -24,9 +24,5 @@ class TestBartExamples(unittest.TestCase):
             f.write("\n".join(articles))
         testargs = ["evaluate_cnn.py", str(tmp), "output.txt"]
         with patch.object(sys, "argv", testargs):
-            evaluate_cnn.main()
+            main()
             self.assertTrue(Path("output.txt").exists())
-
-
-if __name__ == "__main__":
-    unittest.main()
