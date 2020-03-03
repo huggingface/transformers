@@ -529,6 +529,9 @@ class BertPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
+    def _model(self):
+        return getattr(self, self.base_model_prefix)
+
 
 BERT_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
@@ -876,7 +879,7 @@ class BertForPreTraining(BertPreTrainedModel):
 
         """
 
-        outputs = self.bert(
+        outputs = self._model(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -976,7 +979,7 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         """
 
-        outputs = self.bert(
+        outputs = self._model(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1077,7 +1080,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
         """
 
-        outputs = self.bert(
+        outputs = self._model(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1167,7 +1170,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
         """
 
-        outputs = self.bert(
+        outputs = self._model(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1271,7 +1274,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
 
-        outputs = self.bert(
+        outputs = self._model(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1311,6 +1314,9 @@ class BertForTokenClassification(BertPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
+
+    def _model(self):
+        return self.bert
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
     def forward(
@@ -1362,7 +1368,7 @@ class BertForTokenClassification(BertPreTrainedModel):
 
         """
 
-        outputs = self.bert(
+        outputs = self._model(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1471,7 +1477,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
 
         """
 
-        outputs = self.bert(
+        outputs = self._model(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
