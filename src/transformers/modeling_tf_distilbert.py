@@ -397,7 +397,6 @@ class TFTransformer(tf.keras.layers.Layer):
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 
-@keras_serializable
 class TFDistilBertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)

@@ -359,7 +359,6 @@ class TFT5Block(tf.keras.layers.Layer):
 # The full model without a specific pretrained or finetuning head is
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
-@keras_serializable
 class TFT5MainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
