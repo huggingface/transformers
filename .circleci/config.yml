@@ -38,7 +38,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install torch=1.0.0
+            - run: sudo pip install torch==1.0.0
             - run: sudo pip install .[sklearn,testing]
             - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
@@ -131,5 +131,4 @@ workflows:
             - run_tests_torch_and_tf
             - run_tests_legacy_torch
             - run_tests_tf
-            - run_legacy_tests_torch
             - deploy_doc: *workflow_filters
