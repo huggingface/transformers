@@ -1261,7 +1261,7 @@ class SummarizationPipeline(Pipeline):
     def _forward(self, *args, **kwargs):
         raise NotImplementedError("Should not be called")
 
-
+from collections import OrderedDict
 # Register all the supported task here
 SUPPORTED_TASKS = {
     "feature-extraction": {
@@ -1324,13 +1324,13 @@ SUPPORTED_TASKS = {
         "impl": SummarizationPipeline,
         "pt": BartForMaskedLM if is_torch_available() else None,
         "tf": None,
-        "default": {
-            "model": {"pt": "bart-large-cnn"},
-            "config": "bart-large-cnn",
-            "tokenizer": ("bart-large-cnn", {"use_fast": False}),
+        "default": OrderedDict([
+            ("model", {"pt": "bart-large-cnn", "tf": None}),
+            ("config", None),
+            ("tokenizer", ("bart-large-cnn", {"use_fast": False})),
+        ]),
         },
-    },
-}
+    }
 
 
 def pipeline(
