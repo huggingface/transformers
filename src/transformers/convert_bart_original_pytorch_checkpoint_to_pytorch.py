@@ -23,7 +23,7 @@ import fairseq
 import torch
 from packaging import version
 
-from transformers import BartConfig, BartForMaskedLM, BartForSequenceClassification, BartModel, BartTokenizer
+from transformers import BartConfig, BartForConditionalGeneration, BartForSequenceClassification, BartModel, BartTokenizer
 
 
 FAIRSEQ_MODELS = ["bart.large", "bart.large.mnli", "bart.large.cnn"]
@@ -87,7 +87,7 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     # Check results
 
     if checkpoint_path == "bart.large.cnn":  # generate doesnt work yet
-        model = BartForMaskedLM(config, base_model=model)
+        model = BartForConditionalGeneration(config, base_model=model)
         assert "lm_head.weight" in model.state_dict()
         assert model.lm_head.out_features == config.max_position_embeddings
         model.eval()

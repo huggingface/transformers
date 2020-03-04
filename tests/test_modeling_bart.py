@@ -29,7 +29,7 @@ if is_torch_available():
     from transformers import (
         AutoModelForSequenceClassification,
         BartModel,
-        BartForMaskedLM,
+        BartForConditionalGeneration,
         BartForConditionalGeneration,
         BartForSequenceClassification,
         BartConfig,
@@ -98,7 +98,7 @@ def prepare_bart_inputs_dict(
 @require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BartModel, BartForMaskedLM, BartForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (BartModel, BartForConditionalGeneration, BartForSequenceClassification) if is_torch_available() else ()
     is_encoder_decoder = True
     # TODO(SS): fix the below in a separate PR
     test_pruning = False
@@ -213,7 +213,7 @@ class BartHeadTests(unittest.TestCase):
         expected_shape = torch.Size((batch_size, config.num_labels))
         self.assertEqual(logits.shape, expected_shape)
 
-        lm_model = BartForMaskedLM(config)
+        lm_model = BartForConditionalGeneration(config)
         lm_model.to(torch_device)
         loss, logits, enc_features = lm_model.forward(
             input_ids=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids
@@ -234,7 +234,7 @@ class BartHeadTests(unittest.TestCase):
             decoder_ffn_dim=32,
             max_position_embeddings=48,
         )
-        lm_model = BartForMaskedLM(config)
+        lm_model = BartForConditionalGeneration(config)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long()
         summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long()
         logits, enc_features = lm_model.forward(input_ids=context, decoder_input_ids=summary)
@@ -255,7 +255,7 @@ class BartHeadTests(unittest.TestCase):
             max_position_embeddings=48,
             output_past=True,
         )
-        lm_model = BartForMaskedLM(config)
+        lm_model = BartForConditionalGeneration(config)
         lm_model.eval()
 
         new_input_ids = lm_model.generate(
