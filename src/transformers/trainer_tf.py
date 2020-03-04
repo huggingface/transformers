@@ -13,6 +13,7 @@ from sklearn.metrics import classification_report
 
 import tensorflow as tf
 from .optimization_tf import *
+from .losses_tf import *
 from .configuration_auto import AutoConfig
 from .tokenization_auto import AutoTokenizer
 from .data.processors.glue import *
@@ -96,6 +97,10 @@ class TFTrainer(object):
             raise ValueError(
               "If the data_dir parameter is not None, the parameters training_data and validation_data should be None"
             )
+        elif data_dir is None and (not isinstance(training_data, tf.data.Dataset) or not isinstance(validation_data, tf.data.Dataset) or (test_data is not None and not isinstance(test_data, tf.data.Dataset))):
+            raise ValueError(
+              "The parameters training_data, validation_data and test_data must be in tf.data.Dataset format"
+            )
         
         self.datasets["train"] = training_data
         self.datasets["validation"] = validation_data
@@ -127,14 +132,19 @@ class TFTrainer(object):
             )
 
         self._preprocessing_data(tokenizer, data_dir, cache_dir)
-
-        if self.labels is None:
-            self.labels = self.processor.get_labels()
         
-        self.label2id = {label: i for i, label in enumerate(self.labels)}
-        self.id2label = {i: label for i, label in enumerate(self.labels)}
-        
-        config = AutoConfig.from_pretrained(self.pretrained_model_name_or_path, num_labels=len(self.labels), id2label=self.id2label, label2id=self.label2id, cache_dir=cache_dir)
+        try:
+            if self.labels is None:
+                self.labels = self.processor.get_labels()
+                
+            self.label2id = {label: i for i, label in enumerate(self.labels)}
+            self.id2label = {i: label for i, label in enumerate(self.labels)}
+            config = AutoConfig.from_pretrained(self.pretrained_model_name_or_path, num_labels=len(self.labels), id2label=self.id2label, label2id=self.label2id, cache_dir=cache_dir)
+        except NotImplementedError:
+            self.labels = []
+            self.label2id = {}
+            self.id2label = {}
+            config = AutoConfig.from_pretrained(self.pretrained_model_name_or_path, cache_dir=cache_dir)
 
         with self.strategy.scope():
             self.model = globals()[self.architecture].from_pretrained(self.pretrained_model_name_or_path, config=config, cache_dir=cache_dir)
@@ -157,6 +167,8 @@ class TFTrainer(object):
             self.loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         elif self.loss_name == "sparse_categorical_crossentropy":
             self.loss = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE, from_logits=True)
+        elif self.loss_name == "squad_loss":
+            self.loss = SquadLoss()
         else:
             raise ValueError(
                 "Allowed losses are mean_squared_error or sparse_categorical_crossentropy. Given: {}".format(self.loss_name)
@@ -165,6 +177,8 @@ class TFTrainer(object):
         if self.metric_name == "sparse_categorical_accuracy":
             self.train_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
             self.test_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='test_accuracy')
+        elif self.data_processor_name.startswith("squad"):
+            pass
         else:
             raise ValueError(
                 "Allowed metrics are sparse_categorical_accuracy. Given: {}".format(self.metric_name)
@@ -206,23 +220,26 @@ class TFTrainer(object):
                 self.datasets["test"] = self.datasets["validation"]
             else:
                 self.datasets["test"] = glue_convert_examples_to_features(self.datasets["test"], tokenizer, self.max_len, self.task, return_dataset="tf")
-        elif self.data_processor_name == "squadv1" or self.data_processor_name == "squadv2":
+        elif self.data_processor_name.startswith("squad"):
             if self.datasets["train"] is None:
                 train_examples = self.processor.get_train_examples(data_dir)
                 self.datasets["train"] = squad_convert_examples_to_features(train_examples, tokenizer, self.max_len, self.doc_stride, self.max_query_len, True, return_dataset="tf")
             else:
-                self.datasets["train"] = squad_convert_examples_to_features(self.datasets["train"], tokenizer, self.max_len, self.doc_stride, self.max_query_len, True, return_dataset="tf")
-            
+                train_examples = self.processor.get_examples_from_dataset(self.datasets["train"])
+                self.datasets["train"] = squad_convert_examples_to_features(train_examples, tokenizer, self.max_len, self.doc_stride, self.max_query_len, True, return_dataset="tf")
+                
             if self.datasets["validation"] is None:
                 validation_examples = self.processor.get_dev_examples(data_dir)
                 self.datasets["validation"] = squad_convert_examples_to_features(validation_examples, tokenizer, self.max_len, self.doc_stride, self.max_query_len, False, return_dataset="tf")
             else:
-                self.datasets["validation"] = squad_convert_examples_to_features(self.datasets["validation"], tokenizer, self.max_len, self.doc_stride, self.max_query_len, False, return_dataset="tf")
-        
+                validation_examples = self.processor.get_examples_from_dataset(self.datasets["validation"], evaluate=True)
+                self.datasets["validation"] = squad_convert_examples_to_features(validation_examples, tokenizer, self.max_len, self.doc_stride, self.max_query_len, False, return_dataset="tf")
+                
             if self.datasets["test"] is None:
                 self.datasets["test"] = self.datasets["validation"]
             else:
-                self.datasets["test"] = squad_convert_examples_to_features(self.datasets["test"], tokenizer, self.max_len, self.doc_stride, self.max_query_len, False, return_dataset="tf")
+                test_examples = self.processor.get_examples_from_dataset(self.datasets["test"])
+                self.datasets["test"] = squad_convert_examples_to_features(test_examples, tokenizer, self.max_len, self.doc_stride, self.max_query_len, False, return_dataset="tf")
         elif self.data_processor_name == "xnli":
             if self.datasets["train"] is None:
                 train_examples = self.processor.get_train_examples(data_dir)
@@ -248,17 +265,31 @@ class TFTrainer(object):
         Args:
           cached_file: the TFRecords file path.
         """
-        name_to_features = {
-            "input_ids": tf.io.FixedLenFeature([self.max_len], tf.int64),
-            "attention_mask": tf.io.FixedLenFeature([self.max_len], tf.int64),
-            "token_type_ids": tf.io.FixedLenFeature([self.max_len], tf.int64),
-            "label": tf.io.FixedLenFeature([1], tf.int64),
-        }
+        if self.data_processor_name == "glue" or self.data_processor_name == "xnli":
+            name_to_features = {
+                "input_ids": tf.io.FixedLenFeature([self.max_len], tf.int64),
+                "attention_mask": tf.io.FixedLenFeature([self.max_len], tf.int64),
+                "token_type_ids": tf.io.FixedLenFeature([self.max_len], tf.int64),
+                "label": tf.io.FixedLenFeature([1], tf.int64),
+            }
+        elif self.data_processor_name.startswith("squad"):
+            name_to_features = {
+                "input_ids": tf.io.FixedLenFeature([self.max_len], tf.int64),
+                "attention_mask": tf.io.FixedLenFeature([self.max_len], tf.int64),
+                "token_type_ids": tf.io.FixedLenFeature([self.max_len], tf.int64),
+                "start_position": tf.io.FixedLenFeature([1], tf.int64),
+                "end_position": tf.io.FixedLenFeature([1], tf.int64),
+            }
 
         def _decode_record(record):
-            example = tf.io.parse_single_example(record, name_to_features)
+            if self.data_processor_name == "glue" or self.data_processor_name == "xnli":
+                example = tf.io.parse_single_example(record, name_to_features)
 
-            return {k:example[k] for k in ('input_ids','attention_mask','token_type_ids') if k in example}, example["label"]
+                return {k:example[k] for k in ('input_ids','attention_mask','token_type_ids') if k in example}, example["label"]
+            elif self.data_processor_name.startswith("squad"):
+                example = tf.io.parse_single_example(record, name_to_features)
+                
+                return {k:example[k] for k in ('input_ids','attention_mask','token_type_ids') if k in example}, {k:example[k] for k in ('start_position','end_position') if k in example}
 
         d = tf.data.TFRecordDataset(cached_file)
         d = d.map(_decode_record, num_parallel_calls=4)
@@ -288,7 +319,12 @@ class TFTrainer(object):
             record_feature["input_ids"] = create_list_int_feature(feature["input_ids"])
             record_feature["attention_mask"] = create_list_int_feature(feature["attention_mask"])
             record_feature["token_type_ids"] = create_list_int_feature(feature["token_type_ids"])
-            record_feature["label"] = create_int_feature(label)
+            
+            if isinstance(label, dict):
+                record_feature["start_position"] = create_int_feature(label["start_position"])
+                record_feature["end_position"] = create_int_feature(label["end_position"])
+            else:
+                record_feature["label"] = create_int_feature(label)
 
             tf_example = tf.train.Example(features=tf.train.Features(feature=record_feature))
 
@@ -306,17 +342,17 @@ class TFTrainer(object):
           cache_dir: the directory path where the cached data are.
         """
         cached_training_features_file = os.path.join(
-            cache_dir, "cached_train_{}_{}.tf_record".format(
+            cache_dir, "cached_train_{}_{}_{}.tf_record".format(self.data_processor_name,
                 list(filter(None, self.pretrained_model_name_or_path.split("/"))).pop(), str(self.max_len)
             ),
         )
         cached_validation_features_file = os.path.join(
-            cache_dir, "cached_validation_{}_{}.tf_record".format(
+            cache_dir, "cached_validation_{}_{}_{}.tf_record".format(self.data_processor_name,
                 list(filter(None, self.pretrained_model_name_or_path.split("/"))).pop(), str(self.max_len)
             ),
         )
         cached_test_features_file = os.path.join(
-            cache_dir, "cached_test_{}_{}.tf_record".format(
+            cache_dir, "cached_test_{}_{}_{}.tf_record".format(self.data_processor_name,
                 list(filter(None, self.pretrained_model_name_or_path.split("/"))).pop(), str(self.max_len)
             ),
         )
@@ -475,10 +511,18 @@ class TFTrainer(object):
         """
         def step_fn(inputs):
             features, labels = inputs
-            logits = self.model(features, training=False)[0]
-            loss = self.loss(labels, logits) + sum(self.model.losses)
+            logits = self.model(features, training=False)
 
-            self.test_acc_metric(labels, logits)
+            if self.data_processor_name.startswith("squad"):
+                loss = self.loss(labels, logits) + sum(self.model.losses)
+            else:
+                loss = self.loss(labels, logits[0]) + sum(self.model.losses)
+
+            if self.data_processor_name.startswith("squad"):
+                logger.info("Metric not available for SQuad")
+            else:
+                self.test_acc_metric(labels, logits)
+            
             self.test_loss_metric(loss)
 
         self.strategy.experimental_run_v2(step_fn, args=(dist_inputs,))
@@ -495,8 +539,13 @@ class TFTrainer(object):
             features, labels = inputs
 
             with tf.GradientTape() as tape:
-                logits = self.model(features, training=True)[0]
-                per_example_loss = self.loss(labels, logits)
+                logits = self.model(features, training=True)
+                
+                if self.data_processor_name.startswith("squad"):
+                    per_example_loss = self.loss(labels, logits)
+                else:
+                    per_example_loss = self.loss(labels, logits[0])
+                
                 loss = tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.batch_size)
 
             gradients = tape.gradient(loss, self.model.trainable_variables)
@@ -507,7 +556,10 @@ class TFTrainer(object):
                 gradients = [(tf.clip_by_value(grad, -self.max_grad_norm, self.max_grad_norm)) for grad in gradients]
                 self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
 
-            self.train_acc_metric(labels, logits)
+            if self.data_processor_name.startswith("squad"):
+                logger.info("Metric not available for SQuad")
+            else:
+                self.train_acc_metric(labels, logits)
 
             return loss
 
@@ -520,17 +572,20 @@ class TFTrainer(object):
         """
         Evaluate the model over the test dataset and print a report.
         """
-        y_true = []
-        results = self.model.predict(self.datasets["test"], steps=self.test_steps)
+        if not self.data_processor_name.startswith("squad"):
+            y_true = []
+            results = self.model.predict(self.datasets["test"], steps=self.test_steps)
 
-        for batch in self.datasets["test"]:
-            y_true.extend(batch[1].numpy().tolist())
-        
-        y_pred = np.reshape(np.argmax(results, axis=-1), (-1, 1)).tolist()
-        y_true = list(itertools.chain.from_iterable(y_true))
-        y_pred = list(itertools.chain.from_iterable(y_pred))
+            for batch in self.datasets["test"]:
+                y_true.extend(batch[1].numpy().tolist())
+            
+            y_pred = np.reshape(np.argmax(results, axis=-1), (-1, 1)).tolist()
+            y_true = list(itertools.chain.from_iterable(y_true))
+            y_pred = list(itertools.chain.from_iterable(y_pred))
 
-        print(classification_report(y_true, y_pred, target_names=self.label2id.keys()))
+            logger.info(classification_report(y_true, y_pred, target_names=self.label2id.keys()))
+        else:
+            logger.info("Evaluation not yet available for SQuaD datasets")
 
     def save_model(self, save_path):
         """

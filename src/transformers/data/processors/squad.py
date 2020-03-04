@@ -466,11 +466,11 @@ class SquadProcessor(DataProcessor):
             training_examples = get_examples_from_dataset(dataset, evaluate=False)
             evaluation_examples = get_examples_from_dataset(dataset, evaluate=True)
         """
-
-        if evaluate:
-            dataset = dataset["validation"]
-        else:
-            dataset = dataset["train"]
+        if isinstance(dataset, dict):
+            if evaluate:
+                dataset = dataset["validation"]
+            else:
+                dataset = dataset["train"]        
 
         examples = []
         for tensor_dict in tqdm(dataset):
