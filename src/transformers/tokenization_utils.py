@@ -1628,6 +1628,9 @@ class PreTrainedTokenizer(object):
 
 
 class PreTrainedTokenizerFast(PreTrainedTokenizer):
+
+    return_outputs = ["token_type_ids", "attention_mask"]
+
     def __init__(self, tokenizer: BaseTokenizer, **kwargs):
         if tokenizer is None:
             raise ValueError("Provided tokenizer cannot be None")
@@ -1696,16 +1699,25 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         if self._tokenizer is not None:
             self._tokenizer.add_special_tokens(self.all_special_tokens)
 
-    @staticmethod
     def _convert_encoding(
+        self,
         encoding,
         return_tensors=None,
-        return_token_type_ids=True,
-        return_attention_mask=True,
-        return_overflowing_tokens=False,
-        return_special_tokens_mask=False,
+        return_token_type_ids=None,
+        return_attention_mask=None,
+        return_overflowing_tokens=None,
+        return_special_tokens_mask=None,
         return_offsets_mapping=False,
     ):
+        if return_token_type_ids is None:
+            return_token_type_ids = "token_type_ids" in self.return_outputs
+        if return_attention_mask is None:
+            return_attention_mask = "attention_mask" in self.return_outputs
+        if return_overflowing_tokens is None:
+            return_overflowing_tokens = "overflowing_tokens" in self.return_outputs
+        if return_special_tokens_mask is None:
+            return_special_tokens_mask = "special_tokens_mask" in self.return_outputs
+
         if return_overflowing_tokens and encoding.overflowing is not None:
             encodings = [encoding] + encoding.overflowing
         else:
@@ -1792,10 +1804,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         truncation_strategy="longest_first",
         pad_to_max_length=False,
         return_tensors=None,
-        return_token_type_ids=True,
-        return_attention_mask=True,
-        return_overflowing_tokens=False,
-        return_special_tokens_mask=False,
+        return_token_type_ids=None,
+        return_attention_mask=None,
+        return_overflowing_tokens=None,
+        return_special_tokens_mask=None,
         return_offsets_mapping=False,
         **kwargs
     ):
@@ -1887,10 +1899,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         stride=0,
         truncation_strategy="longest_first",
         return_tensors=None,
-        return_token_type_ids=True,
-        return_attention_mask=True,
-        return_overflowing_tokens=False,
-        return_special_tokens_mask=False,
+        return_token_type_ids=None,
+        return_attention_mask=None,
+        return_overflowing_tokens=None,
+        return_special_tokens_mask=None,
         return_offsets_mapping=False,
         **kwargs
     ):

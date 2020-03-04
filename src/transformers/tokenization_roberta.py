@@ -119,7 +119,7 @@ class RobertaTokenizer(GPT2Tokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    keep_outputs = ["attention_mask"]
+    return_outputs = ["attention_mask"]
 
     def __init__(
         self,
@@ -245,6 +245,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    return_outputs = ["attention_mask"]
 
     def __init__(
         self,
