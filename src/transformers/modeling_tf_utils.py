@@ -72,7 +72,9 @@ def keras_serializable(cls):
         cls.get_config = get_config
 
     cls._keras_serializable = True
-    return tf.keras.utils.register_keras_serializable()(cls)
+    if hasattr(tf.keras.utils, "register_keras_serializable"):
+        cls = tf.keras.utils.register_keras_serializable()(cls)
+    return cls
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
