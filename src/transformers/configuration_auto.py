@@ -102,20 +102,6 @@ class AutoConfig:
         )
 
     @classmethod
-    def config_class_for_model_class(cls, model_class):
-        module = import_module(model_class.__module__)
-        return next(
-            (
-                module_attribute
-                for module_attribute_name in dir(module)
-                if module_attribute_name.endswith("Config")
-                for module_attribute in (getattr(module, module_attribute_name),)
-                if issubclass(module_attribute, PretrainedConfig)
-            ),
-            None,
-        )
-
-    @classmethod
     def for_model(cls, model_type, *args, **kwargs):
         for pattern, config_class in CONFIG_MAPPING.items():
             if pattern in model_type:
