@@ -199,6 +199,8 @@ class TFBlock(tf.keras.layers.Layer):
 
 @keras_serializable
 class TFGPT2MainLayer(tf.keras.layers.Layer):
+    config_class = GPT2Config
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         self.output_hidden_states = config.output_hidden_states

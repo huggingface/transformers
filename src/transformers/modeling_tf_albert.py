@@ -480,6 +480,8 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
 @keras_serializable
 class TFAlbertMainLayer(tf.keras.layers.Layer):
+    config_class = AlbertConfig
+
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers

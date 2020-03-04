@@ -166,6 +166,8 @@ class TFEncoderLayer(tf.keras.layers.Layer):
 
 @keras_serializable
 class TFCTRLMainLayer(tf.keras.layers.Layer):
+    config_class = CTRLConfig
+
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states

@@ -351,6 +351,8 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
 
 @keras_serializable
 class TFXLNetMainLayer(tf.keras.layers.Layer):
+    config_class = XLNetConfig
+
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
