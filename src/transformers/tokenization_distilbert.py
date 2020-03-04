@@ -69,7 +69,7 @@ class DistilBertTokenizer(BertTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    skip_outputs = ["token_type_ids"]
+    return_outputs = ["attention_mask"]
 
 
 class DistilBertTokenizerFast(BertTokenizerFast):

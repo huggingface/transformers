@@ -138,7 +138,7 @@ class PreTrainedTokenizer(object):
     pretrained_vocab_files_map = {}
     pretrained_init_configuration = {}
     max_model_input_sizes = {}
-    skip_outputs = []
+    return_outputs = ["token_type_ids", "attention_mask"]
 
     SPECIAL_TOKENS_ATTRIBUTES = [
         "bos_token",
@@ -317,7 +317,7 @@ class PreTrainedTokenizer(object):
 
         # Padding side is right by default and over-riden in subclasses. If specified in the kwargs, it is changed.
         self.padding_side = kwargs.pop("padding_side", self.padding_side)
-        self.skip_outputs = kwargs.pop("skip_outputs", self.skip_outputs)
+        self.return_outputs = kwargs.pop("return_outputs", self.return_outputs)
 
         # Added tokens
         self.added_tokens_encoder = {}
@@ -921,10 +921,10 @@ class PreTrainedTokenizer(object):
         truncation_strategy="longest_first",
         pad_to_max_length=False,
         return_tensors=None,
-        return_token_type_ids=True,
-        return_attention_mask=True,
-        return_overflowing_tokens=False,
-        return_special_tokens_mask=False,
+        return_token_type_ids=None,
+        return_attention_mask=None,
+        return_overflowing_tokens=None,
+        return_special_tokens_mask=None,
         return_offsets_mapping=False,
         **kwargs
     ):
@@ -1230,10 +1230,10 @@ class PreTrainedTokenizer(object):
         truncation_strategy="longest_first",
         pad_to_max_length=False,
         return_tensors=None,
-        return_token_type_ids=True,
-        return_attention_mask=True,
-        return_overflowing_tokens=False,
-        return_special_tokens_mask=False,
+        return_token_type_ids=None,
+        return_attention_mask=None,
+        return_overflowing_tokens=None,
+        return_special_tokens_mask=None,
     ):
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
@@ -1293,6 +1293,15 @@ class PreTrainedTokenizer(object):
         pair = bool(pair_ids is not None)
         len_ids = len(ids)
         len_pair_ids = len(pair_ids) if pair else 0
+
+        if return_token_type_ids is None:
+            return_token_type_ids = "token_type_ids" in self.return_outputs
+        if return_attention_mask is None:
+            return_attention_mask = "attention_mask" in self.return_outputs
+        if return_overflowing_tokens is None:
+            return_overflowing_tokens = "overflowing_tokens" in self.return_outputs
+        if return_special_tokens_mask is None:
+            return_special_tokens_mask = "special_tokens_mask" in self.return_outputs
 
         encoded_inputs = {}
 
@@ -1409,9 +1418,6 @@ class PreTrainedTokenizer(object):
                     return_tensors
                 )
             )
-
-        for output_to_skip in self.skip_outputs:
-            del encoded_inputs[output_to_skip]
 
         return encoded_inputs
 
