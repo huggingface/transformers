@@ -101,6 +101,7 @@ from .pipelines import (
     Pipeline,
     PipelineDataFormat,
     QuestionAnsweringPipeline,
+    SummarizationPipeline,
     TextClassificationPipeline,
     TokenClassificationPipeline,
     pipeline,

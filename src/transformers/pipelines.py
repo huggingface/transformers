@@ -497,7 +497,7 @@ class Pipeline(_ScikitCompat):
         if tokenizer is None:
             default_tokenizer = task_defaults["default"]["tokenizer"]
             if isinstance(default_tokenizer, tuple):
-                # For tuple we have (tokenizer name, {kwargs})
+                # For tuple we have (tokenizer name, {generate_kwargs})
                 tokenizer = AutoTokenizer.from_pretrained(default_tokenizer[0], **default_tokenizer[1])
             else:
                 tokenizer = AutoTokenizer.from_pretrained(default_tokenizer)
@@ -912,8 +912,22 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
             inputs = [inputs]
 
         return inputs
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-INIT_ARGS_DOCSTRING = """
+
+
+class QuestionAnsweringPipeline(Pipeline):
+    """
+    Question Answering pipeline using ModelForQuestionAnswering head. See the
+    `question answering usage <../usage.html#question-answering>`__ examples for more information.
+
+    This question answering can currently be loaded from the :func:`~transformers.pipeline` method using
+    the following task identifier(s):
+
+    - "question-answering", for answering questions given a context.
+
+    The models that this pipeline can use are models that have been fine-tuned on a question answering task.
+    See the list of available community models fine-tuned on such a task on
+    `huggingface.co/models <https://huggingface.co/models?search=&filter=question-answering>`__.
+
     Arguments:
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`, defaults to :obj:`None`):
             The model that will be used by the pipeline to make predictions. This can be :obj:`None`, a string
@@ -942,23 +956,6 @@ INIT_ARGS_DOCSTRING = """
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
             on the associated CUDA device id.
     """
-
-@add_start_docstrings_to_callable("""
-    Question Answering pipeline using ModelForQuestionAnswering head. See the
-    `question answering usage <../usage.html#question-answering>`__ examples for more information.
-
-    This question answering can currently be loaded from the :func:`~transformers.pipeline` method using
-    the following task identifier(s):
-
-    - "question-answering", for answering questions given a context.
-
-    The models that this pipeline can use are models that have been fine-tuned on a question answering task.
-    See the list of available community models fine-tuned on such a task on
-    `huggingface.co/models <https://huggingface.co/models?search=&filter=question-answering>`__.
-    """, INIT_ARGS_DOCSTRING)
-class QuestionAnsweringPipeline(Pipeline):
-
-
 
     default_input_names = "question,context"
     task = "question-answering"
@@ -1180,7 +1177,46 @@ class QuestionAnsweringPipeline(Pipeline):
 
 
 class SummarizationPipeline(Pipeline):
-    """ FIXME(SS)"""
+    """
+    Summarize news articles and other documents
+
+    Usage::
+
+        summarizer = pipeline("summarization")
+        summarizer("Sam Shleifer writes the best docstring examples in the whole world.")
+
+    Supported Models:
+        The models that this pipeline can use are models that have been fine-tuned on a summarization task, which is
+        currently only ``BartForMaskedLM.from_pretrained('bart-large-cnn')``
+
+    Arguments:
+        model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`, defaults to :obj:`None`):
+            The model that will be used by the pipeline to make predictions. This can be :obj:`None`, a string
+            checkpoint identifier or an actual pre-trained model inheriting from
+            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
+            TensorFlow.
+
+            If :obj:`None`, the default of the pipeline will be loaded.
+        tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`, defaults to :obj:`None`):
+            The tokenizer that will be used by the pipeline to encode data for the model. This can be :obj:`None`,
+            a string checkpoint identifier or an actual pre-trained tokenizer inheriting from
+            :class:`~transformers.PreTrainedTokenizer`.
+
+            If :obj:`None`, the default of the pipeline will be loaded.
+        modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`, defaults to :obj:`None`):
+            Model card attributed to the model for this pipeline.
+        framework (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The framework to use, either "pt" for PyTorch or "tf" for TensorFlow. The specified framework must be
+            installed.
+
+            If no framework is specified, will default to the one currently installed. If no framework is specified
+            and both frameworks are installed, will default to PyTorch.
+        args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`, defaults to :obj:`None`):
+            Reference to the object in charge of parsing supplied pipeline parameters.
+        device (:obj:`int`, `optional`, defaults to :obj:`-1`):
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
+            on the associated CUDA device id.
+    """
 
     task = "summarization"
 
@@ -1411,7 +1447,7 @@ def pipeline(
     # Instantiate tokenizer if needed
     if isinstance(tokenizer, (str, tuple)):
         if isinstance(tokenizer, tuple):
-            # For tuple we have (tokenizer name, {kwargs})
+            # For tuple we have (tokenizer name, {generate_kwargs})
             tokenizer = AutoTokenizer.from_pretrained(tokenizer[0], **tokenizer[1])
         else:
             tokenizer = AutoTokenizer.from_pretrained(tokenizer)
