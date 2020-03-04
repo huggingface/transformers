@@ -30,7 +30,6 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         BartModel,
         BartForConditionalGeneration,
-        BartForConditionalGeneration,
         BartForSequenceClassification,
         BartConfig,
     )
@@ -98,7 +97,9 @@ def prepare_bart_inputs_dict(
 @require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BartModel, BartForConditionalGeneration, BartForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (BartModel, BartForConditionalGeneration, BartForSequenceClassification) if is_torch_available() else ()
+    )
     is_encoder_decoder = True
     # TODO(SS): fix the below in a separate PR
     test_pruning = False

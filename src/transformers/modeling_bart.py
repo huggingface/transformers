@@ -777,6 +777,7 @@ def _filter_out_falsey_values(tup) -> Tuple:
     """Remove entries that are None or [] from an iterable."""
     return tuple(x for x in tup if isinstance(x, torch.Tensor) or x)
 
+
 # Public API
 
 
@@ -858,9 +859,9 @@ MASK_FILL_EXAMPLE = """
             values, predictions = probs.topk(10)
 """
 
+
 @add_start_docstrings(
-    "The BART Model with a language modeling head. Can be used for summarization.",
-    BART_START_DOCSTRING,
+    "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING,
 )
 class BartForConditionalGeneration(PretrainedBartModel):
     base_model_prefix = "model"

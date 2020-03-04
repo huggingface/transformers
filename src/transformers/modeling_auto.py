@@ -45,7 +45,12 @@ from .modeling_albert import (
     AlbertForTokenClassification,
     AlbertModel,
 )
-from .modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_MAP, BartForConditionalGeneration, BartForSequenceClassification, BartModel
+from .modeling_bart import (
+    BART_PRETRAINED_MODEL_ARCHIVE_MAP,
+    BartForConditionalGeneration,
+    BartForSequenceClassification,
+    BartModel,
+)
 from .modeling_bert import (
     BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     BertForMaskedLM,

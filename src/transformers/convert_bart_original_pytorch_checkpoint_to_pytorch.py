@@ -23,7 +23,13 @@ import fairseq
 import torch
 from packaging import version
 
-from transformers import BartConfig, BartForConditionalGeneration, BartForSequenceClassification, BartModel, BartTokenizer
+from transformers import (
+    BartConfig,
+    BartForConditionalGeneration,
+    BartForSequenceClassification,
+    BartModel,
+    BartTokenizer,
+)
 
 
 FAIRSEQ_MODELS = ["bart.large", "bart.large.mnli", "bart.large.cnn"]
