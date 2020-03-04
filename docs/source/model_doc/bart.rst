@@ -40,11 +40,11 @@ BartForMaskedLM
     :members: forward
 
 
-BartForSummarization
+BartForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 (Note: This is an alias for BartForMaskedLM)
 
-.. autoclass:: transformers.BartForSummarization
+.. autoclass:: transformers.BartForConditionalGeneration
     :members: generate, forward
 
 

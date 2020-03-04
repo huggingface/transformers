@@ -30,7 +30,7 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         BartModel,
         BartForMaskedLM,
-        BartForSummarization,
+        BartForConditionalGeneration,
         BartForSequenceClassification,
         BartConfig,
     )
@@ -360,7 +360,7 @@ class BartModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_cnn_summarization_same_as_fairseq(self):
-        hf = BartForSummarization.from_pretrained("bart-large-cnn", output_past=True,).to(torch_device)
+        hf = BartForConditionalGeneration.from_pretrained("bart-large-cnn", output_past=True,).to(torch_device)
         tok = BartTokenizer.from_pretrained("bart-large")
         text = " (CNN)The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian"
         tokens = tok.encode(text, return_tensors="pt").to(torch_device)

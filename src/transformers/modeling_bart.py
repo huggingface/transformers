@@ -1250,7 +1250,7 @@ class BartForMaskedLM(PretrainedBartModel):
     "The bare BART Model with a language modeling head that can be used for summarization",
     BART_START_DOCSTRING,
 )
-class BartForSummarization(BartForMaskedLM):
+class BartForConditionalGeneration(BartForMaskedLM):
 
     pass
 
