@@ -497,7 +497,7 @@ class Pipeline(_ScikitCompat):
         if tokenizer is None:
             default_tokenizer = task_defaults["default"]["tokenizer"]
             if isinstance(default_tokenizer, tuple):
-                # For tuple we have (tokenizer name, {generate_kwargs})
+                # For tuple we have (tokenizer name, {kwargs})
                 tokenizer = AutoTokenizer.from_pretrained(default_tokenizer[0], **default_tokenizer[1])
             else:
                 tokenizer = AutoTokenizer.from_pretrained(default_tokenizer)
@@ -1411,7 +1411,7 @@ def pipeline(
     # Instantiate tokenizer if needed
     if isinstance(tokenizer, (str, tuple)):
         if isinstance(tokenizer, tuple):
-            # For tuple we have (tokenizer name, {generate_kwargs})
+            # For tuple we have (tokenizer name, {kwargs})
             tokenizer = AutoTokenizer.from_pretrained(tokenizer[0], **tokenizer[1])
         else:
             tokenizer = AutoTokenizer.from_pretrained(tokenizer)
