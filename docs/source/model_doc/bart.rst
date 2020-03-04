@@ -7,7 +7,7 @@ file a `Github Issue <https://github.com/huggingface/transformers/issues/new?ass
 Paper
 ~~~~~
 The Bart model was `proposed <https://arxiv.org/abs/1910.13461>`_ by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov and Luke Zettlemoyer on 29 Oct, 2019.
-According to the abstract:
+According to the abstract,
 
 - Bart uses a standard seq2seq/machine translation architecture with a bidirectional encoder (like BERT) and a left-to-right decoder (like GPT).
 - The pretraining task involves randomly shuffling the order of the original sentences and a novel in-filling scheme, where spans of text are replaced with a single mask token.
@@ -25,11 +25,14 @@ Implementation Notes
 - Models that load the ``"bart-large-cnn"`` weights will not have a ``mask_token_id``, or be able to perform mask filling tasks.
 
 
+
 BartModel
 ~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BartModel
     :members: forward
+
+.. autofunction:: transformers.modeling_bart._prepare_bart_decoder_inputs
 
 
 BartForConditionalGeneration
@@ -51,8 +54,3 @@ BartConfig
 .. autoclass:: transformers.BartConfig
     :members:
 
-Automatic Creation of Decoder Inputs
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-This is enabled by default
-
-.. autofunction:: transformers.modeling_bart._prepare_bart_decoder_inputs
