@@ -1,3 +1,7 @@
+---
+language: arabic
+---
+
 # AraBERT : Pre-training BERT for Arabic Language Understanding
 
 **AraBERT** is an Arabic pretrained lanaguage model based on [Google's BERT architechture](https://github.com/google-research/bert). AraBERT uses the same BERT-Base config.
