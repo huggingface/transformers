@@ -8,7 +8,6 @@ from transformers.pipelines import (
     NerPipeline,
     Pipeline,
     QuestionAnsweringPipeline,
-    SummarizationPipeline,
     TextClassificationPipeline,
 )
 
@@ -259,8 +258,6 @@ class MonoColumnInputTestCase(unittest.TestCase):
             valid_inputs,
             invalid_inputs,
             mandatory_keys,
-            # expected_multi_result=expected_multi_result,
-            # expected_check_keys=["sequence"],
         )
 
 
