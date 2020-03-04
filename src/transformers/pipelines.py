@@ -36,7 +36,6 @@ from .configuration_xlm import XLMConfig
 from .data import SquadExample, squad_convert_examples_to_features
 from .file_utils import is_tf_available, is_torch_available
 from .modelcard import ModelCard
-from .modeling_bart import BartForMaskedLM
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
@@ -61,6 +60,7 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
     )
+    from .modeling_bart import BartForMaskedLM
 
 
 logger = logging.getLogger(__name__)

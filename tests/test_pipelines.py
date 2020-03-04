@@ -254,10 +254,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         mandatory_keys = ["summary_text"]
         nlp = pipeline(task="summarization")
         self._test_mono_column_pipeline(
-            nlp,
-            valid_inputs,
-            invalid_inputs,
-            mandatory_keys,
+            nlp, valid_inputs, invalid_inputs, mandatory_keys,
         )
 
 
