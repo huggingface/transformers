@@ -944,7 +944,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # scores for each sentence in the beam
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
 
-        # Greedy decoding it is made sure that only words of the first beam are considered to avoid sampling the exact same words three times
+        # Greedy decoding it is made sure that only tokens of the first beam are considered to avoid sampling the exact same tokens three times
         if do_sample is False:
             beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
@@ -986,13 +986,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     batch_size, num_beams * vocab_size
                 )  # (batch_size, num_beams * vocab_size)
 
-                # Sample 2 next words for each beam (so we have some spare tokens and match output of greedy beam search)
-                next_words = torch.multinomial(
+                # Sample 2 next tokens for each beam (so we have some spare tokens and match output of greedy beam search)
+                next_tokens = torch.multinomial(
                     F.softmax(_scores, dim=-1), num_samples=2 * num_beams
                 )  # (batch_size, num_beams * 2)
 
                 # Compute next scores
-                next_scores = torch.gather(_scores, -1, next_words)  # (batch_size, num_beams * 2)
+                next_scores = torch.gather(_scores, -1, next_tokens)  # (batch_size, num_beams * 2)
 
             else:
                 # do greedy beam search
