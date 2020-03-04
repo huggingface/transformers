@@ -14,7 +14,6 @@ jobs:
             - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
-
     run_tests_torch:
         working_directory: ~/transformers
         docker:
@@ -26,6 +25,21 @@ jobs:
         steps:
             - checkout
             - run: sudo pip install .[sklearn,torch,testing]
+            - run: sudo pip install codecov pytest-cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: codecov
+    run_tests_legacy_torch:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install torch=1.0.0
+            - run: sudo pip install .[sklearn,testing]
             - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
@@ -115,6 +129,7 @@ workflows:
             - run_examples_torch
             - run_tests_custom_tokenizers
             - run_tests_torch_and_tf
-            - run_tests_torch
+            - run_tests_legacy_torch
             - run_tests_tf
+            - run_legacy_tests_torch
             - deploy_doc: *workflow_filters
