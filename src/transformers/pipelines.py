@@ -36,6 +36,7 @@ from .configuration_xlm import XLMConfig
 from .data import SquadExample, squad_convert_examples_to_features
 from .file_utils import is_tf_available, is_torch_available
 from .modelcard import ModelCard
+from .modeling_bart import BartForMaskedLM
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
@@ -496,7 +497,7 @@ class Pipeline(_ScikitCompat):
         if tokenizer is None:
             default_tokenizer = task_defaults["default"]["tokenizer"]
             if isinstance(default_tokenizer, tuple):
-                # For tuple we have (tokenizer name, {kwargs})
+                # For tuple we have (tokenizer name, {generate_kwargs})
                 tokenizer = AutoTokenizer.from_pretrained(default_tokenizer[0], **default_tokenizer[1])
             else:
                 tokenizer = AutoTokenizer.from_pretrained(default_tokenizer)
@@ -911,22 +912,8 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
             inputs = [inputs]
 
         return inputs
-
-
-class QuestionAnsweringPipeline(Pipeline):
-    """
-    Question Answering pipeline using ModelForQuestionAnswering head. See the
-    `question answering usage <../usage.html#question-answering>`__ examples for more information.
-
-    This question answering can currently be loaded from the :func:`~transformers.pipeline` method using
-    the following task identifier(s):
-
-    - "question-answering", for answering questions given a context.
-
-    The models that this pipeline can use are models that have been fine-tuned on a question answering task.
-    See the list of available community models fine-tuned on such a task on
-    `huggingface.co/models <https://huggingface.co/models?search=&filter=question-answering>`__.
-
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+INIT_ARGS_DOCSTRING = """
     Arguments:
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`, defaults to :obj:`None`):
             The model that will be used by the pipeline to make predictions. This can be :obj:`None`, a string
@@ -955,6 +942,23 @@ class QuestionAnsweringPipeline(Pipeline):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
             on the associated CUDA device id.
     """
+
+@add_start_docstrings_to_callable("""
+    Question Answering pipeline using ModelForQuestionAnswering head. See the
+    `question answering usage <../usage.html#question-answering>`__ examples for more information.
+
+    This question answering can currently be loaded from the :func:`~transformers.pipeline` method using
+    the following task identifier(s):
+
+    - "question-answering", for answering questions given a context.
+
+    The models that this pipeline can use are models that have been fine-tuned on a question answering task.
+    See the list of available community models fine-tuned on such a task on
+    `huggingface.co/models <https://huggingface.co/models?search=&filter=question-answering>`__.
+    """, INIT_ARGS_DOCSTRING)
+class QuestionAnsweringPipeline(Pipeline):
+
+
 
     default_input_names = "question,context"
     task = "question-answering"
@@ -1175,6 +1179,53 @@ class QuestionAnsweringPipeline(Pipeline):
         return {"answer": " ".join(words), "start": max(0, char_start_idx), "end": min(len(text), char_end_idx)}
 
 
+class SummarizationPipeline(Pipeline):
+    """ FIXME(SS)"""
+
+    task = "summarization"
+
+    def __call__(
+        self,
+        *texts,
+        return_tensors=False,
+        return_text=True,
+        num_beams=4,
+        length_penalty=2.0,
+        max_length=140,
+        min_len=20,
+        no_repeat_ngram_size=3
+    ):
+        assert return_tensors or return_text
+        if self.framework == "tf":
+            raise NotImplementedError("Tensorflow not supported")
+        with self.device_placement():
+            inputs = self._parse_and_tokenize(*texts)
+            inputs = self.ensure_tensor_on_device(**inputs)
+            summaries = self.model.generate(
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                num_beams=num_beams,
+                length_penalty=length_penalty,
+                max_length=max_length,
+                min_len=min_len,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+            )
+            results = []
+            for summary in summaries:
+                record = {}
+                if return_tensors:
+                    record["summary_token_ids"] = summary
+                if return_text:
+                    record["summary_text"] = self.tokenizer.decode(
+                        summary, skip_special_tokens=True, clean_up_tokenization_spaces=False
+                    )
+                results.append(record)
+            return results
+
+    def _forward(self, *args, **kwargs):
+        raise NotImplementedError("Should not be called")
+
+
 # Register all the supported task here
 SUPPORTED_TASKS = {
     "feature-extraction": {
@@ -1231,6 +1282,16 @@ SUPPORTED_TASKS = {
             "model": {"pt": "distilroberta-base", "tf": "distilroberta-base"},
             "config": None,
             "tokenizer": ("distilroberta-base", {"use_fast": False}),
+        },
+    },
+    "summarization": {
+        "impl": SummarizationPipeline,
+        "pt": BartForMaskedLM if is_torch_available() else None,
+        "tf": None,
+        "default": {
+            "model": {"pt": "bart-large-cnn"},
+            "config": "bart-large-cnn",
+            "tokenizer": ("bart-large-cnn", {"use_fast": False}),
         },
     },
 }
@@ -1350,7 +1411,7 @@ def pipeline(
     # Instantiate tokenizer if needed
     if isinstance(tokenizer, (str, tuple)):
         if isinstance(tokenizer, tuple):
-            # For tuple we have (tokenizer name, {kwargs})
+            # For tuple we have (tokenizer name, {generate_kwargs})
             tokenizer = AutoTokenizer.from_pretrained(tokenizer[0], **tokenizer[1])
         else:
             tokenizer = AutoTokenizer.from_pretrained(tokenizer)

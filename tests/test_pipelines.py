@@ -8,6 +8,7 @@ from transformers.pipelines import (
     NerPipeline,
     Pipeline,
     QuestionAnsweringPipeline,
+    SummarizationPipeline,
     TextClassificationPipeline,
 )
 
@@ -246,6 +247,21 @@ class MonoColumnInputTestCase(unittest.TestCase):
                 expected_multi_result=expected_multi_result,
                 expected_check_keys=["sequence"],
             )
+
+    @require_torch
+    def test_summarization(self):
+        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        invalid_inputs = [4, "<mask>"]
+        mandatory_keys = ["summary_text"]
+        nlp = pipeline(task="summarization")
+        self._test_mono_column_pipeline(
+            nlp,
+            valid_inputs,
+            invalid_inputs,
+            mandatory_keys,
+            # expected_multi_result=expected_multi_result,
+            # expected_check_keys=["sequence"],
+        )
 
 
 class MultiColumnInputTestCase(unittest.TestCase):
