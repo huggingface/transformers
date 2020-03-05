@@ -78,7 +78,7 @@ class ModelInfo:
         author: Optional[str] = None,
         downloads: Optional[int] = None,
         tags: List[str] = [],
-        siblings: List[Dict] = [],
+        siblings: List[Dict] = [],  # list of files that constitute the model
         **kwargs
     ):
         self.modelId = modelId
