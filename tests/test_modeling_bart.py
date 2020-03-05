@@ -427,7 +427,7 @@ class BartModelIntegrationTest(unittest.TestCase):
         text = " (CNN)The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian"
         tokens = tok.encode(text, return_tensors="pt").to(torch_device)
         extra_len = 20
-        gen_tokens_bart = hf.generate_1(tokens, num_beams=4, max_length=extra_len,)  # repetition_penalty=10.,
+        gen_tokens_bart = hf.generate_bart(tokens, num_beams=3, max_length=extra_len,)  # repetition_penalty=10.,
         gen_tokens = hf.generate(
             tokens, num_beams=4, max_length=extra_len + 2, do_sample=False
         )  # repetition_penalty=10.,
