@@ -23,8 +23,10 @@ import fairseq
 import torch
 from packaging import version
 
-from transformers import BartConfig, BartForSequenceClassification, BartModel, BartTokenizer
+from transformers import BartConfig, BartForMaskedLM, BartForSequenceClassification, BartModel, BartTokenizer
 
+
+FAIRSEQ_MODELS = ["bart.large", "bart.large.mnli", "bart.large.cnn"]
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
     raise Exception("requires fairseq >= 0.9.0")
@@ -33,7 +35,7 @@ if version.parse(fairseq.__version__) < version.parse("0.9.0"):
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-SAMPLE_TEXT = "Hello world! cécé herlolip"
+SAMPLE_TEXT = " Hello world! cécé herlolip"
 
 rename_keys = [
     ("model.classification_heads.mnli.dense.weight", "classification_head.dense.weight"),
@@ -41,7 +43,7 @@ rename_keys = [
     ("model.classification_heads.mnli.out_proj.weight", "classification_head.out_proj.weight"),
     ("model.classification_heads.mnli.out_proj.bias", "classification_head.out_proj.bias"),
 ]
-IGNORE_KEYS = ["encoder.version", "decoder.version", "model.encoder.version", "model.decoder.version"]
+IGNORE_KEYS = ["encoder.version", "decoder.version", "model.encoder.version", "model.decoder.version", "_float_tensor"]
 
 
 def rename_key(dct, old, new):
@@ -53,36 +55,45 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     """
     Copy/paste/tweak model's weights to our BERT structure.
     """
-    b2 = torch.hub.load("pytorch/fairseq", checkpoint_path)
-    b2.eval()  # disable dropout
-    b2.model.upgrade_state_dict(b2.model.state_dict())
-    config = BartConfig()
-    tokens = b2.encode(SAMPLE_TEXT).unsqueeze(0)
-    tokens2 = BartTokenizer.from_pretrained("bart-large").encode(SAMPLE_TEXT).unsqueeze(0)
+    bart = torch.hub.load("pytorch/fairseq", checkpoint_path)
+    bart.eval()  # disable dropout
+    bart.model.upgrade_state_dict(bart.model.state_dict())
+    hf_model_name = checkpoint_path.replace(".", "-")
+    config = BartConfig.from_pretrained(hf_model_name)
+    tokens = bart.encode(SAMPLE_TEXT).unsqueeze(0)
+    tokens2 = BartTokenizer.from_pretrained(hf_model_name).encode(SAMPLE_TEXT, return_tensors="pt").unsqueeze(0)
     assert torch.eq(tokens, tokens2).all()
 
-    # assert their_output.size() == (1, 11, 1024)
-
-    if checkpoint_path == "bart.large":
-        state_dict = b2.model.state_dict()
+    if checkpoint_path in ["bart.large", "bart.large.cnn"]:
+        state_dict = bart.model.state_dict()
+        for k in IGNORE_KEYS:
+            state_dict.pop(k, None)
         state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
         model = BartModel(config)
-        their_output = b2.extract_features(tokens)
-
+        their_output = bart.extract_features(tokens)
     else:  # MNLI Case
-        state_dict = b2.state_dict()
+        state_dict = bart.state_dict()
+        for k in IGNORE_KEYS:
+            state_dict.pop(k, None)
         state_dict["model.shared.weight"] = state_dict["model.decoder.embed_tokens.weight"]
         for src, dest in rename_keys:
             rename_key(state_dict, src, dest)
-        state_dict.pop("_float_tensor", None)
         model = BartForSequenceClassification(config)
-        their_output = b2.predict("mnli", tokens, return_logits=True)
-    for k in IGNORE_KEYS:
-        state_dict.pop(k, None)
+        their_output = bart.predict("mnli", tokens, return_logits=True)
+
+    # Load state dict
     model.load_state_dict(state_dict)
     model.eval()
-    our_outputs = model.forward(tokens)[0]
+    # Check results
 
+    if checkpoint_path == "bart.large.cnn":  # generate doesnt work yet
+        model = BartForMaskedLM(config, base_model=model)
+        assert "lm_head.weight" in model.state_dict()
+        assert model.lm_head.out_features == config.max_position_embeddings
+        model.eval()
+        our_outputs = model.model.forward(tokens)[0]
+    else:
+        our_outputs = model.forward(tokens)[0]
     assert their_output.shape == our_outputs.shape
     assert (their_output == our_outputs).all().item()
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -92,7 +103,8 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("fairseq_path", choices=["bart.large", "bart.large.mnli"], type=str, help="")
+    parser.add_argument("fairseq_path", choices=FAIRSEQ_MODELS, type=str, help="")
+
     parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     args = parser.parse_args()
     convert_bart_checkpoint(

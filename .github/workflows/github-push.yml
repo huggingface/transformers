@@ -1,0 +1,19 @@
+name: GitHub-hosted runner
+
+on: push
+
+jobs:
+  check_code_quality:
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.7
+    - name: Install dependencies
+      run: |
+        pip install .[tf,torch,quality]
+
+
+

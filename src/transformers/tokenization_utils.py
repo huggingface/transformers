@@ -1012,6 +1012,12 @@ class PreTrainedTokenizer(object):
                 "https://github.com/huggingface/transformers/pull/2674"
             )
 
+        # Throw an error if we can pad because there is no padding token
+        if pad_to_max_length and self.pad_token_id is None:
+            raise ValueError(
+                "Unable to set proper padding strategy as the tokenizer does not have a padding token. In this case please set the `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` or add a new pad token via the function add_special_tokens if you want to use a padding strategy"
+            )
+
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
 
@@ -1115,6 +1121,12 @@ class PreTrainedTokenizer(object):
                     "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
                 )
 
+        # Throw an error if we can pad because there is no padding token
+        if pad_to_max_length and self.pad_token_id is None:
+            raise ValueError(
+                "Unable to set proper padding strategy as the tokenizer does not have a padding token. In this case please set the `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` or add a new pad token via the function add_special_tokens if you want to use a padding strategy"
+            )
+
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers."
@@ -1126,8 +1138,7 @@ class PreTrainedTokenizer(object):
 
         input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
-            if isinstance(ids_or_pair_ids, (list, tuple)):
-                assert len(ids_or_pair_ids) == 2
+            if isinstance(ids_or_pair_ids, (list, tuple)) and len(ids_or_pair_ids) == 2:
                 ids, pair_ids = ids_or_pair_ids
             else:
                 ids, pair_ids = ids_or_pair_ids, None
@@ -1789,7 +1800,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
         # Throw an error if we can pad because there is no padding token
         if pad_to_max_length and self.pad_token_id is None:
-            raise ValueError("Unable to set proper padding strategy as the tokenizer does have padding token")
+            raise ValueError("Unable to set proper padding strategy as the tokenizer does not have a padding token")
 
         # Set the truncation and padding strategy and restore the initial configuration
         with truncate_and_pad(

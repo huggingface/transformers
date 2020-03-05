@@ -104,10 +104,10 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         k = self.split_into_heads(k, batch_size)
         v = self.split_into_heads(v, batch_size)
         if layer_past is not None:
-            past_key, past_value = tf.unstack(layer_past, axis=1)
-            k = tf.concat((past_key, k), dim=-2)
-            v = tf.concat((past_value, v), dim=-2)
-        present = tf.stack((k, v), axis=1)
+            past_key, past_value = tf.unstack(layer_past, axis=0)
+            k = tf.concat((past_key, k), axis=-2)
+            v = tf.concat((past_value, v), axis=-2)
+        present = tf.stack((k, v), axis=0)
 
         output = scaled_dot_product_attention(q, k, v, mask, attention_mask, head_mask)
         scaled_attention = tf.transpose(output[0], perm=[0, 2, 1, 3])
@@ -504,6 +504,13 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head.input_embeddings
+
+    def prepare_inputs_for_generation(self, inputs, past, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if past:
+            inputs = tf.expand_dims(inputs[:, -1], -1)
+
+        return {"inputs": inputs, "past": past}
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):

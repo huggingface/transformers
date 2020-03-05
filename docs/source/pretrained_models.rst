@@ -280,7 +280,10 @@ For a list that includes community-uploaded models, refer to `https://huggingfac
 |                   |                                                            | (see `details <https://github.com/pytorch/fairseq/tree/master/examples/bart>`_)                                                       |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                   | ``bart-large-mnli``                                        | | Adds a 2 layer classification head with 1 million parameters                                                                        |
-|                   |                                                            | | bart-large base architecture with a classification head                                                                             |
+|                   |                                                            | | bart-large base architecture with a classification head, finetuned on MNLI                                                          |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bart-large-cnn``                                         | | 12-layer, 1024-hidden, 16-heads, 406M parameters       (same as base)                                                               |
+|                   |                                                            | | bart-large base architecture finetuned on cnn summarization task                                                                    |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 
 
