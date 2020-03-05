@@ -778,21 +778,6 @@ def _filter_out_falsey_values(tup) -> Tuple:
     return tuple(x for x in tup if isinstance(x, torch.Tensor) or x)
 
 
-RET_DOCSTRING = r"""
-    Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-"""
 # Public API
 
 
@@ -863,10 +848,9 @@ class BartModel(PretrainedBartModel):
 
 
 @add_start_docstrings(
-    "The bare BART Model with a language modeling head. This is the model used for summarization.",
-    BART_START_DOCSTRING,
+    "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING,
 )
-class BartForMaskedLM(PretrainedBartModel):
+class BartForConditionalGeneration(PretrainedBartModel):
     base_model_prefix = "model"
 
     def __init__(self, config: BartConfig):
@@ -919,11 +903,18 @@ class BartForMaskedLM(PretrainedBartModel):
 
     Examples::
 
-            tokenizer = BartTokenizer.from_pretrained('bart-large')
-            model = BartForMaskedLM.from_pretrained('bart-large')
-            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-            outputs = model(input_ids=input_ids, lm_labels=input_ids)
-            loss, prediction_scores = outputs[:2]
+            # Mask filling only works for bart-large
+            from transformers import BartTokenizer, BartForConditionalGeneration
+            tokenizer = AutoTokenizer.from_pretrained('bart-large')
+            TXT = "My friends are <mask> but they eat too many carbs."
+            model = BartForConditionalGeneration.from_pretrained('bart-large')
+            input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
+            logits = model(input_ids)[0]
+            masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+            probs = logits[0, masked_index].softmax(dim=0)
+            values, predictions = probs.topk(5)
+            tokenizer.decode(predictions).split()
+            # ['good', 'great', 'all', 'really', 'very']
         """
         outputs = self.model(
             input_ids,
@@ -992,8 +983,7 @@ class BartForMaskedLM(PretrainedBartModel):
         min_len=0,
         no_repeat_ngram_size=0,
     ):
-        r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
-        and beam-search.
+        r""" Generates summaries using the lm-head and greedy beam search
 
         Adapted in part from Facebook's `XLM beam search code`_ and `Fairseq beam search code`_.
 
@@ -1031,16 +1021,16 @@ class BartForMaskedLM(PretrainedBartModel):
                 sequence_length is <= max_length (examples can finish early)
 
         Examples::
-
-            config = BartConfig(vocab_size=50264, output_past=True)
-            model = AutoModelWithLMHead.from_pretrained('bart-large-cnn', config=config)
-            tokenizer = AutoTokenizer.from_pretrained('bart-large-cnn')
+            from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
+            # see ``examples/summarization/bart/evaluate_cnn.py`` for a longer example
+            config = BartConfig(vocab_size=50264, output_past=True) # no mask_token_id
+            model = BartForConditionalGeneration.from_pretrained('bart-large-cnn', config=config)
+            tokenizer = BartTokenizer.from_pretrained('bart-large-cnn')
             ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
             inputs = tokenizer.batch_encode_plus([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
             # Generate Summary
-            generated_ids = model.generate(inputs['input_ids'], attention_mask=inputs['attention_mask'], num_beams=4, max_length=5)
-            print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in generated_ids])
-
+            summary_ids = model.generate(inputs['input_ids'], attention_mask=inputs['attention_mask'], num_beams=4, max_length=5)
+            print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
         """
         bos_token_id = self.config.bos_token_id
         pad_token_id = self.config.pad_token_id
