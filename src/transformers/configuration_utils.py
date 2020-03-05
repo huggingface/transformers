@@ -275,7 +275,7 @@ class PretrainedConfig(object):
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
-        config = cls(**config_dict)
+        config = cls(**config_dict, **kwargs)
 
         if hasattr(config, "pruned_heads"):
             config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
