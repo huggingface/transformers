@@ -128,6 +128,6 @@ class TestCodeExamples(unittest.TestCase):
             "modeling_utils.py",
             "modeling_tf_t5.py",
             "modeling_bart.py",
-            "modeling_tf_utils.py"
+            "modeling_tf_utils.py",
         ]
         self.analyze_directory(transformers_directory, identifier=modeling_files, ignore_files=ignore_files)
