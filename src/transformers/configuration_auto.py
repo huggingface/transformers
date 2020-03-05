@@ -17,7 +17,6 @@
 
 import logging
 from collections import OrderedDict
-from importlib import import_module
 
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
