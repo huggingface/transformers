@@ -677,7 +677,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
-            outputs = model.generate(max_length=40, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id, do_sample=False)  # do greedy decoding
+            outputs = model.generate(max_length=40, do_sample=False)  # do greedy decoding
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
@@ -692,7 +692,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
             input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, bos_token_id=tokenizer.bos_token_id, pad_token_id=tokenizer.pad_token_id, eos_token_ids=tokenizer.eos_token_id, num_return_sequences=3)  # 3 generate sequences using by sampling
+            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3)  # 3 generate sequences using by sampling
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
