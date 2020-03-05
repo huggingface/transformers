@@ -526,6 +526,21 @@ class ModelTesterMixin:
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
 
+    def test_correct_missing_keys(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            base_model_prefix = model.base_model_prefix
+
+            if hasattr(model, base_model_prefix):
+                with tempfile.TemporaryDirectory() as temp_dir_name:
+                    model.base_model.save_pretrained(temp_dir_name)
+                    model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
+
+                    with self.subTest(msg="Missing keys for {}".format(model.__class__.__name__)):
+                        self.assertGreater(len(loading_info["missing_keys"]), 0)
+
     def test_tie_model_weights(self):
         if not self.test_torchscript:
             return
