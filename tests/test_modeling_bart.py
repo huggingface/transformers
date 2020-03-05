@@ -266,7 +266,7 @@ class BartHeadTests(unittest.TestCase):
             max_position_embeddings=48,
             output_past=True,
         )
-        lm_model = BartForConditionalGeneration(config)
+        lm_model = BartForConditionalGeneration(config).to(torch_device)
         lm_model.eval()
 
         new_input_ids = lm_model.generate(
