@@ -1261,7 +1261,7 @@ class SummarizationPipeline(Pipeline):
     def _forward(self, *args, **kwargs):
         raise NotImplementedError("Should not be called")
 
-from collections import OrderedDict
+
 # Register all the supported task here
 SUPPORTED_TASKS = {
     "feature-extraction": {
@@ -1324,13 +1324,13 @@ SUPPORTED_TASKS = {
         "impl": SummarizationPipeline,
         "pt": BartForMaskedLM if is_torch_available() else None,
         "tf": None,
-        "default": OrderedDict([
-            ("model", {"pt": "bart-large-cnn", "tf": None}),
-            ("config", None),
-            ("tokenizer", ("bart-large-cnn", {"use_fast": False})),
-        ]),
+        "default": {
+            "model": {"pt": "bart-large-cnn", "tf": None},
+            "config": None,
+            "tokenizer": ("bart-large-cnn", {"use_fast": False}),
         },
-    }
+    },
+}
 
 
 def pipeline(
@@ -1421,7 +1421,7 @@ def pipeline(
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
-        models, config, tokenizer = tuple(targeted_task["default"].values())
+        models, config, tokenizer = [targeted_task["default"][k] for k in ["model", "config", "tokenizer"]]
         model = models[framework]
 
     # Try to infer tokenizer from model or config name (if provided as str)
