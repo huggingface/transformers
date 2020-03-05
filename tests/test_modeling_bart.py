@@ -294,6 +294,13 @@ class BartHeadTests(unittest.TestCase):
             bart_toks = tokenizer.encode(ex, return_tensors="pt")
             _assert_tensors_equal(desired_result.long(), bart_toks, prefix=ex)
 
+    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    def test_generate_fp16(self):
+        config, input_ids, batch_size = self._get_config_and_data(output_past=True)
+        attention_mask = input_ids.ne(1)
+        lm_model = BartForMaskedLM(config).eval().to(torch_device).half()
+        lm_model.generate(input_ids, attention_mask)
+
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
