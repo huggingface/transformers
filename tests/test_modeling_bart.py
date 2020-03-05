@@ -300,7 +300,7 @@ class BartHeadTests(unittest.TestCase):
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data(output_past=True)
         attention_mask = input_ids.ne(1)
-        lm_model = BartForMaskedLM(config).eval().to(torch_device).half()
+        lm_model = BartForConditionalGeneration(config).eval().to(torch_device).half()
         lm_model.generate(input_ids, attention_mask)
 
 
