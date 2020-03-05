@@ -1230,7 +1230,7 @@ class SummarizationPipeline(Pipeline):
         max_length=140,
         min_len=20,
         no_repeat_ngram_size=3,
-        **generate_kwargs,
+        **generate_kwargs
     ):
         r"""
         Args:
