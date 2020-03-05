@@ -47,6 +47,21 @@ class TFModelUtilsMixin:
 
 
 def keras_serializable(cls):
+    """
+    Decorate a Keras Layer class to support Keras serialization.
+
+    This is done by:
+    1. adding a `transformers_config` dict to the Keras config dictionary in `get_config` (called by Keras at
+       serialization time
+    2. wrapping `__init__` to accept that `transformers_config` dict (passed by Keras at deserialization time) and
+       convert it to a config object for the actual layer initializer
+    3. registering the class as a custom object in Keras (if the Tensorflow version supports this), so that it does
+       not need to be supplied in `custom_objects` in the call to `tf.keras.models.load_model`
+
+    :param cls: a tf.keras.layers.Layers subclass that accepts a `config` argument to its initializer (typically a
+                `TF*MainLayer` class in this project)
+    :return: the same class object, with modifications for Keras deserialization.
+    """
     initializer = cls.__init__
 
     config_class = getattr(cls, "config_class", None)
