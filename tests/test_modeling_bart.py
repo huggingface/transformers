@@ -64,7 +64,6 @@ class ModelTester:
         self.eos_token_id = 2
         self.pad_token_id = 1
         self.bos_token_id = 0
-        self.output_past = True
         torch.manual_seed(0)
 
     def prepare_config_and_inputs_for_common(self):
@@ -86,7 +85,6 @@ class ModelTester:
             eos_token_ids=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            output_past=self.output_past,
         )
         inputs_dict = prepare_bart_inputs_dict(config, input_ids)
         return config, inputs_dict

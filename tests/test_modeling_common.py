@@ -628,6 +628,9 @@ class ModelTesterMixin:
             "input_ids", None
         )  # TODO (PVP): ugly workaround to make code work for t5 for the moment - has to changed when t5 is fixed.
 
+        if self.is_encoder_decoder:
+            config.output_past = True  # needed for Bart TODO: might have to update for other encoder-decoder models
+
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
             model.to(torch_device)
