@@ -148,9 +148,12 @@ class FlaubertModel(XLMModel):
 
     Examples::
 
+        from transformers import FlaubertTokenizer, FlaubertModel
+        import torch
+
         tokenizer = FlaubertTokenizer.from_pretrained('flaubert-base-cased')
         model = FlaubertModel.from_pretrained('flaubert-base-cased')
-        input_ids = torch.tensor(tokenizer.encode("Le chat manges une pomme.", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        input_ids = torch.tensor(tokenizer.encode("Le chat mange une pomme.", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
