@@ -1229,8 +1229,15 @@ class SummarizationPipeline(Pipeline):
         length_penalty=2.0,
         max_length=140,
         min_len=20,
-        no_repeat_ngram_size=3
+        no_repeat_ngram_size=3,
+        **generate_kwargs,
     ):
+        r"""
+        Args:
+            *texts: (list of
+        Returns:
+            list of dicts with summary_texts and/or summary_token_ids for each text
+        """
         assert return_tensors or return_text
         if self.framework == "tf":
             raise NotImplementedError("Tensorflow not supported")
