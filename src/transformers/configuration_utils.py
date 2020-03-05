@@ -98,6 +98,18 @@ class PretrainedConfig(object):
                 logger.error("Can't set {} with value {} for {}".format(key, value, self))
                 raise err
 
+    @property
+    def num_labels(self):
+        return self._num_labels
+
+    @num_labels.setter
+    def num_labels(self, num_labels):
+        self._num_labels = num_labels
+        self.id2label = {i: "LABEL_{}".format(i) for i in range(self.num_labels)}
+        self.id2label = dict((int(key), value) for key, value in self.id2label.items())
+        self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
+        self.label2id = dict((key, int(value)) for key, value in self.label2id.items())
+
     def save_pretrained(self, save_directory):
         """
         Save a configuration object to the directory `save_directory`, so that it
