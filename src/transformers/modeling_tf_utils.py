@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """TF general model utils."""
-
-
+import functools
 import logging
 import os
 
@@ -54,6 +53,7 @@ def keras_serializable(cls):
     if config_class is None:
         raise AttributeError("Must set `config_class` to use @keras_serializable")
 
+    @functools.wraps(initializer)
     def wrapped_init(self, config, *args, **kwargs):
         if isinstance(config, dict):
             config = config_class.from_dict(config)
