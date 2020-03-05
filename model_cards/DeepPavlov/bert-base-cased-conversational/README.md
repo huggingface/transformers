@@ -10,6 +10,7 @@ on the English part of Twitter, Reddit, DailyDialogues\[1\], OpenSubtitles\[2\],
 Facebook News Comments. We used this training data to build the vocabulary of English subtokens and took
 English cased version of BERT-base as an initialization for English Conversational BERT.
 
+
 \[1\]: Yanran Li, Hui Su, Xiaoyu Shen, Wenjie Li, Ziqiang Cao, and Shuzi Niu. DailyDialog: A Manually Labelled
 Multi-turn Dialogue Dataset. IJCNLP 2017.
 

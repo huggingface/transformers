@@ -11,4 +11,4 @@ of BERT-base as an initialization for RuBERT\[1\].
 
 
 \[1\]: Kuratov, Y., Arkhipov, M. \(2019\). Adaptation of Deep Bidirectional Multilingual Transformers for Russian Language.
-arXiv preprint arXiv:1905.07213.
+arXiv preprint [arXiv:1905.07213](https://arxiv.org/abs/1905.07213).
