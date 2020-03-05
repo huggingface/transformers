@@ -170,6 +170,74 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.parent.assertEqual(len(result["presents"]), config.n_layer)
 
+        def create_and_check_gpt2_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+            model = GPT2Model(config=config)
+            model.to(torch_device)
+            model.eval()
+
+            # first forward pass
+            output, past = model(input_ids, token_type_ids=token_type_ids)
+
+            # create hypothetical next token and extent to next_input_ids
+            next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+            next_token_types = ids_tensor([self.batch_size, 1], self.type_vocab_size)
+
+            # append to next input_ids and token_type_ids
+            next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+            next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
+
+            output_from_no_past, _ = model(next_input_ids, token_type_ids=next_token_type_ids)
+            output_from_past, _ = model(next_tokens, token_type_ids=next_token_types, past=past)
+
+            # select random slice
+            random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+            output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+            output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+            # test that outputs are equal for slice
+            self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+        def create_and_check_gpt2_model_attention_mask_past(
+            self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+        ):
+            model = GPT2Model(config=config)
+            model.to(torch_device)
+            model.eval()
+
+            # create attention mask
+            attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+            half_seq_length = self.seq_length // 2
+            attn_mask[:, half_seq_length:] = 0
+
+            # first forward pass
+            output, past = model(input_ids, attention_mask=attn_mask)
+
+            # create hypothetical next token and extent to next_input_ids
+            next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+            # change a random masked slice from input_ids
+            random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
+            random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+            input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
+
+            # append to next input_ids and attn_mask
+            next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+            attn_mask = torch.cat(
+                [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1
+            )
+
+            # get two different outputs
+            output_from_no_past, _ = model(next_input_ids, attention_mask=attn_mask)
+            output_from_past, _ = model(next_tokens, past=past, attention_mask=attn_mask)
+
+            # select random slice
+            random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+            output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+            output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+            # test that outputs are equal for slice
+            self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
         def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = GPT2LMHeadModel(config)
             model.to(torch_device)
@@ -248,6 +316,14 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_model(*config_and_inputs)
 
+    def test_gpt2_model_past(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_model_past(*config_and_inputs)
+
+    def test_gpt2_model_att_mask_past(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_model_attention_mask_past(*config_and_inputs)
+
     def test_gpt2_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
@@ -299,30 +375,29 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_distilgpt2(self):
         model = GPT2LMHeadModel.from_pretrained("distilgpt2")
-        input_ids = torch.Tensor([[464, 3290, 318, 13779]]).long()  # The dog is cute
+        input_ids = torch.Tensor([[464, 1893]]).long()  # The president
         expected_output_ids = [
             464,
-            3290,
-            318,
-            13779,
-            996,
-            339,
-            460,
-            3360,
-            655,
-            2513,
+            1893,
+            286,
+            262,
+            1578,
+            1829,
+            11,
+            290,
+            262,
+            1893,
+            286,
+            262,
+            1578,
+            7526,
+            11,
+            423,
+            587,
             287,
             262,
-            3952,
-            13,
-            632,
-            318,
-            407,
-            845,
-            3621,
-            284,
-        ]  # The dog is cute though he can sometimes just walk in the park. It is not very nice to
-        torch.manual_seed(0)
+            2635,
+        ]  # The president of the United States, and the president of the United Kingdom, have been in the White
 
-        output_ids = model.generate(input_ids)
+        output_ids = model.generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

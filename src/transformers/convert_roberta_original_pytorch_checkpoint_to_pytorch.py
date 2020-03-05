@@ -46,7 +46,9 @@ logger = logging.getLogger(__name__)
 SAMPLE_TEXT = "Hello world! cécé herlolip"
 
 
-def convert_roberta_checkpoint_to_pytorch(roberta_checkpoint_path, pytorch_dump_folder_path, classification_head):
+def convert_roberta_checkpoint_to_pytorch(
+    roberta_checkpoint_path: str, pytorch_dump_folder_path: str, classification_head: bool
+):
     """
     Copy/paste/tweak roberta's weights to our BERT structure.
     """

@@ -31,6 +31,7 @@ if is_tf_available():
 class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel) if is_tf_available() else ()
+    all_generative_model_classes = (TFCTRLLMHeadModel,) if is_tf_available() else ()
 
     class TFCTRLModelTester(object):
         def __init__(

@@ -199,7 +199,7 @@ class TFBlock(tf.keras.layers.Layer):
 
 class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
+        super().__init__(*inputs, **kwargs)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.num_hidden_layers = config.n_layer

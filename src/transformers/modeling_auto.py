@@ -42,6 +42,7 @@ from .modeling_albert import (
     AlbertForMaskedLM,
     AlbertForQuestionAnswering,
     AlbertForSequenceClassification,
+    AlbertForTokenClassification,
     AlbertModel,
 )
 from .modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_MAP, BartForMaskedLM, BartForSequenceClassification, BartModel
@@ -233,6 +234,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForTokenClassification),
         (BertConfig, BertForTokenClassification),
         (XLNetConfig, XLNetForTokenClassification),
+        (AlbertConfig, AlbertForTokenClassification),
     ]
 )
 

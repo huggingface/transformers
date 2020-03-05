@@ -480,7 +480,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
 class TFAlbertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
 
         self.embeddings = TFAlbertEmbeddings(config, name="embeddings")

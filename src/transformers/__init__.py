@@ -136,7 +136,7 @@ if is_sklearn_available():
 
 # Modeling
 if is_torch_available():
-    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D
+    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D, top_k_top_p_filtering
     from .modeling_auto import (
         AutoModel,
         AutoModelForPreTraining,
@@ -241,7 +241,7 @@ if is_torch_available():
         CamembertForTokenClassification,
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
-    from .modeling_encoder_decoder import PreTrainedEncoderDecoder, Model2Model
+    from .modeling_encoder_decoder import PreTrainedEncoderDecoder
     from .modeling_t5 import (
         T5PreTrainedModel,
         T5Model,
@@ -255,6 +255,7 @@ if is_torch_available():
         AlbertForMaskedLM,
         AlbertForSequenceClassification,
         AlbertForQuestionAnswering,
+        AlbertForTokenClassification,
         load_tf_weights_in_albert,
         ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
@@ -290,7 +291,13 @@ if is_torch_available():
 
 # TensorFlow
 if is_tf_available():
-    from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFSequenceSummary, shape_list
+    from .modeling_tf_utils import (
+        TFPreTrainedModel,
+        TFSharedEmbeddings,
+        TFSequenceSummary,
+        shape_list,
+        tf_top_k_top_p_filtering,
+    )
     from .modeling_tf_auto import (
         TFAutoModel,
         TFAutoModelForPreTraining,
