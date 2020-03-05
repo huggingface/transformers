@@ -1222,7 +1222,7 @@ class SummarizationPipeline(Pipeline):
 
     def __call__(
         self,
-        *texts,
+        *documents,
         return_tensors=False,
         return_text=True,
         num_beams=4,
@@ -1234,15 +1234,36 @@ class SummarizationPipeline(Pipeline):
     ):
         r"""
         Args:
-            *texts: (list of
+            *documents: (list of strings) articles to be summarized
+            return_text: (bool, default=True) whether to add a decoded "summary_text" to each result
+            return_tensors: (bool, default=False) whether to return the raw "summary_token_ids" to each result
+
+            max_length: (`optional`) int
+                The max length of the sequence to be generated. Does not include tokens in input_ids.
+
+            num_beams: (`optional`) int
+                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
+            repetition_penalty: (`optional`) float
+                The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
+            length_penalty: (`optional`) float Exponential penalty to the length. Default to 1.
+            num_return_sequences: (`optional`) int.
+                The number of independently computed returned sequences for each element in the batch. Default to 1.
+            min_len: (`optional`) int
+            no_repeat_ngram_size:  (`optional`) int. ban ngrams of this length from being repeated in the generated text
+            **generate_kwargs: extra kwargs passed to `self.model.generate`_
+
         Returns:
-            list of dicts with summary_texts and/or summary_token_ids for each text
+            list of dicts with 'summary_text' and/or 'summary_token_ids' for each document_to_summarize
+
+        .. _`self.model.generate`:
+            https://huggingface.co/transformers/model_doc/bart.html#transformers.BartForMaskedLM.generate
+
         """
         assert return_tensors or return_text
         if self.framework == "tf":
             raise NotImplementedError("Tensorflow not supported")
         with self.device_placement():
-            inputs = self._parse_and_tokenize(*texts)
+            inputs = self._parse_and_tokenize(*documents)
             inputs = self.ensure_tensor_on_device(**inputs)
             summaries = self.model.generate(
                 inputs["input_ids"],
@@ -1252,6 +1273,7 @@ class SummarizationPipeline(Pipeline):
                 max_length=max_length,
                 min_len=min_len,
                 no_repeat_ngram_size=no_repeat_ngram_size,
+                **generate_kwargs,
             )
             results = []
             for summary in summaries:
