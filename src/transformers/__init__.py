@@ -210,7 +210,6 @@ if is_torch_available():
         BartForSequenceClassification,
         BartModel,
         BartForConditionalGeneration,
-        BartForConditionalGeneration,
     )
     from .modeling_roberta import (
         RobertaForMaskedLM,
