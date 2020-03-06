@@ -1357,10 +1357,6 @@ class PreTrainedTokenizer(object):
             return_token_type_ids = "token_type_ids" in self.return_outputs
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.return_outputs
-        if return_overflowing_tokens is None:
-            return_overflowing_tokens = "overflowing_tokens" in self.return_outputs
-        if return_special_tokens_mask is None:
-            return_special_tokens_mask = "special_tokens_mask" in self.return_outputs
 
         encoded_inputs = {}
 
