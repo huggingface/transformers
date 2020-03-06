@@ -331,7 +331,7 @@ class Pipeline(_ScikitCompat):
 
     def __init__(
         self,
-        model,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
@@ -513,7 +513,7 @@ class FeatureExtractionPipeline(Pipeline):
 
     def __init__(
         self,
-        model,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
@@ -617,7 +617,7 @@ class FillMaskPipeline(Pipeline):
 
     def __init__(
         self,
-        model,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
@@ -716,7 +716,7 @@ class NerPipeline(Pipeline):
 
     def __init__(
         self,
-        model,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
@@ -890,7 +890,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
     def __init__(
         self,
-        model,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
