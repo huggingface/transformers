@@ -1852,8 +1852,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 stack = tf.stack(stack, axis=0)
             elif return_tensors == "pt":
                 stack = torch.stack(stack, dim=0)
-            elif not return_tensors and len(stack) == 1:
-                stack = stack[0]
+            # elif not return_tensors and len(stack) == 1:
+            #     stack = stack[0]
 
             sanitized[key] = stack
 
@@ -1902,7 +1902,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
         # Return tensor is None, then we can remove the leading batch axis
         if not return_tensors:
-            return {key: value[0] if isinstance(value[0], list) else value for key, value in batched_output.items()}
+            return {
+                key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
+                for key, value in batched_output.items()
+            }
         else:
             return batched_output
 
