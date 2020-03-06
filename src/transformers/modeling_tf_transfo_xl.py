@@ -24,7 +24,7 @@ import tensorflow as tf
 from .configuration_transfo_xl import TransfoXLConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 
 
 logger = logging.getLogger(__name__)
@@ -378,7 +378,10 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
         return embed
 
 
+@keras_serializable
 class TFTransfoXLMainLayer(tf.keras.layers.Layer):
+    config_class = TransfoXLConfig
+
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
