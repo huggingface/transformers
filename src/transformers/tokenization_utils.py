@@ -22,7 +22,7 @@ import os
 import re
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import List, Union, Optional
+from typing import List, Optional, Union
 
 from tokenizers.implementations import BaseTokenizer
 
@@ -1790,7 +1790,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Optional[Union[List[str], List[(str, str)]]] = None,
+        batch_text_or_text_pairs: Optional[Union[List[str], List[List[str]]]] = None,
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         stride: int = 0,
