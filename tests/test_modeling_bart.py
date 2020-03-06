@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-from transformers.modeling_bart import LARGE_NEGATIVE
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -38,6 +37,7 @@ if is_torch_available():
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
         shift_tokens_right,
         _prepare_bart_decoder_inputs,
+        LARGE_NEGATIVE,
     )
     from transformers.tokenization_bart import BartTokenizer
 
