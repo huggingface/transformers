@@ -272,6 +272,30 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # self.assertEqual(getattr(tokenizer_rp, key), getattr(tokenizer_pp, key))
             # self.assertEqual(getattr(tokenizer_rp, key + "_id"), getattr(tokenizer_pp, key + "_id"))
 
+    def assert_empty_output_no_special_tokens(self, ru_class, py_class, model):
+        tokenizer_r = ru_class.from_pretrained(model, add_special_tokens=False)
+        tokenizer_p = py_class.from_pretrained(model)
+
+        # add_special_tokens=False makes nothing for now.
+        self.assertEqual(
+            tokenizer_p.tokenize(" ", add_special_tokens=False), tokenizer_r.tokenize(" ", add_special_tokens=False)
+        )
+
+        self.assertEqual(
+            tokenizer_p.encode_plus(" ", add_special_tokens=False),
+            tokenizer_r.encode_plus(" ", add_special_tokens=False),
+        )
+
+        self.assertEqual(
+            tokenizer_p.encode_plus(" ", add_special_tokens=False),
+            tokenizer_r.encode_plus(" ", add_special_tokens=False),
+        )
+
+        self.assertEqual(
+            tokenizer_p.batch_encode_plus([" "], add_special_tokens=False),
+            tokenizer_r.batch_encode_plus([" "], add_special_tokens=False),
+        )
+
     def test_bert(self):
         for tokenizer_name in BertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = BertTokenizer.from_pretrained(tokenizer_name)
@@ -318,6 +342,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Check for padding
             self.assert_padding(tokenizer_r, tokenizer_p)
+
+            # Check for space-only input
+            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
 
     @require_torch
     def test_transfoxl(self):
@@ -381,6 +408,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # self.assertIsNotNone(tokenizer_p.__class__.from_pretrained('./'))
             self.assertIsNotNone(tokenizer_r.__class__.from_pretrained("./"))
 
+            # Check for space-only input
+            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
+
     def test_distilbert(self):
         for tokenizer_name in DistilBertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = DistilBertTokenizer.from_pretrained(tokenizer_name)
@@ -429,6 +459,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # Check for padding
             self.assert_padding(tokenizer_r, tokenizer_p)
 
+            # Check for space-only input
+            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
+
     def test_gpt2(self):
         for tokenizer_name in GPT2Tokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = GPT2Tokenizer.from_pretrained(tokenizer_name)
@@ -475,6 +508,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Check for padding
             self.assertRaises(ValueError, self.assert_padding, tokenizer_r, tokenizer_p)
+
+            # Check for space-only input
+            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
 
     def test_roberta(self):
         for tokenizer_name in RobertaTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
@@ -524,6 +560,9 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # TODO: Re-enable this test as soon as Roberta align with the python tokenizer.
             # self.assert_padding(tokenizer_r, tokenizer_p)
 
+            # Check for space-only input
+            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
+
     def test_openai(self):
         for tokenizer_name in OpenAIGPTTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
             tokenizer_p = OpenAIGPTTokenizer.from_pretrained(tokenizer_name)
@@ -572,3 +611,6 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
             # Check the number of returned files for save_vocabulary
             self.assert_save_pretrained(tokenizer_r, tokenizer_p)
+
+            # Check for space-only input
+            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
