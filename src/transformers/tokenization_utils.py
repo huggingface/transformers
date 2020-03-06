@@ -22,6 +22,7 @@ import os
 import re
 from collections import defaultdict
 from contextlib import contextmanager
+from typing import List, Union, Optional
 
 from tokenizers.implementations import BaseTokenizer
 
@@ -851,14 +852,14 @@ class PreTrainedTokenizer(object):
 
     def encode(
         self,
-        text,
-        text_pair=None,
-        add_special_tokens=True,
-        max_length=None,
-        stride=0,
-        truncation_strategy="longest_first",
-        pad_to_max_length=False,
-        return_tensors=None,
+        text: str,
+        text_pair: Optional[str] = None,
+        add_special_tokens: bool = True,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        truncation_strategy: str = "longest_first",
+        pad_to_max_length: bool = False,
+        return_tensors: Optional[str] = None,
         **kwargs
     ):
         """
@@ -913,19 +914,19 @@ class PreTrainedTokenizer(object):
 
     def encode_plus(
         self,
-        text,
-        text_pair=None,
-        add_special_tokens=True,
-        max_length=None,
-        stride=0,
-        truncation_strategy="longest_first",
-        pad_to_max_length=False,
-        return_tensors=None,
-        return_token_type_ids=None,
-        return_attention_mask=None,
-        return_overflowing_tokens=None,
-        return_special_tokens_mask=None,
-        return_offsets_mapping=False,
+        text: str,
+        text_pair: Optional[str] = None,
+        add_special_tokens: bool = True,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        truncation_strategy: str = "longest_first",
+        pad_to_max_length: bool = False,
+        return_tensors: Optional[str] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
         **kwargs
     ):
         """
@@ -1040,19 +1041,19 @@ class PreTrainedTokenizer(object):
 
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs=None,
-        add_special_tokens=True,
-        max_length=None,
-        stride=0,
-        truncation_strategy="longest_first",
-        pad_to_max_length=False,
-        return_tensors=None,
-        return_token_type_ids=True,
-        return_attention_masks=True,
-        return_overflowing_tokens=False,
-        return_special_tokens_masks=False,
-        return_offsets_mapping=False,
-        return_input_lengths=False,
+        batch_text_or_text_pairs: Union[str, List[str]],
+        add_special_tokens: bool = True,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        truncation_strategy: str = "longest_first",
+        pad_to_max_length: bool = False,
+        return_tensors: Optional[str] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_masks: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_masks: bool = False,
+        return_offsets_mapping: bool = False,
+        return_input_lengths: bool = False,
         **kwargs
     ):
         """
@@ -1222,18 +1223,18 @@ class PreTrainedTokenizer(object):
 
     def prepare_for_model(
         self,
-        ids,
-        pair_ids=None,
-        max_length=None,
-        add_special_tokens=True,
-        stride=0,
-        truncation_strategy="longest_first",
-        pad_to_max_length=False,
-        return_tensors=None,
-        return_token_type_ids=None,
-        return_attention_mask=None,
-        return_overflowing_tokens=None,
-        return_special_tokens_mask=None,
+        ids: List[int],
+        pair_ids: Optional[List[int]] = None,
+        max_length: Optional[int] = None,
+        add_special_tokens: bool = True,
+        stride: int = 0,
+        truncation_strategy: str = "longest_first",
+        pad_to_max_length: bool = False,
+        return_tensors: Optional[str] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
     ):
         """
         Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
@@ -1705,18 +1706,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_tensors=None,
         return_token_type_ids=None,
         return_attention_mask=None,
-        return_overflowing_tokens=None,
-        return_special_tokens_mask=None,
+        return_overflowing_tokens=False,
+        return_special_tokens_mask=False,
         return_offsets_mapping=False,
     ):
         if return_token_type_ids is None:
             return_token_type_ids = "token_type_ids" in self.return_outputs
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.return_outputs
-        if return_overflowing_tokens is None:
-            return_overflowing_tokens = "overflowing_tokens" in self.return_outputs
-        if return_special_tokens_mask is None:
-            return_special_tokens_mask = "special_tokens_mask" in self.return_outputs
 
         if return_overflowing_tokens and encoding.overflowing is not None:
             encodings = [encoding] + encoding.overflowing
@@ -1797,18 +1794,18 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs=None,
-        add_special_tokens=True,
-        max_length=None,
-        stride=0,
-        truncation_strategy="longest_first",
-        pad_to_max_length=False,
-        return_tensors=None,
-        return_token_type_ids=None,
-        return_attention_mask=None,
-        return_overflowing_tokens=None,
-        return_special_tokens_mask=None,
-        return_offsets_mapping=False,
+        batch_text_or_text_pairs: Optional[Union[List[str], List[(str, str)]]] = None,
+        add_special_tokens: bool = True,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        truncation_strategy: str = "longest_first",
+        pad_to_max_length: bool = False,
+        return_tensors: Optional[str] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
         **kwargs
     ):
         if not add_special_tokens:
@@ -1891,19 +1888,19 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     def encode_plus(
         self,
-        text,
-        text_pair=None,
-        add_special_tokens=False,
-        max_length=None,
-        pad_to_max_length=False,
-        stride=0,
-        truncation_strategy="longest_first",
-        return_tensors=None,
-        return_token_type_ids=None,
-        return_attention_mask=None,
-        return_overflowing_tokens=None,
-        return_special_tokens_mask=None,
-        return_offsets_mapping=False,
+        text: str,
+        text_pair: Optional[str] = None,
+        add_special_tokens: bool = False,
+        max_length: Optional[int] = None,
+        pad_to_max_length: bool = False,
+        stride: int = 0,
+        truncation_strategy: str = "longest_first",
+        return_tensors: Optional[bool] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
         **kwargs
     ):
         batched_input = [(text, text_pair)] if text_pair else [text]
