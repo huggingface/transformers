@@ -16,6 +16,7 @@
 
 import tempfile
 import unittest
+import ipdb
 
 from transformers import is_torch_available
 
@@ -425,7 +426,7 @@ class BartModelIntegrationTest(unittest.TestCase):
         text = " (CNN)The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian"
         tokens = tok.encode(text, return_tensors="pt").to(torch_device)
         extra_len = 20
-        gen_tokens_bart = hf.generate_bart(tokens, num_beams=3, max_length=extra_len,)  # repetition_penalty=10.,
+        gen_tokens_bart = hf.generate_bart(tokens, num_beams=4, max_length=extra_len,)  # repetition_penalty=10.,
         gen_tokens = hf.generate(
             tokens, num_beams=4, max_length=extra_len + 2, do_sample=False
         )  # repetition_penalty=10.,
@@ -436,7 +437,49 @@ class BartModelIntegrationTest(unittest.TestCase):
         self.assertEqual(expected_result, generated[0])
 
     @slow
-    def test_cnn_summarization_same_as_fairseq_hard(self):
+    def test_cnn_summarization_same_as_fairseq_hard_single(self):
+        hf = BartForConditionalGeneration.from_pretrained("bart-large-cnn", output_past=True,).to(torch_device)
+        tok = BartTokenizer.from_pretrained("bart-large")
+        SHORTER_ARTICLE = ' (CNN)The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian territories. The formal accession was marked with a ceremony at The Hague, in the Netherlands, where the court is based. The Palestinians signed the ICC\'s founding Rome Statute in January, when they also accepted its jurisdiction over alleged crimes committed "in the occupied Palestinian territory, including East Jerusalem, since June 13, 2014." Later that month, the ICC opened a preliminary examination into the situation in Palestinian territories, paving the way for possible war crimes investigations against Israelis. As members of the court, Palestinians may be subject to counter-charges as well. Israel and the United States, neither of which is an ICC member, opposed the Palestinians\' efforts to join the body. But Palestinian Foreign Minister Riad al-Malki, speaking at Wednesday\'s ceremony, said it was a move toward greater justice. "As Palestine formally becomes a State Party to the Rome Statute today, the world is also a step closer to ending a long era of impunity and injustice," he said, according to an ICC news release. "Indeed, today brings us closer to our shared goals of justice and peace." Judge Kuniko Ozaki, a vice president of the ICC, said acceding to the treaty was just the first step for the Palestinians. "As the Rome Statute today enters into force for the State of Palestine, Palestine acquires all the rights as well as responsibilities that come with being a State Party to the Statute. These are substantive commitments, which cannot be taken lightly," she said. Rights group Human Rights Watch welcomed the development. "Governments seeking to penalize Palestine for joining the ICC should immediately end their pressure, and countries that support universal acceptance of the court\'s treaty should speak out to welcome its membership," said Balkees Jarrah, international justice counsel for the group. "What\'s objectionable is the attempts to undermine international justice, not Palestine\'s decision to join a treaty to which over 100 countries around the world are members." In January, when the preliminary ICC examination was opened, Israeli Prime Minister Benjamin Netanyahu described it as an outrage, saying the court was overstepping its boundaries. The United States also said it "strongly" disagreed with the court\'s decision. "As we have said repeatedly, we do not believe that Palestine is a state and therefore we do not believe that it is eligible to join the ICC," the State Department said in a statement. It urged the warring sides to resolve their differences through direct negotiations. "We will continue to oppose actions against Israel at the ICC as counterproductive to the cause of peace," it said. But the ICC begs to differ with the definition of a state for its purposes and refers to the territories as "Palestine." While a preliminary examination is not a formal investigation, it allows the court to review evidence and determine whether to investigate suspects on both sides. Prosecutor Fatou Bensouda said her office would "conduct its analysis in full independence and impartiality." The war between Israel and Hamas militants in Gaza last summer left more than 2,000 people dead. The inquiry will include alleged war crimes committed since June. The International Criminal Court was set up in 2002 to prosecute genocide, crimes against humanity and war crimes. CNN\'s Vasco Cotovio, Kareem Khadder and Faith Karimi contributed to this report.'
+        EXPECTED_SUMMARY_SHORTER = "The Palestinian Authority becomes the 123rd member of the International Criminal Court. The move gives the court jurisdiction over alleged crimes in Palestinian territories. Israel and the United States opposed the Palestinians' efforts to join the body. But Palestinian Foreign Minister Riad al-Malki said it was a move toward greater justice."
+
+        tokens = tok.encode(SHORTER_ARTICLE, return_tensors="pt").to(torch_device)
+
+        num_beams = 4
+        length_penalty = 2.0
+        max_length = 140
+        min_length = 55
+        no_repeat_ngram_size = 3
+
+        gen_tokens = hf.generate(
+            tokens,
+            num_beams=num_beams,
+            max_length=max_length + 2,
+            min_length=min_length + 1,
+            length_penalty=length_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            do_sample=False
+        )
+
+        generated = [tok.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in gen_tokens]
+
+        self.assertEqual(EXPECTED_SUMMARY_SHORTER, generated[0])
+
+        gen_tokens_bart = hf.generate_bart(
+            tokens,
+            num_beams=num_beams,
+            max_length=max_length,
+            min_len=min_length,
+            length_penalty=length_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size
+        )
+
+        generated_bart = [tok.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in gen_tokens_bart]
+
+        self.assertEqual(EXPECTED_SUMMARY_SHORTER, generated_bart[0])
+
+    @slow
+    def test_cnn_summarization_same_as_fairseq_hard_batch(self):
         hf = BartForConditionalGeneration.from_pretrained("bart-large-cnn", output_past=True,).to(torch_device)
         tok = BartTokenizer.from_pretrained("bart-large")
 
@@ -459,22 +502,47 @@ class BartModelIntegrationTest(unittest.TestCase):
             pad_to_max_length=True,
             return_tensors="pt",
         )
+
+        max_length = 140
+        min_length = 55
+
         self.assertEqual(1024, dct["input_ids"].shape[1])
         hypotheses_batch = hf.generate(
             input_ids=dct["input_ids"].to(torch_device),
             attention_mask=dct["attention_mask"].to(torch_device),
             num_beams=4,
             length_penalty=2.0,
-            max_length=140,
-            min_len=55,
+            max_length=max_length + 2,
+            min_length=min_length + 1,
             no_repeat_ngram_size=3,
+            do_sample=False
         )
         decoded = [
             tok.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in hypotheses_batch
         ]
+
+        hypotheses_batch_bart = hf.generate_bart(
+            input_ids=dct["input_ids"].to(torch_device),
+            attention_mask=dct["attention_mask"].to(torch_device),
+            num_beams=4,
+            length_penalty=2.0,
+            max_length=max_length,
+            min_len=min_length,
+            no_repeat_ngram_size=3,
+        )
+        decoded_bart = [
+            tok.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in hypotheses_batch_bart
+        ]
+
+        ipdb.set_trace()
+
         self.assertListEqual(
             [EXPECTED_SUMMARY_FRANCE, EXPECTED_SUMMARY_SHORTER, EXPECTED_SUMMARY_IRAN, EXPECTED_SUMMARY_SUBWAY],
             decoded,
+        )
+        self.assertListEqual(
+            [EXPECTED_SUMMARY_FRANCE, EXPECTED_SUMMARY_SHORTER, EXPECTED_SUMMARY_IRAN, EXPECTED_SUMMARY_SUBWAY],
+            decoded_bart,
         )
         # TODO(SS): run fairseq again with num_beams=2, min_len=20.
         # TODO(SS): add test case that hits max_length
