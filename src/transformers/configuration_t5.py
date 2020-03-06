@@ -79,8 +79,7 @@ class T5Config(PretrainedConfig):
         **kwargs
     ):
         super().__init__(
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
+            is_encoder_decoder=is_encoder_decoder, **kwargs,
         )
         self.vocab_size = vocab_size
         self.n_positions = n_positions
