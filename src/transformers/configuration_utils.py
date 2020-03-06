@@ -65,11 +65,12 @@ class PretrainedConfig(object):
         self.pruned_heads = kwargs.pop("pruned_heads", {})
 
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
+        self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
         self.is_decoder = kwargs.pop("is_decoder", False)
 
         # Parameters for sequence generation
         self.max_length = kwargs.pop("max_length", 20)
-        self.min_length = kwargs.pop("max_length", 0)
+        self.min_length = kwargs.pop("min_length", 0)
         self.do_sample = kwargs.pop("do_sample", False)
         self.early_stopping = kwargs.pop("early_stopping", False)
         self.num_beams = kwargs.pop("num_beams", 1)
