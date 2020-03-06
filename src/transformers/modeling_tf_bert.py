@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from .configuration_bert import BertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 
 
 logger = logging.getLogger(__name__)
@@ -471,7 +471,10 @@ class TFBertNSPHead(tf.keras.layers.Layer):
         return seq_relationship_score
 
 
+@keras_serializable
 class TFBertMainLayer(tf.keras.layers.Layer):
+    config_class = BertConfig
+
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
