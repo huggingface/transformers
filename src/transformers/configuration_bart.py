@@ -59,6 +59,7 @@ class BartConfig(PretrainedConfig):
         output_past=False,
         num_labels=3,
         bos_token_id=0,
+        is_encoder_decoder=True,
         **common_kwargs
     ):
         r"""
@@ -72,6 +73,7 @@ class BartConfig(PretrainedConfig):
             output_past=output_past,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
             **common_kwargs,
         )
         self.vocab_size = vocab_size
