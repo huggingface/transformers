@@ -50,6 +50,8 @@ for the other languages.
 Citation:
 
 <details>
+
+```bibtex
 @article{Artetxe:etal:2019,
       author    = {Mikel Artetxe and Sebastian Ruder and Dani Yogatama},
       title     = {On the cross-lingual transferability of monolingual representations},
@@ -59,6 +61,8 @@ Citation:
       archivePrefix = {arXiv},
       eprint    = {1910.11856}
 }
+```
+
 </details>
 
 I used `Data augmentation techniques` to obtain more samples and splited the dataset in order to have a train and test set. The test set was created in a way that contains the same number of samples for each language. Finally, I got:
