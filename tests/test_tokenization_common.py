@@ -551,8 +551,6 @@ class TokenizerTesterMixin:
 
             assert token_type_ids + [token_type_padding_idx] * padding_size == right_padded_token_type_ids
             assert [token_type_padding_idx] * padding_size + token_type_ids == left_padded_token_type_ids
-        else:
-            print("Not testing token type ids for", tokenizer.__class__.__name__)
 
         if "attention_mask" in tokenizer.return_outputs:
             attention_mask = encoded_sequence["attention_mask"]
@@ -561,8 +559,6 @@ class TokenizerTesterMixin:
 
             assert attention_mask + [0] * padding_size == right_padded_attention_mask
             assert [0] * padding_size + attention_mask == left_padded_attention_mask
-        else:
-            print("Not testing token type ids for", tokenizer.__class__.__name__)
 
     def test_separate_tokenizers(self):
         # This tests that tokenizers don't impact others. Unfortunately the case where it fails is when
