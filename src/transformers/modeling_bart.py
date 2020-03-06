@@ -913,7 +913,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
             # Mask filling only works for bart-large
             from transformers import BartTokenizer, BartForConditionalGeneration
-            tokenizer = AutoTokenizer.from_pretrained('bart-large')
+            tokenizer = BartTokenizer.from_pretrained('bart-large')
             TXT = "My friends are <mask> but they eat too many carbs."
             model = BartForConditionalGeneration.from_pretrained('bart-large')
             input_ids = tokenizer.batch_encode_plus([TXT], return_tensors='pt')['input_ids']
@@ -1031,8 +1031,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         Examples::
             from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
             # see ``examples/summarization/bart/evaluate_cnn.py`` for a longer example
-            config = BartConfig(vocab_size=50264, output_past=True) # no mask_token_id
-            model = BartForConditionalGeneration.from_pretrained('bart-large-cnn', config=config)
+            model = BartForConditionalGeneration.from_pretrained('bart-large-cnn')
             tokenizer = BartTokenizer.from_pretrained('bart-large-cnn')
             ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
             inputs = tokenizer.batch_encode_plus([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
