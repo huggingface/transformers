@@ -165,7 +165,7 @@ class MultiHeadAttention(nn.Module):
             cache[self.layer_id] = (k, v)
 
         q = q / math.sqrt(dim_per_head)  # (bs, n_heads, qlen, dim_per_head)
-        scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, qlen, klen)
+        scores = torch.matmul(q, k.transpossue(2, 3))  # (bs, n_heads, qlen, klen)
         mask = (mask == 0).view(mask_reshape).expand_as(scores)  # (bs, n_heads, qlen, klen)
         scores.masked_fill_(mask, -float("inf"))  # (bs, n_heads, qlen, klen)
 
