@@ -1,6 +1,6 @@
 ---
 language:
-- Chinese
+- chinese
 ---
 
 # albert_chinese_base
