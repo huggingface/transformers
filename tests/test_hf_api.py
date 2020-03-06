@@ -21,7 +21,7 @@ import unittest
 import requests
 from requests.exceptions import HTTPError
 
-from transformers.hf_api import HfApi, HfFolder, PresignedUrl, S3Obj
+from transformers.hf_api import HfApi, HfFolder, ModelInfo, PresignedUrl, S3Obj
 
 
 USER = "__DUMMY_TRANSFORMERS_USER__"
@@ -36,10 +36,11 @@ FILES = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/empty.txt"),
     ),
 ]
+ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
 
 
 class HfApiCommonTest(unittest.TestCase):
-    _api = HfApi(endpoint="https://moon-staging.huggingface.co")
+    _api = HfApi(endpoint=ENDPOINT_STAGING)
 
 
 class HfApiLoginTest(HfApiCommonTest):
@@ -90,6 +91,18 @@ class HfApiEndpointsTest(HfApiCommonTest):
         if len(objs) > 0:
             o = objs[-1]
             self.assertIsInstance(o, S3Obj)
+
+
+class HfApiPublicTest(unittest.TestCase):
+    def test_staging_model_list(self):
+        _api = HfApi(endpoint=ENDPOINT_STAGING)
+        _ = _api.model_list()
+
+    def test_model_list(self):
+        _api = HfApi()
+        models = _api.model_list()
+        self.assertGreater(len(models), 100)
+        self.assertIsInstance(models[0], ModelInfo)
 
 
 class HfFolderTest(unittest.TestCase):
