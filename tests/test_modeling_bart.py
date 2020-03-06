@@ -515,7 +515,8 @@ class BartModelIntegrationTest(unittest.TestCase):
             max_length=max_length + 2,
             min_length=min_length + 1,
             no_repeat_ngram_size=3,
-            do_sample=False
+            do_sample=False,
+            early_stopping=True
         )
         decoded = [
             tok.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in hypotheses_batch
