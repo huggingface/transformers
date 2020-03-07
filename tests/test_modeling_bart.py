@@ -453,9 +453,7 @@ class BartModelIntegrationTest(unittest.TestCase):
         EXPECTED_SUMMARY_SUBWAY = "Liana Barrientos has been married 10 times, sometimes within two weeks of each other. Prosecutors say the marriages were part of an immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx. She was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the subway."
 
         dct = tok.batch_encode_plus(
-            #            [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
-            [IRAN_ARTICLE, ARTICLE_SUBWAY],
-            #            [FRANCE_ARTICLE, SHORTER_ARTICLE],
+            [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY],
             max_length=1024,
             pad_to_max_length=True,
             return_tensors="pt",
@@ -482,9 +480,7 @@ class BartModelIntegrationTest(unittest.TestCase):
         ]
 
         self.assertListEqual(
-            #            [EXPECTED_SUMMARY_FRANCE, EXPECTED_SUMMARY_SHORTER, EXPECTED_SUMMARY_IRAN, EXPECTED_SUMMARY_SUBWAY],
-            [EXPECTED_SUMMARY_IRAN, EXPECTED_SUMMARY_SUBWAY],
-            #            [EXPECTED_SUMMARY_FRANCE, EXPECTED_SUMMARY_SHORTER],
+            [EXPECTED_SUMMARY_FRANCE, EXPECTED_SUMMARY_SHORTER, EXPECTED_SUMMARY_IRAN, EXPECTED_SUMMARY_SUBWAY],
             decoded,
         )
         # TODO(SS): run fairseq again with num_beams=2, min_len=20.
