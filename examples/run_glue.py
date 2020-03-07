@@ -135,8 +135,13 @@ def train(args, train_dataset, model, tokenizer):
     ]
 
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+
+    if args.warmup_steps:
+        warmup_steps = args.warmup_steps
+    else:
+        warmup_steps = t_total * args.warmup_fraction
     scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
+        optimizer, num_warmup_steps=warmup_steps, num_training_steps=t_total
     )
 
     # Check if saved optimizer or scheduler states exist
@@ -420,9 +425,8 @@ def test(args, model, tokenizer, prefix=""):
             preds = np.squeeze(preds)
             df_preds = pd.DataFrame({'prediction': preds})
 
-        # TODO write to file
         output_test_file = os.path.join(eval_output_dir, prefix, "test_predictions.tsv")
-        df_preds.to_csv(output_test_file, sep='\t')
+        df_preds.to_csv(output_test_file, sep='\t', index=True, index_label='index')
 
     return results
 
@@ -507,6 +511,13 @@ def main():
         help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
     )
     parser.add_argument(
+        "--tokenizer_type",
+        default=None,
+        type=str,
+        required=False,
+        help="Tokenizer type if different than model_type."
+    )
+    parser.add_argument(
         "--model_name_or_path",
         default=None,
         type=str,
@@ -586,6 +597,7 @@ def main():
         help="If > 0: set total number of training steps to perform. Override num_train_epochs.",
     )
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
+    parser.add_argument("--warmup_fraction", default=0, type=float, help='Fraction of total steps to use as warmup steps. --warmup_steps takes priority.')
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
     parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
@@ -685,6 +697,8 @@ def main():
 
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
+    if args.tokenizer_type:
+        _, _, tokenizer_class = MODEL_CLASSES[args.tokenizer_type]
     config = config_class.from_pretrained(
         args.config_name if args.config_name else args.model_name_or_path,
         num_labels=num_labels,
