@@ -116,12 +116,13 @@ def glue_convert_examples_to_features(
             len(token_type_ids), max_length
         )
 
-        if output_mode == "classification":
-            label = label_map[example.label]
-        elif output_mode == "regression":
-            label = float(example.label)
-        else:
-            raise KeyError(output_mode)
+        if example.label:
+            if output_mode == "classification":
+                label = label_map[example.label]
+            elif output_mode == "regression":
+                label = float(example.label)
+            else:
+                raise KeyError(output_mode)
 
         if ex_index < 5:
             logger.info("*** Example ***")
@@ -187,6 +188,11 @@ class MrpcProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
     def get_labels(self):
         """See base class."""
         return ["0", "1"]
@@ -200,7 +206,11 @@ class MrpcProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, i)
             text_a = line[3]
             text_b = line[4]
-            label = line[0]
+
+            if 'test' in set_type:
+                label = None
+            else:
+                label = line[0]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
@@ -225,6 +235,12 @@ class MnliProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev_matched.tsv")), "dev_matched")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test_matched.tsv")),
+            "test_matched")
+
     def get_labels(self):
         """See base class."""
         return ["contradiction", "entailment", "neutral"]
@@ -238,7 +254,11 @@ class MnliProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[8]
             text_b = line[9]
-            label = line[-1]
+
+            if 'test' in set_type:
+                label = None
+            else:
+                label = line[-1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
@@ -249,6 +269,12 @@ class MnliMismatchedProcessor(MnliProcessor):
     def get_dev_examples(self, data_dir):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev_mismatched.tsv")), "dev_matched")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test_mismatched.tsv")),
+            "test_mismatched")
 
 
 class ColaProcessor(DataProcessor):
@@ -271,6 +297,11 @@ class ColaProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
     def get_labels(self):
         """See base class."""
         return ["0", "1"]
@@ -280,8 +311,13 @@ class ColaProcessor(DataProcessor):
         examples = []
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
-            text_a = line[3]
-            label = line[1]
+
+            if 'test' in set_type:
+                text_a = line[1]
+                label = None
+            else:
+                text_a = line[3]
+                label = line[1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
 
@@ -306,6 +342,11 @@ class Sst2Processor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(
+            self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
     def get_labels(self):
         """See base class."""
         return ["0", "1"]
@@ -317,8 +358,12 @@ class Sst2Processor(DataProcessor):
             if i == 0:
                 continue
             guid = "%s-%s" % (set_type, i)
-            text_a = line[0]
-            label = line[1]
+            if 'test' in set_type:
+                text_a = line[1]
+                label = None
+            else:
+                text_a = line[0]
+                label = line[1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
 
@@ -343,6 +388,10 @@ class StsbProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
     def get_labels(self):
         """See base class."""
         return [None]
@@ -356,7 +405,10 @@ class StsbProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[7]
             text_b = line[8]
-            label = line[-1]
+            if 'test' in set_type:
+                label = None
+            else:
+                label = line[-1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
@@ -381,6 +433,10 @@ class QqpProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
     def get_labels(self):
         """See base class."""
         return ["0", "1"]
@@ -393,9 +449,14 @@ class QqpProcessor(DataProcessor):
                 continue
             guid = "%s-%s" % (set_type, line[0])
             try:
-                text_a = line[3]
-                text_b = line[4]
-                label = line[5]
+                if 'test' in set_type:
+                    text_a = line[1]
+                    text_b = line[2]
+                    label = None
+                else:
+                    text_a = line[3]
+                    text_b = line[4]
+                    label = line[5]
             except IndexError:
                 continue
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
@@ -422,6 +483,10 @@ class QnliProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev_matched")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "test.tsv")), "test_matched")
+
     def get_labels(self):
         """See base class."""
         return ["entailment", "not_entailment"]
@@ -435,7 +500,10 @@ class QnliProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[1]
             text_b = line[2]
-            label = line[-1]
+            if 'test' in set_type:
+                label = None
+            else:
+                label = line[-1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
@@ -460,6 +528,10 @@ class RteProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
     def get_labels(self):
         """See base class."""
         return ["entailment", "not_entailment"]
@@ -473,7 +545,10 @@ class RteProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[1]
             text_b = line[2]
-            label = line[-1]
+            if 'test' in set_type:
+                label = None
+            else:
+                label = line[-1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
@@ -498,6 +573,10 @@ class WnliProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
     def get_labels(self):
         """See base class."""
         return ["0", "1"]
@@ -511,7 +590,10 @@ class WnliProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[1]
             text_b = line[2]
-            label = line[-1]
+            if 'test' in set_type:
+                label = None
+            else:
+                label = line[-1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
