@@ -24,6 +24,7 @@ from .utils import CACHE_DIR, require_tf, slow
 
 
 if is_tf_available():
+    import tensorflow as tf
     from transformers.modeling_tf_ctrl import TFCTRLModel, TFCTRLLMHeadModel, TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
@@ -202,3 +203,35 @@ class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in list(TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = TFCTRLModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
+class TFCTRLModelLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_ctrl(self):
+        model = TFCTRLLMHeadModel.from_pretrained("ctrl")
+        input_ids = tf.convert_to_tensor([[11858, 586, 20984, 8]], dtype=tf.int32)
+        expected_output_ids = [
+            11859,
+            586,
+            20984,
+            8,
+            13391,
+            3,
+            980,
+            8258,
+            72,
+            327,
+            148,
+            2,
+            53,
+            29,
+            226,
+            3,
+            780,
+            49,
+            3,
+            980,
+        ]  # Legal My neighbor is refusing to pay rent after 2 years and we are having to force him to pay
+
+        output_ids = model.generate(input_ids, do_sample=False)
+        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
