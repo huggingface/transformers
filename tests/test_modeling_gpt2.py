@@ -343,7 +343,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gpt2(self):
         model = GPT2LMHeadModel.from_pretrained("gpt2")
-        input_ids = torch.tensor([[463, 3290]], dtype=torch.long, device=torch_device)  # The dog
+        input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
         expected_output_ids = [
             464,
             3290,
