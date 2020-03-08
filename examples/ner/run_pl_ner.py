@@ -176,7 +176,8 @@ class NERTransformer(BaseTransformer):
                                 "Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0]
                             )
         # Converting to the dic required by pl
-        # https://github.com/PyTorchLightning/pytorch-lightning/blob/master/pytorch_lightning/trainer/logging.py#L139
+        # https://github.com/PyTorchLightning/pytorch-lightning/blob/master/\
+        # pytorch_lightning/trainer/logging.py#L139
         logs = ret['log']
         # `val_loss` is the key returned by `self._eval_end()` but actually refers to `test_loss`
         return {'avg_test_loss': logs['val_loss'], 'log': logs, 'progress_bar': logs}
