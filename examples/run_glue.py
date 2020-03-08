@@ -26,6 +26,7 @@ import random
 import numpy as np
 import pandas as pd
 import torch
+from collections import defaultdict
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
@@ -125,16 +126,7 @@ def train(args, train_dataset, model, tokenizer):
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
     # Prepare optimizer and schedule (linear warmup and decay)
-    no_decay = ["bias", "LayerNorm.weight"]
-    optimizer_grouped_parameters = [
-        {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-            "weight_decay": args.weight_decay,
-        },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
-    ]
-
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    optimizer = get_optimizer(args, model)
 
     if args.warmup_steps:
         warmup_steps = args.warmup_steps
@@ -431,6 +423,47 @@ def test(args, model, tokenizer, prefix=""):
     return results
 
 
+def get_optimizer(args, model):
+    no_decay = ["bias", "LayerNorm.weight"]
+    no_decay_params = []
+    no_lr_decay_params = []
+    layer_params = defaultdict(list)
+
+    for n, p in model.named_parameters():
+        name_split = n.split(".")
+        if any(nd in n for nd in no_decay):
+            no_decay_params.append(p)
+        elif args.layerwise_lr_decay and len(name_split) > 2 and name_split[2] == "layer":
+            layer_params[int(name_split[3])].append(p)
+        else:
+            no_lr_decay_params.append(p)
+
+    optimizer_grouped_parameters = [
+        {
+            'parameters': no_decay_params,
+            'weight_decay': 0.0,
+            'lr': args.learning_rate
+        },
+        {
+            'parameters': no_lr_decay_params,
+            'weight_decay': args.weight_decay,
+            'lr': args.learning_rate
+        }
+    ]
+
+    if args.layerwise_lr_decay:
+        n_layers = len(layer_params)
+        for layer_n, params in layer_params.items():
+            optimizer_grouped_parameters.append({
+                'parameters': params,
+                'weight_decay': args.weight_decay,
+                'lr': args.learning_rate * (args.layerwise_lr_decay ** (n_layers - layer_n - 1))
+            })
+
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    return optimizer
+
+
 def load_and_cache_examples(args, task, tokenizer, set_type='train'):
     if args.local_rank not in [-1, 0] and set_type != 'train':
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
@@ -585,6 +618,7 @@ def main():
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
+    parser.add_argument("--layerwise_lr_decay", default=None, type=float, help="Decay learning rate from layer to layer.")
     parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
