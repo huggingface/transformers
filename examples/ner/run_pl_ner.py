@@ -141,10 +141,13 @@ class NERTransformer(BaseTransformer):
         return ret, preds_list, out_label_list
 
     def validation_end(self, outputs):
+        # todo: update to validation_epoch_end instead of deprecated validation_end when stable
         ret, preds, targets = self._eval_end(outputs)
-        return ret
+        logs = ret['log']
+        return {'val_loss': logs['val_loss'], 'log': logs, 'progress_bar': logs}
 
     def test_end(self, outputs):
+        # todo: update to test_epoch_end instead of deprecated test_end when stable
         ret, predictions, targets = self._eval_end(outputs)
 
         if self.is_logger():
@@ -172,7 +175,11 @@ class NERTransformer(BaseTransformer):
                             logger.warning(
                                 "Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0]
                             )
-        return ret
+        # Converting to the dic required by pl
+        # https://github.com/PyTorchLightning/pytorch-lightning/blob/master/pytorch_lightning/trainer/logging.py#L139
+        logs = ret['log']
+        # `val_loss` is the key returned by `self._eval_end()` but actually refers to `test_loss`
+        return {'avg_test_loss': logs['val_loss'], 'log': logs, 'progress_bar': logs}
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):

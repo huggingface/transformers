@@ -214,6 +214,8 @@ def add_generic_args(parser, root_dir):
     )
 
     parser.add_argument("--n_gpu", type=int, default=1)
+    parser.add_argument("--gpu_ids", nargs="+", type=int, default=0, help="List of ids of GPUs to use."
+                                                                          "Pass as --gpu_ids 0 1 2 3")
     parser.add_argument("--n_tpu_cores", type=int, default=0)
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
@@ -250,9 +252,15 @@ def generic_train(model, args):
         filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5
     )
 
+    # GPU 0 is considered as default. If the gpu id provided is different than 0, use that
+    # pl automatically handles strings/int/list of gpu ids passed
+    if args.gpu_ids != 0:
+        gpus = args.gpu_ids
+    else:
+        gpus = args.n_gpu
     train_params = dict(
         accumulate_grad_batches=args.gradient_accumulation_steps,
-        gpus=args.n_gpu,
+        gpus=gpus,
         max_epochs=args.num_train_epochs,
         early_stop_callback=False,
         gradient_clip_val=args.max_grad_norm,
