@@ -140,14 +140,14 @@ class NERTransformer(BaseTransformer):
         ret["log"] = tensorboard_logs
         return ret, preds_list, out_label_list
 
-    def validation_end(self, outputs):
-        # todo: update to validation_epoch_end instead of deprecated validation_end when stable
+    def validation_epoch_end(self, outputs):
+        # updating to validation_epoch_end instead of deprecated validation_end
         ret, preds, targets = self._eval_end(outputs)
         logs = ret['log']
         return {'val_loss': logs['val_loss'], 'log': logs, 'progress_bar': logs}
 
-    def test_end(self, outputs):
-        # todo: update to test_epoch_end instead of deprecated test_end when stable
+    def test_epoch_end(self, outputs):
+        # updating to test_epoch_end instead of deprecated test_end
         ret, predictions, targets = self._eval_end(outputs)
 
         if self.is_logger():
