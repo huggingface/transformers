@@ -246,4 +246,4 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
         ]  # Legal My neighbor is refusing to pay rent after 2 years and we are having to force him to pay
 
         output_ids = model.generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
