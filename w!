@@ -16,38 +16,45 @@
 
 import unittest
 
-from transformers import is_tf_available
+from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
-if is_tf_available():
-    import tensorflow as tf
+if is_torch_available():
+    import torch
     from transformers import (
         XLMConfig,
-        TFXLMModel,
-        TFXLMWithLMHeadModel,
-        TFXLMForSequenceClassification,
-        TFXLMForQuestionAnsweringSimple,
-        TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+        XLMModel,
+        XLMWithLMHeadModel,
+        XLMForQuestionAnswering,
+        XLMForSequenceClassification,
+        XLMForQuestionAnsweringSimple,
     )
+    from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-@require_tf
-class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
+@require_torch
+class XLMModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (TFXLMModel, TFXLMWithLMHeadModel, TFXLMForSequenceClassification, TFXLMForQuestionAnsweringSimple)
-        if is_tf_available()
+        (
+            XLMModel,
+            XLMWithLMHeadModel,
+            XLMForQuestionAnswering,
+            XLMForSequenceClassification,
+            XLMForQuestionAnsweringSimple,
+        )
+        if is_torch_available()
         else ()
     )
     all_generative_model_classes = (
-        (TFXLMWithLMHeadModel,) if is_tf_available() else ()
+        (XLMWithLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
 
-    class TFXLMModelTester(object):
+    class XLMModelTester(object):
         def __init__(
             self,
             parent,
@@ -113,7 +120,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            input_mask = ids_tensor([self.batch_size, self.seq_length], 2, dtype=tf.float32)
+            input_mask = ids_tensor([self.batch_size, self.seq_length], 2).float()
 
             input_lengths = None
             if self.use_input_lengths:
@@ -131,7 +138,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
             if self.use_labels:
                 sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-                is_impossible_labels = ids_tensor([self.batch_size], 2, dtype=tf.float32)
+                is_impossible_labels = ids_tensor([self.batch_size], 2).float()
 
             config = XLMConfig(
                 vocab_size=self.vocab_size,
@@ -164,6 +171,9 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
                 input_mask,
             )
 
+        def check_loss_output(self, result):
+            self.parent.assertListEqual(list(result["loss"].size()), [])
+
         def create_and_check_xlm_model(
             self,
             config,
@@ -175,18 +185,18 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
             is_impossible_labels,
             input_mask,
         ):
-            model = TFXLMModel(config=config)
-            inputs = {"input_ids": input_ids, "lengths": input_lengths, "langs": token_type_ids}
-            outputs = model(inputs)
-
-            inputs = [input_ids, input_mask]
-            outputs = model(inputs)
+            model = XLMModel(config=config)
+            model.to(torch_device)
+            model.eval()
+            outputs = model(input_ids, lengths=input_lengths, langs=token_type_ids)
+            outputs = model(input_ids, langs=token_type_ids)
+            outputs = model(input_ids)
             sequence_output = outputs[0]
             result = {
-                "sequence_output": sequence_output.numpy(),
+                "sequence_output": sequence_output,
             }
             self.parent.assertListEqual(
-                list(result["sequence_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
 
         def create_and_check_xlm_lm_head(
@@ -200,20 +210,50 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
             is_impossible_labels,
             input_mask,
         ):
-            model = TFXLMWithLMHeadModel(config)
+            model = XLMWithLMHeadModel(config)
+            model.to(torch_device)
+            model.eval()
 
-            inputs = {"input_ids": input_ids, "lengths": input_lengths, "langs": token_type_ids}
-            outputs = model(inputs)
-
-            logits = outputs[0]
+            loss, logits = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
 
             result = {
-                "logits": logits.numpy(),
+                "loss": loss,
+                "logits": logits,
             }
 
+            self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["logits"].shape), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["logits"].size()), [self.batch_size, self.seq_length, self.vocab_size]
             )
+
+        def create_and_check_xlm_simple_qa(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_lengths,
+            sequence_labels,
+            token_labels,
+            is_impossible_labels,
+            input_mask,
+        ):
+            model = XLMForQuestionAnsweringSimple(config)
+            model.to(torch_device)
+            model.eval()
+
+            outputs = model(input_ids)
+
+            outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
+            loss, start_logits, end_logits = outputs
+
+            result = {
+                "loss": loss,
+                "start_logits": start_logits,
+                "end_logits": end_logits,
+            }
+            self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
+            self.check_loss_output(result)
 
         def create_and_check_xlm_qa(
             self,
@@ -226,19 +266,61 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
             is_impossible_labels,
             input_mask,
         ):
-            model = TFXLMForQuestionAnsweringSimple(config)
+            model = XLMForQuestionAnswering(config)
+            model.to(torch_device)
+            model.eval()
 
-            inputs = {"input_ids": input_ids, "lengths": input_lengths}
+            outputs = model(input_ids)
+            start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits = outputs
 
-            start_logits, end_logits = model(inputs)
+            outputs = model(
+                input_ids,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
+                cls_index=sequence_labels,
+                is_impossible=is_impossible_labels,
+                p_mask=input_mask,
+            )
+
+            outputs = model(
+                input_ids,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
+                cls_index=sequence_labels,
+                is_impossible=is_impossible_labels,
+            )
+
+            (total_loss,) = outputs
+
+            outputs = model(input_ids, start_positions=sequence_labels, end_positions=sequence_labels)
+
+            (total_loss,) = outputs
 
             result = {
-                "start_logits": start_logits.numpy(),
-                "end_logits": end_logits.numpy(),
+                "loss": total_loss,
+                "start_top_log_probs": start_top_log_probs,
+                "start_top_index": start_top_index,
+                "end_top_log_probs": end_top_log_probs,
+                "end_top_index": end_top_index,
+                "cls_logits": cls_logits,
             }
 
-            self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
-            self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["loss"].size()), [])
+            self.parent.assertListEqual(
+                list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top]
+            )
+            self.parent.assertListEqual(
+                list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top]
+            )
+            self.parent.assertListEqual(
+                list(result["end_top_log_probs"].size()),
+                [self.batch_size, model.config.start_n_top * model.config.end_n_top],
+            )
+            self.parent.assertListEqual(
+                list(result["end_top_index"].size()),
+                [self.batch_size, model.config.start_n_top * model.config.end_n_top],
+            )
+            self.parent.assertListEqual(list(result["cls_logits"].size()), [self.batch_size])
 
         def create_and_check_xlm_sequence_classif(
             self,
@@ -251,17 +333,22 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
             is_impossible_labels,
             input_mask,
         ):
-            model = TFXLMForSequenceClassification(config)
+            model = XLMForSequenceClassification(config)
+            model.to(torch_device)
+            model.eval()
 
-            inputs = {"input_ids": input_ids, "lengths": input_lengths}
-
-            (logits,) = model(inputs)
+            (logits,) = model(input_ids)
+            loss, logits = model(input_ids, labels=sequence_labels)
 
             result = {
-                "logits": logits.numpy(),
+                "loss": loss,
+                "logits": logits,
             }
 
-            self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.type_sequence_label_size])
+            self.parent.assertListEqual(list(result["loss"].size()), [])
+            self.parent.assertListEqual(
+                list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size]
+            )
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -275,16 +362,11 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
                 is_impossible_labels,
                 input_mask,
             ) = config_and_inputs
-            inputs_dict = {
-                "input_ids": input_ids,
-                "token_type_ids": token_type_ids,
-                "langs": token_type_ids,
-                "lengths": input_lengths,
-            }
+            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "lengths": input_lengths}
             return config, inputs_dict
 
     def setUp(self):
-        self.model_tester = TFXLMModelTest.TFXLMModelTester(self)
+        self.model_tester = XLMModelTest.XLMModelTester(self)
         self.config_tester = ConfigTester(self, config_class=XLMConfig, emb_dim=37)
 
     def test_config(self):
@@ -298,6 +380,10 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_lm_head(*config_and_inputs)
 
+    def test_xlm_simple_qa(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xlm_simple_qa(*config_and_inputs)
+
     def test_xlm_qa(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_qa(*config_and_inputs)
@@ -308,16 +394,16 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFXLMModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in list(XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+            model = XLMModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
 
 
-class TFXLMModelLanguageGenerationTest(unittest.TestCase):
+class XLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):
-        model = TFXLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
-        input_ids = tf.convert_to_tensor([[1, 14, 2232, 26, 1]], dtype=tf.int32)  # the dog is cute
+        model = XLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
+        input_ids = torch.tensor([[1, 14, 2232, 26, 1]]).long()  # The dog is cute
         expected_output_ids = [
             1,
             14,

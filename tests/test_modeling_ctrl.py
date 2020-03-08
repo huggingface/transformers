@@ -219,7 +219,9 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_ctrl(self):
         model = CTRLLMHeadModel.from_pretrained("ctrl")
-        input_ids = torch.Tensor([[11859, 586, 20984, 8]]).long()  # Legal My neighbor is
+        input_ids = torch.tensor(
+            [[11858, 586, 20984, 8]], dtype=torch.long, device=torch_device
+        )  # Legal My neighbor is
         expected_output_ids = [
             11859,
             586,
@@ -242,7 +244,6 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
             3,
             980,
         ]  # Legal My neighbor is refusing to pay rent after 2 years and we are having to force him to pay
-        torch.manual_seed(0)
 
-        output_ids = model.generate(input_ids)
+        output_ids = model.generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
