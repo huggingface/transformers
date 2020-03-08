@@ -376,6 +376,7 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
         #  father initially slaps him for making such an accusation , Rasputin watches as the
         #  man is chased outside and beaten . Twenty years later , Rasputin sees a vision of
         #  the Virgin Mary , prompting him to become a priest . Rasputin quickly becomes famous ,
+
         #  with people , even a bishop , begging for his blessing . <eod> </s> <eos>
 
         expected_output_ids = [
@@ -520,20 +521,10 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
             24,
             24,
             0,
-            29546,
-            40,
-            1092,
-            18,
-            8,
-            5854,
-            7,
-            1143,
-            2,
-            7,
+            33,
             1,
-            159,
-            99,
-            16,
+            1857,
+            2,
             1,
             1009,
             4,
