@@ -214,6 +214,9 @@ class BartHeadTests(unittest.TestCase):
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             output_past=output_past,
+            eos_token_id=2,
+            pad_token_id=1,
+            bos_token_id=0,
         )
         return config, input_ids, batch_size
 
@@ -468,7 +471,8 @@ class BartModelIntegrationTest(unittest.TestCase):
             attention_mask=dct["attention_mask"].to(torch_device),
             num_beams=4,
             length_penalty=2.0,
-            max_length=max_length + 2,
+            #            max_length=max_length + 2,
+            max_length=max_length + 1,
             min_length=min_length + 1,
             no_repeat_ngram_size=3,
             do_sample=False,
