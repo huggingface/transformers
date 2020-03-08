@@ -18,10 +18,14 @@ python3 preprocess.py train.txt.tmp $BERT_MODEL $MAX_LENGTH > train.txt
 python3 preprocess.py dev.txt.tmp $BERT_MODEL $MAX_LENGTH > dev.txt
 python3 preprocess.py test.txt.tmp $BERT_MODEL $MAX_LENGTH > test.txt
 cat train.txt dev.txt test.txt | cut -d " " -f 2 | grep -v "^$"| sort | uniq > labels.txt
-export OUTPUT_DIR=germeval-model
 export BATCH_SIZE=32
 export NUM_EPOCHS=3
 export SEED=1
+
+export OUTPUT_DIR_NAME=germeval-model
+export CURRENT_DIR=${PWD}
+export OUTPUT_DIR=${CURRENT_DIR}/${OUTPUT_DIR_NAME}
+mkdir -p $OUTPUT_DIR
 
 python3 run_pl_ner.py --data_dir ./ \
 --model_type bert \
