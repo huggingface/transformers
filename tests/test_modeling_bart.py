@@ -313,7 +313,7 @@ class BartHeadTests(unittest.TestCase):
         config, input_ids, batch_size = self._get_config_and_data(output_past=True)
         attention_mask = input_ids.ne(1)
         lm_model = BartForConditionalGeneration(config).eval().to(torch_device).half()
-        lm_model.generate(input_ids, attention_mask)
+        lm_model.generate(input_ids, attention_mask=attention_mask)
 
     def test_prepare_bart_decoder_inputs(self):
         config, *_ = self._get_config_and_data(output_past=False)
