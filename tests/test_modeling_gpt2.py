@@ -372,7 +372,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_distilgpt2(self):
         model = GPT2LMHeadModel.from_pretrained("distilgpt2")
-        input_ids = torch.tensor([[463, 1893]], dtype=torch.long, device=torch_device)  # The president
+        input_ids = torch.tensor([[464, 1893]], dtype=torch.long, device=torch_device)  # The president
         expected_output_ids = [
             464,
             1893,
