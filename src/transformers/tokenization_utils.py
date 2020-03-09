@@ -22,7 +22,7 @@ import os
 import re
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import List, Union, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from tokenizers.implementations import BaseTokenizer
 
