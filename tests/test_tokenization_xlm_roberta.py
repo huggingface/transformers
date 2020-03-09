@@ -81,7 +81,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "s",
                 "é",
                 ".",
-                ],
+            ],
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(
@@ -118,7 +118,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "s",
                 "<unk>",
                 ".",
-                ],
+            ],
         )
 
     def test_tokenizer_lower(self):
@@ -148,7 +148,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "al",
                 "se",
                 ".",
-                ],
+            ],
         )
         self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["▁he", "ll", "o"])
 
@@ -178,7 +178,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 "al",
                 "se",
                 ".",
-                ],
+            ],
         )
 
     @slow
@@ -251,8 +251,8 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # 4426, # What fairseq tokenizes from "<unk>": "_<"
             # 3678, # What fairseq tokenizes from "<unk>": "unk"
             # 2740, # What fairseq tokenizes from "<unk>": ">"
-            3,      # What we tokenize from "<unk>": "<unk>"
-            6,      # Residue from the tokenization: an extra sentencepiece underline
+            3,  # What we tokenize from "<unk>": "<unk>"
+            6,  # Residue from the tokenization: an extra sentencepiece underline
             4,
             6044,
             237,

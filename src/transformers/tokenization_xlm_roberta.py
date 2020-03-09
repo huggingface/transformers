@@ -17,9 +17,9 @@
 
 import logging
 import os
+import unicodedata
 from shutil import copyfile
 from typing import List, Optional
-import unicodedata
 
 from transformers.tokenization_utils import PreTrainedTokenizer
 
