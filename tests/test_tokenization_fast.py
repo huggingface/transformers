@@ -156,7 +156,7 @@ class FastTokenizerMatchingTest(unittest.TestCase):
 
         # No pair
         tokens_with_offsets = tokenizer.encode_plus(text, return_special_tokens_mask=True, return_offsets_mapping=True)
-        added_tokens = tokenizer.num_added_tokens(False)
+        added_tokens = tokenizer.num_special_tokens_to_add(False)
         offsets = tokens_with_offsets["offset_mapping"]
 
         # Assert there is the same number of tokens and offsets
@@ -170,7 +170,7 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         tokens_with_offsets = tokenizer.encode_plus(
             text, pair, return_special_tokens_mask=True, return_offsets_mapping=True
         )
-        added_tokens = tokenizer.num_added_tokens(True)
+        added_tokens = tokenizer.num_special_tokens_to_add(True)
         offsets = tokens_with_offsets["offset_mapping"]
 
         # Assert there is the same number of tokens and offsets
@@ -278,8 +278,8 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_r = BertTokenizerFast.from_pretrained(tokenizer_name)
 
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_added_tokens(False), tokenizer_p.num_added_tokens(False))
-            self.assertEqual(tokenizer_r.num_added_tokens(True), tokenizer_p.num_added_tokens(True))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.
             self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
@@ -320,8 +320,8 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_r = TransfoXLTokenizerFast.from_pretrained(tokenizer_name)
 
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_added_tokens(False), tokenizer_p.num_added_tokens(False))
-            self.assertEqual(tokenizer_r.num_added_tokens(True), tokenizer_p.num_added_tokens(True))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.
             self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
@@ -375,8 +375,8 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_r = DistilBertTokenizerFast.from_pretrained(tokenizer_name)
 
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_added_tokens(False), tokenizer_p.num_added_tokens(False))
-            self.assertEqual(tokenizer_r.num_added_tokens(True), tokenizer_p.num_added_tokens(True))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.
             self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
@@ -417,8 +417,8 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_r = GPT2TokenizerFast.from_pretrained(tokenizer_name)
 
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_added_tokens(False), tokenizer_p.num_added_tokens(False))
-            self.assertEqual(tokenizer_r.num_added_tokens(True), tokenizer_p.num_added_tokens(True))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.
             self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
@@ -458,8 +458,8 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_r = RobertaTokenizerFast.from_pretrained(tokenizer_name)
 
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_added_tokens(False), tokenizer_p.num_added_tokens(False))
-            self.assertEqual(tokenizer_r.num_added_tokens(True), tokenizer_p.num_added_tokens(True))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.
             self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
@@ -500,8 +500,8 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_r = OpenAIGPTTokenizerFast.from_pretrained(tokenizer_name)
 
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_added_tokens(False), tokenizer_p.num_added_tokens(False))
-            self.assertEqual(tokenizer_r.num_added_tokens(True), tokenizer_p.num_added_tokens(True))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.
             self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)

@@ -670,7 +670,7 @@ class PreTrainedTokenizer(object):
 
         return len(to_add_tokens)
 
-    def num_added_tokens(self, pair=False):
+    def num_special_tokens_to_add(self, pair=False):
         """
         Returns the number of added tokens when encoding a sequence with special tokens.
 
@@ -1213,9 +1213,9 @@ class PreTrainedTokenizer(object):
             def total_sequence_length(input_pairs):
                 first_ids, second_ids = input_pairs
                 return len(first_ids) + (
-                    self.num_added_tokens()
+                    self.num_special_tokens_to_add()
                     if second_ids is None
-                    else (len(second_ids) + self.num_added_tokens(pair=True))
+                    else (len(second_ids) + self.num_special_tokens_to_add(pair=True))
                 )
 
             max_length = max([total_sequence_length(ids) for ids in input_ids])
@@ -1361,7 +1361,7 @@ class PreTrainedTokenizer(object):
         encoded_inputs = {}
 
         # Handle max sequence length
-        total_len = len_ids + len_pair_ids + (self.num_added_tokens(pair=pair) if add_special_tokens else 0)
+        total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
         if max_length and total_len > max_length:
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(
                 ids,
@@ -1692,8 +1692,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         self._tokenizer = tokenizer
 
         super().__init__(**kwargs)
-        self.max_len_single_sentence = self.max_len - self.num_added_tokens(False)  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - self.num_added_tokens(True)  # take into account special tokens
+        self.max_len_single_sentence = self.max_len - self.num_special_tokens_to_add(False)  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - self.num_special_tokens_to_add(True)  # take into account special tokens
 
     @property
     def tokenizer(self):
@@ -1840,7 +1840,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         else:
             return token_ids_0 + token_ids_1
 
-    def num_added_tokens(self, pair=False):
+    def num_special_tokens_to_add(self, pair=False):
         return self.tokenizer.num_special_tokens_to_add(pair)
 
     def tokenize(self, text, **kwargs):
