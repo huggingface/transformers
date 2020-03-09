@@ -291,7 +291,7 @@ class MultiColumnInputTestCase(unittest.TestCase):
             self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
 
     @require_tf
-    @unittest.skip("This test is failing intermittently. Skipping it until we resolve.")
+    @slow
     def test_tf_question_answering(self):
         mandatory_output_keys = {"score", "answer", "start", "end"}
         valid_samples = [
