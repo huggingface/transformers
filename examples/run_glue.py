@@ -128,7 +128,7 @@ def train(args, train_dataset, model, tokenizer):
     # Prepare optimizer and schedule (linear warmup and decay)
     optimizer = get_optimizer(args, model)
 
-    if args.warmup_steps:
+    if args.warmup_steps != 0:
         warmup_steps = args.warmup_steps
     else:
         warmup_steps = t_total * args.warmup_fraction
