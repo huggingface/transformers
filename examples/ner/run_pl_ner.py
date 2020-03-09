@@ -144,8 +144,8 @@ class NERTransformer(BaseTransformer):
         # todo: update to validation_epoch_end instead of deprecated validation_end
         # when stable
         ret, preds, targets = self._eval_end(outputs)
-        logs = ret['log']
-        return {'val_loss': logs['val_loss'], 'log': logs, 'progress_bar': logs}
+        logs = ret["log"]
+        return {"val_loss": logs["val_loss"], "log": logs, "progress_bar": logs}
 
     def test_epoch_end(self, outputs):
         # updating to test_epoch_end instead of deprecated test_end
@@ -179,9 +179,9 @@ class NERTransformer(BaseTransformer):
         # Converting to the dic required by pl
         # https://github.com/PyTorchLightning/pytorch-lightning/blob/master/\
         # pytorch_lightning/trainer/logging.py#L139
-        logs = ret['log']
+        logs = ret["log"]
         # `val_loss` is the key returned by `self._eval_end()` but actually refers to `test_loss`
-        return {'avg_test_loss': logs['val_loss'], 'log': logs, 'progress_bar': logs}
+        return {"avg_test_loss": logs["val_loss"], "log": logs, "progress_bar": logs}
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
