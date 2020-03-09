@@ -573,4 +573,5 @@ class TFTransfoXLModelLanguageGenerationTest(unittest.TestCase):
         # TODO: add this test when trasnfo-xl-lmhead is implemented
         with self.assertRaises(NotImplementedError):
             model.generate(input_ids, max_length=200, do_sample=False)
+            print(expected_output_ids)
         # self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids) TODO: (PVP) to add when transfo-xl is implemented
