@@ -162,7 +162,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
         self.fairseq_offset = 1
 
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.fairseq_tokens_to_ids)
+        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
     def __getstate__(self):
@@ -268,7 +268,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.sp_model) + self.fairseq_offset
+        return len(self.sp_model) + self.fairseq_offset + 1  # Add the <mask> token
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
