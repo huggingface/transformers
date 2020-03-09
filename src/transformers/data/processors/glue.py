@@ -132,7 +132,8 @@ def glue_convert_examples_to_features(
             logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
             logger.info("attention_mask: %s" % " ".join([str(x) for x in attention_mask]))
             logger.info("token_type_ids: %s" % " ".join([str(x) for x in token_type_ids]))
-            logger.info("label: %s (id = %d)" % (example.label, label))
+            if label:
+                logger.info("label: %s (id = %d)" % (example.label, label))
 
         features.append(
             InputFeatures(
