@@ -489,9 +489,13 @@ def load_and_cache_examples(args, task, tokenizer, set_type='train'):
         if task in ["mnli", "mnli-mm"] and args.model_type in ["roberta", "xlmroberta"]:
             # HACK(label indices are swapped in RoBERTa pretrained model)
             label_list[1], label_list[2] = label_list[2], label_list[1]
-        examples = (
-            processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
-        )
+        if set_type == 'train':
+            examples = processor.get_train_examples(args.data_dir)
+        elif set_type == 'dev':
+            examples = processor.get_dev_examples(args.data_dir)
+        elif set_type == 'test':
+            examples = processor.get_test_examples(args.data_dir)
+
         features = convert_examples_to_features(
             examples,
             tokenizer,
@@ -506,7 +510,7 @@ def load_and_cache_examples(args, task, tokenizer, set_type='train'):
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
-    if args.local_rank == 0 and not evaluate:
+    if args.local_rank == 0 and not set_type == 'train':
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Convert to Tensors and build dataset
