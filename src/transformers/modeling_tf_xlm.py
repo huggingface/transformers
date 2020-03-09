@@ -408,7 +408,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             inputs_embeds = self.embeddings(input_ids)
 
         tensor = inputs_embeds + self.position_embeddings(position_ids)
-        if langs is not None and self.use_lang_emb:
+        if langs is not None and self.use_lang_emb and self.n_langs > 1:
             tensor = tensor + self.lang_embeddings(langs)
         if token_type_ids is not None:
             tensor = tensor + self.embeddings(token_type_ids)
