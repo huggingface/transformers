@@ -123,6 +123,8 @@ def glue_convert_examples_to_features(
                 label = float(example.label)
             else:
                 raise KeyError(output_mode)
+        else:
+            label = None
 
         if ex_index < 5:
             logger.info("*** Example ***")
