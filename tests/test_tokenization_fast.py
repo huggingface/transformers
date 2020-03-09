@@ -277,8 +277,14 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_p = BertTokenizer.from_pretrained(tokenizer_name)
             tokenizer_r = BertTokenizerFast.from_pretrained(tokenizer_name)
 
+            # Check is_fast is correctly set
+            self.assertFalse(tokenizer_p.is_fast)
+            self.assertTrue(tokenizer_r.is_fast)
+
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(
+                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
+            )
             self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.
@@ -319,8 +325,14 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_p = TransfoXLTokenizer.from_pretrained(tokenizer_name)
             tokenizer_r = TransfoXLTokenizerFast.from_pretrained(tokenizer_name)
 
+            # Check is_fast is correctly set
+            self.assertFalse(tokenizer_p.is_fast)
+            self.assertTrue(tokenizer_r.is_fast)
+
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(
+                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
+            )
             self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.
@@ -374,8 +386,14 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_p = DistilBertTokenizer.from_pretrained(tokenizer_name)
             tokenizer_r = DistilBertTokenizerFast.from_pretrained(tokenizer_name)
 
+            # Check is_fast is correctly set
+            self.assertFalse(tokenizer_p.is_fast)
+            self.assertTrue(tokenizer_r.is_fast)
+
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(
+                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
+            )
             self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.
@@ -416,8 +434,14 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_p = GPT2Tokenizer.from_pretrained(tokenizer_name)
             tokenizer_r = GPT2TokenizerFast.from_pretrained(tokenizer_name)
 
+            # Check is_fast is correctly set
+            self.assertFalse(tokenizer_p.is_fast)
+            self.assertTrue(tokenizer_r.is_fast)
+
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(
+                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
+            )
             self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.
@@ -457,8 +481,14 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_p = RobertaTokenizer.from_pretrained(tokenizer_name)
             tokenizer_r = RobertaTokenizerFast.from_pretrained(tokenizer_name)
 
+            # Check is_fast is correctly set
+            self.assertFalse(tokenizer_p.is_fast)
+            self.assertTrue(tokenizer_r.is_fast)
+
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(
+                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
+            )
             self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.
@@ -499,8 +529,14 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             tokenizer_p = OpenAIGPTTokenizer.from_pretrained(tokenizer_name)
             tokenizer_r = OpenAIGPTTokenizerFast.from_pretrained(tokenizer_name)
 
+            # Check is_fast is correctly set
+            self.assertFalse(tokenizer_p.is_fast)
+            self.assertTrue(tokenizer_r.is_fast)
+
             # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+            self.assertEqual(
+                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
+            )
             self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
             # Check we have the correct max_length for both pair and non-pair inputs.

@@ -1662,6 +1662,10 @@ class PreTrainedTokenizer(object):
         all_ids = self.convert_tokens_to_ids(all_toks)
         return all_ids
 
+    @property
+    def is_fast(self):
+        return False
+
     @staticmethod
     def clean_up_tokenization(out_string):
         """ Clean up a list of simple English tokenization artifacts like spaces before punctuations and abreviated forms.
@@ -1692,8 +1696,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         self._tokenizer = tokenizer
 
         super().__init__(**kwargs)
-        self.max_len_single_sentence = self.max_len - self.num_special_tokens_to_add(False)  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - self.num_special_tokens_to_add(True)  # take into account special tokens
+        self.max_len_single_sentence = self.max_len - self.num_special_tokens_to_add(
+            False
+        )  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - self.num_special_tokens_to_add(
+            True
+        )  # take into account special tokens
 
     @property
     def tokenizer(self):
@@ -1749,6 +1757,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def additional_special_tokens(self, value):
         self._additional_special_tokens = value
         self._update_special_tokens()
+
+    @property
+    def is_fast(self):
+        return True
 
     def _update_special_tokens(self):
         if self._tokenizer is not None:
