@@ -19,6 +19,7 @@ import logging
 import os
 from shutil import copyfile
 from typing import List, Optional
+import unicodedata
 
 from transformers.tokenization_utils import PreTrainedTokenizer
 
@@ -108,6 +109,9 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
+        do_lower_case=False,
+        remove_space=True,
+        keep_accents=False,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -139,6 +143,9 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             )
             raise
 
+        self.do_lower_case = do_lower_case
+        self.remove_space = remove_space
+        self.keep_accents = keep_accents
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -261,21 +268,40 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.sp_model) + len(self.fairseq_tokens_to_ids)
+        return len(self.sp_model) + self.fairseq_offset
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
+    def preprocess_text(self, inputs):
+        if self.remove_space:
+            outputs = " ".join(inputs.strip().split())
+        else:
+            outputs = inputs
+        outputs = outputs.replace("``", '"').replace("''", '"')
+
+        if not self.keep_accents:
+            outputs = unicodedata.normalize("NFKD", outputs)
+            outputs = "".join([c for c in outputs if not unicodedata.combining(c)])
+        if self.do_lower_case:
+            outputs = outputs.lower()
+
+        return outputs
+
     def _tokenize(self, text):
+        text = self.preprocess_text(text)
         return self.sp_model.EncodeAsPieces(text)
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
-        if token in self.fairseq_tokens_to_ids:
+G        if token in self.fairseq_tokens_to_ids:
             return self.fairseq_tokens_to_ids[token]
-        return self.sp_model.PieceToId(token) + self.fairseq_offset
+        spm_id = self.sp_model.PieceToId(token)
+
+        # Need to return unknown token if the SP model returned 0
+        return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
