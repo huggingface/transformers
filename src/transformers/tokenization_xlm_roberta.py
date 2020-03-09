@@ -105,6 +105,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
 
     def __init__(
         self,
@@ -296,7 +297,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
-G        if token in self.fairseq_tokens_to_ids:
+        if token in self.fairseq_tokens_to_ids:
             return self.fairseq_tokens_to_ids[token]
         spm_id = self.sp_model.PieceToId(token)
 
