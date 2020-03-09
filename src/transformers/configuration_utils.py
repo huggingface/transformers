@@ -70,6 +70,7 @@ class PretrainedConfig(object):
         # Parameters for sequence generation
         self.max_length = kwargs.pop("max_length", 20)
         self.do_sample = kwargs.pop("do_sample", False)
+        self.early_stopping = kwargs.pop("early_stopping", False)
         self.num_beams = kwargs.pop("num_beams", 1)
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
