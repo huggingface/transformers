@@ -29,6 +29,7 @@ from .modeling_tf_utils import (
     TFSequenceSummary,
     TFSharedEmbeddings,
     get_initializer,
+    keras_serializable,
     shape_list,
 )
 
@@ -139,10 +140,10 @@ class TFAttention(tf.keras.layers.Layer):
         key = self.split_heads(key)
         value = self.split_heads(value)
         if layer_past is not None:
-            past_key, past_value = tf.unstack(layer_past, axis=1)
+            past_key, past_value = tf.unstack(layer_past, axis=0)
             key = tf.concat([past_key, key], axis=-2)
             value = tf.concat([past_value, value], axis=-2)
-        present = tf.stack([key, value], axis=1)
+        present = tf.stack([key, value], axis=0)
 
         attn_outputs = self._attn([query, key, value, attention_mask, head_mask], training=training)
         a = attn_outputs[0]
@@ -196,7 +197,10 @@ class TFBlock(tf.keras.layers.Layer):
         return outputs  # x, present, (attentions)
 
 
+@keras_serializable
 class TFGPT2MainLayer(tf.keras.layers.Layer):
+    config_class = GPT2Config
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         self.output_hidden_states = config.output_hidden_states
@@ -499,6 +503,13 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
 
     def get_output_embeddings(self):
         return self.transformer.wte
+
+    def prepare_inputs_for_generation(self, inputs, past, **kwargs):
+        # only last token for inputs_ids if past is defined in kwargs
+        if past:
+            inputs = tf.expand_dims(inputs[:, -1], -1)
+
+        return {"inputs": inputs, "past": past}
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):

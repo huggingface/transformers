@@ -57,8 +57,18 @@ class ConfigTester(object):
 
         self.parent.assertEqual(config_second.to_dict(), config_first.to_dict())
 
+    def create_and_test_config_with_num_labels(self):
+        config = self.config_class(**self.inputs_dict, num_labels=5)
+        self.parent.assertEqual(len(config.id2label), 5)
+        self.parent.assertEqual(len(config.label2id), 5)
+
+        config.num_labels = 3
+        self.parent.assertEqual(len(config.id2label), 3)
+        self.parent.assertEqual(len(config.label2id), 3)
+
     def run_common_tests(self):
         self.create_and_test_config_common_properties()
         self.create_and_test_config_to_json_string()
         self.create_and_test_config_to_json_file()
         self.create_and_test_config_from_and_save_pretrained()
+        self.create_and_test_config_with_num_labels()

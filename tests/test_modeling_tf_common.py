@@ -18,17 +18,33 @@ import copy
 import os
 import random
 import tempfile
+import unittest
+from importlib import import_module
 
 from transformers import is_tf_available, is_torch_available
 
-from .utils import require_tf
+from .utils import _tf_gpu_memory_limit, require_tf
 
 
 if is_tf_available():
     import tensorflow as tf
     import numpy as np
 
-    # from transformers.modeling_bert import BertModel, BertConfig, BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers import tf_top_k_top_p_filtering
+
+    if _tf_gpu_memory_limit is not None:
+        gpus = tf.config.list_physical_devices("GPU")
+        for gpu in gpus:
+            # Restrict TensorFlow to only allocate x GB of memory on the GPUs
+            try:
+                tf.config.experimental.set_virtual_device_configuration(
+                    gpu, [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=_tf_gpu_memory_limit)]
+                )
+                logical_gpus = tf.config.experimental.list_logical_devices("GPU")
+                print("Logical GPUs", logical_gpus)
+            except RuntimeError as e:
+                # Virtual devices must be set before GPUs have been initialized
+                print(e)
 
 
 def _config_zero_init(config):
@@ -44,6 +60,7 @@ class TFModelTesterMixin:
 
     model_tester = None
     all_model_classes = ()
+    all_generative_model_classes = ()
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
@@ -73,13 +90,49 @@ class TFModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname)
                 after_outputs = model(inputs_dict)
 
-                # Make sure we don't have nans
-                out_1 = after_outputs[0].numpy()
-                out_2 = outputs[0].numpy()
-                out_1 = out_1[~np.isnan(out_1)]
-                out_2 = out_2[~np.isnan(out_2)]
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
+                self.assert_outputs_same(after_outputs, outputs)
+
+    def test_keras_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        tf_main_layer_classes = set(
+            module_member
+            for model_class in self.all_model_classes
+            for module in (import_module(model_class.__module__),)
+            for module_member_name in dir(module)
+            if module_member_name.endswith("MainLayer")
+            for module_member in (getattr(module, module_member_name),)
+            if isinstance(module_member, type)
+            and tf.keras.layers.Layer in module_member.__bases__
+            and getattr(module_member, "_keras_serializable", False)
+        )
+        for main_layer_class in tf_main_layer_classes:
+            main_layer = main_layer_class(config)
+            symbolic_inputs = {
+                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+            }
+            model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
+            outputs = model(inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                filepath = os.path.join(tmpdirname, "keras_model.h5")
+                model.save(filepath)
+                model = tf.keras.models.load_model(
+                    filepath, custom_objects={main_layer_class.__name__: main_layer_class}
+                )
+                assert isinstance(model, tf.keras.Model)
+                after_outputs = model(inputs_dict)
+                self.assert_outputs_same(after_outputs, outputs)
+
+    def assert_outputs_same(self, after_outputs, outputs):
+        # Make sure we don't have nans
+        out_1 = after_outputs[0].numpy()
+        out_2 = outputs[0].numpy()
+        self.assertEqual(out_1.shape, out_2.shape)
+        out_1 = out_1[~np.isnan(out_1)]
+        out_2 = out_2[~np.isnan(out_2)]
+        max_diff = np.amax(np.abs(out_1 - out_2))
+        self.assertLessEqual(max_diff, 1e-5)
 
     def test_pt_tf_model_equivalence(self):
         if not is_torch_available():
@@ -204,7 +257,7 @@ class TFModelTesterMixin:
             outputs_dict = model(inputs_dict)
 
             inputs_keywords = copy.deepcopy(inputs_dict)
-            input_ids = inputs_keywords.pop("input_ids" if not self.is_encoder_decoder else "decoder_input_ids", None)
+            input_ids = inputs_keywords.pop("input_ids" if not self.is_encoder_decoder else "decoder_input_ids", None,)
             outputs_keywords = model(input_ids, **inputs_keywords)
 
             output_dict = outputs_dict[0].numpy()
@@ -287,7 +340,7 @@ class TFModelTesterMixin:
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]), [self.model_tester.seq_length, self.model_tester.hidden_size]
+                list(hidden_states[0].shape[-2:]), [self.model_tester.seq_length, self.model_tester.hidden_size],
             )
 
     def test_model_common_attributes(self):
@@ -304,7 +357,10 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            first, second = model(inputs_dict, training=False)[0], model(inputs_dict, training=False)[0]
+            first, second = (
+                model(inputs_dict, training=False)[0],
+                model(inputs_dict, training=False)[0],
+            )
             out_1 = first.numpy()
             out_2 = second.numpy()
             out_1 = out_1[~np.isnan(out_1)]
@@ -326,9 +382,9 @@ class TFModelTesterMixin:
                     x = wte([input_ids, None, None, None], mode="embedding")
                 except Exception:
                     if hasattr(self.model_tester, "embedding_size"):
-                        x = tf.ones(input_ids.shape + [self.model_tester.embedding_size], dtype=tf.dtypes.float32)
+                        x = tf.ones(input_ids.shape + [self.model_tester.embedding_size], dtype=tf.dtypes.float32,)
                     else:
-                        x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32)
+                        x = tf.ones(input_ids.shape + [self.model_tester.hidden_size], dtype=tf.dtypes.float32,)
         return x
 
     def test_inputs_embeds(self):
@@ -354,6 +410,55 @@ class TFModelTesterMixin:
 
             model(inputs_dict)
 
+    def test_lm_head_model_random_generate(self):
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict.get(
+            "input_ids", None
+        )  # TODO (PVP): ugly workaround to make code work for t5 for the moment - has to changed when t5 is fixed.
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+
+            if config.bos_token_id is None:
+                with self.assertRaises(AssertionError):
+                    model.generate(max_length=5)
+                # batch_size = 1
+                self._check_generated_tokens(model.generate(input_ids))
+                # batch_size = 1, num_beams > 1
+                self._check_generated_tokens(model.generate(input_ids, num_beams=3))
+            else:
+                # batch_size = 1
+                self._check_generated_tokens(model.generate(max_length=5))
+                # batch_size = 1, num_beams > 1
+                self._check_generated_tokens(model.generate(max_length=5, num_beams=3))
+
+            with self.assertRaises(AssertionError):
+                # generating multiple sequences when greedy no beam generation
+                # is not allowed as it would always generate the same sequences
+                model.generate(input_ids, do_sample=False, num_return_sequences=2)
+
+            with self.assertRaises(AssertionError):
+                # generating more sequences than having beams leads is not possible
+                model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
+
+            # batch_size > 1, sample
+            self._check_generated_tokens(model.generate(input_ids, num_return_sequences=3))
+            # batch_size > 1, greedy
+            self._check_generated_tokens(model.generate(input_ids, do_sample=False))
+
+            # batch_size > 1, num_beams > 1, sample
+            self._check_generated_tokens(model.generate(input_ids, num_beams=3, num_return_sequences=3,))
+            # batch_size > 1, num_beams > 1, greedy
+            self._check_generated_tokens(
+                model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3)
+            )
+
+    def _check_generated_tokens(self, output_ids):
+        for token_id in output_ids[0].numpy().tolist():
+            self.assertGreaterEqual(token_id, 0)
+            self.assertLess(token_id, self.model_tester.vocab_size)
+
 
 def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
     """Creates a random int32 tensor of the shape within the vocab size."""
@@ -371,3 +476,98 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
     output = tf.constant(values, shape=shape, dtype=dtype if dtype is not None else tf.int32)
 
     return output
+
+
+@require_tf
+class UtilsFunctionsTest(unittest.TestCase):
+
+    # tests whether the top_k_top_p_filtering function behaves as expected
+    def test_top_k_top_p_filtering(self):
+        logits = tf.convert_to_tensor(
+            [
+                [
+                    8.2220991,  # 3rd highest value; idx. 0
+                    -0.5620044,
+                    5.23229752,
+                    4.0386393,
+                    -6.8798378,
+                    -0.54785802,
+                    -3.2012153,
+                    2.92777176,
+                    1.88171953,
+                    7.35341276,  # 5th highest value; idx. 9
+                    8.43207833,  # 2nd highest value; idx. 10
+                    -9.85711836,
+                    -5.96209236,
+                    -1.13039161,
+                    -7.1115294,
+                    -0.8369633,
+                    -5.3186408,
+                    7.06427407,
+                    0.81369344,
+                    -0.82023817,
+                    -5.9179796,
+                    0.58813443,
+                    -6.99778438,
+                    4.71551189,
+                    -0.18771637,
+                    7.44020759,  # 4th highest value; idx. 25
+                    9.38450987,  # 1st highest value; idx. 26
+                    2.12662941,
+                    -9.32562038,
+                    2.35652522,
+                ],  # cummulative prob of 5 highest values <= 0.6
+                [
+                    0.58425518,
+                    4.53139238,
+                    -5.57510464,
+                    -6.28030699,
+                    -7.19529503,
+                    -4.02122551,
+                    1.39337037,
+                    -6.06707057,
+                    1.59480517,
+                    -9.643119,
+                    0.03907799,
+                    0.67231762,
+                    -8.88206726,
+                    6.27115922,  # 4th highest value; idx. 13
+                    2.28520723,
+                    4.82767506,
+                    4.30421368,
+                    8.8275313,  # 2nd highest value; idx. 17
+                    5.44029958,  # 5th highest value; idx. 18
+                    -4.4735794,
+                    7.38579536,  # 3rd highest value; idx. 20
+                    -2.91051663,
+                    2.61946077,
+                    -2.5674762,
+                    -9.48959302,
+                    -4.02922645,
+                    -1.35416918,
+                    9.67702323,  # 1st highest value; idx. 27
+                    -5.89478553,
+                    1.85370467,
+                ],  # cummulative prob of 5 highest values <= 0.6
+            ],
+            dtype=tf.float32,
+        )
+
+        non_inf_expected_idx = tf.convert_to_tensor(
+            [[0, 0], [0, 9], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 18], [1, 20], [1, 27]], dtype=tf.int32,
+        )  # expected non filtered idx as noted above
+
+        non_inf_expected_output = tf.convert_to_tensor(
+            [8.222099, 7.3534126, 8.432078, 7.4402075, 9.38451, 6.271159, 8.827531, 5.4402995, 7.3857956, 9.677023],
+            dtype=tf.float32,
+        )  # expected non filtered values as noted above
+
+        output = tf_top_k_top_p_filtering(logits, top_k=10, top_p=0.6, min_tokens_to_keep=4)
+
+        non_inf_output = output[output != -float("inf")]
+        non_inf_idx = tf.cast(
+            tf.where(tf.not_equal(output, tf.constant(-float("inf"), dtype=tf.float32))), dtype=tf.int32,
+        )
+
+        tf.debugging.assert_near(non_inf_output, non_inf_expected_output, rtol=1e-12)
+        tf.debugging.assert_equal(non_inf_idx, non_inf_expected_idx)

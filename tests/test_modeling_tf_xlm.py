@@ -43,6 +43,9 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    all_generative_model_classes = (
+        (TFXLMWithLMHeadModel,) if is_tf_available() else ()
+    )  # TODO (PVP): Check other models whether language generation is also applicable
 
     class TFXLMModelTester(object):
         def __init__(
@@ -75,6 +78,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
             summary_type="last",
             use_proj=True,
             scope=None,
+            bos_token_id=0,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -105,6 +109,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
+            self.bos_token_id = bos_token_id
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -145,6 +150,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
                 initializer_range=self.initializer_range,
                 summary_type=self.summary_type,
                 use_proj=self.use_proj,
+                bos_token_id=self.bos_token_id,
             )
 
             return (

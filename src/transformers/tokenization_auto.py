@@ -157,7 +157,7 @@ class AutoTokenizer:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
 
-            use_fast: (`optional`) boolean, default True:
+            use_fast: (`optional`) boolean, default False:
                 Indicate if transformers should try to load the fast version of the tokenizer (True) or use the Python one (False).
 
             inputs: (`optional`) positional arguments: will be passed to the Tokenizer ``__init__`` method.
@@ -183,7 +183,7 @@ class AutoTokenizer:
         if "bert-base-japanese" in pretrained_model_name_or_path:
             return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-        use_fast = kwargs.pop("use_fast", True)
+        use_fast = kwargs.pop("use_fast", False)
         for config_class, (tokenizer_class_py, tokenizer_class_fast) in TOKENIZER_MAPPING.items():
             if isinstance(config, config_class):
                 if tokenizer_class_fast and use_fast:

@@ -108,11 +108,12 @@ class XLMConfig(PretrainedConfig):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:`~transformers.XLMForSequenceClassification`.
                 Is one of the following options:
-                    - 'last' => take the last token hidden state (like XLNet)
-                    - 'first' => take the first token hidden state (like Bert)
-                    - 'mean' => take the mean of all tokens hidden states
-                    - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
-                    - 'attn' => Not implemented now, use multi-head attention
+
+                - 'last' => take the last token hidden state (like XLNet)
+                - 'first' => take the first token hidden state (like Bert)
+                - 'mean' => take the mean of all tokens hidden states
+                - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
+                - 'attn' => Not implemented now, use multi-head attention
             summary_use_proj (:obj:`boolean`, optional, defaults to :obj:`True`):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:`~transformers.XLMForSequenceClassification`.
@@ -193,6 +194,8 @@ class XLMConfig(PretrainedConfig):
         end_n_top=5,
         mask_token_id=0,
         lang_id=0,
+        bos_token_id=0,
+        pad_token_id=2,
         **kwargs
     ):
         """Constructs XLMConfig.
@@ -232,6 +235,9 @@ class XLMConfig(PretrainedConfig):
 
         if "n_words" in kwargs:
             self.n_words = kwargs["n_words"]
+
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
 
     @property
     def n_words(self):  # For backward compatibility

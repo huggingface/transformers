@@ -24,7 +24,14 @@ import tensorflow as tf
 
 from .configuration_xlnet import XLNetConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, get_initializer, shape_list
+from .modeling_tf_utils import (
+    TFPreTrainedModel,
+    TFSequenceSummary,
+    TFSharedEmbeddings,
+    get_initializer,
+    keras_serializable,
+    shape_list,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -342,7 +349,10 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
         return hidden_states
 
 
+@keras_serializable
 class TFXLNetMainLayer(tf.keras.layers.Layer):
+    config_class = XLNetConfig
+
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
@@ -836,6 +846,32 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_loss.input_embeddings
+
+    def prepare_inputs_for_generation(self, inputs, past, **model_kwargs):
+        # Add dummy token at the end (no attention on this one)
+
+        effective_batch_size = inputs.shape[0]
+        dummy_token = tf.zeros((effective_batch_size, 1), dtype=tf.int32)
+        inputs = tf.concat([inputs, dummy_token], axis=1)
+
+        # Build permutation mask so that previous tokens don't see last token
+        sequence_length = inputs.shape[1]
+        perm_mask = tf.zeros((effective_batch_size, sequence_length, sequence_length - 1), dtype=tf.float32)
+        perm_mask_seq_end = tf.ones((effective_batch_size, sequence_length, 1), dtype=tf.float32)
+        perm_mask = tf.concat([perm_mask, perm_mask_seq_end], axis=-1)
+
+        # We'll only predict the last token
+        target_mapping = tf.zeros((effective_batch_size, 1, sequence_length - 1), dtype=tf.float32)
+        target_mapping_seq_end = tf.ones((effective_batch_size, 1, 1), dtype=tf.float32)
+        target_mapping = tf.concat([target_mapping, target_mapping_seq_end], axis=-1)
+
+        inputs = {"inputs": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping}
+
+        # if past is defined in model kwargs then use it for faster decoding
+        if past:
+            inputs["mems"] = past
+
+        return inputs
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):

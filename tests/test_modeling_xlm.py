@@ -24,6 +24,7 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 if is_torch_available():
+    import torch
     from transformers import (
         XLMConfig,
         XLMModel,
@@ -396,3 +397,37 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in list(XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = XLMModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
+class XLMModelLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_xlm_mlm_en_2048(self):
+        model = XLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
+        input_ids = torch.Tensor([[1, 14, 2232, 26, 1]]).long()  # The dog is cute
+        expected_output_ids = [
+            1,
+            14,
+            2232,
+            26,
+            1,
+            567,
+            26,
+            32,
+            149,
+            149,
+            149,
+            149,
+            149,
+            149,
+            149,
+            149,
+            149,
+            149,
+            149,
+            149,
+        ]  # The dog is nothing is it!!!!!!!!!!!! TODO (PVP): this sentence (and others I tried) does not make much sense, there seems to be a problem with xlm language generation.
+        torch.manual_seed(0)
+
+        output_ids = model.generate(input_ids)
+
+        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

@@ -1,3 +1,25 @@
+/* Our DOM objects */
+
+.framework-selector {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+.framework-selector > button {
+    background-color: white;
+    color: #6670FF;
+    border: 1px solid #6670FF;
+    padding: 5px;
+}
+
+.framework-selector > button.selected{
+    background-color: #6670FF;
+    color: white;
+    border: 1px solid #6670FF;
+    padding: 5px;
+}
+
 /* The literal code blocks */
 .rst-content tt.literal, .rst-content tt.literal, .rst-content code.literal {
     color: #6670FF;

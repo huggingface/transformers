@@ -73,11 +73,12 @@ class GPT2Config(PretrainedConfig):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:`~transformers.GPT2DoubleHeadsModel`.
                 Is one of the following options:
-                    - 'last' => take the last token hidden state (like XLNet)
-                    - 'first' => take the first token hidden state (like Bert)
-                    - 'mean' => take the mean of all tokens hidden states
-                    - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
-                    - 'attn' => Not implemented now, use multi-head attention
+
+                - 'last' => take the last token hidden state (like XLNet)
+                - 'first' => take the first token hidden state (like Bert)
+                - 'mean' => take the mean of all tokens hidden states
+                - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
+                - 'attn' => Not implemented now, use multi-head attention
             summary_use_proj (:obj:`boolean`, optional, defaults to :obj:`True`):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:`~transformers.GPT2DoubleHeadsModel`.
@@ -134,6 +135,8 @@ class GPT2Config(PretrainedConfig):
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
+        bos_token_id=50256,
+        eos_token_id=50256,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -154,6 +157,9 @@ class GPT2Config(PretrainedConfig):
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
+
+        self.bos_token_id = bos_token_id
+        self.eos_token_ids = [eos_token_id]
 
     @property
     def max_position_embeddings(self):

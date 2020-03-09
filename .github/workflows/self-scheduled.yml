@@ -1,0 +1,51 @@
+name: Self-hosted runner (scheduled)
+
+on:
+  push:
+    branches:
+      - ci_*
+  repository_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  run_all_tests_torch_and_tf_gpu:
+    runs-on: self-hosted
+    steps:
+    - uses: actions/checkout@v2
+    - name: Python version
+      run: |
+        which python
+        python --version
+        pip --version
+    - name: Current dir
+      run: pwd
+    - run: nvidia-smi
+    - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+      run: |
+        python -m venv .env
+        source .env/bin/activate
+        which python
+        python --version
+        pip --version
+    - name: Install dependencies
+      run: |
+        source .env/bin/activate
+        pip install .[sklearn,tf,torch,testing]
+
+    - name: Are GPUs recognized by our DL frameworks
+      run: |
+        source .env/bin/activate
+        python -c "import torch; print(torch.cuda.is_available())"
+        python -c "import tensorflow as tf; print(tf.test.is_built_with_cuda(), tf.config.list_physical_devices('GPU'))"
+
+    - name: Run all tests on GPU
+      env:
+        TF_FORCE_GPU_ALLOW_GROWTH: "true"
+        OMP_NUM_THREADS: 1
+        RUN_SLOW: yes
+        USE_CUDA: yes
+      run: |
+        source .env/bin/activate
+        python -m pytest -n 1 --dist=loadfile -s -v ./tests/
+        

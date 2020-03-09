@@ -47,7 +47,7 @@ OpenAIGPTTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.OpenAIGPTTokenizer
-    :members:
+    :members: save_vocabulary
 
 
 OpenAIGPTModel

@@ -22,7 +22,7 @@ pip install -r ./examples/requirements.txt
 | [GLUE](#glue) | Examples running BERT/XLM/XLNet/RoBERTa on the 9 GLUE tasks. Examples feature distributed training as well as half-precision. |
 | [SQuAD](#squad) | Using BERT/RoBERTa/XLNet/XLM for question answering, examples with distributed training. |
 | [Multiple Choice](#multiple-choice) | Examples running BERT/XLNet/RoBERTa on the SWAG/RACE/ARC tasks. |
-| [Named Entity Recognition](#named-entity-recognition) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training. |
+| [Named Entity Recognition](https://github.com/huggingface/transformers/tree/master/examples/ner) | Using BERT for Named Entity Recognition (NER) on the CoNLL 2003 dataset, examples with distributed training. |
 | [XNLI](#xnli) | Examples running BERT/XLM on the XNLI benchmark. |
 | [Adversarial evaluation of model performances](#adversarial-evaluation-of-model-performances) | Testing a model with adversarial evaluation of natural language inference on the Heuristic Analysis for NLI Systems (HANS) dataset (McCoy et al., 2019.) |
 
@@ -379,7 +379,7 @@ export SQUAD_DIR=/path/to/SQUAD
 
 python run_squad.py \
   --model_type bert \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path bert-base-uncased \
   --do_train \
   --do_eval \
   --do_lower_case \
