@@ -139,7 +139,7 @@ class PreTrainedTokenizer(object):
     pretrained_vocab_files_map = {}
     pretrained_init_configuration = {}
     max_model_input_sizes = {}
-    return_outputs = ["token_type_ids", "attention_mask"]
+    model_input_names = ["token_type_ids", "attention_mask"]
 
     SPECIAL_TOKENS_ATTRIBUTES = [
         "bos_token",
@@ -318,7 +318,7 @@ class PreTrainedTokenizer(object):
 
         # Padding side is right by default and over-riden in subclasses. If specified in the kwargs, it is changed.
         self.padding_side = kwargs.pop("padding_side", self.padding_side)
-        self.return_outputs = kwargs.pop("return_outputs", self.return_outputs)
+        self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
         # Added tokens
         self.added_tokens_encoder = {}
@@ -1296,9 +1296,9 @@ class PreTrainedTokenizer(object):
         len_pair_ids = len(pair_ids) if pair else 0
 
         if return_token_type_ids is None:
-            return_token_type_ids = "token_type_ids" in self.return_outputs
+            return_token_type_ids = "token_type_ids" in self.model_input_names
         if return_attention_mask is None:
-            return_attention_mask = "attention_mask" in self.return_outputs
+            return_attention_mask = "attention_mask" in self.model_input_names
 
         encoded_inputs = {}
 
@@ -1626,7 +1626,7 @@ class PreTrainedTokenizer(object):
 
 class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
-    return_outputs = ["token_type_ids", "attention_mask"]
+    model_input_names = ["token_type_ids", "attention_mask"]
 
     def __init__(self, tokenizer: BaseTokenizer, **kwargs):
         if tokenizer is None:
@@ -1707,9 +1707,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_offsets_mapping=False,
     ):
         if return_token_type_ids is None:
-            return_token_type_ids = "token_type_ids" in self.return_outputs
+            return_token_type_ids = "token_type_ids" in self.model_input_names
         if return_attention_mask is None:
-            return_attention_mask = "attention_mask" in self.return_outputs
+            return_attention_mask = "attention_mask" in self.model_input_names
 
         if return_overflowing_tokens and encoding.overflowing is not None:
             encodings = [encoding] + encoding.overflowing

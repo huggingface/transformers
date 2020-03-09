@@ -263,7 +263,7 @@ class TokenizerTesterMixin:
 
         if (
             tokenizer.build_inputs_with_special_tokens.__qualname__.split(".")[0] != "PreTrainedTokenizer"
-            and "token_type_ids" in tokenizer.return_outputs
+            and "token_type_ids" in tokenizer.model_input_names
         ):
             seq_0 = "Test this method."
             seq_1 = "With these inputs."
@@ -544,7 +544,7 @@ class TokenizerTesterMixin:
         assert [padding_idx] * padding_size + input_ids == left_padded_input_ids
         assert [1] * padding_size + special_tokens_mask == left_padded_special_tokens_mask
 
-        if "token_type_ids" in tokenizer.return_outputs:
+        if "token_type_ids" in tokenizer.model_input_names:
             token_type_ids = encoded_sequence["token_type_ids"]
             left_padded_token_type_ids = left_padded_sequence["token_type_ids"]
             right_padded_token_type_ids = right_padded_sequence["token_type_ids"]
@@ -552,7 +552,7 @@ class TokenizerTesterMixin:
             assert token_type_ids + [token_type_padding_idx] * padding_size == right_padded_token_type_ids
             assert [token_type_padding_idx] * padding_size + token_type_ids == left_padded_token_type_ids
 
-        if "attention_mask" in tokenizer.return_outputs:
+        if "attention_mask" in tokenizer.model_input_names:
             attention_mask = encoded_sequence["attention_mask"]
             right_padded_attention_mask = right_padded_sequence["attention_mask"]
             left_padded_attention_mask = left_padded_sequence["attention_mask"]
