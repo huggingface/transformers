@@ -440,12 +440,12 @@ def get_optimizer(args, model):
 
     optimizer_grouped_parameters = [
         {
-            'parameters': no_decay_params,
+            'params': no_decay_params,
             'weight_decay': 0.0,
             'lr': args.learning_rate
         },
         {
-            'parameters': no_lr_decay_params,
+            'params': no_lr_decay_params,
             'weight_decay': args.weight_decay,
             'lr': args.learning_rate
         }
@@ -455,7 +455,7 @@ def get_optimizer(args, model):
         n_layers = len(layer_params)
         for layer_n, params in layer_params.items():
             optimizer_grouped_parameters.append({
-                'parameters': params,
+                'params': params,
                 'weight_decay': args.weight_decay,
                 'lr': args.learning_rate * (args.layerwise_lr_decay ** (n_layers - layer_n - 1))
             })
