@@ -641,7 +641,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         # create attention mask if necessary
         # TODO (PVP): this should later be handled by the forward fn() in each model in the future see PR 3140
-        if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids):
+        import ipdb
+
+        ipdb.set_trace()
+        if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
             attention_mask = tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
         elif attention_mask is None:
             attention_mask = tf.ones_like(input_ids)
