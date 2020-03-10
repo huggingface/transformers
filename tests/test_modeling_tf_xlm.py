@@ -311,3 +311,35 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in list(TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = TFXLMModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
+class TFXLMModelLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_xlm_mlm_en_2048(self):
+        model = TFXLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
+        input_ids = tf.convert_to_tensor([[14, 447]], dtype=tf.int32)  # the president
+        expected_output_ids = [
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+        ]  # the president the president the president the president the president the president the president the president the president the president
+        # TODO(PVP): this and other input_ids I tried for generation give pretty bad results. Not sure why. Model might just not be made for auto-regressive inference
+        output_ids = model.generate(input_ids, do_sample=False)
+        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
