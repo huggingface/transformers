@@ -18,6 +18,9 @@
 import logging
 import os
 import typing
+import sys
+import psutil
+import linecache
 
 import torch
 from torch import nn
@@ -38,6 +41,36 @@ from .file_utils import (
 
 
 logger = logging.getLogger(__name__)
+
+
+def set_memory_tracing(module_to_trace):
+    """ Setup line-by-line tracing to record rss mem (RAM) at each line of a module or sub-module.
+        See `../../examples/benchmarks.py for a usage example.
+    """
+    memory_list = []
+    process = psutil.Process(os.getpid())
+
+    def traceit(frame, event, arg):
+        """ Tracing method executed before running each line in a module or sub-module
+            Record memory allocated in a list with debugging information
+        """
+        name = frame.f_globals["__name__"]
+        if event != "line" or (not isinstance(name, str)) or (module_to_trace not in name):
+            return traceit
+
+        lineno = frame.f_lineno
+        filename = frame.f_globals["__file__"]
+        if (filename.endswith(".pyc") or
+            filename.endswith(".pyo")):
+            filename = filename[:-1]
+        line = linecache.getline(filename, lineno).rstrip()
+        mem = process.memory_info()
+        memory_list.append((filename, name, lineno, event, line, mem.rss))
+        return traceit
+
+    sys.settrace(traceit)
+    return memory_list
+
 
 try:
     from torch.nn import Identity
@@ -65,6 +98,37 @@ class ModuleUtilsMixin:
         """
         params = filter(lambda x: x.requires_grad, self.parameters()) if only_trainable else self.parameters()
         return sum(p.numel() for p in params)
+
+    @staticmethod
+    def _hook_rss_memory_pre_forward(module, *args, **kwargs):
+        process = psutil.Process(os.getpid())
+        mem = process.memory_info()
+        module.mem_rss_pre_forward = mem.rss
+        return None
+
+
+    @staticmethod
+    def _hook_rss_memory_post_forward(module, *args, **kwargs):
+        process = psutil.Process(os.getpid())
+        mem = process.memory_info()
+        module.mem_rss_post_forward = mem.rss
+        mem_rss_diff = module.mem_rss_post_forward - module.mem_rss_pre_forward
+        module.mem_rss_diff = mem_rss_diff + (module.mem_rss_diff if hasattr(module, 'mem_rss_diff') else 0)
+        return None
+
+    def add_memory_hooks(self):
+        """ Add a memory hook before and after each sub-module forward pass to record increase in memory consumption.
+            Increase in memory consumption is stored in a `mem_rss_diff` attribute for each module and can be reset to zero with `model.reset_memory_hooks_state()`
+        """
+        for module in self.modules():
+            module.register_forward_pre_hook(self._hook_rss_memory_pre_forward)
+            module.register_forward_hook(self._hook_rss_memory_post_forward)
+
+    def reset_memory_hooks_state(self):
+        for module in self.modules:
+            module.mem_rss_diff = 0
+            module.mem_rss_post_forward = 0
+            module.mem_rss_pre_forward = 0
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin):

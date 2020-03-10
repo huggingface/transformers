@@ -26,7 +26,7 @@ import psutil
 from time import time
 from typing import List
 
-from transformers import AutoConfig, AutoTokenizer, is_tf_available, is_torch_available
+from transformers import AutoConfig, AutoTokenizer, is_tf_available, is_torch_available, set_memory_tracing
 
 
 if is_tf_available():
@@ -251,6 +251,8 @@ as they entered."""
 
 
 def get_memory_diff(func, memory_field="rss", repeat=1):
+    """ We include these inside the pytorch model butcan't do it for TF 2.0 so let's keep the method here for now.
+    """
     process = psutil.Process(os.getpid())
     mem_diffs = []
     for _ in range(repeat):
@@ -382,7 +384,11 @@ def _compute_pytorch(model_names, batch_sizes, slice_sizes, dictionary, average_
             if fp16:
                 model.half()
             model.to(device)
-            model.eval()
+            model.train()
+
+            memory_list = set_memory_tracing('transformers')  # Line by line tracing for all code in the module `transformers`
+            model.add_memory_hooks()  # Forward methode tracing for a PyTorch model
+
             for slice_size in slice_sizes:
                 if max_input_size is not None and slice_size > max_input_size:
                     dictionary[model_name]["results"][batch_size][slice_size] = "N/A"
@@ -397,13 +403,35 @@ def _compute_pytorch(model_names, batch_sizes, slice_sizes, dictionary, average_
                             inference = model
                             inference(sequence)
 
+                        mem_diffs = []
+                        mem_diffs_set = {}
+                        for line1, line2 in zip(memory_list[:-1], memory_list[1:]):
+                            filename, name, line_no, event, line_text, mem1 = line1
+                            _, _, _, _, _, mem2 = line2
+                            mem_diff = mem2 - mem1
+                            mem_diffs.append((filename, line_no, line_text, mem_diff))
+                            if (filename, line_no, line_text) in mem_diffs_set:
+                                mem_diffs_set[(filename, line_no, line_text)] = mem_diffs_set[(filename, line_no, line_text)] + mem_diff
+                            else:
+                                mem_diffs_set[(filename, line_no, line_text)] = mem_diff
+                            mem_str = memory_to_human_readable(mem_diff)
+                            print(f"{filename}:{line_no}: mem {mem_str}: {line_text}")
+
+                        mem_diffs = sorted(list(mem_diffs_set.items()), key=lambda x: x[1], reverse=False)
+                        for (filename, line_no, line_text), mem_diff in mem_diffs[-10:]:
+                            mem_str = memory_to_human_readable(mem_diff)
+                            print(f"---- {filename}:{line_no}: mem {mem_str}: {line_text}")
+
+                        print('sum of all lines increase', memory_to_human_readable(sum(m[1] for m in mem_diffs)))
+                        print('forward pass increase', memory_to_human_readable(model.mem_rss_diff))
+
+                        exit()
+
                         print("Going through model with sequence of shape", sequence.shape)
                         runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
                         average_time = sum(runtimes) / float(len(runtimes)) / 3.0
                         dictionary[model_name]["results"][batch_size][slice_size] = average_time
-
-                        mem_diff = get_memory_diff(lambda: inference(sequence), repeat=5)
-                        dictionary[model_name]["memory"][batch_size][slice_size] = mem_diff
+                        dictionary[model_name]["memory"][batch_size][slice_size] = model.mem_rss_diff
 
                     except RuntimeError as e:
                         print("Doesn't fit on GPU.", e)
