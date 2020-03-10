@@ -5,7 +5,7 @@ thumbnail:
 
 # BERT (base-multilingual-cased) fine-tuned on XQuAD
 
-This model was created by [Google](https://github.com/google-research/bert/blob/master/multilingual.md) and fine-tuned on [XQuAD](https://github.com/deepmind/xquad) for multilingual (`11 different languages`) **Q&A** downstream task.
+This model was created by [Google](https://github.com/google-research/bert/blob/master/multilingual.md) and fine-tuned on [XQuAD](https://github.com/deepmind/xquad) like data for multilingual (`11 different languages`) **Q&A** downstream task.
 
 ## Details of the language model('bert-base-multilingual-cased')
 
@@ -76,14 +76,6 @@ As **XQuAD** is just an evaluation dataset, I used `Data augmentation techniques
 
 The model was trained on a Tesla P100 GPU and 25GB of RAM.
 The script for fine tuning can be found [here](https://github.com/huggingface/transformers/blob/master/examples/distillation/run_squad_w_distillation.py)
-
-## Results:
-
-| Metric    | # Value     |
-| --------- | ----------- |
-| **Exact** | **91.43** |
-| **F1**    | **94.14** |
-
 
 
 ## Model in action
