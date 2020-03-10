@@ -497,7 +497,9 @@ If you want your model to be namespaced by your organization name rather than yo
 
 Your model will then be accessible through its identifier, a concatenation of your username (or organization name) and the folder name above:
 ```python
-"namespace/pretrained_model"
+"username/pretrained_model"
+# or if an org:
+"organization_name/pretrained_model"
 ```
 
 **Please add a README.md model card** to the repo under `model_cards/` with: model description, training params (dataset, preprocessing, hardware used, hyperparameters), evaluation results, intended uses & limitations, etc.
