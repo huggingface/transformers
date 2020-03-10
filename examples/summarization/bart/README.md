@@ -1,4 +1,4 @@
-### Get the CNN/Daily Mail Data
+### Get the CNN Data
 To be able to reproduce the authors' results on the CNN/Daily Mail dataset you first need to download both CNN and Daily Mail datasets [from Kyunghyun Cho's website](https://cs.nyu.edu/~kcho/DMQA/) (the links next to "Stories") in the same folder. Then uncompress the archives by running:
 
 ```bash

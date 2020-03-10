@@ -34,6 +34,7 @@ from transformers import (
     XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
     AlbertConfig,
+    BartConfig, BART_PRETRAINED_MODEL_ARCHIVE_MAP,
     BertConfig,
     CamembertConfig,
     CTRLConfig,
@@ -76,6 +77,9 @@ if is_torch_available():
         BertForPreTraining,
         BertForQuestionAnswering,
         BertForSequenceClassification,
+        BartModel,
+        BartForSequenceClassification,
+        BartForConditionalGeneration,
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         GPT2LMHeadModel,
         GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -111,6 +115,9 @@ else:
         BertForPreTraining,
         BertForQuestionAnswering,
         BertForSequenceClassification,
+        BartModel,
+        BartForSequenceClassification,
+        BartForConditionalGeneration,
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         GPT2LMHeadModel,
         GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -173,12 +180,16 @@ else:
         None,
         None,
         None,
+        None,
+        None,
+        None,
     )
 
 
 logging.basicConfig(level=logging.INFO)
 
 MODEL_CLASSES = {
+    "bart": (BartConfig, BartForSequenceClassification),
     "bert": (
         BertConfig,
         TFBertForPreTraining,
