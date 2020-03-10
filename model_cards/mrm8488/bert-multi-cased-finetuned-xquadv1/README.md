@@ -3,7 +3,7 @@ language: multilingual
 thumbnail:
 ---
 
-# BERT (base-multilingual-cased) fine-tuned on XQuAD
+# BERT (base-multilingual-cased) fine-tuned for multilingual Q&A
 
 This model was created by [Google](https://github.com/google-research/bert/blob/master/multilingual.md) and fine-tuned on [XQuAD](https://github.com/deepmind/xquad) for multilingual (`11 different languages`) **Q&A** downstream task.
 
