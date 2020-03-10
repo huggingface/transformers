@@ -27,7 +27,7 @@ from transformers.tokenization_transfo_xl import TransfoXLTokenizerFast
 Tokenizer = namedtuple("Tokenizer", ["name", "rust", "python", "vocab_key"])
 
 
-class CommonFastTokenizerTest(ABC, unittest.TestCase):
+class CommonFastTokenizerTest(unittest.TestCase):
 
     TOKENIZERS_CLASSES = frozenset([
         Tokenizer("Bert", BertTokenizerFast, BertTokenizer, "vocab_file"),
