@@ -1,4 +1,7 @@
 import unittest
+from abc import ABC
+from collections import namedtuple
+from itertools import takewhile
 
 import numpy as np
 
@@ -21,117 +24,92 @@ from transformers.tokenization_roberta import RobertaTokenizerFast
 from transformers.tokenization_transfo_xl import TransfoXLTokenizerFast
 
 
-class FastTokenizerMatchingTest(unittest.TestCase):
+Tokenizer = namedtuple("Tokenizer", ["name", "rust", "python", "vocab_key"])
+
+
+class CommonFastTokenizerTest(ABC, unittest.TestCase):
+
+    TOKENIZERS_CLASSES = frozenset([
+        Tokenizer("Bert", BertTokenizerFast, BertTokenizer, "vocab_file"),
+        Tokenizer("DistilBert", DistilBertTokenizerFast, DistilBertTokenizer, "vocab_file"),
+        Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file"),
+    ])
+
     def setUp(self) -> None:
         with open("tests/fixtures/sample_text.txt", encoding="utf-8") as f_data:
             self._data = f_data.read().replace("\n\n", "\n").strip()
 
-    def assert_sequence_almost_equals(self, a, b, threshold):
+    def test_fast_align_python(self):
+        for (name, rust_cls, python_cls, vocab_key) in self.TOKENIZERS_CLASSES:
+            for pretrained_name in python_cls.pretrained_vocab_files_map[vocab_key].keys():
+                with self.subTest("{} ({})".format(name, pretrained_name)):
+                    tokenizer_r = rust_cls.from_pretrained(pretrained_name)
+                    tokenizer_p = python_cls.from_pretrained(pretrained_name)
 
-        # Handle padding
-        if len(a) != len(b):
-            max_len = max(len(a), len(b))
+                    # Check is_fast is set correctly
+                    self.assertFalse(tokenizer_p.is_fast)
+                    self.assertTrue(tokenizer_r.is_fast)
 
-            # Pad with a negative number as vocab doesnt allow idx < 0
-            # if will be tracked as differences
-            if len(a) < max_len:
-                a += [-1] * (max_len - len(a))
+                    self.assert_tokenization_python_rust_equals(tokenizer_r, tokenizer_p)
+                    self.assert_num_special_tokens_to_add_equal(tokenizer_r, tokenizer_p)
+                    self.assert_max_length_equal(tokenizer_r, tokenizer_p)
+                    self.assert_special_tokens_map_equal(tokenizer_r, tokenizer_p)
+                    self.assert_padding(tokenizer_r, tokenizer_p)
+                    # TODO: enable for v3.0.0
+                    # self.assert_empty_output_no_special_tokens(tokenizer_r, tokenizer_p)
 
-            if len(b) < max_len:
-                b += [-1] * (max_len - len(b))
+    def test_fast_only(self):
+        for (name, rust_cls, python_cls, vocab_key) in self.TOKENIZERS_CLASSES:
+            for pretrained_name in python_cls.pretrained_vocab_files_map[vocab_key].keys():
+                with self.subTest("{} ({})".format(name, pretrained_name)):
+                    tokenizer_r = rust_cls.from_pretrained(pretrained_name)
 
-        # Convert to numpy for convenience
-        a_, b_ = np.array(a), np.array(b)
+                    self.assert_add_tokens(tokenizer_r)
+                    self.assert_offsets_mapping(tokenizer_r)
 
-        # Compute elementwise difference
-        inputs_diffs = a_ - b_
-        inputs_diff = np.count_nonzero(inputs_diffs)
-        self.assertLessEqual(inputs_diff / a_.shape[0], threshold)
-
-    def assert_tokenization_python_rust_almost_equals(self, tokenizer_p, tokenizer_r, threshold: float):
+    def assert_tokenization_python_rust_equals(self, tokenizer_p, tokenizer_r):
         # Ensure basic input match
         input_p = tokenizer_p.encode_plus(self._data)
         input_r = tokenizer_r.encode_plus(self._data)
 
         for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
-            self.assert_sequence_almost_equals(input_p[key], input_r[key], threshold)
+            self.assertSequenceEqual(input_p[key], input_r[key])
 
         input_pairs_p = tokenizer_p.encode_plus(self._data, self._data)
         input_pairs_r = tokenizer_r.encode_plus(self._data, self._data)
 
         for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
-            self.assert_sequence_almost_equals(input_pairs_p[key], input_pairs_r[key], threshold)
+            self.assertSequenceEqual(input_pairs_p[key], input_pairs_r[key])
 
         # Ensure truncation match
         input_p = tokenizer_p.encode_plus(self._data, max_length=512)
         input_r = tokenizer_r.encode_plus(self._data, max_length=512)
 
         for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
-            self.assert_sequence_almost_equals(input_p[key], input_r[key], threshold)
+            self.assertSequenceEqual(input_p[key], input_r[key])
 
         # Ensure truncation with stride match
         input_p = tokenizer_p.encode_plus(self._data, max_length=512, stride=3, return_overflowing_tokens=True)
         input_r = tokenizer_r.encode_plus(self._data, max_length=512, stride=3, return_overflowing_tokens=True)
 
         for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
-            self.assert_sequence_almost_equals(input_p[key], input_r[key], threshold)
+            self.assertSequenceEqual(input_p[key], input_r[key])
 
-    def assert_padding(self, tokenizer_r, tokenizer_p):
-        # Simple input
-        input_r = tokenizer_r.encode("This is a simple input", max_length=15, pad_to_max_length=True)
-        input_p = tokenizer_p.encode("This is a simple input", max_length=15, pad_to_max_length=True)
+    def assert_num_special_tokens_to_add_equal(self, tokenizer_r, tokenizer_p):
+        # Check we have the same number of added_tokens for both pair and non-pair inputs.
+        self.assertEqual(tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False))
+        self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
 
-        self.assertSequenceEqual(input_r, input_p)
+    def assert_max_length_equal(self, tokenizer_r, tokenizer_p):
+        # Check we have the correct max_length for both pair and non-pair inputs.
+        self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
+        self.assertEqual(tokenizer_r.max_len_sentences_pair, tokenizer_p.max_len_sentences_pair)
 
-        # Simple input
-        input_r = tokenizer_r.encode_plus("This is a simple input", max_length=15, pad_to_max_length=True)
-        input_p = tokenizer_p.encode_plus("This is a simple input", max_length=15, pad_to_max_length=True)
-
-        self.assertSequenceEqual(input_r, input_p)
-
-        # Simple input
-        # TODO: Re-enable this test when batch_encode_plus with padding correctly handles padding
-        # input_r = tokenizer_r.batch_encode_plus(
-        #     ["This is a simple input 1", "This is a simple input 2"], max_length=15, pad_to_max_length=True
-        # )
-        # input_p = tokenizer_p.batch_encode_plus(
-        #     ["This is a simple input 1", "This is a simple input 2"], max_length=15, pad_to_max_length=True
-        # )
-
-        # self.assertSequenceEqual(input_r, input_p)
-
-        # Pair input
-        input_r = tokenizer_r.encode("This is a simple input", "This is a pair", max_length=15, pad_to_max_length=True)
-        input_p = tokenizer_p.encode("This is a simple input", "This is a pair", max_length=15, pad_to_max_length=True)
-
-        self.assertSequenceEqual(input_r, input_p)
-
-        # Pair input
-        input_r = tokenizer_r.encode_plus(
-            "This is a simple input", "This is a pair", max_length=15, pad_to_max_length=True
+    def assert_special_tokens_map_equal(self, tokenizer_r, tokenizer_p):
+        # Assert the set of special tokens match.
+        self.assertSequenceEqual(
+            tokenizer_p.special_tokens_map.items(), tokenizer_r.special_tokens_map.items(),
         )
-        input_p = tokenizer_p.encode_plus(
-            "This is a simple input", "This is a pair", max_length=15, pad_to_max_length=True
-        )
-
-        self.assertSequenceEqual(input_r, input_p)
-
-        # Pair input
-        # TODO: Re-enable this test when batch_encode_plus with padding correctly handles padding
-        # input_r = tokenizer_r.batch_encode_plus(
-        #     ["This is a simple input 1", "This is a simple input 2"],
-        #     ["This is a simple pair 1", "This is a simple pair 2"],
-        #     max_length=15,
-        #     pad_to_max_length=True,
-        # )
-        # input_p = tokenizer_p.batch_encode_plus(
-        #     ["This is a simple input 1", "This is a simple input 2"],
-        #     ["This is a simple pair 1", "This is a simple pair 2"],
-        #     max_length=15,
-        #     pad_to_max_length=True,
-        # )
-
-        # self.assertSequenceEqual(input_r, input_p)
 
     def assert_add_tokens(self, tokenizer_r):
         vocab_size = tokenizer_r.vocab_size
@@ -150,13 +128,15 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         )
         self.assertEqual(len(tokenizer_r), vocab_size + 6)
 
-    def assert_offsets_mapping(self, tokenizer):
+    def assert_offsets_mapping(self, tokenizer_r):
         text = "Wonderful no inspiration example with subtoken"
         pair = "Along with an awesome pair"
 
         # No pair
-        tokens_with_offsets = tokenizer.encode_plus(text, return_special_tokens_mask=True, return_offsets_mapping=True)
-        added_tokens = tokenizer.num_special_tokens_to_add(False)
+        tokens_with_offsets = tokenizer_r.encode_plus(
+            text, return_special_tokens_mask=True, return_offsets_mapping=True
+        )
+        added_tokens = tokenizer_r.num_special_tokens_to_add(False)
         offsets = tokens_with_offsets["offset_mapping"]
 
         # Assert there is the same number of tokens and offsets
@@ -167,10 +147,10 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
         # Pairs
-        tokens_with_offsets = tokenizer.encode_plus(
+        tokens_with_offsets = tokenizer_r.encode_plus(
             text, pair, return_special_tokens_mask=True, return_offsets_mapping=True
         )
-        added_tokens = tokenizer.num_special_tokens_to_add(True)
+        added_tokens = tokenizer_r.num_special_tokens_to_add(True)
         offsets = tokens_with_offsets["offset_mapping"]
 
         # Assert there is the same number of tokens and offsets
@@ -258,8 +238,103 @@ class FastTokenizerMatchingTest(unittest.TestCase):
         output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
         self.assertEqual(output_p, output_r)
 
-    def assert_save_pretrained(self, tokenizer_r, tokenizer_p):
+    def assert_empty_output_no_special_tokens(self, tokenizer_r, tokenizer_p):
 
+        for should_add_special_tokens in [True, False]:
+            self.assertEqual(
+                tokenizer_p.tokenize(" ", add_special_tokens=should_add_special_tokens),
+                tokenizer_r.tokenize(" ", add_special_tokens=should_add_special_tokens),
+            )
+
+            self.assertEqual(
+                tokenizer_p.encode_plus(" ", add_special_tokens=should_add_special_tokens),
+                tokenizer_r.encode_plus(" ", add_special_tokens=should_add_special_tokens),
+            )
+
+            self.assertEqual(
+                tokenizer_p.batch_encode_plus([" "], add_special_tokens=should_add_special_tokens),
+                tokenizer_r.batch_encode_plus([" "], add_special_tokens=should_add_special_tokens),
+            )
+
+    def assert_padding(self, tokenizer_r, tokenizer_p, max_length=15):
+        def assert_padded_input_match(input_r: list, input_p: list, max_length: int):
+
+            # Ensure we match max_length
+            self.assertEqual(len(input_r), max_length), self.assertEqual(len(input_p), max_length)
+
+            # Ensure the number of padded tokens is the same
+            padded_tokens_r = list(takewhile(lambda i: i == tokenizer_r.pad_token_id, reversed(input_r)))
+            padded_tokens_p = list(takewhile(lambda i: i == tokenizer_p.pad_token_id, reversed(input_p)))
+            self.assertSequenceEqual(padded_tokens_r, padded_tokens_p)
+
+        def assert_batch_padded_input_match(input_r: dict, input_p: dict):
+            for i_r in input_r.values():
+                self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), 15), self.assertEqual(len(i_r[1]), 15)
+                self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), 15), self.assertEqual(len(i_r[1]), 15)
+
+            for i_r, i_p in zip(input_r["input_ids"], input_p["input_ids"]):
+                assert_padded_input_match(i_r, i_p, max_length)
+
+            for i_r, i_p in zip(input_r["attention_mask"], input_p["attention_mask"]):
+                self.assertSequenceEqual(i_r, i_p)
+
+        # Simple input
+        input_r = tokenizer_r.encode("This is a simple input", max_length=max_length, pad_to_max_length=True)
+        input_p = tokenizer_p.encode("This is a simple input", max_length=max_length, pad_to_max_length=True)
+        assert_padded_input_match(input_r, input_p, max_length)
+
+        # Pair input
+        input_r = tokenizer_r.encode(
+            "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
+        )
+        input_p = tokenizer_p.encode(
+            "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
+        )
+        assert_padded_input_match(input_r, input_p, max_length)
+
+        # Simple input
+        input_r = tokenizer_r.encode_plus("This is a simple input", max_length=max_length, pad_to_max_length=True)
+        input_p = tokenizer_p.encode_plus("This is a simple input", max_length=max_length, pad_to_max_length=True)
+        assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length)
+        self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
+
+        # Pair input
+        input_r = tokenizer_r.encode_plus(
+            "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
+        )
+        input_p = tokenizer_p.encode_plus(
+            "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
+        )
+        assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length)
+        self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
+
+        # Simple input
+        # TODO: Re-enable this test when batch_encode_plus with padding correctly handles padding
+        input_r = tokenizer_r.batch_encode_plus(
+            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, pad_to_max_length=True
+        )
+        input_p = tokenizer_p.batch_encode_plus(
+            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, pad_to_max_length=True
+        )
+        assert_batch_padded_input_match(input_r, input_p)
+
+        # Pair input
+        # TODO: Re-enable this test when batch_encode_plus with padding correctly handles padding
+        input_r = tokenizer_r.batch_encode_plus(
+            ["This is a simple input 1", "This is a simple input 2"],
+            ["This is a simple pair 1", "This is a simple pair 2"],
+            max_length=15,
+            pad_to_max_length=True,
+        )
+        input_p = tokenizer_p.batch_encode_plus(
+            ["This is a simple input 1", "This is a simple input 2"],
+            ["This is a simple pair 1", "This is a simple pair 2"],
+            max_length=15,
+            pad_to_max_length=True,
+        )
+        assert_batch_padded_input_match(input_r, input_p)
+
+    def assert_save_pretrained(self, tokenizer_r, tokenizer_p):
         # Checks it save with the same files
         self.assertSequenceEqual(tokenizer_r.save_vocabulary("."), tokenizer_p.save_vocabulary("."))
 
@@ -272,345 +347,38 @@ class FastTokenizerMatchingTest(unittest.TestCase):
             # self.assertEqual(getattr(tokenizer_rp, key), getattr(tokenizer_pp, key))
             # self.assertEqual(getattr(tokenizer_rp, key + "_id"), getattr(tokenizer_pp, key + "_id"))
 
-    def assert_empty_output_no_special_tokens(self, ru_class, py_class, model):
-        tokenizer_r = ru_class.from_pretrained(model, add_special_tokens=False)
-        tokenizer_p = py_class.from_pretrained(model)
 
-        # add_special_tokens=False makes nothing for now.
-        self.assertEqual(
-            tokenizer_p.tokenize(" ", add_special_tokens=False), tokenizer_r.tokenize(" ", add_special_tokens=False)
-        )
-
-        self.assertEqual(
-            tokenizer_p.encode_plus(" ", add_special_tokens=False),
-            tokenizer_r.encode_plus(" ", add_special_tokens=False),
-        )
-
-        self.assertEqual(
-            tokenizer_p.encode_plus(" ", add_special_tokens=False),
-            tokenizer_r.encode_plus(" ", add_special_tokens=False),
-        )
-
-        self.assertEqual(
-            tokenizer_p.batch_encode_plus([" "], add_special_tokens=False),
-            tokenizer_r.batch_encode_plus([" "], add_special_tokens=False),
-        )
-
-    def test_bert(self):
-        for tokenizer_name in BertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
-            tokenizer_p = BertTokenizer.from_pretrained(tokenizer_name)
-            tokenizer_r = BertTokenizerFast.from_pretrained(tokenizer_name)
-
-            # Check is_fast is correctly set
-            self.assertFalse(tokenizer_p.is_fast)
-            self.assertTrue(tokenizer_r.is_fast)
-
-            # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(
-                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
-            )
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
-
-            # Check we have the correct max_length for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
-            self.assertEqual(tokenizer_r.max_len_sentences_pair, tokenizer_p.max_len_sentences_pair)
-
-            # Assert the set of special tokens match.
-            self.assertSequenceEqual(
-                tokenizer_p.special_tokens_map.items(),
-                tokenizer_r.special_tokens_map.items(),
-                "Bert tokenizers doesn't have the same set of special_tokens",
-            )
-
-            # Assure tokenization overlap between python and rust impl.
-            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
-
-            # Ensure add_tokens and add_special_tokens return the correct vocab size
-            self.assert_add_tokens(tokenizer_r)
-
-            # Check for offsets mapping
-            self.assert_offsets_mapping(tokenizer_r)
-
-            # Check for dynamic encoding sequence handling in batch_encode_plus
-            self.assert_batch_encode_dynamic_overflowing(tokenizer_r)
-
-            # Check alignment for build_inputs_with_special_tokens
-            self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
-
-            # Check the number of returned files for save_vocabulary
-            self.assert_save_pretrained(tokenizer_r, tokenizer_p)
-
-            # Check for padding
-            self.assert_padding(tokenizer_r, tokenizer_p)
-
-            # Check for space-only input
-            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
-
-    @require_torch
-    def test_transfoxl(self):
-        for tokenizer_name in TransfoXLTokenizer.pretrained_vocab_files_map["pretrained_vocab_file"].keys():
-            tokenizer_p = TransfoXLTokenizer.from_pretrained(tokenizer_name)
-            tokenizer_r = TransfoXLTokenizerFast.from_pretrained(tokenizer_name)
-
-            # Check is_fast is correctly set
-            self.assertFalse(tokenizer_p.is_fast)
-            self.assertTrue(tokenizer_r.is_fast)
-
-            # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(
-                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
-            )
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
-
-            # Check we have the correct max_length for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
-            self.assertEqual(tokenizer_r.max_len_sentences_pair, tokenizer_p.max_len_sentences_pair)
-
-            # Assert the set of special tokens match.
-            self.assertSequenceEqual(
-                tokenizer_p.special_tokens_map.items(),
-                tokenizer_r.special_tokens_map.items(),
-                "TransfoXL tokenizers doesn't have the same set of special_tokens",
-            )
-
-            # Assure tokenization overlap between python and rust impl.
-            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
-
-            # Ensure add_tokens and add_special_tokens return the correct vocab size
-            self.assert_add_tokens(tokenizer_r)
-
-            # Check for offsets mapping
-            self.assert_offsets_mapping(tokenizer_r)
-
-            # Check for dynamic encoding sequence handling in batch_encode_plus
-            self.assertRaises(ValueError, self.assert_batch_encode_dynamic_overflowing, tokenizer_r)
-
-            # Check alignment for build_inputs_with_special_tokens
-            self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
-
-            # Check for padding
-            self.assertRaises(ValueError, self.assert_padding, tokenizer_r, tokenizer_p)
-
-            # Check the number of returned files for save_vocabulary
-            # TransfoXL tokenizers comes in a special format which is not compatible at all
-            # with rust tokenizers. We ensure the errors detection at correctly raised
-            tokenizer_r_files = tokenizer_r.save_pretrained(".")
-            self.assertSequenceEqual(
-                tokenizer_r_files, ["./vocab.json", "./special_tokens_map.json", "./added_tokens.json"]
-            )
-
-            # Check loading Python-tokenizer save through Rust doesnt work (and the opposite)
-            self.assertRaises(ValueError, tokenizer_p.from_pretrained, *tokenizer_r_files)
-            self.assertRaises(ValueError, tokenizer_r.from_pretrained, *tokenizer_p.save_pretrained("."))
-
-            # Check loading works for Python to Python and Rust to Rust
-            # Issue: https://github.com/huggingface/transformers/issues/3000
-            # self.assertIsNotNone(tokenizer_p.__class__.from_pretrained('./'))
-            self.assertIsNotNone(tokenizer_r.__class__.from_pretrained("./"))
-
-            # Check for space-only input
-            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
-
-    def test_distilbert(self):
-        for tokenizer_name in DistilBertTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
-            tokenizer_p = DistilBertTokenizer.from_pretrained(tokenizer_name)
-            tokenizer_r = DistilBertTokenizerFast.from_pretrained(tokenizer_name)
-
-            # Check is_fast is correctly set
-            self.assertFalse(tokenizer_p.is_fast)
-            self.assertTrue(tokenizer_r.is_fast)
-
-            # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(
-                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
-            )
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
-
-            # Check we have the correct max_length for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
-            self.assertEqual(tokenizer_r.max_len_sentences_pair, tokenizer_p.max_len_sentences_pair)
-
-            # DistilBert should match 100%
-            # Assert the set of special tokens match.
-            self.assertSequenceEqual(
-                tokenizer_p.special_tokens_map.items(),
-                tokenizer_r.special_tokens_map.items(),
-                "DistilBert tokenizers doesn't have the same set of special_tokens",
-            )
-
-            # Assure tokenization overlap between python and rust impl.
-            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
-
-            # Ensure add_tokens and add_special_tokens return the correct vocab size
-            self.assert_add_tokens(tokenizer_r)
-
-            # Check for offsets mapping
-            self.assert_offsets_mapping(tokenizer_r)
-
-            # Check for dynamic encoding sequence handling in batch_encode_plus
-            self.assert_batch_encode_dynamic_overflowing(tokenizer_r)
-
-            # Check alignment for build_inputs_with_special_tokens
-            self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
-
-            # Check the number of returned files for save_vocabulary
-            self.assert_save_pretrained(tokenizer_r, tokenizer_p)
-
-            # Check for padding
-            self.assert_padding(tokenizer_r, tokenizer_p)
-
-            # Check for space-only input
-            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
-
-    def test_gpt2(self):
-        for tokenizer_name in GPT2Tokenizer.pretrained_vocab_files_map["vocab_file"].keys():
-            tokenizer_p = GPT2Tokenizer.from_pretrained(tokenizer_name)
-            tokenizer_r = GPT2TokenizerFast.from_pretrained(tokenizer_name)
-
-            # Check is_fast is correctly set
-            self.assertFalse(tokenizer_p.is_fast)
-            self.assertTrue(tokenizer_r.is_fast)
-
-            # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(
-                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
-            )
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
-
-            # Check we have the correct max_length for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
-            self.assertEqual(tokenizer_r.max_len_sentences_pair, tokenizer_p.max_len_sentences_pair)
-
-            # Assert the set of special tokens match.
-            self.assertSequenceEqual(
-                tokenizer_p.special_tokens_map.items(),
-                tokenizer_r.special_tokens_map.items(),
-                "GPT2 tokenizers doesn't have the same set of special_tokens",
-            )
-
-            # Assure tokenization overlap between python and rust impl.
-            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
-
-            # Ensure add_tokens and add_special_tokens return the correct vocab size
-            self.assert_add_tokens(tokenizer_r)
-
-            # Check for offsets mapping
-            self.assert_offsets_mapping(tokenizer_r)
-
-            # Check for dynamic encoding sequence handling in batch_encode_plus
-            self.assertRaises(ValueError, self.assert_batch_encode_dynamic_overflowing, tokenizer_r)
-
-            # Check alignment for build_inputs_with_special_tokens
-            self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
-
-            # Check the number of returned files for save_vocabulary
-            self.assert_save_pretrained(tokenizer_r, tokenizer_p)
-
-            # Check for padding
-            self.assertRaises(ValueError, self.assert_padding, tokenizer_r, tokenizer_p)
-
-            # Check for space-only input
-            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
-
-    def test_roberta(self):
-        for tokenizer_name in RobertaTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
-            tokenizer_p = RobertaTokenizer.from_pretrained(tokenizer_name)
-            tokenizer_r = RobertaTokenizerFast.from_pretrained(tokenizer_name)
-
-            # Check is_fast is correctly set
-            self.assertFalse(tokenizer_p.is_fast)
-            self.assertTrue(tokenizer_r.is_fast)
-
-            # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(
-                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
-            )
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
-
-            # Check we have the correct max_length for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
-            self.assertEqual(tokenizer_r.max_len_sentences_pair, tokenizer_p.max_len_sentences_pair)
-
-            # Assert the set of special tokens match.
-            self.assertSequenceEqual(
-                tokenizer_p.special_tokens_map.items(),
-                tokenizer_r.special_tokens_map.items(),
-                "Roberta tokenizers doesn't have the same set of special_tokens",
-            )
-
-            # Assure tokenization overlap between python and rust impl.
-            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.01)
-
-            # Ensure add_tokens and add_special_tokens return the correct vocab size
-            self.assert_add_tokens(tokenizer_r)
-
-            # Check for offsets mapping
-            self.assert_offsets_mapping(tokenizer_r)
-
-            # Check for dynamic encoding sequence handling in batch_encode_plus
-            self.assert_batch_encode_dynamic_overflowing(tokenizer_r)
-
-            # Check alignment for build_inputs_with_special_tokens
-            self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
-
-            # Check the number of returned files for save_vocabulary
-            self.assert_save_pretrained(tokenizer_r, tokenizer_p)
-
-            # Check for padding
-            # TODO: Re-enable this test as soon as Roberta align with the python tokenizer.
-            # self.assert_padding(tokenizer_r, tokenizer_p)
-
-            # Check for space-only input
-            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
-
-    def test_openai(self):
-        for tokenizer_name in OpenAIGPTTokenizer.pretrained_vocab_files_map["vocab_file"].keys():
-            tokenizer_p = OpenAIGPTTokenizer.from_pretrained(tokenizer_name)
-            tokenizer_r = OpenAIGPTTokenizerFast.from_pretrained(tokenizer_name)
-
-            # Check is_fast is correctly set
-            self.assertFalse(tokenizer_p.is_fast)
-            self.assertTrue(tokenizer_r.is_fast)
-
-            # Check we have the same number of added_tokens for both pair and non-pair inputs.
-            self.assertEqual(
-                tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
-            )
-            self.assertEqual(tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True))
-
-            # Check we have the correct max_length for both pair and non-pair inputs.
-            self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
-            self.assertEqual(tokenizer_r.max_len_sentences_pair, tokenizer_p.max_len_sentences_pair)
-
-            # Assert the set of special tokens match.
-            self.assertSequenceEqual(
-                tokenizer_p.special_tokens_map.items(),
-                tokenizer_r.special_tokens_map.items(),
-                "GPT tokenizers doesn't have the same set of special_tokens",
-            )
-
-            # Assure tokenization overlap between python and rust impl.
-            self.assert_tokenization_python_rust_almost_equals(tokenizer_p, tokenizer_r, 0.0)
-
-            # Ensure add_tokens and add_special_tokens return the correct vocab size
-            self.assert_add_tokens(tokenizer_r)
-
-            # Check for offsets mapping
-            self.assert_offsets_mapping(tokenizer_r)
-
-            # Check for dynamic encoding sequence handling in batch_encode_plus
-            self.assertRaises(ValueError, self.assert_batch_encode_dynamic_overflowing, tokenizer_r)
-
-            # Check alignment for build_inputs_with_special_tokens
-            self.assert_build_inputs_with_special_tokens(tokenizer_r, tokenizer_p)
-
-            self.assertEqual(len(tokenizer_r.save_vocabulary(".")), len(tokenizer_p.save_vocabulary(".")))
-
-            # Check for padding
-            self.assertRaises(ValueError, self.assert_padding, tokenizer_r, tokenizer_p)
-
-            # Check the number of returned files for save_vocabulary
-            self.assert_save_pretrained(tokenizer_r, tokenizer_p)
-
-            # Check for space-only input
-            self.assert_empty_output_no_special_tokens(tokenizer_r.__class__, tokenizer_p.__class__, tokenizer_name)
+class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
+    TOKENIZERS_CLASSES = [
+        Tokenizer("OpenAI GPT", OpenAIGPTTokenizerFast, OpenAIGPTTokenizer, "vocab_file"),
+        Tokenizer("GPT2", GPT2TokenizerFast, GPT2Tokenizer, "vocab_file"),
+        Tokenizer("TransfoXL", TransfoXLTokenizerFast, TransfoXLTokenizer, "pretrained_vocab_file"),
+    ]
+
+    def assert_padding(self, tokenizer_r, tokenizer_p, max_length=15):
+        # Simple input
+        s = "This is a simple input"
+        s2 = ["This is a simple input 1", "This is a simple input 2"]
+        p = ("This is a simple input", "This is a pair")
+        p2 = [
+            ("This is a simple input 1", "This is a simple input 2"),
+            ("This is a simple pair 1", "This is a simple pair 2"),
+        ]
+
+        # Simple input tests
+        self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, pad_to_max_length=True)
+
+        # Simple input
+        self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, pad_to_max_length=True)
+
+        # Simple input
+        self.assertRaises(ValueError, tokenizer_r.batch_encode_plus, s2, max_length=max_length, pad_to_max_length=True)
+
+        # Pair input
+        self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, pad_to_max_length=True)
+
+        # Pair input
+        self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, pad_to_max_length=True)
+
+        # Pair input
+        self.assertRaises(ValueError, tokenizer_r.batch_encode_plus, p2, max_length=max_length, pad_to_max_length=True)
