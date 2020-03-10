@@ -23,7 +23,7 @@ from transformers.tokenization_transfo_xl import TransfoXLTokenizerFast
 
 class FastTokenizerMatchingTest(unittest.TestCase):
     def setUp(self) -> None:
-        with open("tests/fixtures/sample_text.txt") as f_data:
+        with open("tests/fixtures/sample_text.txt", encoding="utf-8") as f_data:
             self._data = f_data.read().replace("\n\n", "\n").strip()
 
     def assert_sequence_almost_equals(self, a, b, threshold):
