@@ -65,7 +65,7 @@ Citation:
 
 </details>
 
-I used `Data augmentation techniques` and splited the dataset in order to have a train and test set. The test set was created in a way that contains the same number of samples for each language. Finally, I got:
+As **XQuAD** is just an evaluation dataset, I used `Data augmentation techniques` (scraping, neural machine translation, etc) to obtain more samples and splited the dataset in order to have a train and test set. The test set was created in a way that contains the same number of samples for each language. Finally, I got:
 
 | Dataset     | # samples |
 | ----------- | --------- |
