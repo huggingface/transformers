@@ -65,7 +65,7 @@ Citation:
 
 </details>
 
-I used `Data augmentation techniques` to obtain more samples and splited the dataset in order to have a train and test set. The test set was created in a way that contains the same number of samples for each language. Finally, I got:
+As **XQuAD** is just an evaluation dataset, I used `Data augmentation techniques` (scraping, neural machine translation, etc) to obtain more samples and splited the dataset in order to have a train and test set. The test set was created in a way that contains the same number of samples for each language. Finally, I got:
 
 | Dataset     | # samples |
 | ----------- | --------- |
@@ -101,7 +101,7 @@ from transformers import pipeline
 qa_pipeline = pipeline(
     "question-answering",
     model="mrm8488/bert-multi-uncased-finetuned-xquadv1",
-    tokenizer="bert-multi-uncased-finetuned-xquadv1"
+    tokenizer="mrm8488/bert-multi-uncased-finetuned-xquadv1"
 )
 
 
