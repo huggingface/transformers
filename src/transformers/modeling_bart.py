@@ -58,7 +58,7 @@ BART_GENERATION_EXAMPLE = r"""
         # Generate Summary
         summary_ids = model.generate(inputs['input_ids'], attention_mask=inputs['attention_mask'], num_beams=4, max_length=5)
         print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
-            
+
 """
 
 BART_INPUTS_DOCSTRING = r"""
