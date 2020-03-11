@@ -1,10 +1,11 @@
 name: Self-hosted runner (push)
 
 on: 
-  push:
-    branches:
-      - master
-  pull_request:
+  # push:
+  #   branches:
+  #     - master
+  # pull_request:
+  repository_dispatch:
 
 
 jobs:
