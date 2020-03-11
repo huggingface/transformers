@@ -329,14 +329,14 @@ class CommonFastTokenizerTest(unittest.TestCase):
         # Pair input
         # TODO: Re-enable this test when batch_encode_plus with padding correctly handles padding
         input_r = tokenizer_r.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"],
-            ["This is a simple pair 1", "This is a simple pair 2"],
+            [("This is a simple input 1", "This is a simple input 2"),
+             ("This is a simple pair 1", "This is a simple pair 2")],
             max_length=15,
             pad_to_max_length=True,
         )
         input_p = tokenizer_p.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"],
-            ["This is a simple pair 1", "This is a simple pair 2"],
+            [("This is a simple input 1", "This is a simple input 2"),
+             ("This is a simple pair 1", "This is a simple pair 2")],
             max_length=15,
             pad_to_max_length=True,
         )
