@@ -1881,11 +1881,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         **kwargs
     ):
-        if not add_special_tokens:
-            logger.warning(
-                "Fast tokenizers add special tokens by default. To remove special tokens, please specify"
-                "`add_special_tokens=False` during the initialisation rather than when calling `encode`,"
-                "`encode_plus` or `batch_encode_plus`."
+
+        if batch_text_or_text_pairs is None:
+            raise ValueError(
+                "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
             )
 
         # Needed if we have to return a tensor
