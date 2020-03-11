@@ -37,7 +37,6 @@ jobs:
       run: |
         source .env/bin/activate
         python -c "import torch; print(torch.cuda.is_available())"
-        python -c "import tensorflow as tf; print(tf.test.is_built_with_cuda(), tf.config.list_physical_devices('GPU'))"
 
     - name: Run all non-slow tests on GPU
       env:
