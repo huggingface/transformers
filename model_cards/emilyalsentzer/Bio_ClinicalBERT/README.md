@@ -35,5 +35,5 @@ Refer to the original paper, [Publicly Available Clinical BERT Embeddings](https
 
 ## Questions?
 
-Post a Github issue on the clinicalBERT repo or email emilya@mit.edu with any questions.
+Post a Github issue on the [clinicalBERT repo](https://github.com/EmilyAlsentzer/clinicalBERT) or email emilya@mit.edu with any questions.
 
