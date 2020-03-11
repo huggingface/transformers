@@ -3,7 +3,7 @@ language: multilingual
 thumbnail:
 ---
 
-# [XLM](https://github.com/facebookresearch/XLM/) (multilingual version) fine-tuned on XQuAD
+# [XLM](https://github.com/facebookresearch/XLM/) (multilingual version) fine-tuned for multilingual Q&A
 
 Released from `Facebook` together with the paper [Cross-lingual Language Model Pretraining](https://arxiv.org/abs/1901.07291) by Guillaume Lample and Alexis Conneau and fine-tuned on [XQuAD](https://github.com/deepmind/xquad) for multilingual (`11 different languages`) **Q&A** downstream task.
 
@@ -71,7 +71,7 @@ Citation:
 
 </details>
 
-I used `Data augmentation techniques` to obtain more samples and splited the dataset in order to have a train and test set. The test set was created in a way that contains the same number of samples for each language. Finally, I got:
+As XQuAD is just an evaluation dataset, I used Data augmentation techniques (scraping, neural machine translation, etc) to obtain more samples and splited the dataset in order to have a train and test set. The test set was created in a way that contains the same number of samples for each language. Finally, I got:
 
 | Dataset     | # samples |
 | ----------- | --------- |
@@ -83,20 +83,6 @@ I used `Data augmentation techniques` to obtain more samples and splited the dat
 The model was trained on a Tesla P100 GPU and 25GB of RAM.
 The script for fine tuning can be found [here](https://github.com/huggingface/transformers/blob/master/examples/distillation/run_squad_w_distillation.py)
 
-## Results:
-
-| Metric    | # Value   |
-| --------- | --------- |
-| **Exact** | **82.69** |
-| **F1**    | **84.57** |
-
-## Comparison:
-
-| Model                                                                                                   | Exact     | F1 score  |
-| ------------------------------------------------------------------------------------------------------- | --------- | --------- |
-| bert-multi-cased-finetuned-xquadv1 | 91.43     | 94.14     |
-| bert-multi-uncased-finetuned-xquadv1                                                                    | **93.03** | **94.62** |
-| [xlm-multi-finetuned-xquadv1](https://huggingface.co/mrm8488/xlm-multi-finetuned-xquadv1) | 82.69 | 84.57 |
 
 ## Model in action
 
