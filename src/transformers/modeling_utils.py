@@ -173,7 +173,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         if getattr(output_embeddings, "bias", None) is not None:
             output_embeddings.bias.data = torch.nn.functional.pad(
                 output_embeddings.bias.data,
-                (0, output_embeddings.weight.shape[0] - output_embeddings.bias.shape[0]),
+                (0, output_embeddings.weight.shape[0] - output_embeddings.bias.shape[0],),
                 "constant",
                 0,
             )
@@ -411,7 +411,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 else:
                     raise EnvironmentError(
                         "Error no file named {} found in directory {} or `from_tf` set to False".format(
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"], pretrained_model_name_or_path
+                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
+                            pretrained_model_name_or_path,
                         )
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
@@ -425,7 +426,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path, postfix=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME)
+                    pretrained_model_name_or_path, postfix=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
                 )
 
             # redirect to the cache, if necessary
@@ -520,7 +521,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             def load(module: nn.Module, prefix=""):
                 local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
                 module._load_from_state_dict(
-                    state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs
+                    state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs,
                 )
                 for name, child in module._modules.items():
                     if child is not None:
@@ -584,6 +585,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         return {"input_ids": input_ids}
 
+    def prepare_scores_for_generation(self, scores, **kwargs):
+        return scores
+
     def _do_output_past(self, outputs):
         """During generation, decide whether to pass the `past` variable to the next forward pass."""
         has_output_past = getattr(self.config, "output_past", False)
@@ -609,7 +613,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         self,
         input_ids=None,
         max_length=None,
+        min_length=None,
         do_sample=True,
+        early_stopping=False,
         num_beams=None,
         temperature=None,
         top_k=None,
@@ -619,7 +625,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         pad_token_id=None,
         eos_token_ids=None,
         length_penalty=None,
+        no_repeat_ngram_size=None,
         num_return_sequences=None,
+        attention_mask=None,
     ):
         r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
         and beam-search.
@@ -713,7 +721,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             )
 
         max_length = max_length if max_length is not None else self.config.max_length
+        min_length = min_length if min_length is not None else self.config.min_length
         do_sample = do_sample if do_sample is not None else self.config.do_sample
+        early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         temperature = temperature if temperature is not None else self.config.temperature
         top_k = top_k if top_k is not None else self.config.top_k
@@ -723,6 +733,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_ids = eos_token_ids if eos_token_ids is not None else self.config.eos_token_ids
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
+        no_repeat_ngram_size = (
+            no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
+        )
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
@@ -735,7 +748,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             eos_token_ids = [eos_token_ids]
 
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictly positive integer."
+        assert isinstance(min_length, int) and min_length >= 0, "`min_length` should be a positive integer."
         assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
+        assert isinstance(early_stopping, bool), "`early_stopping` should be a boolean."
         assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictly positive integer."
         assert temperature > 0, "`temperature` should be strictly positive."
         assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
@@ -752,6 +767,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         ), "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
         assert length_penalty > 0, "`length_penalty` should be strictly positive."
         assert (
+            isinstance(no_repeat_ngram_size, int) and no_repeat_ngram_size >= 0
+        ), "`no_repeat_ngram_size` should be a positive integer."
+        assert (
             isinstance(num_return_sequences, int) and num_return_sequences > 0
         ), "`num_return_sequences` should be a strictly positive integer."
 
@@ -761,7 +779,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
             )
             input_ids = torch.full(
-                (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device
+                (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device,
             )
         else:
             assert input_ids.dim() == 2, "Input prompt should be of shape (batch_size, sequence length)."
@@ -780,6 +798,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     num_beams >= num_return_sequences
                 ), "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams >= num_return_sequences"
 
+        # create attention mask if necessary
+        # TODO (PVP): this should later be handled by the forward fn() in each model in the future see PR 3140
+        if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids):
+            attention_mask = input_ids.ne(pad_token_id).long()
+        elif attention_mask is None:
+            attention_mask = input_ids.new_ones(input_ids.shape)
+
+        # set pad_token_id to eos_token_ids if not set. Important that this is done after
+        # attention_mask is created
         if pad_token_id is None and eos_token_ids is not None:
             logger.warning(
                 "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_ids[0])
@@ -787,7 +814,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             pad_token_id = eos_token_ids[0]
 
         # current position and vocab size
-        cur_len = input_ids.shape[1]
         vocab_size = self.config.vocab_size
 
         # set effective batch size and effective batch multiplier according to do_sample
@@ -802,41 +828,77 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         if num_return_sequences > 1 or num_beams > 1:
             input_ids_len = input_ids.shape[-1]
             input_ids = input_ids.unsqueeze(1).expand(batch_size, effective_batch_mult * num_beams, input_ids_len)
+            attention_mask = attention_mask.unsqueeze(1).expand(
+                batch_size, effective_batch_mult * num_beams, input_ids_len
+            )
+
             input_ids = input_ids.contiguous().view(
                 effective_batch_size * num_beams, input_ids_len
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
+            attention_mask = attention_mask.contiguous().view(
+                effective_batch_size * num_beams, input_ids_len
+            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
+
+        if self.config.is_encoder_decoder:
+            assert bos_token_id is not None, "Encoder Decoder Models need to have a bos_token_id"
+            # encoder decoder need to start with empty input_ids and copy the input_ids to encoder_inputs
+            encoder_inputs = input_ids
+            input_ids = torch.full(
+                (effective_batch_size * num_beams, 1),
+                bos_token_id,
+                dtype=torch.long,
+                device=next(self.parameters()).device,
+            )
+            cur_len = 1
+
+            # put model in generation mode if it has one
+            if hasattr(self.model, "decoder") and hasattr(self.model.decoder, "generation_mode"):
+                self.model.decoder.generation_mode = True
+        else:
+            encoder_inputs = None
+            cur_len = input_ids.shape[-1]
 
         if num_beams > 1:
             output = self._generate_beam_search(
                 input_ids,
-                cur_len,
-                max_length,
-                do_sample,
-                temperature,
-                top_k,
-                top_p,
-                repetition_penalty,
-                pad_token_id,
-                eos_token_ids,
-                effective_batch_size,
-                num_return_sequences,
-                length_penalty,
-                num_beams,
-                vocab_size,
+                cur_len=cur_len,
+                max_length=max_length,
+                min_length=min_length,
+                do_sample=do_sample,
+                early_stopping=early_stopping,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                bos_token_id=bos_token_id,
+                pad_token_id=pad_token_id,
+                eos_token_ids=eos_token_ids,
+                batch_size=effective_batch_size,
+                num_return_sequences=num_return_sequences,
+                length_penalty=length_penalty,
+                num_beams=num_beams,
+                vocab_size=vocab_size,
+                encoder_inputs=encoder_inputs,
+                attention_mask=attention_mask,
             )
         else:
             output = self._generate_no_beam_search(
                 input_ids,
-                cur_len,
-                max_length,
-                do_sample,
-                temperature,
-                top_k,
-                top_p,
-                repetition_penalty,
-                pad_token_id,
-                eos_token_ids,
-                effective_batch_size,
+                cur_len=cur_len,
+                max_length=max_length,
+                min_length=min_length,
+                do_sample=do_sample,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                pad_token_id=pad_token_id,
+                eos_token_ids=eos_token_ids,
+                batch_size=effective_batch_size,
+                encoder_inputs=encoder_inputs,
+                attention_mask=attention_mask,
             )
 
         return output
@@ -846,14 +908,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         input_ids,
         cur_len,
         max_length,
+        min_length,
         do_sample,
         temperature,
         top_k,
         top_p,
         repetition_penalty,
+        no_repeat_ngram_size,
         pad_token_id,
         eos_token_ids,
         batch_size,
+        encoder_inputs,
+        attention_mask,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
             All returned sequence are generated independantly.
@@ -864,7 +930,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         past = None
         while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past)
+            model_inputs = self.prepare_inputs_for_generation(
+                input_ids, past=past, encoder_inputs=encoder_inputs, attention_mask=attention_mask
+            )
 
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
@@ -877,6 +945,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if repetition_penalty != 1.0:
                 self.enforce_repetition_penalty_(next_token_logits, batch_size, 1, input_ids, repetition_penalty)
 
+            if no_repeat_ngram_size > 0:
+                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
+                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+                banned_tokens = calc_banned_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
+                for batch_idx in range(batch_size):
+                    next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
+
+            # set eos token prob to zero if min_length is not reached
+            if eos_token_ids is not None and cur_len < min_length:
+                for eos_token_id in eos_token_ids:
+                    next_token_logits[:, eos_token_id] = -float("inf")
+
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
                 if temperature != 1.0:
@@ -884,7 +964,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 # Top-p/top-k filtering
                 next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
                 # Sample
-                next_token = torch.multinomial(F.softmax(next_token_logits, dim=-1), num_samples=1).squeeze(1)
+                probs = F.softmax(next_token_logits, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
                 # Greedy decoding
                 next_token = torch.argmax(next_token_logits, dim=-1)
@@ -911,6 +992,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if unfinished_sents.max() == 0:
                 break
 
+            # extend attention_mask for new generated input if only decoder
+            if self.config.is_encoder_decoder is False:
+                attention_mask = torch.cat(
+                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+                )
+
             cur_len = cur_len + 1
 
         # if there are different sentences lengths in the batch, some batches have to be padded
@@ -931,11 +1018,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         input_ids,
         cur_len,
         max_length,
+        min_length,
         do_sample,
+        early_stopping,
         temperature,
         top_k,
         top_p,
         repetition_penalty,
+        no_repeat_ngram_size,
+        bos_token_id,
         pad_token_id,
         eos_token_ids,
         batch_size,
@@ -943,18 +1034,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         length_penalty,
         num_beams,
         vocab_size,
+        encoder_inputs,
+        attention_mask,
     ):
         """ Generate sequences for each example with beam search.
         """
 
         # generated hypotheses
         generated_hyps = [
-            BeamHypotheses(num_beams, max_length, length_penalty, early_stopping=False) for _ in range(batch_size)
+            BeamHypotheses(num_beams, max_length, length_penalty, early_stopping=early_stopping)
+            for _ in range(batch_size)
         ]
 
         # scores for each sentence in the beam
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
-        # Greedy decoding it is made sure that only tokens of the first beam are considered to avoid sampling the exact same tokens three times
+
+        # for greedy decoding it is made sure that only tokens of the first beam are considered to avoid sampling the exact same tokens three times
         if do_sample is False:
             beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
@@ -966,7 +1061,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past)
+            model_inputs = self.prepare_inputs_for_generation(
+                input_ids, past=past, encoder_inputs=encoder_inputs, attention_mask=attention_mask
+            )
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
 
@@ -977,44 +1074,59 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
                 self.enforce_repetition_penalty_(
-                    next_token_logits, batch_size, num_beams, input_ids, repetition_penalty
+                    next_token_logits, batch_size, num_beams, input_ids, repetition_penalty,
                 )
 
+            if temperature != 1.0:
+                next_token_logits = next_token_logits / temperature
+
+            scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+            if self.config.is_encoder_decoder and do_sample is False:
+                # TODO(PVP) to be refactored later - do we need this boolean flag here? Also Only add for beam_search or also for no_beam_search? The prepare scores fn is ugly here
+                scores = self.prepare_scores_for_generation(scores, cur_len, max_length)
+
+            # set eos token prob to zero if min_length is not reached
+            if eos_token_ids is not None and cur_len < min_length:
+                for eos_token_id in eos_token_ids:
+                    scores[:, eos_token_id] = -float("inf")
+
+            if no_repeat_ngram_size > 0:
+                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
+                num_batch_hypotheses = batch_size * num_beams
+                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+                banned_batch_tokens = calc_banned_tokens(
+                    input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
+                )
+                for i, banned_tokens in enumerate(banned_batch_tokens):
+                    scores[i, banned_tokens] = -float("inf")
+
+            assert scores.shape == (batch_size * num_beams, vocab_size), "Shapes of scores: {} != {}".format(
+                scores.shape, (batch_size * num_beams, vocab_size)
+            )
+
             if do_sample:
-                # Temperature (higher temperature => more likely to sample low probability tokens)
-                if temperature != 1.0:
-                    next_token_logits = next_token_logits / temperature
-
-                scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
                 _scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * num_beams, vocab_size)
-
                 # Top-p/top-k filtering
                 _scores = top_k_top_p_filtering(
                     _scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2
                 )  # (batch_size * num_beams, vocab_size)
-
                 # re-organize to group the beam together to sample from all beam_idxs
                 _scores = _scores.contiguous().view(
                     batch_size, num_beams * vocab_size
                 )  # (batch_size, num_beams * vocab_size)
 
                 # Sample 2 next tokens for each beam (so we have some spare tokens and match output of greedy beam search)
-                next_tokens = torch.multinomial(
-                    F.softmax(_scores, dim=-1), num_samples=2 * num_beams
-                )  # (batch_size, num_beams * 2)
-
+                probs = F.softmax(_scores, dim=-1)
+                next_tokens = torch.multinomial(probs, num_samples=2 * num_beams)  # (batch_size, num_beams * 2)
                 # Compute next scores
                 next_scores = torch.gather(_scores, -1, next_tokens)  # (batch_size, num_beams * 2)
-
                 # sort the sampled vector to make sure that the first num_beams samples are the best
                 next_scores, next_scores_indices = torch.sort(next_scores, descending=True, dim=1)
                 next_tokens = torch.gather(next_tokens, -1, next_scores_indices)  # (batch_size, num_beams * 2)
+
             else:
-                # do greedy beam search
-                scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
-                assert scores.size() == (batch_size * num_beams, vocab_size)
-                # Add the log prob of the new beams to the log prob of the beginning of the sequence (sum of logs == log of the product)
                 next_scores = scores + beam_scores[:, None].expand_as(scores)  # (batch_size * num_beams, vocab_size)
+
                 # re-organize to group the beam together (we are keeping top hypothesis accross beams)
                 next_scores = next_scores.view(
                     batch_size, num_beams * vocab_size
@@ -1025,16 +1137,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             assert next_scores.size() == next_tokens.size() == (batch_size, 2 * num_beams)
 
             # next batch beam content
-            # list of (batch_size * num_beams) tuple(next hypothesis score, next word, current position in the batch)
             next_batch_beam = []
 
             # for each sentence
             for batch_idx in range(batch_size):
 
                 # if we are done with this sentence
-                done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
-                    next_scores[batch_idx].max().item()
-                )
                 if done[batch_idx]:
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
@@ -1049,30 +1157,45 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 next_sent_beam = []
 
                 # next tokens for this sentence
-                for idx, score in zip(next_tokens[batch_idx], next_scores[batch_idx]):
-
+                for beam_token_rank, (beam_token_id, beam_token_score) in enumerate(
+                    zip(next_tokens[batch_idx], next_scores[batch_idx])
+                ):
                     # get beam and word IDs
-                    beam_id = idx // vocab_size
-                    token_id = idx % vocab_size
+                    beam_id = beam_token_id // vocab_size
+                    token_id = beam_token_id % vocab_size
 
                     effective_beam_id = batch_idx * num_beams + beam_id
+
                     # add to generated hypotheses if end of sentence
-                    if eos_token_ids is not None and token_id.item() in eos_token_ids:
+                    if (eos_token_ids is not None) and (token_id.item() in eos_token_ids):
+                        # if beam_token does not belong to top num_beams tokens, it should not be added
+                        is_beam_token_worse_than_top_num_beams = beam_token_rank >= num_beams
+                        if is_beam_token_worse_than_top_num_beams:
+                            continue
                         generated_hyps[batch_idx].add(
-                            input_ids[effective_beam_id].clone(), score.item(),
+                            input_ids[effective_beam_id].clone(), beam_token_score.item(),
                         )
                     else:
                         # add next predicted word if it is not eos_token
-                        next_sent_beam.append((score, token_id, effective_beam_id))
+                        next_sent_beam.append((beam_token_score, token_id, effective_beam_id))
 
                     # the beam for next step is full
                     if len(next_sent_beam) == num_beams:
                         break
 
+                # Check if were done so that we can save a pad step if all(done)
+                done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
+                    next_scores[batch_idx].max().item(), cur_len=cur_len
+                )
+
                 # update next beam content
                 assert len(next_sent_beam) == num_beams, "Beam should always be full"
                 next_batch_beam.extend(next_sent_beam)
                 assert len(next_batch_beam) == num_beams * (batch_idx + 1)
+
+            # stop when we are done with each sentence
+            if all(done):
+                break
 
             # sanity check / prepare next batch
             assert len(next_batch_beam) == batch_size * num_beams
@@ -1088,9 +1211,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if past:
                 past = self._reorder_cache(past, beam_idx)
 
-            # stop when we are done with each sentence
-            if all(done):
-                break
+            # extend attention_mask for new generated input if only decoder
+            if self.config.is_encoder_decoder is False:
+                attention_mask = torch.cat(
+                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+                )
 
             # update current length
             cur_len = cur_len + 1
@@ -1107,7 +1232,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 assert torch.all(
                     next_scores[batch_idx, :num_beams] == beam_scores.view(batch_size, num_beams)[batch_idx]
                 ), "If batch_idx is not done, final next scores: {} have to equal to accumulated beam_scores: {}".format(
-                    next_scores[:, :num_beams][batch_idx], beam_scores.view(batch_size, num_beams)[batch_idx]
+                    next_scores[:, :num_beams][batch_idx], beam_scores.view(batch_size, num_beams)[batch_idx],
                 )
 
             # need to add best num_beams hypotheses to generated hyps
@@ -1150,7 +1275,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             assert (len(hypo) == max_length for hypo in best)
             decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
 
+        if self.config.is_encoder_decoder:
+            # do not return first <EOS> token
+            return decoded[:, 1:]
         return decoded
+
+    # force one of token_ids to be generated by setting prob of all other tokens to 0.
+    def _force_token_ids_generation(self, scores, token_ids):
+        if isinstance(token_ids, int):
+            token_ids = [token_ids]
+        all_but_token_ids_mask = torch.tensor(
+            [x for x in range(self.config.vocab_size) if x not in token_ids],
+            dtype=torch.long,
+            device=next(self.parameters()).device,
+        )
+        assert len(scores.shape) == 2, "scores should be of rank 2 with shape: [batch_size, vocab_size]"
+        scores[:, all_but_token_ids_mask] = -float("inf")
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
@@ -1165,6 +1305,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             reordered_past.append(reordered_layer_past)
         past = tuple(reordered_past)
         return past
+
+
+def calc_banned_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len):
+    # Copied from fairseq for no_repeat_ngram in beam_search"""
+    if cur_len + 1 < no_repeat_ngram_size:
+        # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
+        return [[] for _ in range(num_hypos)]
+    generated_ngrams = [{} for _ in range(num_hypos)]
+    for idx in range(num_hypos):
+        gen_tokens = prev_input_ids[idx].tolist()
+        generated_ngram = generated_ngrams[idx]
+        for ngram in zip(*[gen_tokens[i:] for i in range(no_repeat_ngram_size)]):
+            prev_ngram_tuple = tuple(ngram[:-1])
+            generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
+
+    def _get_generated_ngrams(hypo_idx):
+        # Before decoding the next token, prevent decoding of ngrams that have already appeared
+        start_idx = cur_len + 1 - no_repeat_ngram_size
+        ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].tolist())
+        return generated_ngrams[hypo_idx].get(ngram_idx, [])
+
+    banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
+    return banned_tokens
 
 
 def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
@@ -1440,7 +1603,7 @@ class SQuADHead(nn.Module):
         self.answer_class = PoolerAnswerClass(config)
 
     def forward(
-        self, hidden_states, start_positions=None, end_positions=None, cls_index=None, is_impossible=None, p_mask=None
+        self, hidden_states, start_positions=None, end_positions=None, cls_index=None, is_impossible=None, p_mask=None,
     ):
         outputs = ()
 
@@ -1499,7 +1662,7 @@ class SQuADHead(nn.Module):
             start_states = torch.einsum("blh,bl->bh", hidden_states, start_log_probs)
             cls_logits = self.answer_class(hidden_states, start_states=start_states, cls_index=cls_index)
 
-            outputs = (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits) + outputs
+            outputs = (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits,) + outputs
 
         # return start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits
         # or (if labels are provided) (total_loss,)
@@ -1568,7 +1731,7 @@ class SequenceSummary(nn.Module):
             output = hidden_states.mean(dim=1)
         elif self.summary_type == "cls_index":
             if cls_index is None:
-                cls_index = torch.full_like(hidden_states[..., :1, :], hidden_states.shape[-2] - 1, dtype=torch.long)
+                cls_index = torch.full_like(hidden_states[..., :1, :], hidden_states.shape[-2] - 1, dtype=torch.long,)
             else:
                 cls_index = cls_index.unsqueeze(-1).unsqueeze(-1)
                 cls_index = cls_index.expand((-1,) * (cls_index.dim() - 1) + (hidden_states.size(-1),))
