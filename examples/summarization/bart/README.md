@@ -32,6 +32,7 @@ unzip stanford-corenlp-full-2018-10-05.zip
 cd stanford-corenlp-full-2018-10-05
 export CLASSPATH=stanford-corenlp-3.9.2.jar:stanford-corenlp-3.9.2-models.jar
 ```
+Then run `ptb_tokenize` on `test.target` and your generated hypotheses.
 ### Rouge Setup
 Install `files2rouge` following the instructions at [here](https://github.com/pltrdy/files2rouge).
 I also needed to run `sudo apt-get install libxml-parser-perl`
