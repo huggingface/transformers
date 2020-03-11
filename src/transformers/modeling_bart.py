@@ -869,7 +869,8 @@ class BartModel(PretrainedBartModel):
 
 
 @add_start_docstrings(
-    "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING + BART_GENERATION_EXAMPLE,
+    "The BART Model with a language modeling head. Can be used for summarization.",
+    BART_START_DOCSTRING + BART_GENERATION_EXAMPLE,
 )
 class BartForConditionalGeneration(PretrainedBartModel):
     base_model_prefix = "model"
