@@ -29,11 +29,13 @@ Tokenizer = namedtuple("Tokenizer", ["name", "rust", "python", "vocab_key"])
 
 class CommonFastTokenizerTest(unittest.TestCase):
 
-    TOKENIZERS_CLASSES = frozenset([
-        Tokenizer("Bert", BertTokenizerFast, BertTokenizer, "vocab_file"),
-        Tokenizer("DistilBert", DistilBertTokenizerFast, DistilBertTokenizer, "vocab_file"),
-        Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file"),
-    ])
+    TOKENIZERS_CLASSES = frozenset(
+        [
+            Tokenizer("Bert", BertTokenizerFast, BertTokenizer, "vocab_file"),
+            Tokenizer("DistilBert", DistilBertTokenizerFast, DistilBertTokenizer, "vocab_file"),
+            Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file"),
+        ]
+    )
 
     def setUp(self) -> None:
         with open("tests/fixtures/sample_text.txt", encoding="utf-8") as f_data:
@@ -54,6 +56,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
                     self.assert_num_special_tokens_to_add_equal(tokenizer_r, tokenizer_p)
                     self.assert_max_length_equal(tokenizer_r, tokenizer_p)
                     self.assert_special_tokens_map_equal(tokenizer_r, tokenizer_p)
+                    self.assert_embeded_special_tokens(tokenizer_r, tokenizer_p)
                     self.assert_padding(tokenizer_r, tokenizer_p)
                     # TODO: enable for v3.0.0
                     # self.assert_empty_output_no_special_tokens(tokenizer_r, tokenizer_p)
@@ -349,34 +352,22 @@ class CommonFastTokenizerTest(unittest.TestCase):
 
     def assert_embeded_special_tokens(self, tokenizer_r, tokenizer_p):
         sentence = "A, <mask> AllenNLP sentence."
-        tokens_r = tokenizer_r.encode_plus(sentence, return_attention_mask=False, return_token_type_ids=True)
+        tokens_r = tokenizer_r.encode_plus(
+            sentence, add_special_tokens=True, return_attention_mask=False, return_token_type_ids=True
+        )
         tokens_p = tokenizer_p.encode_plus(
             sentence, add_special_tokens=True, return_attention_mask=False, return_token_type_ids=True
         )
-        type_ids_r = tokens_r["token_type_ids"]
-        type_ids_p = tokens_p["token_type_ids"]
 
-        expected_tokens = [
-            "<s>",
-            "A",
-            ",",
-            "Ġ",
-            "<mask>",
-            "ĠAllen",
-            "N",
-            "LP",
-            "Ġsentence",
-            ".",
-            "</s>",
-        ]
+        for key in tokens_p.keys():
+            self.assertEqual(tokens_r[key], tokens_p[key])
+
+        self.assertEqual(sum(tokens_r["token_type_ids"]), 0)
+        self.assertEqual(sum(tokens_p["token_type_ids"]), 0)
 
         tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
         tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
-        self.assertEqual(expected_tokens, tokens_r)
-        self.assertEqual(expected_tokens, tokens_p)
-
-        self.assertEqual([0] * len(expected_tokens), type_ids_r)
-        self.assertEqual([0] * len(expected_tokens), type_ids_p)
+        self.assertSequenceEqual(tokens_r, tokens_p)
 
 
 class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
