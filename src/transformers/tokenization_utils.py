@@ -299,6 +299,11 @@ class PreTrainedTokenizer(object):
         """ Ids of all the additional special tokens in the vocabulary (list of integers). Log an error if used while not having been set. """
         return self.convert_tokens_to_ids(self.additional_special_tokens)
 
+    @property
+    def vocab_size(self) -> int:
+        """ Size of the base vocabulary (without the added tokens) """
+        raise NotImplementedError
+
     def get_vocab(self):
         """ Returns the vocabulary as a dict of {token: index} pairs. `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the vocab. """
         raise NotImplementedError()
@@ -612,10 +617,6 @@ class PreTrainedTokenizer(object):
 
             Please use :func:`~transformers.PreTrainedTokenizer.save_pretrained` `()` to save the full Tokenizer state if you want to reload it using the :func:`~transformers.PreTrainedTokenizer.from_pretrained` class method.
         """
-        raise NotImplementedError
-
-    def vocab_size(self):
-        """ Size of the base vocabulary (without the added tokens) """
         raise NotImplementedError
 
     def __len__(self):
