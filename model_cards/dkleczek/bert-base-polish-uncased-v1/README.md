@@ -35,26 +35,19 @@ Polbert is released via [HuggingFace Transformers library](https://huggingface.c
 For an example use as language model, see [this notebook](https://github.com/kldarek/polbert/blob/master/LM_testing.ipynb) file. 
 
 ```python
-import numpy as np
-import torch
-import transformers as ppb
+from transformers import *
+model = BertForMaskedLM.from_pretrained("dkleczek/bert-base-polish-uncased-v1")
+tokenizer = BertTokenizer.from_pretrained("dkleczek/bert-base-polish-uncased-v1")
+nlp = pipeline('fill-mask', model=model, tokenizer=tokenizer)
+for pred in nlp(f"Adam Mickiewicz wielkim polskim {nlp.tokenizer.mask_token} był."):
+  print(pred)
 
-tokenizer = ppb.BertTokenizer.from_pretrained('dkleczek/bert-base-polish-uncased-v1')
-bert_model = ppb.BertForMaskedLM.from_pretrained('dkleczek/bert-base-polish-uncased-v1') 
-string1 = 'Adam mickiewicz wielkim polskim [MASK] był .'
-indices = tokenizer.encode(string1, add_special_tokens=True)
-masked_token = np.argwhere(np.array(indices) == 3).flatten()[0] # 3 is the vocab id for [MASK] token
-input_ids = torch.tensor([indices])
-with torch.no_grad():
-    last_hidden_states = bert_model(input_ids)[0]
-more_words = np.argsort(np.asarray(last_hidden_states[0,masked_token,:]))[-4:]
-print(more_words)
-
-# Output: 
-# poeta
-# bohaterem
-# człowiekiem
-# pisarzem
+# Output:
+# {'sequence': '[CLS] adam mickiewicz wielkim polskim poeta był. [SEP]', 'score': 0.47196975350379944, 'token': 26596}
+# {'sequence': '[CLS] adam mickiewicz wielkim polskim bohaterem był. [SEP]', 'score': 0.09127858281135559, 'token': 10953}
+# {'sequence': '[CLS] adam mickiewicz wielkim polskim człowiekiem był. [SEP]', 'score': 0.0647173821926117, 'token': 5182}
+# {'sequence': '[CLS] adam mickiewicz wielkim polskim pisarzem był. [SEP]', 'score': 0.05232388526201248, 'token': 24293}
+# {'sequence': '[CLS] adam mickiewicz wielkim polskim politykiem był. [SEP]', 'score': 0.04554257541894913, 'token': 44095}
 ```
 
 See the next section for an example usage of Polbert in downstream tasks. 
