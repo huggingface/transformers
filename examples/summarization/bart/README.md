@@ -16,6 +16,7 @@ the default batch size, 8, fits in 16GB GPU memory, but may need to be adjusted 
 
 
 ### Training
+<<<<<<< HEAD
 
 
 Install newest PyTorch Lightning.
@@ -35,6 +36,17 @@ python run_bart_sum.py \
 --output_dir=./results \
 --do_train \
 --train_batch_size=4
+=======
+Clone the repository and preprocess the data:
+```commandline
+git clone https://github.com/artmatsak/cnn-dailymail
+cd cnn-dailymail && python make_datafiles.py ../cnn/stories/ ../dailymail/stories/
+```
+
+Run the training command:
+```commandline
+python run_bart_sum.py --data_dir=/path/to/cnn-dailymail/cnn_dm --output_dir=./results --do_train --train_batch_size=2
+>>>>>>> added bart for finetuning
 ```
 
 ### Where is the code?
