@@ -542,24 +542,28 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
     try:
         import psutil
     except (ImportError):
-        logger.warning("Psutil not installed, we won't log CPU memory usage. "
-                       "Install psutil (pip install psutil) to use CPU memory tracing.")
+        logger.warning(
+            "Psutil not installed, we won't log CPU memory usage. "
+            "Install psutil (pip install psutil) to use CPU memory tracing."
+        )
         process = None
     else:
         process = psutil.Process(os.getpid())
 
     try:
         from py3nvml import py3nvml
+
         py3nvml.nvmlInit()
         devices = list(range(py3nvml.nvmlDeviceGetCount())) if gpus_to_trace is None else gpus_to_trace
         py3nvml.nvmlShutdown()
     except ImportError:
-        logger.warning("py3nvml not installed, we won't log GPU memory usage. "
-                       "Install py3nvml (pip install py3nvml) to use GPU memory tracing.")
+        logger.warning(
+            "py3nvml not installed, we won't log GPU memory usage. "
+            "Install py3nvml (pip install py3nvml) to use GPU memory tracing."
+        )
         log_gpu = False
-    except:
-        logger.warning("Error while initializing comunication with GPU. "
-                       "We won't perform GPU memory tracing.")
+    except (OSError, py3nvml.NVMLError):
+        logger.warning("Error while initializing comunication with GPU. " "We won't perform GPU memory tracing.")
         log_gpu = False
     else:
         log_gpu = _torch_available or _tf_available
@@ -622,6 +626,7 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
                 torch.cuda.empty_cache()
             if _tf_available:
                 from tensorflow.python.eager import context
+
                 context.context()._clear_caches()  # See https://github.com/tensorflow/tensorflow/issues/20218#issuecomment-416771802
 
             # Sum used memory for all GPUs
@@ -643,6 +648,7 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
     _memory_tracing_enabled = True
 
     return memory_trace
+
 
 Memory = namedtuple("Memory", ["bytes", "string"])
 CPUGPUMemory = namedtuple("TotalMemoryIncrease", ["cpu", "gpu", "cpu_gpu"])
@@ -680,27 +686,37 @@ def stop_memory_tracing(memory_trace=None, ignore_released_memory_in_total=True)
     if memory_trace is not None and len(memory_trace) > 1:
         memory_diff_trace = []
         cumulative_memory_dict = defaultdict(lambda: [0, 0, 0])
-        for (frame, cpu_mem, gpu_mem), (next_frame, next_cpu_mem, next_gpu_mem) in zip(memory_trace[:-1], memory_trace[1:]):
+        for (frame, cpu_mem, gpu_mem), (next_frame, next_cpu_mem, next_gpu_mem) in zip(
+            memory_trace[:-1], memory_trace[1:]
+        ):
             cpu_mem_inc = next_cpu_mem - cpu_mem
             cpu_mem_str = bytes_to_human_readable(cpu_mem_inc)
             gpu_mem_inc = next_gpu_mem - gpu_mem
             gpu_mem_str = bytes_to_human_readable(gpu_mem_inc)
             cpu_gpu_mem_inc = cpu_mem_inc + gpu_mem_inc
             cpu_gpu_mem_str = bytes_to_human_readable(cpu_gpu_mem_inc)
-            memory_diff_trace.append(TraceCPUGPUMemory(frame=frame,
-                                                       cpu=Memory(cpu_mem_inc, cpu_mem_str),
-                                                       gpu=Memory(gpu_mem_inc, gpu_mem_str),
-                                                       cpu_gpu=Memory(cpu_gpu_mem_inc, cpu_gpu_mem_str)))
+            memory_diff_trace.append(
+                TraceCPUGPUMemory(
+                    frame=frame,
+                    cpu=Memory(cpu_mem_inc, cpu_mem_str),
+                    gpu=Memory(gpu_mem_inc, gpu_mem_str),
+                    cpu_gpu=Memory(cpu_gpu_mem_inc, cpu_gpu_mem_str),
+                )
+            )
             cumulative_memory_dict[frame][0] += cpu_mem_inc
             cumulative_memory_dict[frame][1] += gpu_mem_inc
             cumulative_memory_dict[frame][2] += cpu_gpu_mem_inc
 
-        cumulative_memory = sorted(list(cumulative_memory_dict.items()), key=lambda x: x[1][2], reverse=True)  # order by the total CPU + GPU memory increase
+        cumulative_memory = sorted(
+            list(cumulative_memory_dict.items()), key=lambda x: x[1][2], reverse=True
+        )  # order by the total CPU + GPU memory increase
         cumulative_memory = list(
-            TraceCPUGPUMemory(frame=frame,
-                              cpu=Memory(cpu_mem_inc, bytes_to_human_readable(cpu_mem_inc)),
-                              gpu=Memory(gpu_mem_inc, bytes_to_human_readable(gpu_mem_inc)),
-                              cpu_gpu=Memory(cpu_gpu_mem_inc, bytes_to_human_readable(cpu_gpu_mem_inc)))
+            TraceCPUGPUMemory(
+                frame=frame,
+                cpu=Memory(cpu_mem_inc, bytes_to_human_readable(cpu_mem_inc)),
+                gpu=Memory(gpu_mem_inc, bytes_to_human_readable(gpu_mem_inc)),
+                cpu_gpu=Memory(cpu_gpu_mem_inc, bytes_to_human_readable(cpu_gpu_mem_inc)),
+            )
             for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in cumulative_memory
         )
 
