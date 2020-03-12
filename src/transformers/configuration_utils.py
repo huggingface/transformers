@@ -251,8 +251,8 @@ class PretrainedConfig(object):
             else:
                 msg = (
                     "Can't load '{}'. Make sure that:\n\n"
-                    "- '{}' is a correct model identifier of a community model from 'https://huggingface.co/models' which has a '{}' file\n\n"
-                    "- or '{}' is either a model name in {}\n\n"
+                    "- '{}' is either a correct model identifier of a community model from 'https://huggingface.co/models' which has a '{}' file\n\n"
+                    "- or '{}' is a model name in {}\n\n"
                     "- or '{}' is the correct path to a directory containing a '{}' file".format(
                         pretrained_model_name_or_path,
                         pretrained_model_name_or_path,
