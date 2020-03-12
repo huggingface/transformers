@@ -69,7 +69,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
                 with self.subTest("{} ({})".format(name, pretrained_name)):
                     tokenizer_r = rust_cls.from_pretrained(pretrained_name)
 
-                    # Ensure None raise an issue
+                    # Ensure None raise an error
+                    self.assertRaises(ValueError, tokenizer_r.tokenize, None)
                     self.assertRaises(ValueError, tokenizer_r.encode, None)
                     self.assertRaises(ValueError, tokenizer_r.encode_plus, None)
                     self.assertRaises(ValueError, tokenizer_r.batch_encode_plus, None)
