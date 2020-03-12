@@ -373,7 +373,7 @@ class ElectraModel(ElectraPreTrainedModel):
 
             output += (probs, preds, loss)
 
-        return output  # generator_sequence_output, generator_pooled_output, discriminator_sequence_output, (logits, probs, preds) (probs,)
+        return output  # generator_sequence_output, generator_pooled_output, discriminator_sequence_output, (logits, probs, preds, loss) (probs,)
 
 
 class ElectraGenerator(ElectraPreTrainedModel):
@@ -387,10 +387,8 @@ class ElectraGenerator(ElectraPreTrainedModel):
         self.generator_lm_head = nn.Linear(int(config.hidden_size / 2), config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
-        self.ElectraGeneratorOutputs.__new__.__defaults__ = (None, None, None)  # Last three are optional
-
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def get_output_embeddings(self):
         return self.generator_lm_head
@@ -443,7 +441,7 @@ class ElectraGenerator(ElectraPreTrainedModel):
         # Masked language modeling softmax layer
         if masked_lm_weights is not None:
             # Gather only the relevant values in the indices that were masked
-            relevant_hidden = self._gather_positions(generator_hidden_states[0], masked_lm_positions)
+            relevant_hidden = self._gather_positions(generator_sequence_output, masked_lm_positions)
             hidden_states = self.generator_predictions(relevant_hidden)
 
             # Project to the vocabulary
@@ -455,11 +453,14 @@ class ElectraGenerator(ElectraPreTrainedModel):
             probs = torch.softmax(hidden_states, dim=-1)
 
             log_probs = torch.log_softmax(hidden_states, -1)
+            # label_log_probs = -
             predictions = torch.argmax(log_probs, dim=-1)
 
-            output += (logits, probs, predictions)
+            loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
+            loss = loss_fct(logits.view(-1, self.config.vocab_size), masked_lm_ids.view(-1))
+            output += (logits, probs, predictions, loss)
 
-        return output  # generator_sequence_output, generator_pooled_output (logits, probs, preds)
+        return output  # generator_sequence_output, generator_pooled_output, (logits, probs, preds, loss)
 
 
 class ElectraDiscriminator(ElectraPreTrainedModel):
@@ -481,6 +482,7 @@ class ElectraDiscriminator(ElectraPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        fake_token_labels=None
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -510,11 +512,18 @@ class ElectraDiscriminator(ElectraPreTrainedModel):
             embedding_output, attention_mask=extended_attention_mask, head_mask=head_mask
         )
 
-        predictions = self.discriminator_predictions(discriminator_hidden_states)
+        discriminator_sequence_output = discriminator_hidden_states[0]
 
-        output = (discriminator_hidden_states,)
+        output = (discriminator_sequence_output,)
 
-        return output  # discriminator_hidden_states
+        if fake_token_labels is not None:
+            probs, preds, loss = self.discriminator_predictions(
+                discriminator_sequence_output, attention_mask, fake_token_labels
+            )
+
+            output += (probs, preds, loss)
+
+        return output  # discriminator_hidden_states (probs, preds, loss)
 
 
 class ElectraTransformer(ElectraPreTrainedModel):
