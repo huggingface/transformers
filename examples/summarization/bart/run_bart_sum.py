@@ -40,15 +40,15 @@ class BartSystem(pl.LightningModule):
             batch["source_ids"], attention_mask=batch["source_mask"], decoder_input_ids=batch["target_ids"]
         )
 
-        logits = outputs[0]
+        out = outputs[0]
 
-        x = F.log_softmax(logits, dim=-1)
+        logits = F.log_softmax(out, dim=-1)
         y = batch["target_ids"]
         norm = (y != self.tokenizer.pad_token_id).data.sum()
 
         targets = y.clone()
         targets[y == self.tokenizer.pad_token_id] = -100
-        loss = self.criterion(x.contiguous().view(-1, x.size(-1)), targets.contiguous().view(-1)) / norm
+        loss = self.criterion(logits.contiguous().view(-1, logits.size(-1)), targets.contiguous().view(-1)) / norm
         return loss
 
     def training_step(self, batch, batch_idx):
