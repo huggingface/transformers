@@ -46,6 +46,20 @@ BART_START_DOCSTRING = r"""
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 
 """
+BART_GENERATION_EXAMPLE = r"""
+    Examples::
+
+        from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
+        # see ``examples/summarization/bart/evaluate_cnn.py`` for a longer example
+        model = BartForConditionalGeneration.from_pretrained('bart-large-cnn')
+        tokenizer = BartTokenizer.from_pretrained('bart-large-cnn')
+        ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+        inputs = tokenizer.batch_encode_plus([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+        # Generate Summary
+        summary_ids = model.generate(inputs['input_ids'], attention_mask=inputs['attention_mask'], num_beams=4, max_length=5)
+        print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+
+"""
 
 BART_INPUTS_DOCSTRING = r"""
     Args:
@@ -855,7 +869,8 @@ class BartModel(PretrainedBartModel):
 
 
 @add_start_docstrings(
-    "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING,
+    "The BART Model with a language modeling head. Can be used for summarization.",
+    BART_START_DOCSTRING + BART_GENERATION_EXAMPLE,
 )
 class BartForConditionalGeneration(PretrainedBartModel):
     base_model_prefix = "model"
