@@ -1,15 +1,19 @@
+import argparse
+
+# import glob
+import os
+import random
+
+import numpy as np
 import pytorch_lightning as pl
-from transformers import AdamW, get_linear_schedule_with_warmup, BartTokenizer
-from transformers.modeling_bart import BartForConditionalGeneration
-from torch.utils.data import DataLoader
+
 # from rouge import Rouge
 import torch
 import torch.nn.functional as F
-import argparse
-import glob
-import os
-import random
-import numpy as np
+from torch.utils.data import DataLoader
+
+from transformers import AdamW, BartTokenizer, get_linear_schedule_with_warmup
+from transformers.modeling_bart import BartForConditionalGeneration
 from utlis import CnnDailyMailDataset, add_generic_args
 
 
@@ -17,57 +21,58 @@ class BartSystem(pl.LightningModule):
     def __init__(self, hparams):
         super(BartSystem, self).__init__()
         self.hparams = hparams
-        self.bart = BartForConditionalGeneration.from_pretrained('bart-large', output_past=True)
+        self.bart = BartForConditionalGeneration.from_pretrained("bart-large", output_past=True)
         # self.rouge = Rouge()
 
-        self.tokenizer = BartTokenizer.from_pretrained('bart-large')
+        self.tokenizer = BartTokenizer.from_pretrained("bart-large")
         self.criterion = torch.nn.CrossEntropyLoss()
 
-
     def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attention_mask=None):
-        return self.bart(input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids,
-                         decoder_attention_mask=decoder_attention_mask)
+        return self.bart(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+        )
 
     def training_step(self, batch, batch_idx):
-        outputs = self.forward(batch['source_ids'],
-                               attention_mask=batch['source_mask'],
-                               decoder_input_ids=batch['target_ids'])
+        outputs = self.forward(
+            batch["source_ids"], attention_mask=batch["source_mask"], decoder_input_ids=batch["target_ids"]
+        )
 
         out = outputs[0]
 
         x = F.log_softmax(out, dim=-1)
-        y = batch['target_ids_y']
+        y = batch["target_ids_y"]
         norm = (y != self.tokenizer.pad_token_id).data.sum()
 
         targets = y.clone()
         targets[y == self.tokenizer.pad_token_id] = -100
-        loss = self.criterion(x.contiguous().view(-1, x.size(-1)),
-                              targets.contiguous().view(-1)) / norm
+        loss = self.criterion(x.contiguous().view(-1, x.size(-1)), targets.contiguous().view(-1)) / norm
 
-        tensorboard_logs = {'train_loss': loss}
-        return {'loss': loss, 'log': tensorboard_logs}
+        tensorboard_logs = {"train_loss": loss}
+        return {"loss": loss, "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
-        outputs = self.forward(batch['source_ids'],
-                               attention_mask=batch['source_mask'],
-                               decoder_input_ids=batch['target_ids'])
+        outputs = self.forward(
+            batch["source_ids"], attention_mask=batch["source_mask"], decoder_input_ids=batch["target_ids"]
+        )
         out = outputs[0]
 
         x = F.log_softmax(out, dim=-1)
 
-        y = batch['target_ids_y']
+        y = batch["target_ids_y"]
         norm = (y != self.tokenizer.pad_token_id).data.sum()
         targets = y.clone()
         targets[y == self.tokenizer.pad_token_id] = -100
 
-        loss = self.criterion(x.contiguous().view(-1, x.size(-1)),
-                              targets.contiguous().view(-1)) / norm
-        return {'val_loss': loss}
+        loss = self.criterion(x.contiguous().view(-1, x.size(-1)), targets.contiguous().view(-1)) / norm
+        return {"val_loss": loss}
 
     def validation_end(self, outputs):
-        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        tensorboard_logs = {'val_loss': avg_loss}
-        return {'avg_val_loss': avg_loss, 'log': tensorboard_logs}
+        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
+        tensorboard_logs = {"val_loss": avg_loss}
+        return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
 
     def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx, second_order_closure=None):
         # if self.trainer.use_tpu:
@@ -85,7 +90,10 @@ class BartSystem(pl.LightningModule):
                 "params": [p for n, p in self.named_parameters() if not any(nd in n for nd in no_decay)],
                 "weight_decay": 0.0,
             },
-            {"params": [p for n, p in self.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+            {
+                "params": [p for n, p in self.named_parameters() if any(nd in n for nd in no_decay)],
+                "weight_decay": 0.0,
+            },
         ]
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
         scheduler = get_linear_schedule_with_warmup(
@@ -96,7 +104,7 @@ class BartSystem(pl.LightningModule):
 
     def prepare_data(self):
         self.train_dataset = CnnDailyMailDataset(self.tokenizer, data_dir=self.hparams.data_dir)
-        self.val_dataset = CnnDailyMailDataset(self.tokenizer, data_dir=self.hparams.data_dir, type_path='val')
+        self.val_dataset = CnnDailyMailDataset(self.tokenizer, data_dir=self.hparams.data_dir, type_path="val")
         # self.test_dataset = CnnDailyMailDataset(self.tokenizer, data_dir=self.hparams.data_dir, type_path='test')
 
     def train_dataloader(self):
@@ -116,7 +124,7 @@ class BartSystem(pl.LightningModule):
             default=128,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
-                 "than this will be truncated, sequences shorter will be padded.",
+            "than this will be truncated, sequences shorter will be padded.",
         )
 
         parser.add_argument(
@@ -128,10 +136,7 @@ class BartSystem(pl.LightningModule):
         )
 
         parser.add_argument(
-            "--batch_size",
-            default=4,
-            type=int,
-            help="The size of each batch.",
+            "--batch_size", default=4, type=int, help="The size of each batch.",
         )
 
         parser.add_argument(
@@ -171,6 +176,7 @@ def set_seed(args):
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
+
 def generic_train(model, args):
     # init model
     set_seed(args)
@@ -198,7 +204,7 @@ def generic_train(model, args):
         early_stop_callback=False,
         gradient_clip_val=args.max_grad_norm,
         checkpoint_callback=checkpoint_callback,
-        progress_bar_refresh_rate=1, # progress bar is slow to update otherwise
+        progress_bar_refresh_rate=1,  # progress bar is slow to update otherwise
     )
 
     if args.fp16:
