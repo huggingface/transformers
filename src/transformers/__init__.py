@@ -51,6 +51,7 @@ from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+from .configuration_electra import ElectraConfig
 from .data import (
     DataProcessor,
     InputExample,
@@ -295,6 +296,12 @@ if is_torch_available():
         FlaubertForQuestionAnswering,
         FlaubertForQuestionAnsweringSimple,
         FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
+
+    from .modeling_electra import (
+        ElectraModel,
+        ElectraGenerator,
+        ElectraDiscriminator
     )
 
     # Optimization

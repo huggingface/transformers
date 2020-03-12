@@ -2,7 +2,7 @@ import collections
 
 import torch
 
-from transformers import PreTrainedModel, BertConfig
+from transformers import PreTrainedModel, BertConfig, ElectraConfig
 from transformers.activations import get_activation
 from .modeling_bert import BertModel, BertEmbeddings, BertLayerNorm, BertEncoder
 import torch.nn as nn
@@ -193,6 +193,12 @@ class ElectraMainLayer(nn.Module):
 
 
 class ElectraPreTrainedModel(PreTrainedModel):
+
+    config_class = ElectraConfig
+    # pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    load_tf_weights = load_tf_weights_in_electra
+    base_model_prefix = "electra"
+
     def get_extended_attention_mask(self, attention_mask, input_shape, device):
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -283,7 +289,7 @@ class ElectraModel(ElectraPreTrainedModel):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def get_output_embeddings(self):
         return self.generator_lm_head
