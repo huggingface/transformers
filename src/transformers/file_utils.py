@@ -18,6 +18,8 @@ from hashlib import sha256
 from typing import Optional
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
+import linecache
+from collections import namedtuple
 
 import boto3
 import requests
@@ -496,3 +498,113 @@ def get_from_cache(
             json.dump(meta, meta_file)
 
     return cache_path
+
+
+_memory_tracing_enabled = False
+
+def start_memory_tracing(module_to_trace=None, events_to_trace='line'):
+    """ Setup line-by-line tracing to record rss mem (RAM) at each line of a module or sub-module.
+        See `../../examples/benchmarks.py for a usage example.
+
+        Args:
+            - `module_to_trace`: if not None, string indicating the module or sub-module to trace,
+                only events from this module will be recorded (e.g. 'transformers' or 'transformers.modeling_gpt2')
+                If None, all events are recorded
+            - `events_to_trace`: string or list of string of events to be recorded (see official python doc for `sys.settrace` for the list of events)
+                default to line
+
+        Return: Tuple with two lists which will be updated during tracing:
+            - `used_memory_list` is a list of `UsedMemoryState` for each event (default each line of the traced script).
+                - `UsedMemoryState` are named tuples with the following fields:
+                    - 'frame': a `Frame` namedtuple (see below) storing information on the current tracing frame (current file, location in current file)
+                    - 'rss_memory': RSS memory state *before* executing the line
+
+                - `IncreasedMemoryState` are named tuples similar to `UsedMemoryState` but recording the *increase* in memory after executing each line.
+                    They have the following fields:
+                    - 'frame': a `Frame` namedtuple (see below) storing information on the current tracing frame (current file, location in current file)
+                    - 'rss_memory_increase': RSS memory *increase* *after* executing the line
+
+                `Frame` namedtuple are used by `UsedMemoryState` and `IncreasedMemoryState` to list the current frame state.
+                    The have the following fields:
+                    - 'filename' (string): Name of the file currently executed
+                    - 'module' (string): Name of the module currently executed
+                    - 'line_number' (int): Number of the line currently executed
+                    - 'event' (string): Event that triggered the tracing (default will be "line")
+                    - 'line_text' (string): Text of the line in the python script
+
+    """
+    try:
+        import psutil
+    except (ImportError):
+        raise ImportError("You need to install psutil (pip install psutil) to use memory tracing.")
+
+    Frame = namedtuple('Frame', ['filename', 'module', 'line_number', 'event', 'line_text'])
+    UsedMemoryState = namedtuple('UsedMemoryState', ['frame', 'rss_memory'])
+    IncreasedMemoryState = namedtuple('IncreasedMemoryState', ['frame', 'rss_memory_increase'])
+    used_memory_list, increased_memory_list = [], []
+    process = psutil.Process(os.getpid())
+
+    def traceit(frame, event, args):
+        """ Tracing method executed before running each line in a module or sub-module
+            Record memory allocated in a list with debugging information
+        """
+        global _memory_tracing_enabled
+
+        if not _memory_tracing_enabled:
+            return traceit
+
+        name = frame.f_globals["__name__"]
+        if events_to_trace is not None:
+            if isinstance(events_to_trace, str) and event != events_to_trace:
+                return traceit
+            elif isinstance(events_to_trace, (list, tuple)) and event not in events_to_trace:
+                return traceit
+            elif not isinstance(name, str):
+                return traceit
+            elif module_to_trace is not None and module_to_trace not in name:
+                return traceit
+
+        # Record current tracing state (file, location in file...)
+        lineno = frame.f_lineno
+        filename = frame.f_globals["__file__"]
+        if (filename.endswith(".pyc") or
+            filename.endswith(".pyo")):
+            filename = filename[:-1]
+        line = linecache.getline(filename, lineno).rstrip()
+
+        # Record current memory state (rss memory) and compute difference with previous memory state
+        mem = process.memory_info()
+        traced_state = Frame(filename, name, lineno, event, line)
+        mem_state = UsedMemoryState(traced_state, mem.rss)
+        used_memory_list.append(mem_state)
+
+        if len(used_memory_list) > 1:
+            prev_frame, prev_mem = used_memory_list[-2]
+            increased_mem_state = IncreasedMemoryState(prev_frame, mem.rss - prev_mem)
+            increased_memory_list.append(increased_mem_state)
+
+        return traceit
+
+    sys.settrace(traceit)
+
+    global _memory_tracing_enabled
+    _memory_tracing_enabled = True
+
+    return used_memory_list, increased_memory_list
+
+
+def stop_memory_tracing():
+    """ Stop memory tracing cleanly
+    """
+    global _memory_tracing_enabled
+    _memory_tracing_enabled = False
+
+
+def bytes_to_human_readable(memory_amount):
+    """ Utility to convert a number of bytes (int) in a human readable string (with units)
+    """
+    for unit in ['B','KB','MB','GB']:
+        if memory_amount > -1024.0 and memory_amount < 1024.0:
+            return f"{memory_amount:.3f}{unit}"
+        memory_amount /= 1024.0
+    return f"{memory_amount:.3f}TB"

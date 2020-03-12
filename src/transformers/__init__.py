@@ -74,6 +74,9 @@ from .file_utils import (
     cached_path,
     is_tf_available,
     is_torch_available,
+    start_memory_tracing,
+    stop_memory_tracing,
+    bytes_to_human_readable,
 )
 
 # Model Cards
@@ -136,7 +139,7 @@ if is_sklearn_available():
 
 # Modeling
 if is_torch_available():
-    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D, top_k_top_p_filtering, set_memory_tracing
+    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D, top_k_top_p_filtering
     from .modeling_auto import (
         AutoModel,
         AutoModelForPreTraining,

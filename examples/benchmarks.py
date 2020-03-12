@@ -25,8 +25,9 @@ import timeit
 import psutil
 from time import time
 from typing import List
+from collections import defaultdict
 
-from transformers import AutoConfig, AutoTokenizer, is_tf_available, is_torch_available, set_memory_tracing
+from transformers import AutoConfig, AutoTokenizer, is_tf_available, is_torch_available, start_memory_tracing, stop_memory_tracing, bytes_to_human_readable
 
 
 if is_tf_available():
@@ -265,14 +266,6 @@ def get_memory_diff(func, memory_field="rss", repeat=1):
     return output
 
 
-def memory_to_human_readable(memory_amount):
-    for unit in ['B','KB','MB','GB']:
-        if memory_amount > -1024.0 and memory_amount < 1024.0:
-            return f"{memory_amount:.3f}{unit}"
-        memory_amount /= 1024.0
-    return f"{memory_amount:.3f}TB"
-
-
 def create_setup_and_compute(
     model_names: List[str],
     batch_sizes: List[int],
@@ -280,6 +273,9 @@ def create_setup_and_compute(
     gpu: bool = True,
     tensorflow: bool = False,
     average_over: int = 3,
+    no_speed: bool = False,
+    no_memory: bool = False,
+    verbose: bool = False,
     torchscript: bool = False,
     xla: bool = False,
     amp: bool = False,
@@ -295,11 +291,11 @@ def create_setup_and_compute(
 
     if tensorflow:
         dictionary = {model_name: {} for model_name in model_names}
-        results = _compute_tensorflow(model_names, batch_sizes, slice_sizes, dictionary, average_over, amp)
+        results = _compute_tensorflow(model_names, batch_sizes, slice_sizes, dictionary, average_over, amp, no_speed, no_memory, verbose)
     else:
         device = "cuda" if (gpu and torch.cuda.is_available()) else "cpu"
         dictionary = {model_name: {} for model_name in model_names}
-        results = _compute_pytorch(model_names, batch_sizes, slice_sizes, dictionary, average_over, device, torchscript, fp16)
+        results = _compute_pytorch(model_names, batch_sizes, slice_sizes, dictionary, average_over, device, torchscript, fp16, no_speed, no_memory, verbose)
 
     print("=========== RESULTS ===========")
     for model_name in model_names:
@@ -310,9 +306,9 @@ def create_setup_and_compute(
                 result = results[model_name]["results"][batch_size][slice_size]
                 memory = results[model_name]["memory"][batch_size][slice_size]
                 if isinstance(result, str):
-                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: " f"{result} " f"{memory_to_human_readable(memory)}")
+                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: " f"{result} " f"{bytes_to_human_readable(memory)}")
                 else:
-                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: " f"{(round(1000 * result) / 1000)}" f"s "  f"{memory_to_human_readable(memory)}")
+                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: " f"{(round(1000 * result) / 1000)}" f"s "  f"{bytes_to_human_readable(memory)}")
 
     if save_to_csv:
         with open(csv_filename, mode="w") as csv_file, open(csv_memory_filename, mode="w") as csv_memory_file:
@@ -365,7 +361,7 @@ def create_setup_and_compute(
                 memory_writer.writerow({"model": model_name, **model_memory_results})
 
 
-def _compute_pytorch(model_names, batch_sizes, slice_sizes, dictionary, average_over, device, torchscript, fp16):
+def _compute_pytorch(model_names, batch_sizes, slice_sizes, dictionary, average_over, device, torchscript, fp16, no_speed, no_memory, verbose):
     for c, model_name in enumerate(model_names):
         print(f"{c + 1} / {len(model_names)}")
         config = AutoConfig.from_pretrained(model_name, torchscript=torchscript)
@@ -384,10 +380,7 @@ def _compute_pytorch(model_names, batch_sizes, slice_sizes, dictionary, average_
             if fp16:
                 model.half()
             model.to(device)
-            model.train()
-
-            memory_list = set_memory_tracing('transformers')  # Line by line tracing for all code in the module `transformers`
-            model.add_memory_hooks()  # Forward methode tracing for a PyTorch model
+            model.eval()
 
             for slice_size in slice_sizes:
                 if max_input_size is not None and slice_size > max_input_size:
@@ -403,35 +396,47 @@ def _compute_pytorch(model_names, batch_sizes, slice_sizes, dictionary, average_
                             inference = model
                             inference(sequence)
 
-                        mem_diffs = []
-                        mem_diffs_set = {}
-                        for line1, line2 in zip(memory_list[:-1], memory_list[1:]):
-                            filename, name, line_no, event, line_text, mem1 = line1
-                            _, _, _, _, _, mem2 = line2
-                            mem_diff = mem2 - mem1
-                            mem_diffs.append((filename, line_no, line_text, mem_diff))
-                            if (filename, line_no, line_text) in mem_diffs_set:
-                                mem_diffs_set[(filename, line_no, line_text)] = mem_diffs_set[(filename, line_no, line_text)] + mem_diff
-                            else:
-                                mem_diffs_set[(filename, line_no, line_text)] = mem_diff
-                            mem_str = memory_to_human_readable(mem_diff)
-                            print(f"{filename}:{line_no}: mem {mem_str}: {line_text}")
+                        if not no_memory:
+                            model.add_memory_hooks()  # Forward method tracing (only for PyTorch models)
 
-                        mem_diffs = sorted(list(mem_diffs_set.items()), key=lambda x: x[1], reverse=False)
-                        for (filename, line_no, line_text), mem_diff in mem_diffs[-10:]:
-                            mem_str = memory_to_human_readable(mem_diff)
-                            print(f"---- {filename}:{line_no}: mem {mem_str}: {line_text}")
+                            # Line by line memory tracing (all code in the module `transformers`) works for all models/arbitrary code
+                            _, increased_memory = start_memory_tracing('transformers')
+                            output = inference(sequence)  # you should keep the output otherwise garbage collector will free all :-)
+                            stop_memory_tracing()
+                            del output
+                            total_memory_consumption = sum(m[1] for m in increased_memory)
 
-                        print('sum of all lines increase', memory_to_human_readable(sum(m[1] for m in mem_diffs)))
-                        print('forward pass increase', memory_to_human_readable(model.mem_rss_diff))
+                            if verbose:
+                                # Print line by line memory consumption
+                                for frame, mem_increase in increased_memory:
+                                    mem_str = bytes_to_human_readable(mem_increase)
+                                    print(f"{frame.filename}:{frame.line_number}: mem {mem_str}: {frame.line_text}")
 
-                        exit()
+                                # Compute cumulative memory consumption for each line (when we go several times over the same line)
+                                cumulative_increased_memory = defaultdict(lambda: 0)
+                                for frame, mem_increase in increased_memory:
+                                    cumulative_increased_memory[frame] += mem_increase
 
-                        print("Going through model with sequence of shape", sequence.shape)
-                        runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
-                        average_time = sum(runtimes) / float(len(runtimes)) / 3.0
-                        dictionary[model_name]["results"][batch_size][slice_size] = average_time
-                        dictionary[model_name]["memory"][batch_size][slice_size] = model.mem_rss_diff
+                                NUM_TOP_LINES = 5 # Print the top N lines consuming the most memory
+                                print(f'\nTop {NUM_TOP_LINES} script lines consuming the most memory:')
+                                top_mem_lines = sorted(list(cumulative_increased_memory.items()), key=lambda x: x[1], reverse=True)[:NUM_TOP_LINES+1]
+                                for i, (frame, mem) in enumerate(top_mem_lines):
+                                    mem_str = bytes_to_human_readable(mem)
+                                    print(f"{i} => {frame.filename}:{frame.line_number}: mem {mem_str}: {frame.line_text}")
+
+                                print('\nMemory increase computed by summing traced script lines:', bytes_to_human_readable(total_memory_consumption))
+                                print('Memory increase computed by PyTorch forward pass hook:  ', bytes_to_human_readable(model.mem_rss_diff))
+                            dictionary[model_name]["memory"][batch_size][slice_size] = total_memory_consumption
+                        else:
+                            dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
+
+                        if not no_speed:
+                            print("Going through model with sequence of shape", sequence.shape)
+                            runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
+                            average_time = sum(runtimes) / float(len(runtimes)) / 3.0
+                            dictionary[model_name]["results"][batch_size][slice_size] = average_time
+                        else:
+                            dictionary[model_name]["results"][batch_size][slice_size] = "N/A"
 
                     except RuntimeError as e:
                         print("Doesn't fit on GPU.", e)
@@ -441,7 +446,7 @@ def _compute_pytorch(model_names, batch_sizes, slice_sizes, dictionary, average_
     return dictionary
 
 
-def _compute_tensorflow(model_names, batch_sizes, slice_sizes, dictionary, average_over, amp):
+def _compute_tensorflow(model_names, batch_sizes, slice_sizes, dictionary, average_over, amp, no_speed, no_memory, verbose):
     for c, model_name in enumerate(model_names):
         print(f"{c + 1} / {len(model_names)}")
         config = AutoConfig.from_pretrained(model_name)
@@ -476,12 +481,43 @@ def _compute_tensorflow(model_names, batch_sizes, slice_sizes, dictionary, avera
                         # To make sure that the model is traced + that the tensors are on the appropriate device
                         inference(sequence)
 
-                        runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
-                        average_time = sum(runtimes) / float(len(runtimes)) / 3.0
-                        dictionary[model_name]["results"][batch_size][slice_size] = average_time
+                        if not no_memory:
+                            # Line by line memory tracing (all code in the module `transformers`) works for all models/arbitrary code
+                            _, increased_memory = start_memory_tracing('transformers')
+                            output = inference(sequence)  # you should keep the output otherwise garbage collector will free all :-)
+                            stop_memory_tracing()
+                            del output
+                            total_memory_consumption = sum(m[1] for m in increased_memory)
 
-                        mem_diff = get_memory_diff(lambda: inference(sequence), repeat=3)
-                        dictionary[model_name]["memory"][batch_size][slice_size] = mem_diff
+                            if verbose:
+                                # Print line by line memory consumption
+                                for frame, mem_increase in increased_memory:
+                                    mem_str = bytes_to_human_readable(mem_increase)
+                                    print(f"{frame.filename}:{frame.line_number}: mem {mem_str}: {frame.line_text}")
+
+                                # Compute cumulative memory consumption for each line (when we go several times over the same line)
+                                cumulative_increased_memory = defaultdict(lambda: 0)
+                                for frame, mem_increase in increased_memory:
+                                    cumulative_increased_memory[frame] += mem_increase
+
+                                NUM_TOP_LINES = 5 # Print the top N lines consuming the most memory
+                                print(f'\nTop {NUM_TOP_LINES} script lines consuming the most memory:')
+                                top_mem_lines = sorted(list(cumulative_increased_memory.items()), key=lambda x: x[1], reverse=True)[:NUM_TOP_LINES+1]
+                                for i, (frame, mem) in enumerate(top_mem_lines):
+                                    mem_str = bytes_to_human_readable(mem)
+                                    print(f"{i} => {frame.filename}:{frame.line_number}: mem {mem_str}: {frame.line_text}")
+
+                                print('\nMemory increase computed by summing traced script lines:', bytes_to_human_readable(total_memory_consumption))
+                            dictionary[model_name]["memory"][batch_size][slice_size] = total_memory_consumption
+                        else:
+                            dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
+
+                        if not no_speed:
+                            runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
+                            average_time = sum(runtimes) / float(len(runtimes)) / 3.0
+                            dictionary[model_name]["results"][batch_size][slice_size] = average_time
+                        else:
+                            dictionary[model_name]["results"][batch_size][slice_size] = "N/A"
 
                     except tf.errors.ResourceExhaustedError as e:
                         print("Doesn't fit on GPU.", e)
@@ -504,6 +540,15 @@ def main():
         "blank to benchmark the base version "
         "of all available model "
         "architectures.",
+    )
+    parser.add_argument(
+        "--verbose", required=False, action="store_true", help="Verbose memory tracing"
+    )
+    parser.add_argument(
+        "--no_speed", required=False, action="store_true", help="Don't perform speed measurments"
+    )
+    parser.add_argument(
+        "--no_memory", required=False, action="store_true", help="Don't perform memory measurments"
     )
     parser.add_argument(
         "--torch", required=False, action="store_true", help="Benchmark the Pytorch version of the " "models"
@@ -584,6 +629,9 @@ def main():
                 save_to_csv=args.save_to_csv,
                 csv_filename=args.csv_filename,
                 average_over=args.average_over,
+                no_speed=args.no_speed,
+                no_memory=args.no_memory,
+                verbose=args.verbose,
             )
         else:
             raise ImportError("Trying to run a PyTorch benchmark but PyTorch was not found in the environment.")
@@ -600,6 +648,9 @@ def main():
                 save_to_csv=args.save_to_csv,
                 csv_filename=args.csv_filename,
                 average_over=args.average_over,
+                no_speed=args.no_speed,
+                no_memory=args.no_memory,
+                verbose=args.verbose,
             )
         else:
             raise ImportError("Trying to run a TensorFlow benchmark but TensorFlow was not found in the environment.")

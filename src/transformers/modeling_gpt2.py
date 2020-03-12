@@ -24,7 +24,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from .activations import gelu_new
+from .activations import gelu_new, gelu
 from .configuration_gpt2 import GPT2Config
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
