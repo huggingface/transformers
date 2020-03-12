@@ -16,38 +16,13 @@ the default batch size, 8, fits in 16GB GPU memory, but may need to be adjusted 
 
 
 ### Training
-<<<<<<< HEAD
-
-
-Install newest PyTorch Lightning.
-```commandline
-pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
-```
-
-After downloading the CNN and Daily Mail datasets to this same directory, preprocess the datset using the script: `preprocess.sh`
-
-Run the training command:
-```commandline
-# Add parent directory to python path to access transformer_base.py 
-export PYTHONPATH="../../../":"${PYTHONPATH}"
-
-python run_bart_sum.py \
---data_dir=./cnn-dailymail/cnn_dm \
---output_dir=./results \
---do_train \
---train_batch_size=4
-=======
 Clone the repository and preprocess the data:
 ```commandline
 git clone https://github.com/artmatsak/cnn-dailymail
 cd cnn-dailymail && python make_datafiles.py ../cnn/stories/ ../dailymail/stories/
 ```
 
-Run the training command:
-```commandline
-python run_bart_sum.py --data_dir=/path/to/cnn-dailymail/cnn_dm --output_dir=./results --do_train --train_batch_size=2
->>>>>>> added bart for finetuning
-```
+To train run the `pl_train.sh` script.
 
 ### Where is the code?
 The core model is in `src/transformers/modeling_bart.py`. This directory only contains examples.
