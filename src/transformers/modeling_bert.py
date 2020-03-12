@@ -177,8 +177,7 @@ class BertEmbeddings(nn.Module):
         embeddings = inputs_embeds + position_embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
-        embeddings = inputs_embeds
-        return embeddings, inputs_embeds
+        return embeddings
 
 
 class BertSelfAttention(nn.Module):
@@ -256,7 +255,7 @@ class BertSelfAttention(nn.Module):
         context_layer = context_layer.view(*new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if self.output_attentions else (context_layer,)
-        return outputs, query_layer
+        return outputs
 
 
 class BertSelfOutput(nn.Module):
@@ -311,12 +310,12 @@ class BertAttention(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
     ):
-        self_outputs, attention_scores = self.self(
+        self_outputs = self.self(
             hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs, self_outputs[0], attention_scores
+        return outputs
 
 
 class BertIntermediate(nn.Module):
@@ -366,7 +365,7 @@ class BertLayer(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
     ):
-        self_attention_outputs, self_value, attention_scores = self.attention(hidden_states, attention_mask, head_mask)
+        self_attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
@@ -380,7 +379,7 @@ class BertLayer(nn.Module):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         outputs = (layer_output,) + outputs
-        return outputs, self_value, attention_scores
+        return outputs
 
 
 class BertEncoder(nn.Module):
@@ -404,7 +403,7 @@ class BertEncoder(nn.Module):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs, self_value, attention_scores = layer_module(
+            layer_outputs = layer_module(
                 hidden_states, attention_mask, head_mask[i], encoder_hidden_states, encoder_attention_mask
             )
             hidden_states = layer_outputs[0]
@@ -780,7 +779,7 @@ class BertModel(BertPreTrainedModel):
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
-        embedding_output, top_kek = self.embeddings(
+        embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
         encoder_outputs = self.encoder(
@@ -793,7 +792,7 @@ class BertModel(BertPreTrainedModel):
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 
-        outputs = (sequence_output, pooled_output) + encoder_outputs[
+        outputs = (sequence_output, pooled_output,) + encoder_outputs[
             1:
         ]  # add hidden_states and attentions if they are here
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
