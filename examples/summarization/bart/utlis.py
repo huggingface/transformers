@@ -1,11 +1,10 @@
-# import logging
 import os
 
 from torch.utils.data import Dataset
 
 
 class CnnDailyMailDataset(Dataset):
-    def __init__(self, tokenizer, data_dir="./cnn-dailymail/cnn_dm/", type_path="train", block_size=768):
+    def __init__(self, tokenizer, data_dir="./cnn-dailymail/cnn_dm/", type_path="train", block_size=1024):
         super(CnnDailyMailDataset,).__init__()
         self.tokenizer = tokenizer
 
@@ -39,12 +38,7 @@ class CnnDailyMailDataset(Dataset):
 
         src_mask = self.source[index]["attention_mask"].squeeze()  # might need to squeeze
 
-        return {
-            "source_ids": source_ids,
-            "source_mask": src_mask,
-            "target_ids": target_ids,
-            "target_ids_y": target_ids,
-        }
+        return {"source_ids": source_ids, "source_mask": src_mask, "target_ids": target_ids}
 
 
 def add_generic_args(parser, root_dir):
@@ -71,7 +65,6 @@ def add_generic_args(parser, root_dir):
     )
 
     parser.add_argument("--n_gpu", type=int, default=1)
-    parser.add_argument("--n_tpu_cores", type=int, default=0)
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_predict", action="store_true", help="Whether to run predictions on the test set.")
