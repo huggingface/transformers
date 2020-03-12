@@ -404,13 +404,26 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
 
         super().__init__(tokenizer, parameters)
 
-    def encode_batch(self, sequences: List[Union[str, Tuple[str, str]]]) -> List[Encoding]:
+    def encode_batch(
+        self, sequences: List[Union[str, Tuple[str, str]]], add_special_tokens: bool = False
+    ) -> List[Encoding]:
+        if sequences is None:
+            raise ValueError(
+                "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
+            )
+
         return super().encode_batch(
-            [seq.strip() if isinstance(seq, str) else (seq[0].strip(), seq[1].strip()) for seq in sequences]
+            [seq.strip() if isinstance(seq, str) else (seq[0].strip(), seq[1].strip()) for seq in sequences],
+            add_special_tokens=add_special_tokens,
         )
 
-    def encode(self, sequence: str, pair: Optional[str] = None) -> Encoding:
-        return super().encode(sequence.strip(), pair.strip() if pair else pair)
+    def encode(self, sequence: str, pair: Optional[str] = None, add_special_tokens: bool = False) -> Encoding:
+        if sequence is None:
+            raise ValueError(
+                "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
+            )
+
+        return super().encode(sequence.strip(), pair.strip() if pair else pair, add_special_tokens=add_special_tokens)
 
 
 class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
