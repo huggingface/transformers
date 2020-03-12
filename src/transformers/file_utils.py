@@ -502,11 +502,10 @@ def get_from_cache(
 
 _memory_tracing_enabled = False
 Frame = namedtuple("Frame", ["filename", "module", "line_number", "event", "line_text"])
-UsedMemoryState = namedtuple("UsedMemoryState", ["frame", "rss_memory"])
-IncreasedMemoryState = namedtuple("IncreasedMemoryState", ["frame", "rss_memory_increase"])
+UsedMemoryState = namedtuple("UsedMemoryState", ["frame", "cpu_memory", "gpu_memory"])
 
 
-def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, events_to_trace="line"):
+def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, events_to_trace="line", gpus_to_trace=None):
     """ Setup line-by-line tracing to record rss mem (RAM) at each line of a module or sub-module.
         See `../../examples/benchmarks.py for a usage example.
         Current memory consumption is returned using psutil and in particular is the RSS memory
@@ -527,7 +526,8 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
             - `used_memory_list` is a list of `UsedMemoryState` for each event (default each line of the traced script).
                 - `UsedMemoryState` are named tuples with the following fields:
                     - 'frame': a `Frame` namedtuple (see below) storing information on the current tracing frame (current file, location in current file)
-                    - 'rss_memory': RSS memory state *before* executing the line
+                    - 'cpu_memory': RSS memory state *before* executing the line
+                    - 'gpu_memory': Used GPU memory *before* executing the line
 
                 `Frame` namedtuple used by `UsedMemoryState` to list the current frame state.
                     The have the following fields:
@@ -541,10 +541,31 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
     try:
         import psutil
     except (ImportError):
-        raise ImportError("You need to install psutil (pip install psutil) to use memory tracing.")
+        logger.warning("Psutil not installed, we won't log CPU memory usage. "
+                       "Install psutil (pip install psutil) to use CPU memory tracing.")
+        process = None
+    else:
+        process = psutil.Process(os.getpid())
+
+    try:
+        from py3nvml import py3nvml
+        py3nvml.nvmlInit()
+    except ImportError:
+        logger.warning("py3nvml not installed, we won't log GPU memory usage. "
+                       "Install py3nvml (pip install py3nvml) to use GPU memory tracing.")
+        gpu_handle = None
+    except:
+        logger.warning("Error while initializing comunication with GPU. "
+                       "We won't perform GPU memory tracing.")
+        gpu_handle = None
+    else:
+        if gpus_to_trace is None:
+            deviceCount = py3nvml.nvmlDeviceGetCount()
+            gpu_handle = list(py3nvml.nvmlDeviceGetHandleByIndex(i) for i in range(deviceCount))
+        else:
+            gpu_handle = list(py3nvml.nvmlDeviceGetHandleByIndex(i) for i in range(gpus_to_trace))
 
     memory_trace = []
-    process = psutil.Process(os.getpid())
 
     def traceit(frame, event, args):
         """ Tracing method executed before running each line in a module or sub-module
@@ -587,11 +608,21 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
         if filename.endswith(".pyc") or filename.endswith(".pyo"):
             filename = filename[:-1]
         line = linecache.getline(filename, lineno).rstrip()
+        traced_state = Frame(filename, name, lineno, event, line)
 
         # Record current memory state (rss memory) and compute difference with previous memory state
-        mem = process.memory_info()
-        traced_state = Frame(filename, name, lineno, event, line)
-        mem_state = UsedMemoryState(traced_state, mem.rss)
+        cpu_mem = 0
+        if process is not None:
+            mem = process.memory_info()
+            cpu_mem = mem.rss
+
+        gpu_mem = 0
+        if gpu_handle is not None:
+            for handle in gpu_handle:
+                meminfo = py3nvml.nvmlDeviceGetMemoryInfo(handle)
+                gpu_mem += meminfo.used
+
+        mem_state = UsedMemoryState(traced_state, cpu_mem, gpu_mem)
         memory_trace.append(mem_state)
 
         return traceit
@@ -603,9 +634,9 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
 
     return memory_trace
 
-
-TraceMemoryIncrease = namedtuple("TraceMemoryIncrease", ["frame", "bytes", "string"])
-TotalMemoryIncrease = namedtuple("TotalMemoryIncrease", ["bytes", "string"])
+Memory = namedtuple("Memory", ["bytes", "string"])
+CPUGPUMemory = namedtuple("TotalMemoryIncrease", ["cpu", "gpu", "cpu_gpu"])
+TraceCPUGPUMemory = namedtuple("TraceMemoryIncrease", ["frame", "cpu", "gpu", "cpu_gpu"])
 MemorySummary = namedtuple("MemorySummary", ["sequential", "cumulative", "total"])
 
 
@@ -623,7 +654,7 @@ def stop_memory_tracing(memory_trace=None):
                 - `cumulative`: an OrderedDict of (Frame, cumulative memory increase for the line) with the cumulative increase in memory for each line
                     (summing repeted memory increase for a line if it's executed several times).
                     The dictionnary is ordered from the line with the largest memory consumption to the line with the smallest (can be negative if memory is free)
-                - `total`: total memory increaseduring the tracing.
+                - `total`: total memory increase during the full tracing.
 
         In the `MemorySummary`, frames are `Frame` namedtuple used to list the current frame state. A `Frame` has the following fields:
             - 'filename' (string): Name of the file currently executed
@@ -637,21 +668,33 @@ def stop_memory_tracing(memory_trace=None):
 
     if memory_trace is not None and len(memory_trace) > 1:
         memory_diff_trace = []
-        cumulative_memory_dict = defaultdict(lambda: 0)
-        for (frame, mem), (next_frame, next_mem) in zip(memory_trace[:-1], memory_trace[1:]):
-            mem_inc = next_mem - mem
-            mem_str = bytes_to_human_readable(mem_inc)
-            memory_diff_trace.append(TraceMemoryIncrease(frame=frame, bytes=mem_inc, string=mem_str))
-            cumulative_memory_dict[frame] += mem_inc
+        cumulative_memory_dict = defaultdict(lambda: [0, 0, 0])
+        for (frame, cpu_mem, gpu_mem), (next_frame, next_cpu_mem, next_gpu_mem) in zip(memory_trace[:-1], memory_trace[1:]):
+            cpu_mem_inc = next_cpu_mem - cpu_mem
+            cpu_mem_str = bytes_to_human_readable(cpu_mem_inc)
+            gpu_mem_inc = next_gpu_mem - gpu_mem
+            gpu_mem_str = bytes_to_human_readable(gpu_mem_inc)
+            cpu_gpu_mem_inc = cpu_mem_inc + gpu_mem_inc
+            cpu_gpu_mem_str = bytes_to_human_readable(cpu_gpu_mem_inc)
+            memory_diff_trace.append(TraceCPUGPUMemory(frame=frame,
+                                                       cpu=Memory(cpu_mem_inc, cpu_mem_str),
+                                                       gpu=Memory(gpu_mem_inc, gpu_mem_str),
+                                                       cpu_gpu=Memory(cpu_gpu_mem_inc, cpu_gpu_mem_str)))
+            cumulative_memory_dict[frame][0] += cpu_mem_inc
+            cumulative_memory_dict[frame][1] += gpu_mem_inc
+            cumulative_memory_dict[frame][2] += cpu_gpu_mem_inc
 
-        cumulative_memory = sorted(list(cumulative_memory_dict.items()), key=lambda x: x[1], reverse=True)
+        cumulative_memory = sorted(list(cumulative_memory_dict.items()), key=lambda x: x[1][2], reverse=True)  # order by the total CPU + GPU memory increase
         cumulative_memory = list(
-            TraceMemoryIncrease(frame=frame, bytes=mem_inc, string=bytes_to_human_readable(mem_inc))
-            for frame, mem_inc in cumulative_memory
+            TraceCPUGPUMemory(frame=frame,
+                              cpu=Memory(cpu_mem_inc, bytes_to_human_readable(cpu_mem_inc)),
+                              gpu=Memory(gpu_mem_inc, bytes_to_human_readable(gpu_mem_inc)),
+                              cpu_gpu=Memory(cpu_gpu_mem_inc, bytes_to_human_readable(cpu_gpu_mem_inc)))
+            for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in cumulative_memory
         )
 
-        total_memory = sum(step_trace.bytes for step_trace in memory_diff_trace)
-        total_memory = TotalMemoryIncrease(bytes=total_memory, string=bytes_to_human_readable(total_memory))
+        total_memory = sum(step_trace.cpu_gpu.bytes for step_trace in memory_diff_trace)
+        total_memory = Memory(bytes=total_memory, string=bytes_to_human_readable(total_memory))
         return MemorySummary(sequential=memory_diff_trace, cumulative=cumulative_memory, total=total_memory)
 
     return None

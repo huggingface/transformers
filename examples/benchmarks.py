@@ -452,15 +452,15 @@ def _compute_pytorch(
                                 print(
                                     "\nLines by line memory consumption:\n"
                                     + "\n".join(
-                                        f"{frame.filename}:{frame.line_number}: mem {mem_str}: {frame.line_text}"
-                                        for frame, _, mem_str in summary.sequential
+                                        f"{frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
+                                        for frame, _, _, cpu_gpu_mem in summary.sequential
                                     )
                                 )
                                 print(
                                     "\nLines with top memory consumption:\n"
                                     + "\n".join(
-                                        f"=> {frame.filename}:{frame.line_number}: mem {mem_str}: {frame.line_text}"
-                                        for frame, _, mem_str in summary.cumulative[:6]
+                                        f"=> {frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
+                                        for frame, _, _, cpu_gpu_mem in summary.cumulative[:6]
                                     )
                                 )
                                 print(f"\nTotal memory increase: {summary.total.string}")
