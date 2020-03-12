@@ -253,7 +253,15 @@ class PretrainedConfig(object):
                     "Can't load '{}'. Make sure that:\n\n"
                     "- '{}' is either a model name in {}\n\n"
                     "- or '{}' is a correct url to a community model identifier which has a '{}' file\n\n"
-                    "- or '{}' is the correct path to a directory containing a '{}' file".format(pretrained_model_name_or_path, pretrained_model_name_or_path, list(pretrained_config_archive_map.keys()), '/'.join(config_file.split('/')[:-1]), CONFIG_NAME, pretrained_model_name_or_path, CONFIG_NAME)
+                    "- or '{}' is the correct path to a directory containing a '{}' file".format(
+                        pretrained_model_name_or_path,
+                        pretrained_model_name_or_path,
+                        list(pretrained_config_archive_map.keys()),
+                        "/".join(config_file.split("/")[:-1]),
+                        CONFIG_NAME,
+                        pretrained_model_name_or_path,
+                        CONFIG_NAME,
+                    )
                 )
             raise EnvironmentError(msg)
 
