@@ -28,7 +28,7 @@ def generate_summaries(lns, out_file, batch_size=8, device=DEFAULT_DEVICE):
             num_beams=4,
             length_penalty=2.0,
             max_length=140,
-            min_len=55,
+            min_length=55,
             no_repeat_ngram_size=3,
         )
         dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summaries]

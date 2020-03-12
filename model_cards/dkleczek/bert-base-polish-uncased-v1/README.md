@@ -1,12 +1,12 @@
 ---
-language: Polish
-thumbnail: https://github.com/kldarek/polbert/blob/master/img/polbert.png
+language: polish
+thumbnail: https://raw.githubusercontent.com/kldarek/polbert/master/img/polbert.png
 ---
 
 # Polbert - Polish BERT
 Polish version of BERT language model is here! While this is still work in progress, I'm happy to share the first model, similar to BERT-Base and trained on a large Polish corpus. If you'd like to contribute to this project, please reach out to me!
 
-![PolBERT image](https://github.com/kldarek/polbert/blob/master/img/polbert.png)
+![PolBERT image](https://raw.githubusercontent.com/kldarek/polbert/master/img/polbert.png)
 
 ## Pre-training corpora
 
