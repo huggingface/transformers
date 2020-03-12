@@ -34,7 +34,7 @@ from transformers import (
     WEIGHTS_NAME,
     AdamW,
     AlbertConfig,
-    AlbertForTokenClassification,
+    AlbertForSequenceClassification,
     AlbertTokenizer,
     BertConfig,
     BertForTokenClassification,
@@ -73,7 +73,7 @@ ALL_MODELS = sum(
 )
 
 MODEL_CLASSES = {
-    "albert": (AlbertConfig, AlbertForTokenClassification, AlbertTokenizer),
+    "albert": (AlbertConfig, AlbertForSequenceClassification, AlbertTokenizer),
     "bert": (BertConfig, BertForTokenClassification, BertTokenizer),
     "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer),
     "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer),
