@@ -1,9 +1,6 @@
 import unittest
-from abc import ABC
 from collections import namedtuple
 from itertools import takewhile
-
-import numpy as np
 
 from tests.utils import require_torch
 from transformers import (
@@ -426,7 +423,6 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
     TOKENIZERS_CLASSES = [
         Tokenizer("OpenAI GPT", OpenAIGPTTokenizerFast, OpenAIGPTTokenizer, "vocab_file"),
         Tokenizer("GPT2", GPT2TokenizerFast, GPT2Tokenizer, "vocab_file"),
-        Tokenizer("TransfoXL", TransfoXLTokenizerFast, TransfoXLTokenizer, "pretrained_vocab_file"),
     ]
 
     def assert_padding(self, tokenizer_r, tokenizer_p, max_length=15):
@@ -456,3 +452,13 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
 
         # Pair input
         self.assertRaises(ValueError, tokenizer_r.batch_encode_plus, p2, max_length=max_length, pad_to_max_length=True)
+
+
+class TransfoXLFastTokenizerTest(NoPaddingTokenFastTokenizerMatchingTest):
+    TOKENIZERS_CLASSES = frozenset([
+        Tokenizer("TransfoXL", TransfoXLTokenizerFast, TransfoXLTokenizer, "pretrained_vocab_file"),
+    ])
+
+    @require_torch
+    def test_fast_align_python(self):
+        super().test_fast_align_python()
