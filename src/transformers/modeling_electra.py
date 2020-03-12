@@ -14,6 +14,9 @@ import os
 logger = logging.getLogger(__name__)
 
 
+ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP = {}
+
+
 def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
     """ Load tf checkpoints in a pytorch model.
     """
