@@ -463,6 +463,13 @@ def _compute_pytorch(
                                         for frame, _, _, cpu_gpu_mem in summary.cumulative[:6]
                                     )
                                 )
+                                print(
+                                    "\nLines with lowest memory consumption:\n"
+                                    + "\n".join(
+                                        f"=> {frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
+                                        for frame, _, _, cpu_gpu_mem in summary.cumulative[-6:]
+                                    )
+                                )
                                 print(f"\nTotal memory increase: {summary.total.string}")
                             dictionary[model_name]["memory"][batch_size][slice_size] = summary.total.bytes
                         else:

@@ -521,6 +521,7 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
                 if string or list of strings: events from the listed module/sub-module will not be recorded (e.g. 'torch')
             - `events_to_trace`: string or list of string of events to be recorded (see official python doc for `sys.settrace` for the list of events)
                 default to line
+            - `gpus_to_trace`: (optional list, default None) list of GPUs to trace. Default to tracing all GPUs
 
         Return: Tuple with two lists which will be updated during tracing:
             - `used_memory_list` is a list of `UsedMemoryState` for each event (default each line of the traced script).
@@ -550,20 +551,18 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
     try:
         from py3nvml import py3nvml
         py3nvml.nvmlInit()
+        devices = list(range(py3nvml.nvmlDeviceGetCount())) if gpus_to_trace is None else gpus_to_trace
+        py3nvml.nvmlShutdown()
     except ImportError:
         logger.warning("py3nvml not installed, we won't log GPU memory usage. "
                        "Install py3nvml (pip install py3nvml) to use GPU memory tracing.")
-        gpu_handle = None
+        log_gpu = False
     except:
         logger.warning("Error while initializing comunication with GPU. "
                        "We won't perform GPU memory tracing.")
-        gpu_handle = None
+        log_gpu = False
     else:
-        if gpus_to_trace is None:
-            deviceCount = py3nvml.nvmlDeviceGetCount()
-            gpu_handle = list(py3nvml.nvmlDeviceGetHandleByIndex(i) for i in range(deviceCount))
-        else:
-            gpu_handle = list(py3nvml.nvmlDeviceGetHandleByIndex(i) for i in range(gpus_to_trace))
+        log_gpu = _torch_available or _tf_available
 
     memory_trace = []
 
@@ -617,10 +616,21 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
             cpu_mem = mem.rss
 
         gpu_mem = 0
-        if gpu_handle is not None:
-            for handle in gpu_handle:
+        if log_gpu:
+            # Clear GPU caches
+            if _torch_available:
+                torch.cuda.empty_cache()
+            if _tf_available:
+                from tensorflow.python.eager import context
+                context.context()._clear_caches()  # See https://github.com/tensorflow/tensorflow/issues/20218#issuecomment-416771802
+
+            # Sum used memory for all GPUs
+            py3nvml.nvmlInit()
+            for i in devices:
+                handle = py3nvml.nvmlDeviceGetHandleByIndex(i)
                 meminfo = py3nvml.nvmlDeviceGetMemoryInfo(handle)
                 gpu_mem += meminfo.used
+            py3nvml.nvmlShutdown()
 
         mem_state = UsedMemoryState(traced_state, cpu_mem, gpu_mem)
         memory_trace.append(mem_state)
@@ -640,11 +650,12 @@ TraceCPUGPUMemory = namedtuple("TraceMemoryIncrease", ["frame", "cpu", "gpu", "c
 MemorySummary = namedtuple("MemorySummary", ["sequential", "cumulative", "total"])
 
 
-def stop_memory_tracing(memory_trace=None):
+def stop_memory_tracing(memory_trace=None, ignore_released_memory_in_total=True):
     """ Stop memory tracing cleanly and return a summary of the memory trace if a trace is given.
 
         Args:
-            - memory_trace (optional, default: None): memmory trace to convert in summary
+            - `memory_trace` (optional output of start_memory_tracing, default: None): memory trace to convert in summary
+            - `ignore_released_memory_in_total` (boolean, default: None): if True we only sum memory increase to compute total memory
 
         Return:
             - None if `memory_trace` is None
@@ -693,7 +704,10 @@ def stop_memory_tracing(memory_trace=None):
             for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in cumulative_memory
         )
 
-        total_memory = sum(step_trace.cpu_gpu.bytes for step_trace in memory_diff_trace)
+        if ignore_released_memory_in_total:
+            total_memory = sum(max(0, step_trace.cpu_gpu.bytes) for step_trace in memory_diff_trace)
+        else:
+            total_memory = sum(step_trace.cpu_gpu.bytes for step_trace in memory_diff_trace)
         total_memory = Memory(bytes=total_memory, string=bytes_to_human_readable(total_memory))
         return MemorySummary(sequential=memory_diff_trace, cumulative=cumulative_memory, total=total_memory)
 
