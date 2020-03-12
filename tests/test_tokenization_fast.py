@@ -411,8 +411,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
             with_special_tokens = tokenizer_r.encode_plus(text, add_special_tokens=True)
             for key in no_special_tokens.keys():
                 self.assertEqual(
-                    len(no_special_tokens[key]),
-                    len(with_special_tokens[key]) - simple_num_special_tokens_to_add
+                    len(no_special_tokens[key]), len(with_special_tokens[key]) - simple_num_special_tokens_to_add
                 )
 
             # # batch_encode_plus
@@ -420,10 +419,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
             with_special_tokens = tokenizer_r.batch_encode_plus([text, text], add_special_tokens=True)
             for key in no_special_tokens.keys():
                 for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
-                    self.assertEqual(
-                        len(i_no),
-                        len(i_with) - simple_num_special_tokens_to_add
-                    )
+                    self.assertEqual(len(i_no), len(i_with) - simple_num_special_tokens_to_add)
 
 
 class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
