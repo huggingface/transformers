@@ -6,20 +6,20 @@ Copyright by the AllenNLP authors.
 
 import fnmatch
 import json
+import linecache
 import logging
 import os
 import shutil
 import sys
 import tarfile
 import tempfile
+from collections import defaultdict, namedtuple
 from contextlib import contextmanager
 from functools import partial, wraps
 from hashlib import sha256
 from typing import Optional
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
-import linecache
-from collections import namedtuple
 
 import boto3
 import requests
@@ -501,15 +501,25 @@ def get_from_cache(
 
 
 _memory_tracing_enabled = False
+Frame = namedtuple("Frame", ["filename", "module", "line_number", "event", "line_text"])
+UsedMemoryState = namedtuple("UsedMemoryState", ["frame", "rss_memory"])
+IncreasedMemoryState = namedtuple("IncreasedMemoryState", ["frame", "rss_memory_increase"])
 
-def start_memory_tracing(module_to_trace=None, events_to_trace='line'):
+
+def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, events_to_trace="line"):
     """ Setup line-by-line tracing to record rss mem (RAM) at each line of a module or sub-module.
         See `../../examples/benchmarks.py for a usage example.
+        Current memory consumption is returned using psutil and in particular is the RSS memory
+            "Resident Set Size” (the non-swapped physical memory the process is using).
+            See https://psutil.readthedocs.io/en/latest/#psutil.Process.memory_info
 
         Args:
-            - `module_to_trace`: if not None, string indicating the module or sub-module to trace,
-                only events from this module will be recorded (e.g. 'transformers' or 'transformers.modeling_gpt2')
-                If None, all events are recorded
+            - `modules_to_trace`: (None, string, list/tuple of string)
+                if None, all events are recorded
+                if string or list of strings: only events from the listed module/sub-module will be recorded (e.g. 'fairseq' or 'transformers.modeling_gpt2')
+            - `modules_not_to_trace`: (None, string, list/tuple of string)
+                if None, no module is avoided
+                if string or list of strings: events from the listed module/sub-module will not be recorded (e.g. 'torch')
             - `events_to_trace`: string or list of string of events to be recorded (see official python doc for `sys.settrace` for the list of events)
                 default to line
 
@@ -519,12 +529,7 @@ def start_memory_tracing(module_to_trace=None, events_to_trace='line'):
                     - 'frame': a `Frame` namedtuple (see below) storing information on the current tracing frame (current file, location in current file)
                     - 'rss_memory': RSS memory state *before* executing the line
 
-                - `IncreasedMemoryState` are named tuples similar to `UsedMemoryState` but recording the *increase* in memory after executing each line.
-                    They have the following fields:
-                    - 'frame': a `Frame` namedtuple (see below) storing information on the current tracing frame (current file, location in current file)
-                    - 'rss_memory_increase': RSS memory *increase* *after* executing the line
-
-                `Frame` namedtuple are used by `UsedMemoryState` and `IncreasedMemoryState` to list the current frame state.
+                `Frame` namedtuple used by `UsedMemoryState` to list the current frame state.
                     The have the following fields:
                     - 'filename' (string): Name of the file currently executed
                     - 'module' (string): Name of the module currently executed
@@ -538,10 +543,7 @@ def start_memory_tracing(module_to_trace=None, events_to_trace='line'):
     except (ImportError):
         raise ImportError("You need to install psutil (pip install psutil) to use memory tracing.")
 
-    Frame = namedtuple('Frame', ['filename', 'module', 'line_number', 'event', 'line_text'])
-    UsedMemoryState = namedtuple('UsedMemoryState', ['frame', 'rss_memory'])
-    IncreasedMemoryState = namedtuple('IncreasedMemoryState', ['frame', 'rss_memory_increase'])
-    used_memory_list, increased_memory_list = [], []
+    memory_trace = []
     process = psutil.Process(os.getpid())
 
     def traceit(frame, event, args):
@@ -553,22 +555,36 @@ def start_memory_tracing(module_to_trace=None, events_to_trace='line'):
         if not _memory_tracing_enabled:
             return traceit
 
-        name = frame.f_globals["__name__"]
+        # Filter events
         if events_to_trace is not None:
             if isinstance(events_to_trace, str) and event != events_to_trace:
                 return traceit
             elif isinstance(events_to_trace, (list, tuple)) and event not in events_to_trace:
                 return traceit
-            elif not isinstance(name, str):
-                return traceit
-            elif module_to_trace is not None and module_to_trace not in name:
-                return traceit
+
+        # Filter modules
+        name = frame.f_globals["__name__"]
+        if not isinstance(name, str):
+            return traceit
+        else:
+            # Filter whitelist of modules to trace
+            if modules_to_trace is not None:
+                if isinstance(modules_to_trace, str) and modules_to_trace not in name:
+                    return traceit
+                elif isinstance(modules_to_trace, (list, tuple)) and all(m not in name for m in modules_to_trace):
+                    return traceit
+
+            # Filter blacklist of modules not to trace
+            if modules_not_to_trace is not None:
+                if isinstance(modules_not_to_trace, str) and modules_not_to_trace in name:
+                    return traceit
+                elif isinstance(modules_not_to_trace, (list, tuple)) and any(m in name for m in modules_not_to_trace):
+                    return traceit
 
         # Record current tracing state (file, location in file...)
         lineno = frame.f_lineno
         filename = frame.f_globals["__file__"]
-        if (filename.endswith(".pyc") or
-            filename.endswith(".pyo")):
+        if filename.endswith(".pyc") or filename.endswith(".pyo"):
             filename = filename[:-1]
         line = linecache.getline(filename, lineno).rstrip()
 
@@ -576,12 +592,7 @@ def start_memory_tracing(module_to_trace=None, events_to_trace='line'):
         mem = process.memory_info()
         traced_state = Frame(filename, name, lineno, event, line)
         mem_state = UsedMemoryState(traced_state, mem.rss)
-        used_memory_list.append(mem_state)
-
-        if len(used_memory_list) > 1:
-            prev_frame, prev_mem = used_memory_list[-2]
-            increased_mem_state = IncreasedMemoryState(prev_frame, mem.rss - prev_mem)
-            increased_memory_list.append(increased_mem_state)
+        memory_trace.append(mem_state)
 
         return traceit
 
@@ -590,20 +601,66 @@ def start_memory_tracing(module_to_trace=None, events_to_trace='line'):
     global _memory_tracing_enabled
     _memory_tracing_enabled = True
 
-    return used_memory_list, increased_memory_list
+    return memory_trace
 
 
-def stop_memory_tracing():
-    """ Stop memory tracing cleanly
+TraceMemoryIncrease = namedtuple("TraceMemoryIncrease", ["frame", "bytes", "string"])
+TotalMemoryIncrease = namedtuple("TotalMemoryIncrease", ["bytes", "string"])
+MemorySummary = namedtuple("MemorySummary", ["sequential", "cumulative", "total"])
+
+
+def stop_memory_tracing(memory_trace=None):
+    """ Stop memory tracing cleanly and return a summary of the memory trace if a trace is given.
+
+        Args:
+            - memory_trace (optional, default: None): memmory trace to convert in summary
+
+        Return:
+            - None if `memory_trace` is None
+            - `MemorySummary` namedtuple otherwise with the fields:
+                - `sequential`: the list of tuple (Frame, memory increase) computed from the memory_trace list
+                    by substracting the memory after executing each line from the memory before executing said line.
+                - `cumulative`: an OrderedDict of (Frame, cumulative memory increase for the line) with the cumulative increase in memory for each line
+                    (summing repeted memory increase for a line if it's executed several times).
+                    The dictionnary is ordered from the line with the largest memory consumption to the line with the smallest (can be negative if memory is free)
+                - `total`: total memory increaseduring the tracing.
+
+        In the `MemorySummary`, frames are `Frame` namedtuple used to list the current frame state. A `Frame` has the following fields:
+            - 'filename' (string): Name of the file currently executed
+            - 'module' (string): Name of the module currently executed
+            - 'line_number' (int): Number of the line currently executed
+            - 'event' (string): Event that triggered the tracing (default will be "line")
+            - 'line_text' (string): Text of the line in the python script
     """
     global _memory_tracing_enabled
     _memory_tracing_enabled = False
+
+    if memory_trace is not None and len(memory_trace) > 1:
+        memory_diff_trace = []
+        cumulative_memory_dict = defaultdict(lambda: 0)
+        for (frame, mem), (next_frame, next_mem) in zip(memory_trace[:-1], memory_trace[1:]):
+            mem_inc = next_mem - mem
+            mem_str = bytes_to_human_readable(mem_inc)
+            memory_diff_trace.append(TraceMemoryIncrease(frame=frame, bytes=mem_inc, string=mem_str))
+            cumulative_memory_dict[frame] += mem_inc
+
+        cumulative_memory = sorted(list(cumulative_memory_dict.items()), key=lambda x: x[1], reverse=True)
+        cumulative_memory = list(
+            TraceMemoryIncrease(frame=frame, bytes=mem_inc, string=bytes_to_human_readable(mem_inc))
+            for frame, mem_inc in cumulative_memory
+        )
+
+        total_memory = sum(step_trace.bytes for step_trace in memory_diff_trace)
+        total_memory = TotalMemoryIncrease(bytes=total_memory, string=bytes_to_human_readable(total_memory))
+        return MemorySummary(sequential=memory_diff_trace, cumulative=cumulative_memory, total=total_memory)
+
+    return None
 
 
 def bytes_to_human_readable(memory_amount):
     """ Utility to convert a number of bytes (int) in a human readable string (with units)
     """
-    for unit in ['B','KB','MB','GB']:
+    for unit in ["B", "KB", "MB", "GB"]:
         if memory_amount > -1024.0 and memory_amount < 1024.0:
             return f"{memory_amount:.3f}{unit}"
         memory_amount /= 1024.0

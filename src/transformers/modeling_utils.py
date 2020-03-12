@@ -35,6 +35,8 @@ from .file_utils import (
     hf_bucket_url,
     is_remote_url,
 )
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -77,7 +79,6 @@ class ModuleUtilsMixin:
         module.mem_rss_pre_forward = mem.rss
         return None
 
-
     @staticmethod
     def _hook_rss_memory_post_forward(module, *args, **kwargs):
         try:
@@ -89,7 +90,7 @@ class ModuleUtilsMixin:
         mem = process.memory_info()
         module.mem_rss_post_forward = mem.rss
         mem_rss_diff = module.mem_rss_post_forward - module.mem_rss_pre_forward
-        module.mem_rss_diff = mem_rss_diff + (module.mem_rss_diff if hasattr(module, 'mem_rss_diff') else 0)
+        module.mem_rss_diff = mem_rss_diff + (module.mem_rss_diff if hasattr(module, "mem_rss_diff") else 0)
         return None
 
     def add_memory_hooks(self):
@@ -99,9 +100,10 @@ class ModuleUtilsMixin:
         for module in self.modules():
             module.register_forward_pre_hook(self._hook_rss_memory_pre_forward)
             module.register_forward_hook(self._hook_rss_memory_post_forward)
+        self.reset_memory_hooks_state()
 
     def reset_memory_hooks_state(self):
-        for module in self.modules:
+        for module in self.modules():
             module.mem_rss_diff = 0
             module.mem_rss_post_forward = 0
             module.mem_rss_pre_forward = 0

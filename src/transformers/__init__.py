@@ -71,12 +71,12 @@ from .file_utils import (
     WEIGHTS_NAME,
     add_end_docstrings,
     add_start_docstrings,
+    bytes_to_human_readable,
     cached_path,
     is_tf_available,
     is_torch_available,
     start_memory_tracing,
     stop_memory_tracing,
-    bytes_to_human_readable,
 )
 
 # Model Cards
