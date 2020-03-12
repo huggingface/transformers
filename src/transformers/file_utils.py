@@ -662,6 +662,6 @@ def bytes_to_human_readable(memory_amount):
     """
     for unit in ["B", "KB", "MB", "GB"]:
         if memory_amount > -1024.0 and memory_amount < 1024.0:
-            return f"{memory_amount:.3f}{unit}"
+            return "{:.3f}{}".format(memory_amount, unit)
         memory_amount /= 1024.0
-    return f"{memory_amount:.3f}TB"
+    return "{:.3f}TB".format(memory_amount)
