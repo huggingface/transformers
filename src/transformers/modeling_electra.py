@@ -108,13 +108,13 @@ class ElectraEmbeddings(BertEmbeddings):
     def __init__(self, config):
         super().__init__(config)
         assert config.hidden_size % 2 == 0
-        self.word_embeddings = nn.Embedding(config.vocab_size, int(config.hidden_size / 2), padding_idx=0)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, int(config.hidden_size / 2))
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, int(config.hidden_size / 2))
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=0)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = BertLayerNorm(int(config.hidden_size / 2), eps=config.layer_norm_eps)
+        self.LayerNorm = BertLayerNorm(config.embedding_size, eps=config.layer_norm_eps)
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
@@ -167,8 +167,8 @@ class ElectraGeneratorPredictions(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.LayerNorm = BertLayerNorm(int(config.hidden_size / 2))
-        self.dense = nn.Linear(config.hidden_size, int(config.hidden_size / 2))
+        self.LayerNorm = BertLayerNorm(config.embedding_size)
+        self.dense = nn.Linear(config.hidden_size, config.embedding_size)
 
     def forward(self, generator_hidden_states):
         hidden_states = self.dense(generator_hidden_states)
@@ -285,7 +285,7 @@ class ElectraModel(ElectraPreTrainedModel):
         self.discriminator = ElectraTransformer(config)
         self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
 
-        self.generator_lm_head = nn.Linear(int(config.hidden_size / 2), config.vocab_size, bias=False)
+        self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     def get_input_embeddings(self):
@@ -384,7 +384,7 @@ class ElectraGenerator(ElectraPreTrainedModel):
         self.generator = ElectraTransformer(config)
         self.generator_predictions = ElectraGeneratorPredictions(config)
 
-        self.generator_lm_head = nn.Linear(int(config.hidden_size / 2), config.vocab_size, bias=False)
+        self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     def get_input_embeddings(self):
@@ -482,7 +482,7 @@ class ElectraDiscriminator(ElectraPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        fake_token_labels=None
+        fake_token_labels=None,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -533,7 +533,7 @@ class ElectraTransformer(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.embeddings_project = nn.Linear(int(config.hidden_size / 2), config.hidden_size)
+        self.embeddings_project = nn.Linear(config.embedding_size, config.hidden_size)
         self.encoder = BertEncoder(config)
         self.config = config
 
@@ -542,4 +542,3 @@ class ElectraTransformer(ElectraPreTrainedModel):
         hidden_states = self.encoder(hidden_states, attention_mask=attention_mask, head_mask=head_mask)
 
         return hidden_states
-
