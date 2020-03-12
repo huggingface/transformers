@@ -20,17 +20,13 @@
 
 import argparse
 import csv
-import os
 import timeit
 from time import time
 from typing import List
 
-import psutil
-
 from transformers import (
     AutoConfig,
     AutoTokenizer,
-    bytes_to_human_readable,
     is_tf_available,
     is_torch_available,
     start_memory_tracing,
@@ -259,21 +255,6 @@ the wall, slowly on into the Social Predestination Room.
 as they entered."""
 
 
-def get_memory_diff(func, memory_field="rss", repeat=1):
-    """ We include these inside the pytorch model butcan't do it for TF 2.0 so let's keep the method here for now.
-    """
-    process = psutil.Process(os.getpid())
-    mem_diffs = []
-    for _ in range(repeat):
-        mi_before = process.memory_info()
-        output = func()
-        mi_after = process.memory_info()
-        mem_diff = getattr(mi_after, memory_field) - getattr(mi_before, memory_field)
-        mem_diffs.append(mem_diff)
-    output = sum(mem_diffs) / len(mem_diffs)
-    return output
-
-
 def create_setup_and_compute(
     model_names: List[str],
     batch_sizes: List[int],
@@ -328,17 +309,13 @@ def create_setup_and_compute(
                 result = results[model_name]["results"][batch_size][slice_size]
                 memory = results[model_name]["memory"][batch_size][slice_size]
                 if isinstance(result, str):
-                    print(
-                        f"\t\t{model_name}/{batch_size}/{slice_size}: "
-                        f"{result} "
-                        f"{bytes_to_human_readable(memory)}"
-                    )
+                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: " f"{result} " f"{memory}")
                 else:
                     print(
                         f"\t\t{model_name}/{batch_size}/{slice_size}: "
                         f"{(round(1000 * result) / 1000)}"
                         f"s "
-                        f"{bytes_to_human_readable(memory)}"
+                        f"{memory}"
                     )
 
     if save_to_csv:
@@ -444,9 +421,8 @@ def _compute_pytorch(
 
                             # Line by line memory tracing (all code in the module `transformers`) works for all models/arbitrary code
                             trace = start_memory_tracing("transformers")
-                            output = inference(sequence)  # noqa: F841
+                            inference(sequence)
                             summary = stop_memory_tracing(trace)
-                            del output  # you should keep the output and delete it after otherwise garbage collector will free all :-)
 
                             if verbose:
                                 print(
@@ -471,7 +447,7 @@ def _compute_pytorch(
                                     )
                                 )
                                 print(f"\nTotal memory increase: {summary.total.string}")
-                            dictionary[model_name]["memory"][batch_size][slice_size] = summary.total.bytes
+                            dictionary[model_name]["memory"][batch_size][slice_size] = summary.total.string
                         else:
                             dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
 
@@ -531,27 +507,33 @@ def _compute_tensorflow(
                         if not no_memory:
                             # Line by line memory tracing (all code in the module `transformers`) works for all models/arbitrary code
                             trace = start_memory_tracing("transformers")
-                            output = inference(sequence)  # noqa: F841
+                            inference(sequence)
                             summary = stop_memory_tracing(trace)
-                            del output  # you should keep the output and delete it after otherwise garbage collector will free all :-)
 
                             if verbose:
                                 print(
                                     "\nLines by line memory consumption:\n"
                                     + "\n".join(
-                                        f"{frame.filename}:{frame.line_number}: mem {mem_str}: {frame.line_text}"
-                                        for frame, _, mem_str in summary.sequential
+                                        f"{frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
+                                        for frame, _, _, cpu_gpu_mem in summary.sequential
                                     )
                                 )
                                 print(
                                     "\nLines with top memory consumption:\n"
                                     + "\n".join(
-                                        f"=> {frame.filename}:{frame.line_number}: mem {mem_str}: {frame.line_text}"
-                                        for frame, _, mem_str in summary.cumulative[:6]
+                                        f"=> {frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
+                                        for frame, _, _, cpu_gpu_mem in summary.cumulative[:6]
+                                    )
+                                )
+                                print(
+                                    "\nLines with lowest memory consumption:\n"
+                                    + "\n".join(
+                                        f"=> {frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
+                                        for frame, _, _, cpu_gpu_mem in summary.cumulative[-6:]
                                     )
                                 )
                                 print(f"\nTotal memory increase: {summary.total.string}")
-                            dictionary[model_name]["memory"][batch_size][slice_size] = summary.total.bytes
+                            dictionary[model_name]["memory"][batch_size][slice_size] = summary.total.string
                         else:
                             dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
 

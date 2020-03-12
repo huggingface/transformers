@@ -523,20 +523,20 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
                 default to line
             - `gpus_to_trace`: (optional list, default None) list of GPUs to trace. Default to tracing all GPUs
 
-        Return: Tuple with two lists which will be updated during tracing:
-            - `used_memory_list` is a list of `UsedMemoryState` for each event (default each line of the traced script).
+        Return:
+            - `memory_trace` is a list of `UsedMemoryState` for each event (default each line of the traced script).
                 - `UsedMemoryState` are named tuples with the following fields:
                     - 'frame': a `Frame` namedtuple (see below) storing information on the current tracing frame (current file, location in current file)
-                    - 'cpu_memory': RSS memory state *before* executing the line
-                    - 'gpu_memory': Used GPU memory *before* executing the line
+                    - 'cpu_memory': CPU RSS memory state *before* executing the line
+                    - 'gpu_memory': GPU used memory *before* executing the line (sum for all GPUs or for only `gpus_to_trace` if provided)
 
-                `Frame` namedtuple used by `UsedMemoryState` to list the current frame state.
-                    The have the following fields:
-                    - 'filename' (string): Name of the file currently executed
-                    - 'module' (string): Name of the module currently executed
-                    - 'line_number' (int): Number of the line currently executed
-                    - 'event' (string): Event that triggered the tracing (default will be "line")
-                    - 'line_text' (string): Text of the line in the python script
+        `Frame` is a namedtuple used by `UsedMemoryState` to list the current frame state.
+            `Frame` has the following fields:
+            - 'filename' (string): Name of the file currently executed
+            - 'module' (string): Name of the module currently executed
+            - 'line_number' (int): Number of the line currently executed
+            - 'event' (string): Event that triggered the tracing (default will be "line")
+            - 'line_text' (string): Text of the line in the python script
 
     """
     try:
@@ -651,34 +651,44 @@ def start_memory_tracing(modules_to_trace=None, modules_not_to_trace=None, event
 
 
 Memory = namedtuple("Memory", ["bytes", "string"])
-CPUGPUMemory = namedtuple("TotalMemoryIncrease", ["cpu", "gpu", "cpu_gpu"])
-TraceCPUGPUMemory = namedtuple("TraceMemoryIncrease", ["frame", "cpu", "gpu", "cpu_gpu"])
+MemoryState = namedtuple("MemoryState", ["frame", "cpu", "gpu", "cpu_gpu"])
 MemorySummary = namedtuple("MemorySummary", ["sequential", "cumulative", "total"])
 
 
-def stop_memory_tracing(memory_trace=None, ignore_released_memory_in_total=True):
+def stop_memory_tracing(memory_trace=None, ignore_released_memory=True):
     """ Stop memory tracing cleanly and return a summary of the memory trace if a trace is given.
 
         Args:
             - `memory_trace` (optional output of start_memory_tracing, default: None): memory trace to convert in summary
-            - `ignore_released_memory_in_total` (boolean, default: None): if True we only sum memory increase to compute total memory
+            - `ignore_released_memory` (boolean, default: None): if True we only sum memory increase to compute total memory
 
         Return:
             - None if `memory_trace` is None
             - `MemorySummary` namedtuple otherwise with the fields:
-                - `sequential`: the list of tuple (Frame, memory increase) computed from the memory_trace list
+                - `sequential`: a list of `MemoryState` namedtuple (see below) computed from the provided `memory_trace`
                     by substracting the memory after executing each line from the memory before executing said line.
-                - `cumulative`: an OrderedDict of (Frame, cumulative memory increase for the line) with the cumulative increase in memory for each line
-                    (summing repeted memory increase for a line if it's executed several times).
-                    The dictionnary is ordered from the line with the largest memory consumption to the line with the smallest (can be negative if memory is free)
-                - `total`: total memory increase during the full tracing.
+                - `cumulative`: a list of `MemoryState` namedtuple (see below) with cumulative increase in memory for each line
+                    obtained by summing repeted memory increase for a line if it's executed several times.
+                    The list is sorted from the frame with the largest memory consumption to the frame with the smallest (can be negative if memory is released)
+                - `total`: total memory increase during the full tracing as a `Memory` named tuple (see below).
+                    Line with memory release (negative consumption) are ignored if `ignore_released_memory` is `True` (default).
 
-        In the `MemorySummary`, frames are `Frame` namedtuple used to list the current frame state. A `Frame` has the following fields:
+        `Memory` named tuple have fields
+            - `byte` (integer): number of bytes,
+            - `string` (string): same as human readable string (ex: "3.5MB")
+
+        `Frame` are namedtuple used to list the current frame state and have the following fields:
             - 'filename' (string): Name of the file currently executed
             - 'module' (string): Name of the module currently executed
             - 'line_number' (int): Number of the line currently executed
             - 'event' (string): Event that triggered the tracing (default will be "line")
             - 'line_text' (string): Text of the line in the python script
+
+        `MemoryState` are namedtuples listing frame + CPU/GPU memory with the following fields:
+            - `frame` (`Frame`): the current frame (see above)
+            - `cpu`: CPU memory consumed at during the current frame as a `Memory` named tuple
+            - `gpu`: GPU memory consumed at during the current frame as a `Memory` named tuple
+            - `cpu_gpu`: CPU + GPU memory consumed at during the current frame as a `Memory` named tuple
     """
     global _memory_tracing_enabled
     _memory_tracing_enabled = False
@@ -696,7 +706,7 @@ def stop_memory_tracing(memory_trace=None, ignore_released_memory_in_total=True)
             cpu_gpu_mem_inc = cpu_mem_inc + gpu_mem_inc
             cpu_gpu_mem_str = bytes_to_human_readable(cpu_gpu_mem_inc)
             memory_diff_trace.append(
-                TraceCPUGPUMemory(
+                MemoryState(
                     frame=frame,
                     cpu=Memory(cpu_mem_inc, cpu_mem_str),
                     gpu=Memory(gpu_mem_inc, gpu_mem_str),
@@ -711,7 +721,7 @@ def stop_memory_tracing(memory_trace=None, ignore_released_memory_in_total=True)
             list(cumulative_memory_dict.items()), key=lambda x: x[1][2], reverse=True
         )  # order by the total CPU + GPU memory increase
         cumulative_memory = list(
-            TraceCPUGPUMemory(
+            MemoryState(
                 frame=frame,
                 cpu=Memory(cpu_mem_inc, bytes_to_human_readable(cpu_mem_inc)),
                 gpu=Memory(gpu_mem_inc, bytes_to_human_readable(gpu_mem_inc)),
@@ -720,7 +730,7 @@ def stop_memory_tracing(memory_trace=None, ignore_released_memory_in_total=True)
             for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in cumulative_memory
         )
 
-        if ignore_released_memory_in_total:
+        if ignore_released_memory:
             total_memory = sum(max(0, step_trace.cpu_gpu.bytes) for step_trace in memory_diff_trace)
         else:
             total_memory = sum(step_trace.cpu_gpu.bytes for step_trace in memory_diff_trace)
