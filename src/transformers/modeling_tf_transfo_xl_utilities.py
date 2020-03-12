@@ -176,3 +176,41 @@ class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
             self.add_metric(loss, name=self.name, aggregation="mean" if return_mean else "")
 
         return out
+
+
+# TODO: (PVP) add tests to compare to PT!
+class LogUniformSampler(object):
+    def __init__(self, range_max, n_sample):
+        """
+        Reference : https://github.com/tensorflow/tensorflow/blob/r1.10/tensorflow/python/ops/candidate_sampling_ops.py
+            `P(class) = (log(class + 2) - log(class + 1)) / log(range_max + 1)`
+
+        expected count can be approximated by 1 - (1 - p)^n
+        and we use a numerically stable version -expm1(num_tries * log1p(-p))
+
+        Our implementation fixes num_tries at 2 * n_sample, and the actual #samples will vary from run to run
+        """
+        self.range_max = range_max
+        log_indices = tf.math.log(tf.range(1.0, range_max + 2.0))
+        self.dist = (log_indices[1:] - log_indices[:-1]) / log_indices[-1]
+
+        self.log_q = tf.cast(tf.log(-tf.math.expm1(-tf.math.log1p(tf.cast(self.dist, tf.double)) * 2 * n_sample)), tf.float)
+
+        self.n_sample = n_sample
+
+    def sample(self, labels):
+        """
+            labels: [b1, b2]
+        Return
+            true_log_probs: [b1, b2]
+            samp_log_probs: [n_sample]
+            neg_samples: [n_sample]
+        """
+
+        n_sample = self.n_sample
+        n_tries = 2 * n_sample
+
+        neg_samples = tf.random.categorical(self.dist, n_tries, replacement=True).unique()
+        true_log_probs = self.log_q[labels]
+        samp_log_probs = self.log_q[neg_samples]
+        return true_log_probs, samp_log_probs, neg_samples
