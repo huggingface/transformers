@@ -1,3 +1,5 @@
+import collections
+
 import torch
 
 from transformers import PreTrainedModel, BertConfig
@@ -43,8 +45,8 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
         name = name.replace("electra/embeddings/", "embeddings/")
         name = name.replace("electra", "discriminator")
         name = name.replace("dense_1", "dense_prediction")
-        name = name.replace("discriminator/embeddings_project", "discriminator_embeddings_project")
-        name = name.replace("generator/embeddings_project", "generator_embeddings_project")
+        # name = name.replace("discriminator/embeddings_project", "discriminator_embeddings_project")
+        # name = name.replace("generator/embeddings_project", "generator_embeddings_project")
         name = name.replace("generator_predictions/output_bias", "bias")
 
         name = name.split("/")
@@ -91,7 +93,6 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
         if m_name[-11:] == "_embeddings":
             pointer = getattr(pointer, "weight")
         elif m_name == "kernel":
-            print("transposing", original_name)
             array = np.transpose(array)
         try:
             assert pointer.shape == array.shape, original_name
@@ -137,7 +138,8 @@ class ElectraEmbeddings(BertEmbeddings):
         embeddings = inputs_embeds + position_embeddings + token_type_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
-        return embeddings, inputs_embeds
+        return embeddings
+
 
 class ElectraDiscriminatorPredictions(nn.Module):
     def __init__(self, config):
@@ -145,10 +147,20 @@ class ElectraDiscriminatorPredictions(nn.Module):
 
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dense_prediction = nn.Linear(config.hidden_size, 1)
+        self.config = config
 
-    def forward(self, discriminator_hidden_states):
+    def forward(self, discriminator_hidden_states, attention_mask, labels):
         hidden_states = self.dense(discriminator_hidden_states)
-        return self.dense_prediction(hidden_states)
+        hidden_states = get_activation(self.config.hidden_act)(hidden_states)
+
+        logits = self.dense_prediction(hidden_states).squeeze_()
+        probs = torch.nn.Sigmoid()(logits)
+        preds = torch.round((logits.sign() + 1) / 2)
+
+        loss_fct = nn.BCEWithLogitsLoss()
+        loss = loss_fct(logits.view(-1, discriminator_hidden_states.shape[1]), labels.float())
+
+        return probs, preds, loss
 
 
 class ElectraGeneratorPredictions(nn.Module):
@@ -167,7 +179,6 @@ class ElectraGeneratorPredictions(nn.Module):
 
 
 class ElectraMainLayer(nn.Module):
-
     def __init__(self, config):
         super().__init__()
 
@@ -175,83 +186,14 @@ class ElectraMainLayer(nn.Module):
 
     def forward(self, embedding_output, attention_mask=None, head_mask=None):
         encoder_outputs, all_selves, attention_scores = self.encoder(
-            embedding_output,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
+            embedding_output, attention_mask=attention_mask, head_mask=head_mask,
         )
 
         return encoder_outputs
 
 
-class ElectraModel(PreTrainedModel):
-
-    config_class = BertConfig
-
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.embeddings = ElectraEmbeddings(config)
-
-        self.discriminator = ElectraMainLayer(config)
-        self.discriminator_embeddings_project = nn.Linear(int(config.hidden_size / 2), config.hidden_size)
-        self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
-
-        self.generator = ElectraMainLayer(config)
-        self.generator_embeddings_project = nn.Linear(int(config.hidden_size / 2), config.hidden_size)
-        self.generator_predictions = ElectraGeneratorPredictions(config)
-        self.generator_lm_head = nn.Linear(int(config.hidden_size / 2), config.vocab_size, bias=False)
-
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        # self.generator_lm_head.bias = self.bias
-
-        self.config = config
-
-    def get_input_embeddings(self):
-        return self.embeddings
-
-    def get_output_embeddings(self):
-        return self.generator_lm_head
-
-    @staticmethod
-    def _gather_positions(sequence, positions):
-        batch_size, sequence_length, dimension = sequence.shape
-        position_shift = (sequence_length * torch.arange(batch_size)).unsqueeze(-1)
-        flat_positions = torch.reshape(positions + position_shift, [-1]).long()
-        flat_sequence = torch.reshape(sequence, [batch_size * sequence_length, dimension])
-        gathered = flat_sequence.index_select(0, flat_positions)
-        return torch.reshape(gathered, [batch_size, -1, dimension])
-
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        masked_lm_positions=None,
-        masked_lm_ids=None,
-        masked_lm_weights=None,
-    ):
-
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=device)
-        if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
+class ElectraPreTrainedModel(PreTrainedModel):
+    def get_extended_attention_mask(self, attention_mask, input_shape, device):
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         if attention_mask.dim() == 3:
@@ -285,32 +227,9 @@ class ElectraModel(PreTrainedModel):
         extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
-        # If a 2D ou 3D attention mask is provided for the cross-attention
-        # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+        return extended_attention_mask
 
-            if encoder_attention_mask.dim() == 3:
-                encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
-            elif encoder_attention_mask.dim() == 2:
-                encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
-            else:
-                raise ValueError(
-                    "Wrong shape for encoder_hidden_shape (shape {}) or encoder_attention_mask (shape {})".format(
-                        encoder_hidden_shape, encoder_attention_mask.shape
-                    )
-                )
-
-            encoder_extended_attention_mask = encoder_extended_attention_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # fp16 compatibility
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
-        else:
-            encoder_extended_attention_mask = None
-
+    def get_head_mask(self, head_mask):
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -330,49 +249,282 @@ class ElectraModel(PreTrainedModel):
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
-        embedding_output, input_embeds = self.embeddings(
+        return head_mask
+
+    @staticmethod
+    def _gather_positions(sequence, positions):
+        batch_size, sequence_length, dimension = sequence.shape
+        position_shift = (sequence_length * torch.arange(batch_size)).unsqueeze(-1)
+        flat_positions = torch.reshape(positions + position_shift, [-1]).long()
+        flat_sequence = torch.reshape(sequence, [batch_size * sequence_length, dimension])
+        gathered = flat_sequence.index_select(0, flat_positions)
+        return torch.reshape(gathered, [batch_size, -1, dimension])
+
+
+class ElectraModel(ElectraPreTrainedModel):
+
+    ElectraModelOutputs = collections.namedtuple(
+        "ElectraModelOutputs",
+        ["generator_sequence_output", "generator_pooled_output", "discriminator_sequence_output"],
+    )
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.embeddings = ElectraEmbeddings(config)
+
+        self.generator = ElectraTransformer(config)
+        self.generator_predictions = ElectraGeneratorPredictions(config)
+
+        self.discriminator = ElectraTransformer(config)
+        self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
+
+        self.generator_lm_head = nn.Linear(int(config.hidden_size / 2), config.vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+    def get_input_embeddings(self):
+        return self.embeddings
+
+    def get_output_embeddings(self):
+        return self.generator_lm_head
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        masked_lm_positions=None,
+        masked_lm_ids=None,
+        masked_lm_weights=None,
+        fake_token_labels=None,
+    ):
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones(input_shape, device=device)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        head_mask = self.get_head_mask(head_mask)
+
+        embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
 
-        discriminator_embedding_output = self.discriminator_embeddings_project(embedding_output)
-        generator_embedding_output = self.generator_embeddings_project(embedding_output)
-
-        discriminator_hidden_states = self.discriminator(
-            discriminator_embedding_output, attention_mask=extended_attention_mask, head_mask=head_mask
-        )
         generator_hidden_states = self.generator(
-            generator_embedding_output, attention_mask=extended_attention_mask, head_mask=head_mask
+            embedding_output, attention_mask=extended_attention_mask, head_mask=head_mask
+        )
+        discriminator_hidden_states = self.discriminator(
+            embedding_output, attention_mask=extended_attention_mask, head_mask=head_mask
         )
 
-        return_dict = {
-            "input_embeds": input_embeds,
-            "embeddings_output": embedding_output,
-            "discriminator_embedding_output": discriminator_embedding_output,
-            "generator_embedding_output": generator_embedding_output,
-            "discriminator_sequence_output": discriminator_hidden_states[0],
-            "generator_sequence_output": generator_hidden_states[0],
-            "generator_pooled_output": generator_hidden_states[0][:, 0]
-        }
+        generator_sequence_output = generator_hidden_states[0]
+        generator_pooled_output = generator_hidden_states[0][:, 0]
+        discriminator_sequence_output = discriminator_hidden_states[0]
 
-        if self.config.output_hidden_states:
-            return_dict["discriminator_hidden_states"] = discriminator_hidden_states[-1]
-            return_dict["generator_hidden_states"] = generator_hidden_states[-1]
+        output = (generator_sequence_output, generator_pooled_output, discriminator_sequence_output)
 
         # Masked language modeling softmax layer
         if masked_lm_weights is not None:
+            # Gather only the relevant values in the indices that were masked
+            relevant_hidden = self._gather_positions(generator_sequence_output, masked_lm_positions)
+            hidden_states = self.generator_predictions(relevant_hidden)
+
+            # Project to the vocabulary
+            hidden_states = torch.matmul(hidden_states, self.embeddings.word_embeddings.weight.T)
+            hidden_states = hidden_states + self.bias
+
+            # Compute logits, probabilities and predictions
+            logits = hidden_states
+            probs = torch.softmax(hidden_states, dim=-1)
+
+            log_probs = torch.log_softmax(hidden_states, -1)
+            # label_log_probs = -
+            predictions = torch.argmax(log_probs, dim=-1)
+
+            loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
+            loss = loss_fct(logits.view(-1, self.config.vocab_size), masked_lm_ids.view(-1))
+            output += (logits, probs, predictions, loss)
+
+        if fake_token_labels is not None:
+            probs, preds, loss = self.discriminator_predictions(
+                discriminator_sequence_output, attention_mask, fake_token_labels
+            )
+
+            output += (probs, preds, loss)
+
+        return output  # generator_sequence_output, generator_pooled_output, discriminator_sequence_output, (logits, probs, preds) (probs,)
+
+
+class ElectraGenerator(ElectraPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.embeddings = ElectraEmbeddings(config)
+        self.generator = ElectraTransformer(config)
+        self.generator_predictions = ElectraGeneratorPredictions(config)
+
+        self.generator_lm_head = nn.Linear(int(config.hidden_size / 2), config.vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+        self.ElectraGeneratorOutputs.__new__.__defaults__ = (None, None, None)  # Last three are optional
+
+    def get_input_embeddings(self):
+        return self.embeddings
+
+    def get_output_embeddings(self):
+        return self.generator_lm_head
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        masked_lm_positions=None,
+        masked_lm_ids=None,
+        masked_lm_weights=None,
+    ):
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones(input_shape, device=device)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        head_mask = self.get_head_mask(head_mask)
+
+        embedding_output = self.embeddings(
+            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+        )
+
+        generator_hidden_states = self.generator(
+            embedding_output, attention_mask=extended_attention_mask, head_mask=head_mask
+        )
+
+        generator_sequence_output = generator_hidden_states[0]
+        generator_pooled_output = generator_hidden_states[0][:, 0]
+
+        output = (generator_sequence_output, generator_pooled_output)
+
+        # Masked language modeling softmax layer
+        if masked_lm_weights is not None:
+            # Gather only the relevant values in the indices that were masked
             relevant_hidden = self._gather_positions(generator_hidden_states[0], masked_lm_positions)
             hidden_states = self.generator_predictions(relevant_hidden)
-            # hidden_states = self.generator_lm_head(hidden_states)
+
+            # Project to the vocabulary
             hidden_states = torch.matmul(hidden_states, self.embeddings.word_embeddings.weight.T)
-            return_dict['x'] = hidden_states
             hidden_states = hidden_states + self.bias
-            return_dict["logits"] = hidden_states
 
+            # Compute logits, probabilities and predictions
+            logits = hidden_states
             probs = torch.softmax(hidden_states, dim=-1)
+
             log_probs = torch.log_softmax(hidden_states, -1)
-            preds = torch.argmax(log_probs, dim=-1)
+            predictions = torch.argmax(log_probs, dim=-1)
 
-            return_dict["probs"] = probs
-            return_dict["preds"] = preds
+            output += (logits, probs, predictions)
 
-        return return_dict
+        return output  # generator_sequence_output, generator_pooled_output (logits, probs, preds)
+
+
+class ElectraDiscriminator(ElectraPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.embeddings = ElectraEmbeddings(config)
+        self.discriminator = ElectraTransformer(config)
+        self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
+
+    def get_input_embeddings(self):
+        return self.embeddings
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+    ):
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones(input_shape, device=device)
+        if token_type_ids is None:
+            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        head_mask = self.get_head_mask(head_mask)
+
+        embedding_output = self.embeddings(
+            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+        )
+
+        discriminator_hidden_states = self.discriminator(
+            embedding_output, attention_mask=extended_attention_mask, head_mask=head_mask
+        )
+
+        predictions = self.discriminator_predictions(discriminator_hidden_states)
+
+        output = (discriminator_hidden_states,)
+
+        return output  # discriminator_hidden_states
+
+
+class ElectraTransformer(ElectraPreTrainedModel):
+
+    config_class = BertConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.embeddings_project = nn.Linear(int(config.hidden_size / 2), config.hidden_size)
+        self.encoder = BertEncoder(config)
+        self.config = config
+
+    def forward(self, embedding_output, attention_mask=None, head_mask=None):
+        hidden_states = self.embeddings_project(embedding_output)
+        hidden_states = self.encoder(hidden_states, attention_mask=attention_mask, head_mask=head_mask)
+
+        return hidden_states
+

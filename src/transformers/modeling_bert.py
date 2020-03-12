@@ -400,7 +400,6 @@ class BertEncoder(nn.Module):
     ):
         all_hidden_states = ()
         all_attentions = ()
-        all_selves = ()
         for i, layer_module in enumerate(self.layer):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -409,8 +408,6 @@ class BertEncoder(nn.Module):
                 hidden_states, attention_mask, head_mask[i], encoder_hidden_states, encoder_attention_mask
             )
             hidden_states = layer_outputs[0]
-
-            all_selves += (self_value,)
 
             if self.output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -424,7 +421,7 @@ class BertEncoder(nn.Module):
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
-        return outputs, all_selves, attention_scores  # last-layer hidden state, (all hidden states), (all attentions)
+        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 
 class BertPooler(nn.Module):
@@ -786,7 +783,7 @@ class BertModel(BertPreTrainedModel):
         embedding_output, top_kek = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
-        encoder_outputs, all_selves, attention_scores = self.encoder(
+        encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
@@ -796,10 +793,10 @@ class BertModel(BertPreTrainedModel):
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
 
-        outputs = (sequence_output, pooled_output, all_selves) + encoder_outputs[
+        outputs = (sequence_output, pooled_output) + encoder_outputs[
             1:
         ]  # add hidden_states and attentions if they are here
-        return outputs, extended_attention_mask, attention_scores  # sequence_output, pooled_output, (hidden_states), (attentions)
+        return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
