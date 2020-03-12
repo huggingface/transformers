@@ -57,7 +57,6 @@ class CommonFastTokenizerTest(unittest.TestCase):
                     self.assert_num_special_tokens_to_add_equal(tokenizer_r, tokenizer_p)
                     self.assert_max_length_equal(tokenizer_r, tokenizer_p)
                     self.assert_special_tokens_map_equal(tokenizer_r, tokenizer_p)
-                    self.assert_add_special_tokens(tokenizer_r, tokenizer_p)
                     self.assert_embeded_special_tokens(tokenizer_r, tokenizer_p)
                     self.assert_padding(tokenizer_r, tokenizer_p)
                     # TODO: enable for v3.0.0
@@ -77,6 +76,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
 
                     self.assert_add_tokens(tokenizer_r)
                     self.assert_offsets_mapping(tokenizer_r)
+                    self.assert_add_special_tokens(tokenizer_r)
+                    # self.assert_offsets_with_special_characters(tokenizer_r)
 
     def assert_tokenization_python_rust_equals(self, tokenizer_p, tokenizer_r):
         # Ensure basic input match
@@ -249,24 +250,6 @@ class CommonFastTokenizerTest(unittest.TestCase):
         output_p = tokenizer_p.build_inputs_with_special_tokens(input_simple, input_pair)
         self.assertEqual(output_p, output_r)
 
-    def assert_add_special_tokens(self, tokenizer_r, tokenizer_p):
-        for text in ["", " ", "This is a sample input"]:
-            for should_add_special_tokens in [False, True]:
-                self.assertEqual(
-                    tokenizer_p.tokenize(text, add_special_tokens=should_add_special_tokens),
-                    tokenizer_r.tokenize(text, add_special_tokens=should_add_special_tokens),
-                )
-
-                self.assertEqual(
-                    tokenizer_p.encode_plus(text, add_special_tokens=should_add_special_tokens),
-                    tokenizer_r.encode_plus(text, add_special_tokens=should_add_special_tokens),
-                )
-
-                self.assertEqual(
-                    tokenizer_p.batch_encode_plus([text], add_special_tokens=should_add_special_tokens),
-                    tokenizer_r.batch_encode_plus([text], add_special_tokens=should_add_special_tokens),
-                )
-
     def assert_padding(self, tokenizer_r, tokenizer_p, max_length=15):
         def assert_padded_input_match(input_r: list, input_p: list, max_length: int):
 
@@ -332,14 +315,18 @@ class CommonFastTokenizerTest(unittest.TestCase):
         # Pair input
         # TODO: Re-enable this test when batch_encode_plus with padding correctly handles padding
         input_r = tokenizer_r.batch_encode_plus(
-            [("This is a simple input 1", "This is a simple input 2"),
-             ("This is a simple pair 1", "This is a simple pair 2")],
+            [
+                ("This is a simple input 1", "This is a simple input 2"),
+                ("This is a simple pair 1", "This is a simple pair 2"),
+            ],
             max_length=15,
             pad_to_max_length=True,
         )
         input_p = tokenizer_p.batch_encode_plus(
-            [("This is a simple input 1", "This is a simple input 2"),
-             ("This is a simple pair 1", "This is a simple pair 2")],
+            [
+                ("This is a simple input 1", "This is a simple input 2"),
+                ("This is a simple pair 1", "This is a simple pair 2"),
+            ],
             max_length=15,
             pad_to_max_length=True,
         )
@@ -376,6 +363,67 @@ class CommonFastTokenizerTest(unittest.TestCase):
         tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
         tokens_p = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
         self.assertSequenceEqual(tokens_r, tokens_p)
+
+    def assert_offsets_with_special_characters(self, tokenizer_r):
+        sentence = "A, naïve [MASK] AllenNLP sentence."
+        tokens = tokenizer_r.encode_plus(
+            sentence,
+            return_attention_mask=False,
+            return_token_type_ids=False,
+            return_offsets_mapping=True,
+            add_special_tokens=True,
+        )
+
+        expected_results = [
+            (None, "[CLS]"),
+            ((0, 1), "A"),
+            ((1, 2), ","),
+            ((3, 8), "naive"),  # BERT normalizes this away
+            ((9, 15), "[MASK]"),
+            ((16, 21), "Allen"),
+            ((22, 24), "##NL"),
+            ((24, 25), "##P"),
+            ((26, 34), "sentence"),
+            ((35, 36), "."),
+            (None, "[SEP]"),
+        ]
+
+        self.assertEqual([e[1] for e in expected_results], tokenizer_r.convert_ids_to_tokens(tokens["input_ids"]))
+        self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
+
+    def assert_add_special_tokens(self, tokenizer_r):
+        simple_num_special_tokens_to_add = tokenizer_r.num_special_tokens_to_add(pair=False)
+        pair_num_special_tokens_to_add = tokenizer_r.num_special_tokens_to_add(pair=True)
+
+        for text in ["", " "]:
+            # tokenize()
+            no_special_tokens = tokenizer_r.tokenize(text, add_special_tokens=False)
+            with_special_tokens = tokenizer_r.tokenize(text, add_special_tokens=True)
+            self.assertEqual(len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add)
+
+            # encode()
+            no_special_tokens = tokenizer_r.encode(text, add_special_tokens=False)
+            with_special_tokens = tokenizer_r.encode(text, add_special_tokens=True)
+            self.assertEqual(len(no_special_tokens), len(with_special_tokens) - simple_num_special_tokens_to_add)
+
+            # encode_plus()
+            no_special_tokens = tokenizer_r.encode_plus(text, add_special_tokens=False)
+            with_special_tokens = tokenizer_r.encode_plus(text, add_special_tokens=True)
+            for key in no_special_tokens.keys():
+                self.assertEqual(
+                    len(no_special_tokens[key]),
+                    len(with_special_tokens[key]) - simple_num_special_tokens_to_add
+                )
+
+            # # batch_encode_plus
+            no_special_tokens = tokenizer_r.batch_encode_plus([text, text], add_special_tokens=False)
+            with_special_tokens = tokenizer_r.batch_encode_plus([text, text], add_special_tokens=True)
+            for key in no_special_tokens.keys():
+                for i_no, i_with in zip(no_special_tokens[key], with_special_tokens[key]):
+                    self.assertEqual(
+                        len(i_no),
+                        len(i_with) - simple_num_special_tokens_to_add
+                    )
 
 
 class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
