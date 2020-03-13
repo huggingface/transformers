@@ -176,6 +176,9 @@ if is_torch_available():
         load_tf_weights_in_transfo_xl,
         TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
+    from .modeling_transfo_xl_utilities import (
+        LogUniformSampler,
+    )
     from .modeling_gpt2 import (
         GPT2PreTrainedModel,
         GPT2Model,
@@ -344,6 +347,10 @@ if is_tf_available():
         TFTransfoXLModel,
         TFTransfoXLLMHeadModel,
         TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
+
+    from .modeling_tf_transfo_xl_utilities import (
+        TFLogUniformSampler,
     )
 
     from .modeling_tf_xlnet import (

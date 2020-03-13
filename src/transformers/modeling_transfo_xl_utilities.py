@@ -276,6 +276,7 @@ class LogUniformSampler(object):
         n_sample = self.n_sample
         n_tries = 2 * n_sample
 
+        print("PT: {}".format(self.dist))
         with torch.no_grad():
             neg_samples = torch.multinomial(self.dist, n_tries, replacement=True).unique()
             device = labels.device

@@ -28,6 +28,7 @@ if is_torch_available():
     import torch
     from transformers import TransfoXLConfig, TransfoXLModel, TransfoXLLMHeadModel
     from transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_transfo_xl_utilities import LogUniformSampler
 
 
 @require_torch
@@ -206,6 +207,9 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         output_result = self.model_tester.create_transfo_xl_lm_head(*config_and_inputs)
         self.model_tester.check_transfo_xl_lm_head_output(output_result)
+
+    def test_log_uniform_sampler(self):
+        
 
     @slow
     def test_model_from_pretrained(self):
