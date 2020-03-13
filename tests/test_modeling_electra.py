@@ -188,6 +188,17 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(discrim_preds.size()), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(list(discrim_loss.size()), [])
 
+        def prepare_config_and_inputs_for_common(self):
+            config_and_inputs = self.prepare_config_and_inputs()
+
+            (
+                config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_labels
+            ) = config_and_inputs
+
+            inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids}
+
+            return config, inputs_dict
+
 
     def setUp(self):
         self.model_tester = ElectraModelTest.ElectraModelTester(self)
