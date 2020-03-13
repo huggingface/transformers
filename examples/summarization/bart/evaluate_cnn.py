@@ -36,7 +36,7 @@ def generate_summaries(lns, out_file, batch_size=8, device=DEFAULT_DEVICE):
             no_repeat_ngram_size=3,
             early_stopping=True,
             do_sample=False,
-            decoder_start_token_id=model.config.eos_token_ids[0]
+            decoder_start_token_id=model.config.eos_token_ids[0],
         )
         dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summaries]
         for hypothesis in dec:
