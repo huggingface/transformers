@@ -107,6 +107,7 @@ class ElectraConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
+        self.embedding_size = embedding_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

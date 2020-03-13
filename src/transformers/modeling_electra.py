@@ -307,7 +307,6 @@ class ElectraModel(ElectraPreTrainedModel):
         inputs_embeds=None,
         masked_lm_positions=None,
         masked_lm_ids=None,
-        masked_lm_weights=None,
         fake_token_labels=None,
     ):
 
@@ -348,7 +347,7 @@ class ElectraModel(ElectraPreTrainedModel):
         output = (generator_sequence_output, generator_pooled_output, discriminator_sequence_output)
 
         # Masked language modeling softmax layer
-        if masked_lm_weights is not None:
+        if masked_lm_positions is not None:
             # Gather only the relevant values in the indices that were masked
             relevant_hidden = self._gather_positions(generator_sequence_output, masked_lm_positions)
             hidden_states = self.generator_predictions(relevant_hidden)
@@ -406,7 +405,6 @@ class ElectraGenerator(ElectraPreTrainedModel):
         inputs_embeds=None,
         masked_lm_positions=None,
         masked_lm_ids=None,
-        masked_lm_weights=None,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -442,7 +440,7 @@ class ElectraGenerator(ElectraPreTrainedModel):
         output = (generator_sequence_output, generator_pooled_output)
 
         # Masked language modeling softmax layer
-        if masked_lm_weights is not None:
+        if masked_lm_positions is not None:
             # Gather only the relevant values in the indices that were masked
             relevant_hidden = self._gather_positions(generator_sequence_output, masked_lm_positions)
             hidden_states = self.generator_predictions(relevant_hidden)
@@ -461,7 +459,7 @@ class ElectraGenerator(ElectraPreTrainedModel):
 
             loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
             loss = loss_fct(logits.view(-1, self.config.vocab_size), masked_lm_ids.view(-1))
-            output += (logits, probs, predictions, loss)
+            output = output + (logits, probs, predictions, loss)
 
         return output  # generator_sequence_output, generator_pooled_output, (logits, probs, preds, loss)
 
@@ -526,7 +524,7 @@ class ElectraDiscriminator(ElectraPreTrainedModel):
 
             output += (probs, preds, loss)
 
-        return output  # discriminator_hidden_states (probs, preds, loss)
+        return output  # (probs, preds, loss), discriminator_hidden_states
 
 
 class ElectraTransformer(ElectraPreTrainedModel):
