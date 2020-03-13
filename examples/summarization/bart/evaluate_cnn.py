@@ -27,9 +27,11 @@ def generate_summaries(lns, out_file, batch_size=8, device=DEFAULT_DEVICE):
             attention_mask=dct["attention_mask"].to(device),
             num_beams=4,
             length_penalty=2.0,
-            max_length=140,
-            min_len=55,
+            max_length=142,  # +2 from original because we start at step=1 and stop before max_length
+            min_length=56,  # +1 from original because we start at step=1
             no_repeat_ngram_size=3,
+            early_stopping=True,
+            do_sample=False,
         )
         dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summaries]
         for hypothesis in dec:
