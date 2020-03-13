@@ -82,7 +82,7 @@ LARGE_NEGATIVE = -1e8
 
 
 def _prepare_bart_decoder_inputs(
-    config, input_ids, decoder_input_ids=None, decoder_attn_mask=None,
+    config, input_ids, decoder_input_ids=None, decoder_attn_mask=None, mask_dtype=None,
 ):
     """Prepare masks that ignore padding tokens  decoder and a causal lm mask for the decoder if
     none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
@@ -101,6 +101,8 @@ def _prepare_bart_decoder_inputs(
         new_shape = (bsz, tgt_len, tgt_len)
         # make it broadcastable so can just be added to the attention coefficients
         decoder_attn_mask = _combine_masks(decoder_padding_mask, causal_lm_mask, new_shape).to(device=input_ids.device)
+        if mask_dtype is not None:
+            decoder_attn_mask = decoder_attn_mask.to(mask_dtype)
     assert decoder_attn_mask is None or decoder_attn_mask.shape == (bsz, 1, tgt_len, tgt_len)
     return decoder_input_ids, decoder_attn_mask
 
@@ -838,7 +840,11 @@ class BartModel(PretrainedBartModel):
         # make masks if user doesn't supply
         if not self.decoder.generation_mode:
             decoder_input_ids, decoder_attention_mask = _prepare_bart_decoder_inputs(
-                self.config, input_ids, decoder_input_ids=decoder_input_ids, decoder_attn_mask=decoder_attention_mask,
+                self.config,
+                input_ids,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attn_mask=decoder_attention_mask,
+                mask_dtype=self.shared.weight.dtype,
             )
         assert decoder_input_ids is not None
         if encoder_outputs is None:
