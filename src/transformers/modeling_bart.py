@@ -840,6 +840,7 @@ class BartModel(PretrainedBartModel):
             decoder_input_ids, decoder_attention_mask = _prepare_bart_decoder_inputs(
                 self.config, input_ids, decoder_input_ids=decoder_input_ids, decoder_attn_mask=decoder_attention_mask,
             )
+            decoder_attention_mask = decoder_attention_mask.to(self.shared.weight.dtype)
         assert decoder_input_ids is not None
         if encoder_outputs is None:
             encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
