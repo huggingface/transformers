@@ -89,6 +89,12 @@ class BertConfig(PretrainedConfig):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
                 The epsilon used by the layer normalization layers.
+            train_embeddings (:obj:`bool`, optional, defaults to True):
+                Whether or not to make embeddings trainable in fine-tuning
+            train_pooler (:obj:`bool`, optional, defaults to True):
+                Whether or not to make pooler trainable in fine-tuning
+            train_layers (:obj:`int` or :obj:`slice`, optional, defaults to `None` meaning all hidden layers):
+                Which encoder layers to make trainable in fine-tuning; if :obj:`int` then the top N layers are trainable
 
         Example::
 
@@ -125,6 +131,9 @@ class BertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        train_embeddings=True,
+        train_layers=None,
+        train_pooler=True,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -141,3 +150,6 @@ class BertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.train_embeddings = train_embeddings
+        self.train_layers = train_layers
+        self.train_pooler = train_pooler

@@ -359,10 +359,21 @@ class TFBertLayer(tf.keras.layers.Layer):
 
 class TFBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
+        train_layers = config.train_layers
+        if train_layers is None:
+            train_layers = range(0, config.num_hidden_layers)
+        elif isinstance(train_layers, int):
+            train_layers = range(config.num_hidden_layers - train_layers, config.num_hidden_layers)
+        elif not hasattr(train_layers, "__contains__"):
+            raise TypeError("Invalid argument passed for train_layers, should be int or a container: %r", train_layers)
+
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.layer = [TFBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
+        self.layer = [
+            TFBertLayer(config, name="layer_._{}".format(i), trainable=i in train_layers)
+            for i in range(config.num_hidden_layers)
+        ]
 
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
@@ -479,9 +490,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
 
-        self.embeddings = TFBertEmbeddings(config, name="embeddings")
+        self.embeddings = TFBertEmbeddings(config, name="embeddings", trainable=config.train_embeddings)
         self.encoder = TFBertEncoder(config, name="encoder")
-        self.pooler = TFBertPooler(config, name="pooler")
+        self.pooler = TFBertPooler(config, name="pooler", trainable=config.train_pooler)
 
     def get_input_embeddings(self):
         return self.embeddings
