@@ -314,10 +314,17 @@ class BartHeadTests(unittest.TestCase):
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data(output_past=True)
-        input_ids = input_ids
         attention_mask = input_ids.ne(1).to(torch_device)
         lm_model = BartForConditionalGeneration(config).eval().to(torch_device).half()
         lm_model.generate(input_ids, attention_mask=attention_mask)
+
+    def test_base_model_fp16(self):
+        config, input_ids, batch_size = self._get_config_and_data(output_past=False)
+        attention_mask = input_ids.ne(1).to(torch_device)
+        lm_model = BartForConditionalGeneration(config).eval().to(torch_device).half()
+        lm_model.generate(input_ids, attention_mask=attention_mask)
+
+
 
     def test_prepare_bart_decoder_inputs(self):
         config, *_ = self._get_config_and_data(output_past=False)
