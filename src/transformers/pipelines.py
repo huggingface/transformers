@@ -1154,11 +1154,8 @@ class SummarizationPipeline(Pipeline):
         *documents,
         return_tensors=False,
         return_text=True,
-        num_beams=4,
-        length_penalty=2.0,
         max_length=142,
         min_len=21,
-        no_repeat_ngram_size=3,
         **generate_kwargs
     ):
         r"""
@@ -1197,11 +1194,8 @@ class SummarizationPipeline(Pipeline):
             summaries = self.model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
-                num_beams=num_beams,
-                length_penalty=length_penalty,
                 max_length=max_length,
                 min_len=min_len,
-                no_repeat_ngram_size=no_repeat_ngram_size,
                 do_sample=False,
                 **generate_kwargs,
             )
