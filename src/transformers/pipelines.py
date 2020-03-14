@@ -1155,7 +1155,8 @@ class SummarizationPipeline(Pipeline):
         return_tensors=False,
         return_text=True,
         max_length=142,
-        min_len=21,
+        min_length=21,
+        clean_up_tokenization_spaces=False,
         **generate_kwargs
     ):
         r"""
@@ -1166,16 +1167,9 @@ class SummarizationPipeline(Pipeline):
 
             max_length: (`optional`) int
                 The max length of the sequence to be generated. Does not include tokens in input_ids.
-
-            num_beams: (`optional`) int
-                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
-            repetition_penalty: (`optional`) float
-                The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
-            length_penalty: (`optional`) float Exponential penalty to the length. Default to 1.
-            num_return_sequences: (`optional`) int.
-                The number of independently computed returned sequences for each element in the batch. Default to 1.
             min_len: (`optional`) int
             no_repeat_ngram_size:  (`optional`) int. ban ngrams of this length from being repeated in the generated text
+            clean_up_tokenization_spaces: (`optional`) bool whether to include extra spaces in the output
             **generate_kwargs: extra kwargs passed to `self.model.generate`_
 
         Returns:
@@ -1185,7 +1179,7 @@ class SummarizationPipeline(Pipeline):
             https://huggingface.co/transformers/model_doc/bart.html#transformers.BartForConditionalGeneration.generate
 
         """
-        assert return_tensors or return_text
+        assert return_tensors or return_text, "You must specify return_tensors=True or return_text=True"
         if self.framework == "tf":
             raise NotImplementedError("Tensorflow not supported")
         with self.device_placement():
@@ -1195,7 +1189,7 @@ class SummarizationPipeline(Pipeline):
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 max_length=max_length,
-                min_len=min_len,
+                min_length=min_length,
                 do_sample=False,
                 **generate_kwargs,
             )
@@ -1206,13 +1200,10 @@ class SummarizationPipeline(Pipeline):
                     record["summary_token_ids"] = summary
                 if return_text:
                     record["summary_text"] = self.tokenizer.decode(
-                        summary, skip_special_tokens=True, clean_up_tokenization_spaces=False
+                        summary, skip_special_tokens=True, clean_up_tokenization_spaces=clean_up_tokenization_spaces
                     )
                 results.append(record)
             return results
-
-    def _forward(self, *args, **kwargs):
-        raise NotImplementedError("Should not be called")
 
 
 # Register all the supported task here
