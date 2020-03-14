@@ -909,6 +909,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 attention_mask=attention_mask,
             )
 
+        if hasattr(self.model, "decoder") and hasattr(self.model.decoder, "generation_mode"):
+            self.model.decoder.generation_mode = False
+
         return output
 
     def _generate_no_beam_search(
