@@ -3,9 +3,9 @@ language: multilingual
 thumbnail:
 ---
 
-# BERT (base-multilingual-cased) fine-tuned on XQuAD
+# BERT (base-multilingual-cased) fine-tuned for multilingual Q&A
 
-This model was created by [Google](https://github.com/google-research/bert/blob/master/multilingual.md) and fine-tuned on [XQuAD](https://github.com/deepmind/xquad) for multilingual (`11 different languages`) **Q&A** downstream task.
+This model was created by [Google](https://github.com/google-research/bert/blob/master/multilingual.md) and fine-tuned on [XQuAD](https://github.com/deepmind/xquad) like data for multilingual (`11 different languages`) **Q&A** downstream task.
 
 ## Details of the language model('bert-base-multilingual-cased')
 
@@ -50,7 +50,8 @@ for the other languages.
 Citation:
 
 <details>
-```
+
+```bibtex
 @article{Artetxe:etal:2019,
       author    = {Mikel Artetxe and Sebastian Ruder and Dani Yogatama},
       title     = {On the cross-lingual transferability of monolingual representations},
@@ -61,9 +62,10 @@ Citation:
       eprint    = {1910.11856}
 }
 ```
+
 </details>
 
-I used `Data augmentation techniques` and splited the dataset in order to have a train and test set. The test set was created in a way that contains the same number of samples for each language. Finally, I got:
+As **XQuAD** is just an evaluation dataset, I used `Data augmentation techniques` (scraping, neural machine translation, etc) to obtain more samples and splited the dataset in order to have a train and test set. The test set was created in a way that contains the same number of samples for each language. Finally, I got:
 
 | Dataset     | # samples |
 | ----------- | --------- |
@@ -74,14 +76,6 @@ I used `Data augmentation techniques` and splited the dataset in order to have a
 
 The model was trained on a Tesla P100 GPU and 25GB of RAM.
 The script for fine tuning can be found [here](https://github.com/huggingface/transformers/blob/master/examples/distillation/run_squad_w_distillation.py)
-
-## Results:
-
-| Metric    | # Value     |
-| --------- | ----------- |
-| **Exact** | **91.43** |
-| **F1**    | **94.14** |
-
 
 
 ## Model in action

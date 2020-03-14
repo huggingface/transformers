@@ -47,6 +47,7 @@ The different languages this model/tokenizer handles, as well as the ids of thes
 
 .. code-block::
 
+    # Continuation of the previous script
     print(tokenizer.lang2id)  # {'en': 0, 'fr': 1}
 
 
@@ -54,6 +55,7 @@ These ids should be used when passing a language parameter during a model pass. 
 
 .. code-block::
 
+    # Continuation of the previous script
     input_ids = torch.tensor([tokenizer.encode("Wikipedia was used to")]) # batch size of 1
 
 
@@ -62,6 +64,7 @@ filled with the appropriate language ids, of the same size as input_ids. For eng
 
 .. code-block::
 
+    # Continuation of the previous script
     language_id = tokenizer.lang2id['en']  # 0
     langs = torch.tensor([language_id] * input_ids.shape[1])  # torch.tensor([0, 0, 0, ..., 0])
 
@@ -73,6 +76,7 @@ You can then feed it all as input to your model:
 
 .. code-block::
 
+    # Continuation of the previous script
     outputs = model(input_ids, langs=langs)
 
 

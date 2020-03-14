@@ -119,11 +119,11 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             input_ids_q = ids_tensor([self.batch_size, self.seq_length + 1], self.vocab_size)
             perm_mask = torch.zeros(
-                self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float, device=torch_device
+                self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float, device=torch_device,
             )
             perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
             target_mapping = torch.zeros(
-                self.batch_size, 1, self.seq_length + 1, dtype=torch.float, device=torch_device
+                self.batch_size, 1, self.seq_length + 1, dtype=torch.float, device=torch_device,
             )
             target_mapping[:, 0, -1] = 1.0  # predict last token
 
@@ -212,7 +212,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertEqual(len(no_mems_outputs), 1)
 
             self.parent.assertListEqual(
-                list(result["outputs"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["outputs"].size()), [self.batch_size, self.seq_length, self.hidden_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -283,7 +283,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss_1"].size()), [])
             self.parent.assertListEqual(
-                list(result["all_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["all_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -292,7 +292,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss_2"].size()), [])
             self.parent.assertListEqual(
-                list(result["all_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["all_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_2"]),
@@ -319,7 +319,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             outputs = model(input_ids_1)
-            start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems = outputs
+            (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems,) = outputs
 
             outputs = model(
                 input_ids_1,
@@ -340,7 +340,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             total_loss, mems = outputs
 
-            outputs = model(input_ids_1, start_positions=sequence_labels, end_positions=sequence_labels)
+            outputs = model(input_ids_1, start_positions=sequence_labels, end_positions=sequence_labels,)
 
             total_loss, mems = outputs
 
@@ -356,10 +356,10 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top]
+                list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top],
             )
             self.parent.assertListEqual(
-                list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top]
+                list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top],
             )
             self.parent.assertListEqual(
                 list(result["end_top_log_probs"].size()),
@@ -405,7 +405,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["logits"].size()), [self.batch_size, self.seq_length, self.type_sequence_label_size]
+                list(result["logits"].size()), [self.batch_size, self.seq_length, self.type_sequence_label_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -442,7 +442,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size]
+                list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -513,18 +513,11 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-def prepare_generation_special_tokens():
-    return {"bos_token_id": 1, "pad_token_id": 5, "eos_token_id": 2}
-
-
 class XLNetModelLanguageGenerationTest(unittest.TestCase):
-
-    special_tokens = prepare_generation_special_tokens()
-
     @slow
     def test_lm_generate_xlnet_base_cased(self):
         model = XLNetLMHeadModel.from_pretrained("xlnet-base-cased")
-        input_ids = torch.Tensor(
+        input_ids = torch.tensor(
             [
                 [
                     67,
@@ -689,8 +682,10 @@ class XLNetModelLanguageGenerationTest(unittest.TestCase):
                     4,
                     3,
                 ]
-            ]
-        ).long()
+            ],
+            dtype=torch.long,
+            device=torch_device,
+        )
         #  In 1991, the remains of Russian Tsar Nicholas II and his family
         #  (except for Alexei and Maria) are discovered.
         #  The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
@@ -864,45 +859,45 @@ class XLNetModelLanguageGenerationTest(unittest.TestCase):
             9,
             4,
             3,
-            1722,
             19,
-            24,
-            6348,
-            61,
-            977,
-            176,
-            1772,
-            33,
-            45,
-            970,
-            19,
-            4185,
-            19,
+            12943,
+            4354,
+            153,
             27,
             442,
             22,
             2771,
             4901,
-            25,
-            18,
-            2059,
-            20,
-            24,
-            303,
-            1775,
-            691,
             9,
-            1147,
+            69,
+            27,
+            50,
+            551,
+            22,
+            2771,
+            4901,
             19,
-            634,
-            19,
-            43,
-            51,
-            54,
-            6157,
-            2999,
-            33,
-            4185,
+            21,
+            45,
+            668,
+            21,
+            18,
+            416,
+            41,
+            1499,
+            22,
+            755,
+            18,
+            14285,
+            9,
+            12943,
+            4354,
+            153,
+            27,
+            1499,
+            22,
+            642,
+            22,
         ]
         #  In 1991, the remains of Russian Tsar Nicholas II and his family (except for Alexei and Maria)
         #  are discovered. The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich,
@@ -912,17 +907,9 @@ class XLNetModelLanguageGenerationTest(unittest.TestCase):
         #  him for making such an accusation, Rasputin watches as the man is chased outside and beaten.
         #  Twenty years later, Rasputin sees a vision of the Virgin Mary, prompting him to become a priest.
         #  Rasputin quickly becomes famous, with people, even a bishop, begging for his blessing.
-        #  1990, a priest who cannot even walk with his wife, Maria, is asked to perform magic
-        #  in the presence of a local religious leader.
-        #  Since, however, he has had difficulty walking with Maria
+        #  <sep><cls>, Rasputin is asked to perform magic.
+        #  He is not able to perform magic, and his father and
+        # the men are forced to leave the monastery. Rasputin is forced to return to
 
-        torch.manual_seed(0)
-        output_ids = model.generate(
-            input_ids,
-            bos_token_id=self.special_tokens["bos_token_id"],
-            pad_token_id=self.special_tokens["pad_token_id"],
-            eos_token_ids=self.special_tokens["eos_token_id"],
-            max_length=200,
-        )
-
+        output_ids = model.generate(input_ids, max_length=200, do_sample=False)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

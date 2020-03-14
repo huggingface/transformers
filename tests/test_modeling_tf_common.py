@@ -19,6 +19,7 @@ import os
 import random
 import tempfile
 import unittest
+from importlib import import_module
 
 from transformers import is_tf_available, is_torch_available
 
@@ -89,13 +90,49 @@ class TFModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname)
                 after_outputs = model(inputs_dict)
 
-                # Make sure we don't have nans
-                out_1 = after_outputs[0].numpy()
-                out_2 = outputs[0].numpy()
-                out_1 = out_1[~np.isnan(out_1)]
-                out_2 = out_2[~np.isnan(out_2)]
-                max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 1e-5)
+                self.assert_outputs_same(after_outputs, outputs)
+
+    def test_keras_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        tf_main_layer_classes = set(
+            module_member
+            for model_class in self.all_model_classes
+            for module in (import_module(model_class.__module__),)
+            for module_member_name in dir(module)
+            if module_member_name.endswith("MainLayer")
+            for module_member in (getattr(module, module_member_name),)
+            if isinstance(module_member, type)
+            and tf.keras.layers.Layer in module_member.__bases__
+            and getattr(module_member, "_keras_serializable", False)
+        )
+        for main_layer_class in tf_main_layer_classes:
+            main_layer = main_layer_class(config)
+            symbolic_inputs = {
+                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+            }
+            model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
+            outputs = model(inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                filepath = os.path.join(tmpdirname, "keras_model.h5")
+                model.save(filepath)
+                model = tf.keras.models.load_model(
+                    filepath, custom_objects={main_layer_class.__name__: main_layer_class}
+                )
+                assert isinstance(model, tf.keras.Model)
+                after_outputs = model(inputs_dict)
+                self.assert_outputs_same(after_outputs, outputs)
+
+    def assert_outputs_same(self, after_outputs, outputs):
+        # Make sure we don't have nans
+        out_1 = after_outputs[0].numpy()
+        out_2 = outputs[0].numpy()
+        self.assertEqual(out_1.shape, out_2.shape)
+        out_1 = out_1[~np.isnan(out_1)]
+        out_2 = out_2[~np.isnan(out_2)]
+        max_diff = np.amax(np.abs(out_1 - out_2))
+        self.assertLessEqual(max_diff, 1e-5)
 
     def test_pt_tf_model_equivalence(self):
         if not is_torch_available():
@@ -381,7 +418,6 @@ class TFModelTesterMixin:
         )  # TODO (PVP): ugly workaround to make code work for t5 for the moment - has to changed when t5 is fixed.
 
         for model_class in self.all_generative_model_classes:
-            # TODO (PVP): add beam search tests when beam search is implemented
             model = model_class(config)
 
             if config.bos_token_id is None:
@@ -389,15 +425,34 @@ class TFModelTesterMixin:
                     model.generate(max_length=5)
                 # batch_size = 1
                 self._check_generated_tokens(model.generate(input_ids))
+                # batch_size = 1, num_beams > 1
+                self._check_generated_tokens(model.generate(input_ids, num_beams=3))
             else:
                 # batch_size = 1
                 self._check_generated_tokens(model.generate(max_length=5))
                 # batch_size = 1, num_beams > 1
+                self._check_generated_tokens(model.generate(max_length=5, num_beams=3))
+
+            with self.assertRaises(AssertionError):
+                # generating multiple sequences when greedy no beam generation
+                # is not allowed as it would always generate the same sequences
+                model.generate(input_ids, do_sample=False, num_return_sequences=2)
+
+            with self.assertRaises(AssertionError):
+                # generating more sequences than having beams leads is not possible
+                model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 
             # batch_size > 1, sample
             self._check_generated_tokens(model.generate(input_ids, num_return_sequences=3))
             # batch_size > 1, greedy
-            self._check_generated_tokens(model.generate(input_ids, do_sample=False, num_return_sequences=3))
+            self._check_generated_tokens(model.generate(input_ids, do_sample=False))
+
+            # batch_size > 1, num_beams > 1, sample
+            self._check_generated_tokens(model.generate(input_ids, num_beams=3, num_return_sequences=3,))
+            # batch_size > 1, num_beams > 1, greedy
+            self._check_generated_tokens(
+                model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3)
+            )
 
     def _check_generated_tokens(self, output_ids):
         for token_id in output_ids[0].numpy().tolist():

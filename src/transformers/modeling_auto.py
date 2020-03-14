@@ -45,7 +45,12 @@ from .modeling_albert import (
     AlbertForTokenClassification,
     AlbertModel,
 )
-from .modeling_bart import BART_PRETRAINED_MODEL_ARCHIVE_MAP, BartForMaskedLM, BartForSequenceClassification, BartModel
+from .modeling_bart import (
+    BART_PRETRAINED_MODEL_ARCHIVE_MAP,
+    BartForConditionalGeneration,
+    BartForSequenceClassification,
+    BartModel,
+)
 from .modeling_bert import (
     BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     BertForMaskedLM,
@@ -73,7 +78,7 @@ from .modeling_distilbert import (
 )
 from .modeling_flaubert import (
     FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-    FlaubertForQuestionAnswering,
+    FlaubertForQuestionAnsweringSimple,
     FlaubertForSequenceClassification,
     FlaubertModel,
     FlaubertWithLMHeadModel,
@@ -92,7 +97,7 @@ from .modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP, T5Model, T5WithLMHeadM
 from .modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP, TransfoXLLMHeadModel, TransfoXLModel
 from .modeling_xlm import (
     XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
-    XLMForQuestionAnswering,
+    XLMForQuestionAnsweringSimple,
     XLMForSequenceClassification,
     XLMModel,
     XLMWithLMHeadModel,
@@ -106,7 +111,7 @@ from .modeling_xlm_roberta import (
 )
 from .modeling_xlnet import (
     XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
-    XLNetForQuestionAnswering,
+    XLNetForQuestionAnsweringSimple,
     XLNetForSequenceClassification,
     XLNetForTokenClassification,
     XLNetLMHeadModel,
@@ -166,7 +171,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForMaskedLM),
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
-        (BartConfig, BartForMaskedLM),
+        (BartConfig, BartForConditionalGeneration),
         (RobertaConfig, RobertaForMaskedLM),
         (BertConfig, BertForPreTraining),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
@@ -186,7 +191,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForMaskedLM),
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
-        (BartConfig, BartForMaskedLM),
+        (BartConfig, BartForConditionalGeneration),
         (RobertaConfig, RobertaForMaskedLM),
         (BertConfig, BertForMaskedLM),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
@@ -220,9 +225,9 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForQuestionAnswering),
         (RobertaConfig, RobertaForQuestionAnswering),
         (BertConfig, BertForQuestionAnswering),
-        (XLNetConfig, XLNetForQuestionAnswering),
-        (FlaubertConfig, FlaubertForQuestionAnswering),
-        (XLMConfig, XLMForQuestionAnswering),
+        (XLNetConfig, XLNetForQuestionAnsweringSimple),
+        (FlaubertConfig, FlaubertForQuestionAnsweringSimple),
+        (XLMConfig, XLMForQuestionAnsweringSimple),
     ]
 )
 

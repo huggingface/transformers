@@ -194,6 +194,8 @@ class XLMConfig(PretrainedConfig):
         end_n_top=5,
         mask_token_id=0,
         lang_id=0,
+        bos_token_id=0,
+        pad_token_id=2,
         **kwargs
     ):
         """Constructs XLMConfig.
@@ -233,6 +235,9 @@ class XLMConfig(PretrainedConfig):
 
         if "n_words" in kwargs:
             self.n_words = kwargs["n_words"]
+
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
 
     @property
     def n_words(self):  # For backward compatibility

@@ -526,6 +526,21 @@ class ModelTesterMixin:
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
 
+    def test_correct_missing_keys(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            base_model_prefix = model.base_model_prefix
+
+            if hasattr(model, base_model_prefix):
+                with tempfile.TemporaryDirectory() as temp_dir_name:
+                    model.base_model.save_pretrained(temp_dir_name)
+                    model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
+
+                    with self.subTest(msg="Missing keys for {}".format(model.__class__.__name__)):
+                        self.assertGreater(len(loading_info["missing_keys"]), 0)
+
     def test_tie_model_weights(self):
         if not self.test_torchscript:
             return
@@ -612,6 +627,9 @@ class ModelTesterMixin:
         input_ids = inputs_dict.get(
             "input_ids", None
         )  # TODO (PVP): ugly workaround to make code work for t5 for the moment - has to changed when t5 is fixed.
+
+        if self.is_encoder_decoder:
+            config.output_past = True  # needed for Bart TODO: might have to update for other encoder-decoder models
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)

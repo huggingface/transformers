@@ -29,6 +29,7 @@ from .modeling_tf_utils import (
     TFSequenceSummary,
     TFSharedEmbeddings,
     get_initializer,
+    keras_serializable,
     shape_list,
 )
 
@@ -39,6 +40,7 @@ TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-tf_model.h5",
     "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-tf_model.h5",
     "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-tf_model.h5",
+    "gpt2-xl": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-tf_model.h5",
     "distilgpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-tf_model.h5",
 }
 
@@ -139,10 +141,10 @@ class TFAttention(tf.keras.layers.Layer):
         key = self.split_heads(key)
         value = self.split_heads(value)
         if layer_past is not None:
-            past_key, past_value = tf.unstack(layer_past, axis=1)
+            past_key, past_value = tf.unstack(layer_past, axis=0)
             key = tf.concat([past_key, key], axis=-2)
             value = tf.concat([past_value, value], axis=-2)
-        present = tf.stack([key, value], axis=1)
+        present = tf.stack([key, value], axis=0)
 
         attn_outputs = self._attn([query, key, value, attention_mask, head_mask], training=training)
         a = attn_outputs[0]
@@ -196,7 +198,10 @@ class TFBlock(tf.keras.layers.Layer):
         return outputs  # x, present, (attentions)
 
 
+@keras_serializable
 class TFGPT2MainLayer(tf.keras.layers.Layer):
+    config_class = GPT2Config
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         self.output_hidden_states = config.output_hidden_states

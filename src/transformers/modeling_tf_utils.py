@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """TF general model utils."""
-
-
+import functools
 import logging
 import os
 
@@ -45,6 +44,64 @@ class TFModelUtilsMixin:
             return int(sum(np.prod(w.shape.as_list()) for w in self.trainable_variables))
         else:
             return self.count_params()
+
+
+def keras_serializable(cls):
+    """
+    Decorate a Keras Layer class to support Keras serialization.
+
+    This is done by:
+    1. adding a `transformers_config` dict to the Keras config dictionary in `get_config` (called by Keras at
+       serialization time
+    2. wrapping `__init__` to accept that `transformers_config` dict (passed by Keras at deserialization time) and
+       convert it to a config object for the actual layer initializer
+    3. registering the class as a custom object in Keras (if the Tensorflow version supports this), so that it does
+       not need to be supplied in `custom_objects` in the call to `tf.keras.models.load_model`
+
+    :param cls: a tf.keras.layers.Layers subclass that accepts a `config` argument to its initializer (typically a
+                `TF*MainLayer` class in this project)
+    :return: the same class object, with modifications for Keras deserialization.
+    """
+    initializer = cls.__init__
+
+    config_class = getattr(cls, "config_class", None)
+    if config_class is None:
+        raise AttributeError("Must set `config_class` to use @keras_serializable")
+
+    @functools.wraps(initializer)
+    def wrapped_init(self, *args, **kwargs):
+        transformers_config = kwargs.pop("transformers_config", None)
+        config = args[0] if args and isinstance(args[0], PretrainedConfig) else kwargs.get("config", None)
+        if config is not None and transformers_config is not None:
+            raise ValueError("Must pass either `config` or `transformers_config`, not both")
+        elif config is not None:
+            # normal layer construction, call with unchanged args (config is already in there)
+            initializer(self, *args, **kwargs)
+        elif transformers_config is not None:
+            # Keras deserialization, convert dict to config
+            config = config_class.from_dict(transformers_config)
+            initializer(self, config, *args, **kwargs)
+        else:
+            raise ValueError("Must pass either `config` (PretrainedConfig) or `transformers_config` (dict)")
+        self._transformers_config = config
+
+    cls.__init__ = wrapped_init
+
+    if not hasattr(cls, "get_config"):
+        raise TypeError("Only use @keras_serializable on tf.keras.layers.Layer subclasses")
+    if hasattr(cls.get_config, "_is_default"):
+
+        def get_config(self):
+            cfg = super(cls, self).get_config()
+            cfg["transformers_config"] = self._transformers_config.to_dict()
+            return cfg
+
+        cls.get_config = get_config
+
+    cls._keras_serializable = True
+    if hasattr(tf.keras.utils, "register_keras_serializable"):
+        cls = tf.keras.utils.register_keras_serializable()(cls)
+    return cls
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
@@ -142,7 +199,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         # # initialize all new embeddings (in particular added tokens)
         # self._init_weights(new_embeddings)
 
-        # # Copy word embeddings from the previous weights
+        # # Copy token embeddings from the previous weights
         # num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
         # new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
 
@@ -402,7 +459,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         self,
         input_ids=None,
         max_length=None,
+        min_length=None,
         do_sample=True,
+        early_stopping=False,
         num_beams=None,
         temperature=None,
         top_k=None,
@@ -412,7 +471,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         pad_token_id=None,
         eos_token_ids=None,
         length_penalty=None,
+        no_repeat_ngram_size=None,
         num_return_sequences=None,
+        attention_mask=None,
     ):
         r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
         and beam-search.
@@ -502,11 +563,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         if self.get_output_embeddings() is None:
             raise AttributeError(
                 "You tried to generate sequences with a model that does not have a LM Head."
-                "Please use another model class (e.g. `OpenAIGPTLMHeadModel`, `XLNetLMHeadModel`, `GPT2LMHeadModel`, `CTRLLMHeadModel`, `T5WithLMHeadModel`, `TransfoXLLMHeadModel`)"
+                "Please use another model class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`, `TFCTRLLMHeadModel`, `TFT5WithLMHeadModel`, `TFTransfoXLLMHeadModel`)"
             )
 
         max_length = max_length if max_length is not None else self.config.max_length
+        min_length = min_length if min_length is not None else self.config.min_length
         do_sample = do_sample if do_sample is not None else self.config.do_sample
+        early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         temperature = temperature if temperature is not None else self.config.temperature
         top_k = top_k if top_k is not None else self.config.top_k
@@ -516,6 +579,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_ids = eos_token_ids if eos_token_ids is not None else self.config.eos_token_ids
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
+        no_repeat_ngram_size = (
+            no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
+        )
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
@@ -528,7 +594,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             eos_token_ids = [eos_token_ids]
 
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictely positive integer."
+        assert isinstance(min_length, int) and min_length >= 0, "`min_length` should be a positive integer."
         assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
+        assert isinstance(early_stopping, bool), "`early_stopping` should be a boolean."
         assert isinstance(num_beams, int) and num_beams > 0, "`num_beams` should be a strictely positive integer."
         assert temperature > 0, "`temperature` should be strictely positive."
         assert isinstance(top_k, int) and top_k >= 0, "`top_k` should be a positive integer."
@@ -557,6 +625,27 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         else:
             assert len(shape_list(input_ids)) == 2, "Input prompt should be of shape (batch_size, sequence length)."
 
+        # not allow to duplicate outputs when greedy decoding
+        if do_sample is False:
+            if num_beams == 1:
+                # no_beam_search greedy generation conditions
+                assert (
+                    num_return_sequences == 1
+                ), "Greedy decoding will always produce the same output for num_beams == 1 and num_return_sequences > 1. Please set num_return_sequences = 1"
+
+            else:
+                # beam_search greedy generation conditions
+                assert (
+                    num_beams >= num_return_sequences
+                ), "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams >= num_return_sequences"
+
+        # create attention mask if necessary
+        # TODO (PVP): this should later be handled by the forward fn() in each model in the future see PR 3140
+        if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
+            attention_mask = tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
+        elif attention_mask is None:
+            attention_mask = tf.ones_like(input_ids)
+
         if pad_token_id is None and eos_token_ids is not None:
             logger.warning(
                 "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_ids[0])
@@ -567,44 +656,69 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         cur_len = shape_list(input_ids)[1]
         vocab_size = self.config.vocab_size
 
-        if num_return_sequences != 1:
-            # Expand input to num return sequences
-            input_ids = tf.broadcast_to(tf.expand_dims(input_ids, 1), (batch_size, num_return_sequences, cur_len))
+        # set effective batch size and effective batch multiplier according to do_sample
+        if do_sample:
             effective_batch_size = batch_size * num_return_sequences
-            input_ids = tf.reshape(input_ids, (effective_batch_size, cur_len))
+            effective_batch_mult = num_return_sequences
         else:
             effective_batch_size = batch_size
+            effective_batch_mult = 1
+
+        # Expand input ids if num_beams > 1 or num_return_sequences > 1
+        if num_return_sequences > 1 or num_beams > 1:
+            input_ids_len = shape_list(input_ids)[-1]
+            input_ids = tf.broadcast_to(
+                tf.expand_dims(input_ids, 1), (batch_size, effective_batch_mult * num_beams, input_ids_len)
+            )
+            attention_mask = tf.broadcast_to(
+                tf.expand_dims(attention_mask, 1), (batch_size, effective_batch_mult * num_beams, input_ids_len)
+            )
+            input_ids = tf.reshape(
+                input_ids, (effective_batch_size * num_beams, input_ids_len)
+            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
+            attention_mask = tf.reshape(
+                attention_mask, (effective_batch_size * num_beams, input_ids_len)
+            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
         if num_beams > 1:
             output = self._generate_beam_search(
                 input_ids,
-                cur_len,
-                max_length,
-                do_sample,
-                temperature,
-                top_k,
-                top_p,
-                repetition_penalty,
-                pad_token_id,
-                eos_token_ids,
-                effective_batch_size,
-                length_penalty,
-                num_beams,
-                vocab_size,
+                cur_len=cur_len,
+                max_length=max_length,
+                min_length=min_length,
+                do_sample=do_sample,
+                early_stopping=early_stopping,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                pad_token_id=pad_token_id,
+                eos_token_ids=eos_token_ids,
+                batch_size=effective_batch_size,
+                num_return_sequences=num_return_sequences,
+                length_penalty=length_penalty,
+                num_beams=num_beams,
+                vocab_size=vocab_size,
+                attention_mask=attention_mask,
             )
         else:
             output = self._generate_no_beam_search(
                 input_ids,
-                cur_len,
-                max_length,
-                do_sample,
-                temperature,
-                top_k,
-                top_p,
-                repetition_penalty,
-                pad_token_id,
-                eos_token_ids,
-                effective_batch_size,
+                cur_len=cur_len,
+                max_length=max_length,
+                min_length=min_length,
+                do_sample=do_sample,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
+                no_repeat_ngram_size=no_repeat_ngram_size,
+                pad_token_id=pad_token_id,
+                eos_token_ids=eos_token_ids,
+                batch_size=effective_batch_size,
+                vocab_size=vocab_size,
+                attention_mask=attention_mask,
             )
 
         return output
@@ -614,39 +728,31 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         input_ids,
         cur_len,
         max_length,
+        min_length,
         do_sample,
         temperature,
         top_k,
         top_p,
         repetition_penalty,
+        no_repeat_ngram_size,
         pad_token_id,
         eos_token_ids,
         batch_size,
+        vocab_size,
+        attention_mask,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
             All returned sequence are generated independantly.
         """
 
-        def _create_next_token_logits_penalties(input_ids, logits):
-            # create logit penalties for already seen input_ids
-            token_penalties = np.ones(shape_list(logits))
-            prev_input_ids = [np.unique(input_id) for input_id in input_ids.numpy()]
-            for i, prev_input_id in enumerate(prev_input_ids):
-                logit_penalized = logits[i].numpy()[prev_input_id]
-                # if previous logit score is < 0 then multiply repetition penalty else divide
-                logit_penalized[logit_penalized < 0] = repetition_penalty
-                logit_penalized[logit_penalized > 0] = 1 / repetition_penalty
-                np.put(token_penalties[i], prev_input_id, logit_penalized)
-            return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
-
-        # current position / max lengths / length of generated sentences / unfinished sentences
+        # length of generated sentences / unfinished sentences
         unfinished_sents = tf.ones_like(input_ids[:, 0])
         sent_lengths = tf.ones_like(input_ids[:, 0]) * max_length
 
         past = None
 
         while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
 
@@ -656,8 +762,37 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
             # repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
             if repetition_penalty != 1.0:
-                next_token_logits_penalties = _create_next_token_logits_penalties(input_ids, next_token_logits)
+                next_token_logits_penalties = _create_next_token_logits_penalties(
+                    input_ids, next_token_logits, repetition_penalty
+                )
                 next_token_logits = tf.math.multiply(next_token_logits, next_token_logits_penalties)
+
+            if no_repeat_ngram_size > 0:
+                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
+                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+                banned_tokens = calc_banned_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
+                # create banned_tokens boolean mask
+                banned_tokens_indices_mask = []
+                for banned_tokens_slice in banned_tokens:
+                    banned_tokens_indices_mask.append(
+                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+                    )
+
+                next_token_logits = set_tensor_by_indices_to_value(
+                    next_token_logits, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+                )
+
+            # set eos token prob to zero if min_length is not reached
+            if eos_token_ids is not None and cur_len < min_length:
+                # create eos_token_ids boolean mask
+                is_token_logit_eos_token = tf.convert_to_tensor(
+                    [True if token in eos_token_ids else False for token in range(vocab_size)], dtype=tf.bool
+                )
+                eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [batch_size, vocab_size])
+
+                next_token_logits = set_tensor_by_indices_to_value(
+                    next_token_logits, eos_token_indices_mask, -float("inf")
+                )
 
             if do_sample:
                 # Temperature (higher temperature => more likely to sample low probability tokens)
@@ -697,11 +832,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     # unfinished_sents is set to zero if eos in sentence
                     unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
 
-            cur_len = cur_len + 1
-
             # stop when there is a </s> in each sentence, or if we exceed the maximul length
             if tf.math.reduce_max(unfinished_sents) == 0:
                 break
+
+            cur_len = cur_len + 1
 
         # if there are different sentences lengths in the batch, some batches have to be padded
         min_sent_length = tf.math.reduce_min(sent_lengths)
@@ -730,19 +865,331 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         input_ids,
         cur_len,
         max_length,
+        min_length,
         do_sample,
+        early_stopping,
         temperature,
         top_k,
         top_p,
         repetition_penalty,
+        no_repeat_ngram_size,
         pad_token_id,
         eos_token_ids,
         batch_size,
+        num_return_sequences,
         length_penalty,
         num_beams,
         vocab_size,
+        attention_mask,
     ):
-        pass
+        """ Generate sequences for each example with beam search.
+        """
+
+        # generated hypotheses
+        generated_hyps = [
+            BeamHypotheses(num_beams, max_length, length_penalty, early_stopping=early_stopping)
+            for _ in range(batch_size)
+        ]
+
+        # for greedy decoding it is made sure that only tokens of the first beam are considered to avoid sampling the exact same tokens three times
+        if do_sample is False:
+            beam_scores_begin = tf.zeros((batch_size, 1), dtype=tf.float32)
+            beam_scores_end = tf.ones((batch_size, num_beams - 1), dtype=tf.float32) * (-1e9)
+            beam_scores = tf.concat([beam_scores_begin, beam_scores_end], -1)
+        else:
+            beam_scores = tf.zeros((batch_size, num_beams), dtype=tf.float32)
+
+        beam_scores = tf.reshape(beam_scores, (batch_size * num_beams,))
+        # cache compute states
+        past = None
+
+        # done sentences
+        done = [False for _ in range(batch_size)]
+
+        while cur_len < max_length:
+            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
+            outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
+            next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
+
+            # if model has past, then set the past variable to speed up decoding
+            if self._do_output_past(outputs):
+                past = outputs[1]
+
+            # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
+            if repetition_penalty != 1.0:
+                next_token_logits_penalties = _create_next_token_logits_penalties(
+                    input_ids, next_token_logits, repetition_penalty
+                )
+                next_token_logits = tf.math.multiply(next_token_logits, next_token_logits_penalties)
+
+            # Temperature (higher temperature => more likely to sample low probability tokens)
+            if temperature != 1.0:
+                next_token_logits = next_token_logits / temperature
+
+            #             calculate log softmax score
+            scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
+
+            # set eos token prob to zero if min_length is not reached
+            if eos_token_ids is not None and cur_len < min_length:
+                # create eos_token_ids boolean mask
+                is_token_logit_eos_token = tf.convert_to_tensor(
+                    [True if token in eos_token_ids else False for token in range(vocab_size)], dtype=tf.bool
+                )
+                eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [batch_size, vocab_size])
+
+                scores = set_tensor_by_indices_to_value(scores, eos_token_indices_mask, -float("inf"))
+
+            if no_repeat_ngram_size > 0:
+                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
+                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+                num_batch_hypotheses = batch_size * num_beams
+                banned_tokens = calc_banned_tokens(input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len)
+                # create banned_tokens boolean mask
+                banned_tokens_indices_mask = []
+                for banned_tokens_slice in banned_tokens:
+                    banned_tokens_indices_mask.append(
+                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+                    )
+
+                scores = set_tensor_by_indices_to_value(
+                    scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+                )
+
+            assert shape_list(scores) == [batch_size * num_beams, vocab_size]
+
+            if do_sample:
+                _scores = scores + tf.broadcast_to(
+                    beam_scores[:, None], (batch_size * num_beams, vocab_size)
+                )  # (batch_size * num_beams, vocab_size)
+
+                # Top-p/top-k filtering
+                _scores = tf_top_k_top_p_filtering(
+                    _scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2
+                )  # (batch_size * num_beams, vocab_size)
+                # Sample 2 next tokens for each beam (so we have some spare tokens and match output of greedy beam search)
+                _scores = tf.reshape(_scores, (batch_size, num_beams * vocab_size))
+
+                next_tokens = tf.random.categorical(
+                    _scores, dtype=tf.int32, num_samples=2 * num_beams
+                )  # (batch_size, 2 * num_beams)
+                # Compute next scores
+                next_scores = tf.gather(_scores, next_tokens, batch_dims=1)  # (batch_size, 2 * num_beams)
+
+                # sort the sampled vector to make sure that the first num_beams samples are the best
+                next_scores_indices = tf.argsort(next_scores, direction="DESCENDING", axis=1)
+                next_scores = tf.gather(next_scores, next_scores_indices, batch_dims=1)  # (batch_size, num_beams * 2)
+                next_tokens = tf.gather(next_tokens, next_scores_indices, batch_dims=1)  # (batch_size, num_beams * 2)
+            else:
+                # Add the log prob of the new beams to the log prob of the beginning of the sequence (sum of logs == log of the product)
+                next_scores = scores + tf.broadcast_to(
+                    beam_scores[:, None], (batch_size * num_beams, vocab_size)
+                )  # (batch_size * num_beams, vocab_size)
+
+                # re-organize to group the beam together (we are keeping top hypothesis accross beams)
+                next_scores = tf.reshape(
+                    next_scores, (batch_size, num_beams * vocab_size)
+                )  # (batch_size, num_beams * vocab_size)
+
+                next_scores, next_tokens = tf.math.top_k(next_scores, k=2 * num_beams, sorted=True)
+
+            assert shape_list(next_scores) == shape_list(next_tokens) == [batch_size, 2 * num_beams]
+
+            # next batch beam content
+            # list of (batch_size * num_beams) tuple(next hypothesis score, next token, current position in the batch)
+            next_batch_beam = []
+
+            # for each sentence
+            for batch_idx in range(batch_size):
+
+                if done[batch_idx]:
+                    assert (
+                        len(generated_hyps[batch_idx]) >= num_beams
+                    ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
+                    assert (
+                        eos_token_ids is not None and pad_token_id is not None
+                    ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
+                    next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
+                    continue
+
+                # next sentence beam content
+                next_sent_beam = []
+
+                # next tokens for this sentence
+                for beam_token_rank, (beam_token_id, beam_token_score) in enumerate(
+                    zip(next_tokens[batch_idx], next_scores[batch_idx])
+                ):
+
+                    # get beam and token IDs
+                    beam_id = beam_token_id // vocab_size
+                    token_id = beam_token_id % vocab_size
+
+                    effective_beam_id = batch_idx * num_beams + beam_id
+                    # add to generated hypotheses if end of sentence or last iteration
+                    if eos_token_ids is not None and token_id.numpy() in eos_token_ids:
+                        # if beam_token does not belong to top num_beams tokens, it should not be added
+                        is_beam_token_worse_than_top_num_beams = beam_token_rank >= num_beams
+                        if is_beam_token_worse_than_top_num_beams:
+                            continue
+                        generated_hyps[batch_idx].add(
+                            tf.identity(input_ids[effective_beam_id]), beam_token_score.numpy()
+                        )
+                    else:
+                        # add next predicted token if it is not eos_token
+                        next_sent_beam.append((beam_token_score, token_id, effective_beam_id))
+
+                    # the beam for next step is full
+                    if len(next_sent_beam) == num_beams:
+                        break
+
+                # if we are done with this sentence
+                done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
+                    tf.reduce_max(next_scores[batch_idx]).numpy()
+                )
+
+                # update next beam content
+                assert len(next_sent_beam) == num_beams, "Beam should always be full"
+                next_batch_beam.extend(next_sent_beam)
+                assert len(next_batch_beam) == num_beams * (batch_idx + 1)
+
+            # stop when we are done with each sentence
+            if all(done):
+                break
+
+            # sanity check / prepare next batch
+            assert len(next_batch_beam) == batch_size * num_beams
+            beam_scores = tf.convert_to_tensor([x[0] for x in next_batch_beam], dtype=tf.float32)
+            beam_tokens = tf.convert_to_tensor([x[1] for x in next_batch_beam], dtype=tf.int32)
+            beam_idx = tf.convert_to_tensor([x[2] for x in next_batch_beam], dtype=tf.int32)
+
+            # re-order batch
+            input_ids = tf.stack([tf.identity(input_ids[x, :]) for x in beam_idx])
+            input_ids = tf.concat([input_ids, tf.expand_dims(beam_tokens, 1)], axis=-1)
+            # re-order internal states
+            if past:
+                past = self._reorder_cache(past, beam_idx)
+
+            # update current length
+            cur_len = cur_len + 1
+
+        # finalize all open beam hypotheses and end to generated hypotheses
+        for batch_idx in range(batch_size):
+            # Add all open beam hypothesis to generated_hyps
+            if done[batch_idx]:
+                continue
+            # test that beam scores match previously calculated scores if not eos and batch_idx not done
+            if eos_token_ids is not None and all(
+                (token_id % vocab_size).numpy().item() not in eos_token_ids for token_id in next_tokens[batch_idx]
+            ):
+                assert tf.reduce_all(
+                    next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
+                ), "If batch_idx is not done, final next scores: {} have to equal to accumulated beam_scores: {}".format(
+                    next_scores[:, :num_beams][batch_idx], tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
+                )
+
+            # need to add best num_beams hypotheses to generated hyps
+            for beam_id in range(num_beams):
+                effective_beam_id = batch_idx * num_beams + beam_id
+                final_score = beam_scores[effective_beam_id].numpy().item()
+                final_tokens = input_ids[effective_beam_id]
+                generated_hyps[batch_idx].add(final_tokens, final_score)
+
+        # depending on whether greedy generation is wanted or not define different output_batch_size and output_num_return_sequences_per_batch
+        output_batch_size = batch_size if do_sample else batch_size * num_return_sequences
+        output_num_return_sequences_per_batch = 1 if do_sample else num_return_sequences
+
+        # select the best hypotheses
+        sent_lengths_list = []
+        best = []
+
+        # retrieve best hypotheses
+        for i, hypotheses in enumerate(generated_hyps):
+            sorted_hyps = sorted(hypotheses.beams, key=lambda x: x[0])
+            for j in range(output_num_return_sequences_per_batch):
+                best_hyp = sorted_hyps.pop()[1]
+                sent_lengths_list.append(len(best_hyp))
+                best.append(best_hyp)
+        assert output_batch_size == len(best), "Output batch size {} must match output beam hypotheses {}".format(
+            output_batch_size, len(best)
+        )
+
+        sent_lengths = tf.convert_to_tensor(sent_lengths_list, dtype=tf.int32)
+
+        # shorter batches are filled with pad_token
+        if tf.reduce_min(sent_lengths).numpy() != tf.reduce_max(sent_lengths).numpy():
+            assert pad_token_id is not None, "`Pad_token_id` has to be defined"
+            sent_max_len = min(tf.reduce_max(sent_lengths).numpy() + 1, max_length)
+            decoded_list = []
+
+            # fill with hypothesis and eos_token_id if necessary
+            for i, hypo in enumerate(best):
+                padding = tf.ones((sent_max_len - shape_list(hypo)[0],), dtype=tf.int32) * pad_token_id
+                decoded_hypo = tf.concat([hypo, padding], axis=0)
+
+                if sent_lengths[i] < max_length:
+                    decoded_hypo = tf.where(
+                        tf.range(max_length) == sent_lengths[i],
+                        eos_token_ids[0] * tf.ones((sent_max_len,), dtype=tf.int32),
+                        decoded_hypo,
+                    )
+                decoded_list.append(decoded_hypo)
+            decoded = tf.stack(decoded_list)
+        else:
+            # none of the hypotheses have an eos_token
+            assert (len(hypo) == max_length for hypo in best)
+            decoded = tf.stack(best)
+
+        return decoded
+
+    @staticmethod
+    def _reorder_cache(past, beam_idx):
+        reordered_past = []
+        for layer_past in past:
+            # get the correct batch idx from layer past batch dim
+            # batch dim of `past` and `mems` is at 2nd position
+            reordered_layer_past = [tf.identity(tf.expand_dims(layer_past[:, i], 1)) for i in beam_idx]
+            reordered_layer_past = tf.concat(reordered_layer_past, axis=1)
+            # check that shape matches
+            assert shape_list(reordered_layer_past) == shape_list(layer_past)
+            reordered_past.append(reordered_layer_past)
+        past = tuple(reordered_past)
+        return past
+
+
+def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
+    # create logit penalties for already seen input_ids
+    token_penalties = np.ones(shape_list(logits))
+    prev_input_ids = [np.unique(input_id) for input_id in input_ids.numpy()]
+    for i, prev_input_id in enumerate(prev_input_ids):
+        logit_penalized = logits[i].numpy()[prev_input_id]
+        logit_penalties = np.zeros(logit_penalized.shape)
+        # if previous logit score is < 0 then multiply repetition penalty else divide
+        logit_penalties[logit_penalized < 0] = repetition_penalty
+        logit_penalties[logit_penalized > 0] = 1 / repetition_penalty
+        np.put(token_penalties[i], prev_input_id, logit_penalties)
+    return tf.convert_to_tensor(token_penalties, dtype=tf.float32)
+
+
+def calc_banned_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len):
+    # Copied from fairseq for no_repeat_ngram in beam_search"""
+    if cur_len + 1 < no_repeat_ngram_size:
+        # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
+        return [[] for _ in range(num_hypos)]
+    generated_ngrams = [{} for _ in range(num_hypos)]
+    for idx in range(num_hypos):
+        gen_tokens = prev_input_ids[idx].numpy().tolist()
+        generated_ngram = generated_ngrams[idx]
+        for ngram in zip(*[gen_tokens[i:] for i in range(no_repeat_ngram_size)]):
+            prev_ngram_tuple = tuple(ngram[:-1])
+            generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
+
+    def _get_generated_ngrams(hypo_idx):
+        # Before decoding the next token, prevent decoding of ngrams that have already appeared
+        start_idx = cur_len + 1 - no_repeat_ngram_size
+        ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].numpy().tolist())
+        return generated_ngrams[hypo_idx].get(ngram_idx, [])
+
+    banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
+    return banned_tokens
 
 
 def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
@@ -811,6 +1258,56 @@ def set_tensor_by_indices_to_value(tensor, indices, value):
     return tf.where(indices, value_tensor, tensor)
 
 
+class BeamHypotheses(object):
+    def __init__(self, num_beams, max_length, length_penalty, early_stopping):
+        """
+        Initialize n-best list of hypotheses.
+        """
+        self.max_length = max_length - 1  # ignoring bos_token
+        self.length_penalty = length_penalty
+        self.early_stopping = early_stopping
+        self.num_beams = num_beams
+        self.beams = []
+        self.worst_score = 1e9
+
+    def __len__(self):
+        """
+        Number of hypotheses in the list.
+        """
+        return len(self.beams)
+
+    def add(self, hyp, sum_logprobs):
+        """
+        Add a new hypothesis to the list.
+        """
+        score = sum_logprobs / len(hyp) ** self.length_penalty
+        if len(self) < self.num_beams or score > self.worst_score:
+            self.beams.append((score, hyp))
+            if len(self) > self.num_beams:
+                sorted_scores = sorted([(s, idx) for idx, (s, _) in enumerate(self.beams)])
+                del self.beams[sorted_scores[0][1]]
+                self.worst_score = sorted_scores[1][0]
+            else:
+                self.worst_score = min(score, self.worst_score)
+
+    def is_done(self, best_sum_logprobs, cur_len=None):
+        """
+        If there are enough hypotheses and that none of the hypotheses being generated
+        can become better than the worst one in the heap, then we are done with this sentence.
+        """
+
+        if len(self) < self.num_beams:
+            return False
+        elif self.early_stopping:
+            return True
+        else:
+            if cur_len is None:
+                cur_len = self.max_length
+            cur_score = best_sum_logprobs / cur_len ** self.length_penalty
+            ret = self.worst_score >= cur_score
+            return ret
+
+
 class TFConv1D(tf.keras.layers.Layer):
     def __init__(self, nf, nx, initializer_range=0.02, **kwargs):
         """ TFConv1D layer as defined by Radford et al. for OpenAI GPT (and also used in GPT-2)
@@ -849,7 +1346,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         self.initializer_range = hidden_size ** -0.5 if initializer_range is None else initializer_range
 
     def build(self, input_shape):
-        """Build shared word embedding layer
+        """Build shared token embedding layer
         Shared weights logic adapted from
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """

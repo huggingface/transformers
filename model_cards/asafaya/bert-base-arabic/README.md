@@ -1,3 +1,7 @@
+---
+language: arabic
+---
+
 # Arabic BERT Model
 
 Pretrained BERT base language model for Arabic
