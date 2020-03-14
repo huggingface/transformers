@@ -363,7 +363,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             config.num_labels = self.num_labels
-            model = XLMForTokenClassification(config=config)
+            model = XLMForTokenClassification(config)
             model.to(torch_device)
             model.eval()
 
