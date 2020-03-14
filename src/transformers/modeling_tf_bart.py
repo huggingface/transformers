@@ -187,10 +187,11 @@ def shift_tokens_right(input_ids, pad_token_id):
     prev_output_tokens = tf.identity(input_ids)
     index_of_eos = tf.reduce_sum(tf.cast(tf.math.not_equal(input_ids, pad_token_id), tf.int8), axis=1) - 1
     index_of_eos = tf.expand_dims(index_of_eos, -1)
+    gathered  = tf.gather(input_ids, index_of_eos, axis=1)
+    return tf.concat([gathered, input_ids[:, :-1]], axis=1)
+    #    prev_output_tokens[:, 1:] = input_ids[:, :-1]
+    #    return prev_output_tokens
     #index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
-    prev_output_tokens[:, 0] = tf.gather(input_ids, index_of_eos, axis=1)
-    prev_output_tokens[:, 1:] = input_ids[:, :-1]
-    return prev_output_tokens
 
 
 def make_padding_mask(input_ids, padding_idx=1):
@@ -346,7 +347,7 @@ class DecoderLayer(tf.keras.layers.Layer):
             embed_dim=self.embed_dim, num_heads=config.decoder_attention_heads, dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
-        self.activation_fn = F.gelu
+        self.activation_fn = gelu
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)

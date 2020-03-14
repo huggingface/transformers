@@ -70,7 +70,7 @@ class ModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length-1], self.vocab_size)
-        eos_tensor =  tf.expand_dims(tf.constant([2]*self.batch_size), 1)
+        eos_tensor = tf.expand_dims(tf.constant([2]*self.batch_size), 1)
         input_ids = tf.concat([input_ids,eos_tensor], axis=1)
         input_ids = tf.clip_by_value(input_ids, 3, self.vocab_size+1)
 
@@ -98,7 +98,7 @@ def prepare_bart_inputs_dict(
     config, input_ids, attention_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = input_ids.ne(config.pad_token_id)
+        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
@@ -145,13 +145,13 @@ class BARTModelTest(TFModelTesterMixin, unittest.TestCase):
         _check_var(model.encoder.layers[0].fc1)
         _check_var(model.encoder.embed_positions)
 
-        decoder_features_with_created_mask = model.forward(**inputs_dict)[0]
-        decoder_features_with_passed_mask = model.forward(
+        decoder_features_with_created_mask = model(**inputs_dict)[0]
+        decoder_features_with_passed_mask = model(
             decoder_attention_mask=decoder_attn_mask, decoder_input_ids=decoder_input_ids, **inputs_dict
         )[0]
         _assert_tensors_equal(decoder_features_with_passed_mask, decoder_features_with_created_mask)
         useless_mask = tf.zeros_like(decoder_attn_mask)
-        decoder_features = model.forward(decoder_attention_mask=useless_mask, **inputs_dict)[0]
+        decoder_features = model(decoder_attention_mask=useless_mask, **inputs_dict)[0]
         self.assertTrue(isinstance(decoder_features, tf.Tensor))  # no hidden states or attentions
         self.assertEqual(
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
@@ -160,7 +160,7 @@ class BARTModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertFalse((decoder_features_with_created_mask == decoder_features).all().item())
 
         # Test different encoder attention masks
-        decoder_features_with_long_encoder_mask = model.forward(
+        decoder_features_with_long_encoder_mask = model(
             inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"].long()
         )[0]
         _assert_tensors_equal(decoder_features_with_long_encoder_mask, decoder_features_with_created_mask)
@@ -237,7 +237,7 @@ class TFBartHeadTests(unittest.TestCase):
         decoder_lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(DEFAULT_DEVICE)
         lm_model = TFBartForConditionalGeneration(config)
         lm_model.to(DEFAULT_DEVICE)
-        loss, logits, enc_features = lm_model.forward(
+        loss, logits, enc_features = lm_model(
             input_ids=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids
         )
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
@@ -259,7 +259,7 @@ class TFBartHeadTests(unittest.TestCase):
         lm_model = TFBartForConditionalGeneration(config).to(DEFAULT_DEVICE)
         context = tf.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(DEFAULT_DEVICE)
         summary = tf.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(DEFAULT_DEVICE)
-        loss, logits, enc_features = lm_model.forward(input_ids=context, decoder_input_ids=summary, lm_labels=summary)
+        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, lm_labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
 
@@ -430,8 +430,8 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         input_ids_no_pad = _long_tensor([example_b[:-1]])
 
         inputs_dict = prepare_bart_inputs_dict(model.config, input_ids=input_ids_no_pad)
-        with torch.no_grad():
-            logits2 = model.forward(**inputs_dict)[0]
+
+        logits2 = model(**inputs_dict)[0]
         _assert_tensors_equal(batched_logits[1], logits2, atol=TOLERANCE)
         _assert_tensors_equal(expected_slice, logits_arr, atol=TOLERANCE)
 
