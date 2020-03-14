@@ -60,7 +60,7 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
     )
-    from .modeling_bart import BartForMaskedLM
+    from .modeling_bart import BartForConditionalGeneration
 
 
 logger = logging.getLogger(__name__)
@@ -1116,7 +1116,7 @@ class SummarizationPipeline(Pipeline):
 
     Supported Models:
         The models that this pipeline can use are models that have been fine-tuned on a summarization task, which is
-        currently only ``BartForMaskedLM.from_pretrained('bart-large-cnn')``
+        currently only ``BartForConditionalGeneration.from_pretrained('bart-large-cnn')``
 
     Arguments:
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`, defaults to :obj:`None`):
@@ -1156,8 +1156,8 @@ class SummarizationPipeline(Pipeline):
         return_text=True,
         num_beams=4,
         length_penalty=2.0,
-        max_length=140,
-        min_len=20,
+        max_length=142,
+        min_len=21,
         no_repeat_ngram_size=3,
         **generate_kwargs
     ):
@@ -1185,7 +1185,7 @@ class SummarizationPipeline(Pipeline):
             list of dicts with 'summary_text' and/or 'summary_token_ids' for each document_to_summarize
 
         .. _`self.model.generate`:
-            https://huggingface.co/transformers/model_doc/bart.html#transformers.BartForMaskedLM.generate
+            https://huggingface.co/transformers/model_doc/bart.html#transformers.BartForConditionalGeneration.generate
 
         """
         assert return_tensors or return_text
@@ -1202,6 +1202,7 @@ class SummarizationPipeline(Pipeline):
                 max_length=max_length,
                 min_len=min_len,
                 no_repeat_ngram_size=no_repeat_ngram_size,
+                do_sample=False,
                 **generate_kwargs,
             )
             results = []
@@ -1280,7 +1281,7 @@ SUPPORTED_TASKS = {
     },
     "summarization": {
         "impl": SummarizationPipeline,
-        "pt": BartForMaskedLM if is_torch_available() else None,
+        "pt": BartForConditionalGeneration if is_torch_available() else None,
         "tf": None,
         "default": {
             "model": {"pt": "bart-large-cnn", "tf": None},
