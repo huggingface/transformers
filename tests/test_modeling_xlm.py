@@ -29,6 +29,7 @@ if is_torch_available():
         XLMConfig,
         XLMModel,
         XLMWithLMHeadModel,
+        XLMForTokenClassification,
         XLMForQuestionAnswering,
         XLMForSequenceClassification,
         XLMForQuestionAnsweringSimple,
@@ -350,6 +351,32 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
                 list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size]
             )
 
+        def create_and_check_xlm_for_token_classification(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_lengths,
+            sequence_labels,
+            token_labels,
+            is_impossible_labels,
+            input_mask,
+        ):
+            config.num_labels = self.num_labels
+            model = XLMForTokenClassification(config=config)
+            model.to(torch_device)
+            model.eval()
+
+            loss, logits = model(input_ids, attention_mask=input_mask, labels=token_labels)
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels]
+            )
+            self.check_loss_output(result)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -391,6 +418,10 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_xlm_sequence_classif(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_sequence_classif(*config_and_inputs)
+
+    def test_xlm_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xlm_for_token_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
