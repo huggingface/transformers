@@ -1059,7 +1059,16 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, attention_mask=None, langs=None, token_type_ids=None, position_ids=None, head_mask=None, labels=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        langs=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        labels=None
+    ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
