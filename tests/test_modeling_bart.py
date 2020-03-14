@@ -327,7 +327,7 @@ class BartHeadTests(unittest.TestCase):
 
     def test_prepare_bart_decoder_inputs(self):
         config, *_ = self._get_config_and_data(output_past=False)
-        input_ids = _long_tensor(([4, 4, 2]))  # only used for .device if decoder_input_ids is passed
+        input_ids = _long_tensor(([4, 4, 2]))  # only used for .DEFAULT_DEVICE if decoder_input_ids is passed
         decoder_input_ids = _long_tensor([[26388, 2, config.pad_token_id]])
         ignore = LARGE_NEGATIVE
         decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(config, input_ids, decoder_input_ids)
