@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from .configuration_transfo_xl import TransfoXLConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
+from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask, TFLogUniformSampler
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 
 
@@ -745,12 +745,24 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         self.sample_softmax = config.sample_softmax
         # use sampled softmax
         if config.sample_softmax > 0:
-            raise NotImplementedError
+            #            self.out_layer = nn.Linear(config.d_model, config.vocab_size)
+            self.sampler = TFLogUniformSampler(config.vocab_size, config.sample_softmax)
         # use adaptive softmax (including standard softmax)
         else:
             self.crit = TFAdaptiveSoftmaxMask(
                 config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val, name="crit"
             )
+
+    def get_output_embeddings(self):
+        """ Double-check if you are using adaptive softmax.
+        """
+        if self.sample_softmax > 0:
+            raise NotImplementedError
+        #            return self.out_layer
+        else:
+            if len(self.crit.out_layers) > 0:
+                return self.crit.out_layers[-1]
+            return None
 
     def reset_length(self, tgt_len, ext_len, mem_len):
         self.transformer.reset_length(tgt_len, ext_len, mem_len)
@@ -822,6 +834,14 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         outputs = transformer_outputs[1:]
         if self.sample_softmax > 0 and training:
             raise NotImplementedError
+
+        #            assert self.config.tie_weight
+        #            logit = sample_logits(self.transformer.word_emb, self.out_layer.bias, labels, pred_hid, self.sampler)
+        #            softmax_output = -tf.nn.log_softmax(logit, -1)[:, :, 0]
+        #            outputs = [softmax_output] + outputs
+        #            if labels is not None:
+        # TODO: This is not implemented
+        #                raise NotImplementedError
         else:
             # pred_hid = tf.reshape(pred_hid, (-1, shape_list(pred_hid)[-1]))
             softmax_output = self.crit([pred_hid, labels], training=training)

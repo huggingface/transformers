@@ -30,7 +30,7 @@ if is_tf_available():
     import tensorflow as tf
     import numpy as np
 
-    from transformers import tf_top_k_top_p_filtering
+    from transformers import tf_top_k_top_p_filtering, TFAdaptiveEmbedding
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
@@ -348,7 +348,7 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            assert isinstance(model.get_input_embeddings(), (tf.keras.layers.Layer, TFAdaptiveEmbedding))
             x = model.get_output_embeddings()
             assert x is None or isinstance(x, tf.keras.layers.Layer)
 

@@ -194,7 +194,9 @@ class TFLogUniformSampler(object):
         log_indices = tf.math.log(tf.range(1.0, range_max + 2.0))
         self.dist = (log_indices[1:] - log_indices[:-1]) / log_indices[-1]
 
-        self.log_q = tf.cast(tf.math.log(-tf.math.expm1(-tf.math.log1p(tf.cast(self.dist, tf.double)) * 2 * n_sample)), tf.float32)
+        self.log_q = tf.cast(
+            tf.math.log(-tf.math.expm1(-tf.math.log1p(tf.cast(self.dist, tf.double)) * 2 * n_sample)), tf.float32
+        )
 
         self.n_sample = n_sample
 
@@ -211,6 +213,6 @@ class TFLogUniformSampler(object):
         n_tries = 2 * n_sample
 
         neg_samples = tf.unique(tf.squeeze(tf.random.categorical(tf.expand_dims(self.dist, 0), n_tries), 0))[0]
-        true_log_probs = self.log_q[labels]
-        samp_log_probs = self.log_q[neg_samples]
+        true_log_probs = tf.gather_nd(self.log_q, labels)
+        samp_log_probs = tf.gather(self.log_q, neg_samples)
         return true_log_probs, samp_log_probs, neg_samples
