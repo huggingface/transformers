@@ -69,8 +69,10 @@ class ModelTester:
         #torch.manual_seed(0)
 
     def prepare_config_and_inputs_for_common(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3,)
-        input_ids[:, -1] = 2  # Eos Token
+        input_ids = ids_tensor([self.batch_size, self.seq_length-1], self.vocab_size)
+        eos_tensor =  tf.expand_dims(tf.constant([2]*self.batch_size), 1)
+        input_ids = tf.concat([input_ids,eos_tensor], axis=1)
+        input_ids = tf.clip_by_value(input_ids, 3, self.vocab_size+1)
 
         config = BartConfig(
             vocab_size=self.vocab_size,

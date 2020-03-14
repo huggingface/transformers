@@ -179,7 +179,7 @@ def _combine_masks(key_padding_mask, causal_lm_mask, targ_size):
     if causal_lm_mask is not None:  # (tgt_len, src_len) -> targ_size
         _check_shapes(causal_lm_mask.shape, targ_size[-2:])
         b = causal_lm_mask.unsqueeze(0).expand(*targ_size)
-    return (a + b).unsqueeze(1).clamp(LARGE_NEGATIVE,)
+    return tf.expand_dims(a + b, 1)
 
 
 def shift_tokens_right(input_ids, pad_token_id):

@@ -312,7 +312,12 @@ if is_tf_available():
         TFAutoModelForTokenClassification,
         TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
-
+    from .modeling_tf_bart import (
+        TFBartForSequenceClassification,
+        TFBartModel,
+        TFBartForConditionalGeneration,
+        TF_BART_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
     from .modeling_tf_bert import (
         TFBertPreTrainedModel,
         TFBertMainLayer,
