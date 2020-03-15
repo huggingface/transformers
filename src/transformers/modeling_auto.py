@@ -99,6 +99,7 @@ from .modeling_xlm import (
     XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     XLMForQuestionAnsweringSimple,
     XLMForSequenceClassification,
+    XLMForTokenClassification,
     XLMModel,
     XLMWithLMHeadModel,
 )
@@ -235,6 +236,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
+        (XLMConfig, XLMForTokenClassification),
         (XLMRobertaConfig, XLMRobertaForTokenClassification),
         (RobertaConfig, RobertaForTokenClassification),
         (BertConfig, BertForTokenClassification),
@@ -989,6 +991,7 @@ class AutoModelForTokenClassification:
                 The model class to instantiate is selected based on the configuration class:
 
                 - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertModelForTokenClassification` (DistilBERT model)
+                - isInstance of `xlm` configuration class: :class:`~transformers.XLMForTokenClassification` (XLM model)
                 - isInstance of `xlm roberta` configuration class: :class:`~transformers.XLMRobertaModelForTokenClassification` (XLMRoberta model)
                 - isInstance of `bert` configuration class: :class:`~transformers.BertModelForTokenClassification` (Bert model)
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModelForTokenClassification` (XLNet model)
@@ -1025,6 +1028,7 @@ class AutoModelForTokenClassification:
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: :class:`~transformers.DistilBertForTokenClassification` (DistilBERT model)
+            - contains `xlm`: :class:`~transformers.XLMForTokenClassification` (XLM model)
             - contains `xlm-roberta`: :class:`~transformers.XLMRobertaForTokenClassification` (XLM-RoBERTa?Para model)
             - contains `camembert`: :class:`~transformers.CamembertForTokenClassification` (Camembert model)
             - contains `bert`: :class:`~transformers.BertForTokenClassification` (Bert model)

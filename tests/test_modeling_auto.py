@@ -37,6 +37,8 @@ if is_torch_available():
         BertForSequenceClassification,
         AutoModelForQuestionAnswering,
         BertForQuestionAnswering,
+        AutoModelForTokenClassification,
+        BertForTokenClassification,
     )
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
     from transformers.modeling_auto import (
@@ -121,6 +123,19 @@ class AutoModelTest(unittest.TestCase):
             model, loading_info = AutoModelForQuestionAnswering.from_pretrained(model_name, output_loading_info=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForQuestionAnswering)
+
+    # @slow
+    def test_token_classification_model_from_pretrained(self):
+        logging.basicConfig(level=logging.INFO)
+        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+            config = AutoConfig.from_pretrained(model_name)
+            self.assertIsNotNone(config)
+            self.assertIsInstance(config, BertConfig)
+
+            model = AutoModelForTokenClassification.from_pretrained(model_name)
+            model, loading_info = AutoModelForTokenClassification.from_pretrained(model_name, output_loading_info=True)
+            self.assertIsNotNone(model)
+            self.assertIsInstance(model, BertForTokenClassification)
 
     def test_from_pretrained_identifier(self):
         logging.basicConfig(level=logging.INFO)
