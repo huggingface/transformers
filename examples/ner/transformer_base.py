@@ -8,42 +8,32 @@ import torch
 
 from transformers import (
     AdamW,
-    BertConfig,
-    BertForTokenClassification,
-    BertTokenizer,
-    CamembertConfig,
-    CamembertForTokenClassification,
-    CamembertTokenizer,
-    DistilBertConfig,
-    DistilBertForTokenClassification,
-    DistilBertTokenizer,
-    RobertaConfig,
-    RobertaForTokenClassification,
-    RobertaTokenizer,
-    XLMRobertaConfig,
-    XLMRobertaForTokenClassification,
-    XLMRobertaTokenizer,
+    AutoConfig,
+    AutoModel,
+    AutoModelForPreTraining,
+    AutoModelForQuestionAnswering,
+    AutoModelForSequenceClassification,
+    AutoModelForTokenClassification,
+    AutoModelWithLMHead,
+    AutoTokenizer,
     get_linear_schedule_with_warmup,
+    ALL_PRETRAINED_MODEL_ARCHIVE_MAP
 )
-
+from transformers.modeling_auto import MODEL_MAPPING
 
 logger = logging.getLogger(__name__)
 
 
-ALL_MODELS = sum(
-    (
-        tuple(conf.pretrained_config_archive_map.keys())
-        for conf in (BertConfig, RobertaConfig, DistilBertConfig, CamembertConfig, XLMRobertaConfig)
-    ),
-    (),
-)
+ALL_MODELS = tuple(ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
+MODEL_CLASSES = tuple(m.model_type for m in MODEL_MAPPING)
 
-MODEL_CLASSES = {
-    "bert": (BertConfig, BertForTokenClassification, BertTokenizer),
-    "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer),
-    "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer),
-    "camembert": (CamembertConfig, CamembertForTokenClassification, CamembertTokenizer),
-    "xlmroberta": (XLMRobertaConfig, XLMRobertaForTokenClassification, XLMRobertaTokenizer),
+MODEL_MODES = {
+    "base": AutoModel,
+    "sequence-classification": AutoModelForSequenceClassification,
+    "question-answering": AutoModelForQuestionAnswering,
+    "pretraining": AutoModelForPreTraining,
+    "token-classification": AutoModelForTokenClassification,
+    "language-modeling": AutoModelWithLMHead,
 }
 
 
@@ -56,25 +46,24 @@ def set_seed(args):
 
 
 class BaseTransformer(pl.LightningModule):
-    def __init__(self, hparams, num_labels=None):
+    def __init__(self, hparams, num_labels=None, mode='base'):
         "Initialize a model."
 
         super(BaseTransformer, self).__init__()
         self.hparams = hparams
         self.hparams.model_type = self.hparams.model_type.lower()
 
-        config_class, model_class, tokenizer_class = MODEL_CLASSES[self.hparams.model_type]
-        config = config_class.from_pretrained(
+        config = AutoConfig.from_pretrained(
             self.hparams.config_name if self.hparams.config_name else self.hparams.model_name_or_path,
             num_labels=num_labels,
             cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
         )
-        tokenizer = tokenizer_class.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             self.hparams.tokenizer_name if self.hparams.tokenizer_name else self.hparams.model_name_or_path,
             do_lower_case=self.hparams.do_lower_case,
             cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
         )
-        model = model_class.from_pretrained(
+        model = MODEL_MODES[mode].from_pretrained(
             self.hparams.model_name_or_path,
             from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
             config=config,
@@ -151,7 +140,7 @@ class BaseTransformer(pl.LightningModule):
             default=None,
             type=str,
             required=True,
-            help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
+            help="Model type selected in the list: " + ", ".join(MODEL_CLASSES),
         )
         parser.add_argument(
             "--model_name_or_path",

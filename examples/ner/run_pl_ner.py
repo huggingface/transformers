@@ -21,11 +21,13 @@ class NERTransformer(BaseTransformer):
     A training module for NER. See BaseTransformer for the core options.
     """
 
+    mode = 'token-classification'
+
     def __init__(self, hparams):
         self.labels = get_labels(hparams.labels)
         num_labels = len(self.labels)
         self.pad_token_label_id = CrossEntropyLoss().ignore_index
-        super(NERTransformer, self).__init__(hparams, num_labels)
+        super(NERTransformer, self).__init__(hparams, num_labels, self.mode)
 
     def forward(self, **inputs):
         return self.model(**inputs)
