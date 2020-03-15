@@ -7,6 +7,7 @@ import pytorch_lightning as pl
 import torch
 
 from transformers import (
+    ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
     AdamW,
     AutoConfig,
     AutoModel,
@@ -17,9 +18,9 @@ from transformers import (
     AutoModelWithLMHead,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
-    ALL_PRETRAINED_MODEL_ARCHIVE_MAP
 )
 from transformers.modeling_auto import MODEL_MAPPING
+
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ def set_seed(args):
 
 
 class BaseTransformer(pl.LightningModule):
-    def __init__(self, hparams, num_labels=None, mode='base'):
+    def __init__(self, hparams, num_labels=None, mode="base"):
         "Initialize a model."
 
         super(BaseTransformer, self).__init__()

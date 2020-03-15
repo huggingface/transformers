@@ -21,7 +21,7 @@ class NERTransformer(BaseTransformer):
     A training module for NER. See BaseTransformer for the core options.
     """
 
-    mode = 'token-classification'
+    mode = "token-classification"
 
     def __init__(self, hparams):
         self.labels = get_labels(hparams.labels)
