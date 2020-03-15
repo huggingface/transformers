@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Copy over transformer base
+cp -n ../transformer_base.py ./transformer_base.py
 # Install newest ptl.
 pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
 # for seqeval metrics import
