@@ -1500,7 +1500,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         if self.has_last_dropout:
             output = self.last_dropout(output, training=training)
 
-        return outputrate
+        return output
 
 
 def shape_list(x):
