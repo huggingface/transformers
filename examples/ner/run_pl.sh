@@ -34,7 +34,7 @@ python3 run_pl_ner.py --data_dir ./ \
 --output_dir $OUTPUT_DIR \
 --max_seq_length  $MAX_LENGTH \
 --num_train_epochs $NUM_EPOCHS \
---train_batch_size 32 \
+--train_batch_size $BATCH_SIZE \
 --seed $SEED \
 --do_train \
 --do_predict
