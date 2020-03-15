@@ -216,3 +216,36 @@ class TFLogUniformSampler(object):
         true_log_probs = tf.gather_nd(self.log_q, labels)
         samp_log_probs = tf.gather(self.log_q, neg_samples)
         return true_log_probs, samp_log_probs, neg_samples
+
+
+def sample_logits(embedding, bias, labels, inputs, sampler):
+    """
+        embedding: an nn.Embedding layer
+        bias: [n_vocab]
+        labels: [b1, b2]
+        inputs: [b1, b2, n_emb]
+        sampler: you may use a LogUniformSampler
+    Return
+        logits: [b1, b2, 1 + n_sample]
+    """
+    true_log_probs, samp_log_probs, neg_samples = sampler.sample(labels)
+    n_sample = tf.shape(neg_samples, 0)
+    b1, b2 = labels.size(0), labels.size(1)
+    b1, b2 = tf.shape(labels, 0), tf.shape(labels, 1)
+    all_ids = tf.concat([tf.keras.backend.flatten(labels), neg_samples], 0)
+    all_w = embedding(all_ids)
+    true_w = tf.reshape(all_w[:-n_sample], [b1, b2, -1])
+    sample_w = tf.reshape(all_w[-n_sample:], [n_sample, -1])
+
+    all_b = bias[all_ids]
+    true_b = all_b[:-n_sample].view(b1, b2)
+    sample_b = all_b[-n_sample:]
+
+    hit = (labels[:, :, None] == neg_samples).detach()
+
+    true_logits = tf.einsum("ijk,ijk->ij", [true_w, inputs]) + true_b - true_log_probs
+    sample_logits = tf.einsum("lk,ijk->ijl", [sample_w, inputs]) + sample_b - samp_log_probs
+    sample_logits.masked_fill_(hit, -1e30)
+    logits = tf.cat([true_logits[:, :, None], sample_logits], -1)
+
+    return logits

@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from .configuration_transfo_xl import TransfoXLConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask, TFLogUniformSampler
+from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask, TFLogUniformSampler, sample_logits
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 
 
@@ -733,6 +733,25 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         return outputs
 
 
+class TFTransfoXLLMHead(tf.keras.layers.Layer):
+    def __init__(self, config, input_embeddings, **kwargs):
+        super().__init__(**kwargs)
+        self.vocab_size = config.vocab_size
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.input_embeddings = input_embeddings
+
+    def build(self, input_shape):
+        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        super().build(input_shape)
+
+    def call(self, hidden_states):
+        hidden_states = self.input_embeddings(hidden_states, mode="linear")
+        hidden_states = hidden_states + self.bias
+        return hidden_states
+
+
 @add_start_docstrings(
     """The Transformer-XL Model with a language modeling head on top
     (adaptive softmax with weights tied to the adaptive input embeddings)""",
@@ -745,7 +764,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         self.sample_softmax = config.sample_softmax
         # use sampled softmax
         if config.sample_softmax > 0:
-            #            self.out_layer = nn.Linear(config.d_model, config.vocab_size)
+            self.out_layer = TFTransfoXLLMHead(config, self.transformer.word_emb.weight, name="out_layer")
             self.sampler = TFLogUniformSampler(config.vocab_size, config.sample_softmax)
         # use adaptive softmax (including standard softmax)
         else:
@@ -757,8 +776,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         """ Double-check if you are using adaptive softmax.
         """
         if self.sample_softmax > 0:
-            raise NotImplementedError
-        #            return self.out_layer
+            return self.out_layer
         else:
             if len(self.crit.out_layers) > 0:
                 return self.crit.out_layers[-1]
@@ -832,20 +850,17 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]
         outputs = transformer_outputs[1:]
-        if self.sample_softmax > 0 and training:
-            raise NotImplementedError
 
-        #            assert self.config.tie_weight
-        #            logit = sample_logits(self.transformer.word_emb, self.out_layer.bias, labels, pred_hid, self.sampler)
-        #            softmax_output = -tf.nn.log_softmax(logit, -1)[:, :, 0]
-        #            outputs = [softmax_output] + outputs
-        #            if labels is not None:
-        # TODO: This is not implemented
-        #                raise NotImplementedError
+        if self.sample_softmax > 0 and training:
+            assert self.config.tie_weight
+            logit = sample_logits(self.transformer.word_emb, self.out_layer.bias, labels, pred_hid, self.sampler)
+            softmax_output = -tf.nn.log_softmax(logit, -1)[:, :, 0]
+            outputs = [softmax_output] + outputs
+            if labels is not None:
+                # TODO: This is not implemented
+                raise NotImplementedError
         else:
-            # pred_hid = tf.reshape(pred_hid, (-1, shape_list(pred_hid)[-1]))
             softmax_output = self.crit([pred_hid, labels], training=training)
-            # softmax_output = tf.reshape(softmax_output, (bsz, tgt_len, -1))
             outputs = [softmax_output] + outputs
 
         return outputs  # logits, new_mems, (all hidden states), (all attentions)

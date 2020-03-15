@@ -827,6 +827,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         # sampled softmax
         if self.sample_softmax > 0:
             if self.config.tie_weight:
+                # TODO: this does not make sense -> transformer.word_emb.weight does not exist
                 self.out_layer.weight = self.transformer.word_emb.weight
         # adaptive softmax (including standard softmax)
         else:
