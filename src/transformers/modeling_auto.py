@@ -420,12 +420,12 @@ class AutoModelForPreTraining(object):
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertModelForMaskedLM` (DistilBERT model)
-                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModelForMaskedLM` (RoBERTa model)
+                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
+                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
                 - isInstance of `bert` configuration class: :class:`~transformers.BertForPreTraining` (Bert model)
                 - isInstance of `openai-gpt` configuration class: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
-                - isInstance of `gpt2` configuration class: :class:`~transformers.GPT2ModelLMHeadModel` (OpenAI GPT-2 model)
-                - isInstance of `ctrl` configuration class: :class:`~transformers.CTRLModelLMHeadModel` (Salesforce CTRL  model)
+                - isInstance of `gpt2` configuration class: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
+                - isInstance of `ctrl` configuration class: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL  model)
                 - isInstance of `transfo-xl` configuration class: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
@@ -561,12 +561,12 @@ class AutoModelWithLMHead(object):
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertModelForMaskedLM` (DistilBERT model)
-                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModelForMaskedLM` (RoBERTa model)
-                - isInstance of `bert` configuration class: :class:`~transformers.BertModelForMaskedLM` (Bert model)
+                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
+                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
+                - isInstance of `bert` configuration class: :class:`~transformers.BertForMaskedLM` (Bert model)
                 - isInstance of `openai-gpt` configuration class: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
-                - isInstance of `gpt2` configuration class: :class:`~transformers.GPT2ModelLMHeadModel` (OpenAI GPT-2 model)
-                - isInstance of `ctrl` configuration class: :class:`~transformers.CTRLModelLMHeadModel` (Salesforce CTRL  model)
+                - isInstance of `gpt2` configuration class: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
+                - isInstance of `ctrl` configuration class: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL  model)
                 - isInstance of `transfo-xl` configuration class: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
@@ -703,14 +703,14 @@ class AutoModelForSequenceClassification(object):
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertModelForSequenceClassification` (DistilBERT model)
-                - isInstance of `albert` configuration class: :class:`~transformers.AlbertModelForSequenceClassification` (ALBERT model)
-                - isInstance of `camembert` configuration class: :class:`~transformers.CamembertModelForSequenceClassification` (CamemBERT model)
-                - isInstance of `xlm roberta` configuration class: :class:`~transformers.XLMRobertaModelForSequenceClassification` (XLM-RoBERTa model)
-                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModelForSequenceClassification` (RoBERTa model)
-                - isInstance of `bert` configuration class: :class:`~transformers.BertModelForSequenceClassification` (Bert model)
-                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModelForSequenceClassification` (XLNet model)
-                - isInstance of `xlm` configuration class: :class:`~transformers.XLMModelForSequenceClassification` (XLM model)
+                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForSequenceClassification` (DistilBERT model)
+                - isInstance of `albert` configuration class: :class:`~transformers.AlbertForSequenceClassification` (ALBERT model)
+                - isInstance of `camembert` configuration class: :class:`~transformers.CamembertForSequenceClassification` (CamemBERT model)
+                - isInstance of `xlm roberta` configuration class: :class:`~transformers.XLMRobertaForSequenceClassification` (XLM-RoBERTa model)
+                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaForSequenceClassification` (RoBERTa model)
+                - isInstance of `bert` configuration class: :class:`~transformers.BertForSequenceClassification` (Bert model)
+                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
+                - isInstance of `xlm` configuration class: :class:`~transformers.XLMForSequenceClassification` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
 
 
@@ -850,11 +850,11 @@ class AutoModelForQuestionAnswering(object):
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertModelForQuestionAnswering` (DistilBERT model)
-                - isInstance of `albert` configuration class: :class:`~transformers.AlbertModelForQuestionAnswering` (ALBERT model)
+                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForQuestionAnswering` (DistilBERT model)
+                - isInstance of `albert` configuration class: :class:`~transformers.AlbertForQuestionAnswering` (ALBERT model)
                 - isInstance of `bert` configuration class: :class:`~transformers.BertModelForQuestionAnswering` (Bert model)
-                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModelForQuestionAnswering` (XLNet model)
-                - isInstance of `xlm` configuration class: :class:`~transformers.XLMModelForQuestionAnswering` (XLM model)
+                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetForQuestionAnswering` (XLNet model)
+                - isInstance of `xlm` configuration class: :class:`~transformers.XLMForQuestionAnswering` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertForQuestionAnswering` (XLM model)
 
         Examples::
@@ -990,13 +990,13 @@ class AutoModelForTokenClassification:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertModelForTokenClassification` (DistilBERT model)
+                - isInstance of `distilbert` configuration class: :class:`~transformers.DistilBertForTokenClassification` (DistilBERT model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMForTokenClassification` (XLM model)
-                - isInstance of `xlm roberta` configuration class: :class:`~transformers.XLMRobertaModelForTokenClassification` (XLMRoberta model)
-                - isInstance of `bert` configuration class: :class:`~transformers.BertModelForTokenClassification` (Bert model)
-                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModelForTokenClassification` (XLNet model)
-                - isInstance of `camembert` configuration class: :class:`~transformers.CamembertModelForTokenClassification` (Camembert model)
-                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModelForTokenClassification` (Roberta model)
+                - isInstance of `xlm roberta` configuration class: :class:`~transformers.XLMRobertaForTokenClassification` (XLMRoberta model)
+                - isInstance of `bert` configuration class: :class:`~transformers.BertForTokenClassification` (Bert model)
+                - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetForTokenClassification` (XLNet model)
+                - isInstance of `camembert` configuration class: :class:`~transformers.CamembertForTokenClassification` (Camembert model)
+                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaForTokenClassification` (Roberta model)
 
         Examples::
 
