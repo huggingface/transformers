@@ -810,9 +810,9 @@ class TFT5WithLMHeadModel(TFT5PreTrainedModel):
     def encode(self, encoder_input_ids, **kwargs):
         # get only encoder output ids
         encoder_embeddings = self.shared(encoder_input_ids)
-        encoder_output_ids = self.encoder(encoder_embeddings, **kwargs)
+        encoder_outputs = self.encoder(encoder_embeddings, **kwargs)
 
-        return encoder_output_ids
+        return encoder_outputs
 
     def _reorder_cache(self, past, beam_idx):
         # past does not have to be re-ordered for T5.
