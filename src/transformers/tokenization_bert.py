@@ -19,8 +19,9 @@ import collections
 import logging
 import os
 import unicodedata
+from typing import List, Optional
 
-import tokenizers as tk
+from tokenizers import BertWordPieceTokenizer
 
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -117,17 +118,41 @@ def whitespace_tokenize(text):
 
 class BertTokenizer(PreTrainedTokenizer):
     r"""
-    Constructs a BertTokenizer.
-    :class:`~transformers.BertTokenizer` runs end-to-end tokenization: punctuation splitting + wordpiece
+    Constructs a BERT tokenizer. Based on WordPiece.
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
 
     Args:
-        vocab_file: Path to a one-wordpiece-per-line vocabulary file
-        do_lower_case: Whether to lower case the input. Only has an effect when do_basic_tokenize=True
-        do_basic_tokenize: Whether to do basic tokenization before wordpiece.
-        max_len: An artificial maximum length to truncate tokenized sequences to; Effective maximum length is always the
-            minimum of this value (if specified) and the underlying BERT model's sequence length.
-        never_split: List of tokens which will never be split during tokenization. Only has an effect when
-            do_basic_tokenize=True
+        vocab_file (:obj:`string`):
+            File containing the vocabulary.
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to lowercase the input when tokenizing.
+        do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to do basic tokenization before WordPiece.
+        never_split (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            List of tokens which will never be split during tokenization. Only has an effect when
+            :obj:`do_basic_tokenize=True`
+        unk_token (:obj:`string`, `optional`, defaults to "[UNK]"):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        sep_token (:obj:`string`, `optional`, defaults to "[SEP]"):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
+            for sequence classification or for a text and a question for question answering.
+            It is also used as the last token of a sequence built with special tokens.
+        pad_token (:obj:`string`, `optional`, defaults to "[PAD]"):
+            The token used for padding, for example when batching sequences of different lengths.
+        cls_token (:obj:`string`, `optional`, defaults to "[CLS]"):
+            The classifier token which is used when doing sequence classification (classification of the whole
+            sequence instead of per-token classification). It is the first token of the sequence when built with
+            special tokens.
+        mask_token (:obj:`string`, `optional`, defaults to "[MASK]"):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
+        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to tokenize Chinese characters.
+            This should likely be deactivated for Japanese:
+            see: https://github.com/huggingface/transformers/issues/328
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -149,23 +174,6 @@ class BertTokenizer(PreTrainedTokenizer):
         tokenize_chinese_chars=True,
         **kwargs
     ):
-        """Constructs a BertTokenizer.
-
-        Args:
-            **vocab_file**: Path to a one-wordpiece-per-line vocabulary file
-            **do_lower_case**: (`optional`) boolean (default True)
-                Whether to lower case the input
-                Only has an effect when do_basic_tokenize=True
-            **do_basic_tokenize**: (`optional`) boolean (default True)
-                Whether to do basic tokenization before wordpiece.
-            **never_split**: (`optional`) list of string
-                List of tokens which will never be split during tokenization.
-                Only has an effect when do_basic_tokenize=True
-            **tokenize_chinese_chars**: (`optional`) boolean (default True)
-                Whether to tokenize Chinese characters.
-                This should likely be deactivated for Japanese:
-                see: https://github.com/huggingface/pytorch-pretrained-BERT/issues/328
-        """
         super().__init__(
             unk_token=unk_token,
             sep_token=sep_token,
@@ -195,6 +203,9 @@ class BertTokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return len(self.vocab)
 
+    def get_vocab(self):
+        return dict(self.vocab, **self.added_tokens_encoder)
+
     def _tokenize(self, text):
         split_tokens = []
         if self.do_basic_tokenize:
@@ -218,13 +229,25 @@ class BertTokenizer(PreTrainedTokenizer):
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
         by concatenating and adding special tokens.
         A BERT sequence has the following format:
-            single sequence: [CLS] X [SEP]
-            pair of sequences: [CLS] A [SEP] B [SEP]
+
+        - single sequence: ``[CLS] X [SEP]``
+        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
@@ -232,20 +255,23 @@ class BertTokenizer(PreTrainedTokenizer):
         sep = [self.sep_token_id]
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
-    def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
+    def get_special_tokens_mask(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
 
         Args:
-            token_ids_0: list of ids (must not contain special tokens)
-            token_ids_1: Optional list of ids (must not contain special tokens), necessary when fetching sequence ids
-                for sequence pairs
-            already_has_special_tokens: (default False) Set to True if the token list is already formated with
-                special tokens for the model
+            token_ids_0 (:obj:`List[int]`):
+                List of ids.
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Set to True if the token list is already formatted with special tokens for the model
 
         Returns:
-            A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -260,14 +286,29 @@ class BertTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
         return [1] + ([0] * len(token_ids_0)) + [1]
 
-    def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
         A BERT sequence pair mask has the following format:
-        0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence
+
+        ::
+
+            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+            | first sequence    | second sequence |
 
         if token_ids_1 is None, only returns the first portion of the mask (0's).
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of ids.
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            sequence(s).
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -276,7 +317,16 @@ class BertTokenizer(PreTrainedTokenizer):
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, vocab_path):
-        """Save the tokenizer vocabulary to a directory or file."""
+        """
+        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
+
+        Args:
+            vocab_path (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
         index = 0
         if os.path.isdir(vocab_path):
             vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES["vocab_file"])
@@ -549,15 +599,26 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
+        clean_text=True,
         tokenize_chinese_chars=True,
-        max_length=None,
-        pad_to_max_length=False,
-        stride=0,
-        truncation_strategy="longest_first",
         add_special_tokens=True,
+        strip_accents=True,
+        wordpieces_prefix="##",
         **kwargs
     ):
         super().__init__(
+            BertWordPieceTokenizer(
+                vocab_file=vocab_file,
+                add_special_tokens=add_special_tokens,
+                unk_token=unk_token,
+                sep_token=sep_token,
+                cls_token=cls_token,
+                clean_text=clean_text,
+                handle_chinese_chars=tokenize_chinese_chars,
+                strip_accents=strip_accents,
+                lowercase=do_lower_case,
+                wordpieces_prefix=wordpieces_prefix,
+            ),
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
@@ -566,32 +627,12 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-        self._tokenizer = tk.Tokenizer(tk.models.WordPiece.from_files(vocab_file, unk_token=unk_token))
-        self._update_special_tokens()
-        self._tokenizer.with_pre_tokenizer(
-            tk.pre_tokenizers.BertPreTokenizer.new(
-                do_basic_tokenize=do_basic_tokenize,
-                do_lower_case=do_lower_case,
-                tokenize_chinese_chars=tokenize_chinese_chars,
-                never_split=never_split if never_split is not None else [],
-            )
-        )
-        self._tokenizer.with_decoder(tk.decoders.WordPiece.new())
+        self.do_lower_case = do_lower_case
 
-        if add_special_tokens:
-            self._tokenizer.with_post_processor(
-                tk.processors.BertProcessing.new(
-                    (sep_token, self._tokenizer.token_to_id(sep_token)),
-                    (cls_token, self._tokenizer.token_to_id(cls_token)),
-                )
-            )
-        if max_length is not None:
-            self._tokenizer.with_truncation(max_length, stride=stride, strategy=truncation_strategy)
-        self._tokenizer.with_padding(
-            max_length=max_length if pad_to_max_length else None,
-            direction=self.padding_side,
-            pad_id=self.pad_token_id,
-            pad_type_id=self.pad_token_type_id,
-            pad_token=self.pad_token,
-        )
-        self._decoder = tk.decoders.WordPiece.new()
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+
+        if token_ids_1:
+            output += token_ids_1 + [self.sep_token_id]
+
+        return output

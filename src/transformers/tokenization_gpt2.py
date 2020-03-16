@@ -21,7 +21,7 @@ import os
 from functools import lru_cache
 
 import regex as re
-import tokenizers as tk
+from tokenizers import ByteLevelBPETokenizer
 
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -101,11 +101,35 @@ def get_pairs(word):
 class GPT2Tokenizer(PreTrainedTokenizer):
     """
     GPT-2 BPE tokenizer. Peculiarities:
-        - Byte-level Byte-Pair-Encoding
-        - Requires a space to start the input string => the encoding and tokenize methods should be called with the
-          ``add_prefix_space`` flag set to ``True``.
-          Otherwise, this tokenizer's ``encode``, ``decode``, and ``tokenize`` methods will not conserve
-          the spaces at the beginning of a string: `tokenizer.decode(tokenizer.encode(" Hello")) = "Hello"`
+
+    - Byte-level Byte-Pair-Encoding
+    - Requires a space to start the input string => the encoding methods should be called with the
+      ``add_prefix_space`` flag set to ``True``.
+      Otherwise, this tokenizer ``encode`` and ``decode`` method will not conserve
+      the absence of a space at the beginning of a string:
+
+    ::
+
+        tokenizer.decode(tokenizer.encode("Hello")) = " Hello"
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
+
+    Args:
+        vocab_file (:obj:`str`):
+            Path to the vocabulary file.
+        merges_file (:obj:`str`):
+            Path to the merges file.
+        errors (:obj:`str`, `optional`, defaults to "replace"):
+            Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
+            <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
+        unk_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        bos_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The beginning of sequence token.
+        eos_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The end of sequence token.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -149,6 +173,9 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     def vocab_size(self):
         return len(self.encoder)
 
+    def get_vocab(self):
+        return dict(self.encoder, **self.added_tokens_encoder)
+
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
@@ -191,15 +218,8 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def _tokenize(self, text, add_prefix_space=False):
-        """ Tokenize a string.
-            Args:
-                - add_prefix_space (boolean, default False):
-                    Begin the sentence with at least one space to get invariance to word order in GPT-2 (and RoBERTa) tokenizers.
-        """
-        if add_prefix_space:
-            text = " " + text
-
+    def _tokenize(self, text):
+        """ Tokenize a string. """
         bpe_tokens = []
         for token in re.findall(self.pat, text):
             token = "".join(
@@ -223,7 +243,16 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         return text
 
     def save_vocabulary(self, save_directory):
-        """Save the tokenizer vocabulary and merge files to a directory."""
+        """
+        Save the vocabulary and special tokens file to a directory.
+
+        Args:
+            save_directory (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
@@ -248,6 +277,11 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
+    def prepare_for_tokenization(self, text, **kwargs):
+        if "add_prefix_space" in kwargs and kwargs["add_prefix_space"]:
+            return " " + text
+        return text
+
 
 class GPT2TokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
@@ -261,26 +295,13 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
-        pad_to_max_length=False,
         add_prefix_space=False,
-        max_length=None,
-        stride=0,
-        truncation_strategy="longest_first",
         **kwargs
     ):
-        super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
-
-        self._tokenizer = tk.Tokenizer(tk.models.BPE.from_files(vocab_file, merges_file))
-        self._update_special_tokens()
-        self._tokenizer.with_pre_tokenizer(tk.pre_tokenizers.ByteLevel.new(add_prefix_space=add_prefix_space))
-        self._tokenizer.with_decoder(tk.decoders.ByteLevel.new())
-        if max_length:
-            self._tokenizer.with_truncation(max_length, stride=stride, strategy=truncation_strategy)
-        self._tokenizer.with_padding(
-            max_length=max_length if pad_to_max_length else None,
-            direction=self.padding_side,
-            pad_id=self.pad_token_id if self.pad_token_id is not None else 0,
-            pad_type_id=self.pad_token_type_id,
-            pad_token=self.pad_token if self.pad_token is not None else "",
+        super().__init__(
+            ByteLevelBPETokenizer(vocab_file=vocab_file, merges_file=merges_file, add_prefix_space=add_prefix_space),
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            **kwargs,
         )
-        self._decoder = tk.decoders.ByteLevel.new()

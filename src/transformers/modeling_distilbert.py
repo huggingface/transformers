@@ -27,6 +27,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from .activations import gelu
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, prune_linear_layer
@@ -38,6 +39,8 @@ logger = logging.getLogger(__name__)
 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "distilbert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-pytorch_model.bin",
     "distilbert-base-uncased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-pytorch_model.bin",
+    "distilbert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-cased-pytorch_model.bin",
+    "distilbert-base-cased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-cased-distilled-squad-pytorch_model.bin",
     "distilbert-base-german-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-german-cased-pytorch_model.bin",
     "distilbert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-multilingual-cased-pytorch_model.bin",
     "distilbert-base-uncased-finetuned-sst-2-english": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-pytorch_model.bin",
@@ -45,8 +48,6 @@ DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 
 
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
-def gelu(x):
-    return 0.5 * x * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -216,11 +217,6 @@ class TransformerBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.n_heads = config.n_heads
-        self.dim = config.dim
-        self.hidden_dim = config.hidden_dim
-        self.dropout = nn.Dropout(p=config.dropout)
-        self.activation = config.activation
         self.output_attentions = config.output_attentions
 
         assert config.dim % config.n_heads == 0
@@ -440,8 +436,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
         from transformers import DistilBertTokenizer, DistilBertModel
         import torch
 
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+        model = DistilBertModel.from_pretrained('distilbert-base-cased')
 
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
@@ -544,8 +540,8 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         from transformers import DistilBertTokenizer, DistilBertForMaskedLM
         import torch
 
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = DistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+        model = DistilBertForMaskedLM.from_pretrained('distilbert-base-cased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, masked_lm_labels=input_ids)
         loss, prediction_scores = outputs[:2]
@@ -619,8 +615,8 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
         import torch
 
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+        model = DistilBertForSequenceClassification.from_pretrained('distilbert-base-cased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
@@ -711,8 +707,8 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         from transformers import DistilBertTokenizer, DistilBertForQuestionAnswering
         import torch
 
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = DistilBertForQuestionAnswering.from_pretrained('distilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+        model = DistilBertForQuestionAnswering.from_pretrained('distilbert-base-cased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         start_positions = torch.tensor([1])
         end_positions = torch.tensor([3])
@@ -798,8 +794,8 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         from transformers import DistilBertTokenizer, DistilBertForTokenClassification
         import torch
 
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = DistilBertForTokenClassification.from_pretrained('distilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+        model = DistilBertForTokenClassification.from_pretrained('distilbert-base-cased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
@@ -822,8 +818,10 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
             # Only keep active parts of the loss
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1) == 1
-                active_logits = logits.view(-1, self.num_labels)[active_loss]
-                active_labels = labels.view(-1)[active_loss]
+                active_logits = logits.view(-1, self.num_labels)
+                active_labels = torch.where(
+                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
+                )
                 loss = loss_fct(active_logits, active_labels)
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))

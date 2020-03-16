@@ -24,6 +24,7 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 if is_torch_available():
+    import torch
     from transformers import (
         XLMConfig,
         XLMModel,
@@ -49,6 +50,9 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    all_generative_model_classes = (
+        (XLMWithLMHeadModel,) if is_torch_available() else ()
+    )  # TODO (PVP): Check other models whether language generation is also applicable
 
     class XLMModelTester(object):
         def __init__(
@@ -81,6 +85,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             summary_type="last",
             use_proj=True,
             scope=None,
+            bos_token_id=0,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -111,6 +116,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
+            self.bos_token_id = bos_token_id
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -151,6 +157,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
                 initializer_range=self.initializer_range,
                 summary_type=self.summary_type,
                 use_proj=self.use_proj,
+                bos_token_id=self.bos_token_id,
             )
 
             return (
@@ -390,3 +397,35 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in list(XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = XLMModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
+class XLMModelLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_xlm_mlm_en_2048(self):
+        model = XLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
+        input_ids = torch.tensor([[14, 447]], dtype=torch.long, device=torch_device)  # the president
+        expected_output_ids = [
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+        ]  # the president the president the president the president the president the president the president the president the president the president
+        # TODO(PVP): this and other input_ids I tried for generation give pretty bad results. Not sure why. Model might just not be made for auto-regressive inference
+        output_ids = model.generate(input_ids, do_sample=False)
+        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)

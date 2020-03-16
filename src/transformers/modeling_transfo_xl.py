@@ -645,7 +645,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         else:
             return None
 
-    def _update_mems(self, hids, mems, qlen, mlen):
+    def _update_mems(self, hids, mems, mlen, qlen):
         # does not deal with None
         if mems is None:
             return None
@@ -935,11 +935,11 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         else:
             return self.crit.out_layers[-1]
 
-    def prepare_inputs_for_generation(self, input_ids, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past, **model_kwargs):
         inputs = {"input_ids": input_ids}
 
         # if past is defined in model kwargs then use it for faster decoding
-        if "past" in model_kwargs and model_kwargs["past"]:
-            inputs["mems"] = model_kwargs["past"]
+        if past:
+            inputs["mems"] = past
 
         return inputs

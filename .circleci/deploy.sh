@@ -26,3 +26,4 @@ deploy_doc "3ddce1d" v2.1.1
 deploy_doc "3616209" v2.2.0
 deploy_doc "d0f8b9a" v2.3.0
 deploy_doc "6664ea9" v2.4.0
+deploy_doc "fb560dc" v2.5.0

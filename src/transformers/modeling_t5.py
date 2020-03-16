@@ -79,7 +79,10 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
         name = txt_name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
-        if any(n in ["adam_v", "adam_m", "global_step"] for n in name):
+        if any(
+            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
+            for n in name
+        ):
             logger.info("Skipping {}".format("/".join(name)))
             tf_weights.pop(txt_name, None)
             continue

@@ -24,6 +24,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from .activations import gelu_new
 from .configuration_gpt2 import GPT2Config
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv1d_layer
@@ -93,10 +94,6 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
         logger.info("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array)
     return model
-
-
-def gelu(x):
-    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
 
 class Attention(nn.Module):
@@ -206,7 +203,7 @@ class MLP(nn.Module):
         nx = config.n_embd
         self.c_fc = Conv1D(n_state, nx)
         self.c_proj = Conv1D(nx, n_state)
-        self.act = gelu
+        self.act = gelu_new
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(self, x):
@@ -279,14 +276,17 @@ GPT2_START_DOCSTRING = r"""
 
 GPT2_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`):
+            `input_ids_length` = `sequence_length if `past` is None else 1
             Indices of input sequence tokens in the vocabulary.
+            If using `past` as an input make sure that `input_ids` are those of the last position.
 
             Indices can be obtained using :class:`transformers.GPT2Tokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
+
         past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `past` output below). Can be used to speed up sequential decoding. The token ids which have their past given to this model
@@ -297,10 +297,12 @@ GPT2_INPUTS_DOCSTRING = r"""
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`, `optional`, defaults to :obj:`None`):
+            `input_ids_length` = `sequence_length if `past` is None else 1
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
+            If using `past` as an input make sure that `token_type_ids` correspond to the `input_ids` of the last position.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -422,7 +424,8 @@ class GPT2Model(GPT2PreTrainedModel):
 
         # Attention mask.
         if attention_mask is not None:
-            attention_mask = attention_mask.view(-1, input_shape[-1])
+            batch_size = input_ids.shape[0]
+            attention_mask = attention_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
@@ -522,14 +525,12 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
-        if "past" in kwargs and kwargs["past"]:
+        if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
-        inputs = {"input_ids": input_ids}
-        inputs.update(kwargs)
-        return inputs
+        return {"input_ids": input_ids, "past": past}
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
     def forward(

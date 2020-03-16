@@ -459,7 +459,7 @@ def main():
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight deay if we apply some.")
+    parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument(
@@ -530,7 +530,7 @@ def main():
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        args.n_gpu = torch.cuda.device_count()
+        args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)

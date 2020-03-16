@@ -18,7 +18,6 @@
 import logging
 import os
 
-import torch
 from torch import nn
 
 from .modeling_auto import AutoModel, AutoModelWithLMHead
@@ -232,119 +231,6 @@ class PreTrainedEncoderDecoder(nn.Module):
             encoder_outputs = ()
 
         kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
-        decoder_outputs = self.decoder(decoder_input_ids, encoder_hidden_states, **kwargs_decoder)
+        decoder_outputs = self.decoder(decoder_input_ids, **kwargs_decoder)
 
         return decoder_outputs + encoder_outputs
-
-    @staticmethod
-    def prepare_model_kwargs(**kwargs):
-        """ Prepare the encoder and decoder's keyword arguments.
-
-        Keyword arguments come in 3 flavors:
-        - encoder-specific (prefixed by `encoder_`)
-        - decoder-specific (prefixed by `decoder_`)
-        - those that apply to the model as whole.
-
-        We let the specific kwargs override the common ones in case of
-        conflict.
-        """
-        kwargs_common = {
-            argument: value
-            for argument, value in kwargs.items()
-            if not argument.startswith("encoder_") and not argument.startswith("decoder_")
-        }
-        decoder_kwargs = kwargs_common.copy()
-        encoder_kwargs = kwargs_common.copy()
-        encoder_kwargs.update(
-            {
-                argument[len("encoder_") :]: value
-                for argument, value in kwargs.items()
-                if argument.startswith("encoder_")
-            }
-        )
-        decoder_kwargs.update(
-            {
-                argument[len("decoder_") :]: value
-                for argument, value in kwargs.items()
-                if argument.startswith("decoder_")
-            }
-        )
-        decoder_kwargs["encoder_attention_mask"] = encoder_kwargs.get("attention_mask", None)
-        return encoder_kwargs, decoder_kwargs
-
-
-class Model2Model(PreTrainedEncoderDecoder):
-    r"""
-        :class:`~transformers.Model2Model` instantiates a Seq2Seq2 model
-        where both of the encoder and decoder are of the same family. If the
-        name of or that path to a pretrained model is specified the encoder and
-        the decoder will be initialized with the pretrained weight (the
-        cross-attention will be intialized randomly if its weights are not
-        present).
-
-        It is possible to override this behavior and initialize, say, the decoder randomly
-        by creating it beforehand as follows
-
-            config = BertConfig.from_pretrained()
-            decoder = BertForMaskedLM(config)
-            model = Model2Model.from_pretrained('bert-base-uncased', decoder_model=decoder)
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.tie_weights()
-
-    def tie_weights(self):
-        """ Tying the encoder and decoders' embeddings together.
-
-       We need for each to get down to the embedding weights. However the
-        different model classes are inconsistent to that respect:
-        - BertModel: embeddings.word_embeddings
-        - RoBERTa: embeddings.word_embeddings
-        - XLMModel: embeddings
-        - GPT2: wte
-        - BertForMaskedLM: bert.embeddings.word_embeddings
-        - RobertaForMaskedLM: roberta.embeddings.word_embeddings
-
-        argument of the XEmbedding layer for each model, but it is "blocked"
-        by a model-specific keyword (bert, )...
-        """
-        # self._tie_or_clone_weights(self.encoder, self.decoder)
-        pass
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *args, **kwargs):
-
-        if (
-            "bert" not in pretrained_model_name_or_path
-            or "roberta" in pretrained_model_name_or_path
-            or "distilbert" in pretrained_model_name_or_path
-        ):
-            raise ValueError("Only the Bert model is currently supported.")
-
-        model = super().from_pretrained(
-            encoder_pretrained_model_name_or_path=pretrained_model_name_or_path,
-            decoder_pretrained_model_name_or_path=pretrained_model_name_or_path,
-            *args,
-            **kwargs,
-        )
-
-        return model
-
-
-class Model2LSTM(PreTrainedEncoderDecoder):
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        if kwargs.get("decoder_model", None) is None:
-            # We will create a randomly initilized LSTM model as decoder
-            if "decoder_config" not in kwargs:
-                raise ValueError(
-                    "To load an LSTM in Encoder-Decoder model, please supply either: "
-                    "    - a torch.nn.LSTM model as `decoder_model` parameter (`decoder_model=lstm_model`), or"
-                    "    - a dictionary of configuration parameters that will be used to initialize a"
-                    "      torch.nn.LSTM model as `decoder_config` keyword argument. "
-                    "      E.g. `decoder_config={'input_size': 768, 'hidden_size': 768, 'num_layers': 2}`"
-                )
-            kwargs["decoder_model"] = torch.nn.LSTM(kwargs.pop("decoder_config"))
-        model = super().from_pretrained(*args, **kwargs)
-        return model

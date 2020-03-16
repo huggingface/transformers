@@ -155,6 +155,9 @@ class XLNetConfig(PretrainedConfig):
         summary_last_dropout=0.1,
         start_n_top=5,
         end_n_top=5,
+        bos_token_id=1,
+        pad_token_id=5,
+        eos_token_id=2,
         **kwargs
     ):
         """Constructs XLNetConfig.
@@ -187,6 +190,10 @@ class XLNetConfig(PretrainedConfig):
         self.summary_last_dropout = summary_last_dropout
         self.start_n_top = start_n_top
         self.end_n_top = end_n_top
+
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
+        self.eos_token_ids = [eos_token_id]
 
     @property
     def max_position_embeddings(self):

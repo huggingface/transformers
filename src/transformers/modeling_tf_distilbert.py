@@ -33,6 +33,8 @@ logger = logging.getLogger(__name__)
 TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "distilbert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-tf_model.h5",
     "distilbert-base-uncased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-tf_model.h5",
+    "distilbert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-cased-tf_model.h5",
+    "distilbert-base-cased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-cased-distilled-squad-tf_model.h5",
     "distilbert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-multilingual-cased-tf_model.h5",
     "distilbert-base-uncased-finetuned-sst-2-english": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-tf_model.h5",
 }
@@ -78,8 +80,6 @@ class TFEmbeddings(tf.keras.layers.Layer):
             embeddings_initializer=get_initializer(config.initializer_range),
             name="position_embeddings",
         )
-        if config.sinusoidal_pos_embds:
-            raise NotImplementedError
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -563,8 +563,8 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         import tensorflow as tf
         from transformers import DistilBertTokenizer, TFDistilBertModel
 
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = TFDistilBertModel.from_pretrained('distilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+        model = TFDistilBertModel.from_pretrained('distilbert-base-cased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
@@ -637,8 +637,8 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         import tensorflow as tf
         from transformers import DistilBertTokenizer, TFDistilBertForMaskedLM
 
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = TFDistilBertForMaskedLM.from_pretrained('distilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+        model = TFDistilBertForMaskedLM.from_pretrained('distilbert-base-cased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         prediction_scores = outputs[0]
@@ -701,8 +701,8 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
         import tensorflow as tf
         from transformers import DistilBertTokenizer, TFDistilBertForSequenceClassification
 
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = TFDistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+        model = TFDistilBertForSequenceClassification.from_pretrained('distilbert-base-cased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         logits = outputs[0]
@@ -759,8 +759,8 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
         import tensorflow as tf
         from transformers import DistilBertTokenizer, TFDistilBertForTokenClassification
 
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = TFDistilBertForTokenClassification.from_pretrained('distilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+        model = TFDistilBertForTokenClassification.from_pretrained('distilbert-base-cased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         scores = outputs[0]
@@ -818,8 +818,8 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
         import tensorflow as tf
         from transformers import DistilBertTokenizer, TFDistilBertForQuestionAnswering
 
-        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
-        model = TFDistilBertForQuestionAnswering.from_pretrained('distilbert-base-uncased')
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
+        model = TFDistilBertForQuestionAnswering.from_pretrained('distilbert-base-cased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         start_scores, end_scores = outputs[:2]

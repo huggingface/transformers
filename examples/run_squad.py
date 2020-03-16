@@ -38,6 +38,9 @@ from transformers import (
     BertConfig,
     BertForQuestionAnswering,
     BertTokenizer,
+    CamembertConfig,
+    CamembertForQuestionAnswering,
+    CamembertTokenizer,
     DistilBertConfig,
     DistilBertForQuestionAnswering,
     DistilBertTokenizer,
@@ -70,12 +73,16 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig, XLNetConfig, XLMConfig)),
+    (
+        tuple(conf.pretrained_config_archive_map.keys())
+        for conf in (BertConfig, CamembertConfig, RobertaConfig, XLNetConfig, XLMConfig)
+    ),
     (),
 )
 
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForQuestionAnswering, BertTokenizer),
+    "camembert": (CamembertConfig, CamembertForQuestionAnswering, CamembertTokenizer),
     "roberta": (RobertaConfig, RobertaForQuestionAnswering, RobertaTokenizer),
     "xlnet": (XLNetConfig, XLNetForQuestionAnswering, XLNetTokenizer),
     "xlm": (XLMConfig, XLMForQuestionAnswering, XLMTokenizer),
@@ -212,13 +219,18 @@ def train(args, train_dataset, model, tokenizer):
                 "end_positions": batch[4],
             }
 
-            if args.model_type in ["xlm", "roberta", "distilbert"]:
+            if args.model_type in ["xlm", "roberta", "distilbert", "camembert"]:
                 del inputs["token_type_ids"]
 
             if args.model_type in ["xlnet", "xlm"]:
                 inputs.update({"cls_index": batch[5], "p_mask": batch[6]})
                 if args.version_2_with_negative:
                     inputs.update({"is_impossible": batch[7]})
+                if hasattr(model, "config") and hasattr(model.config, "lang2id"):
+                    inputs.update(
+                        {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
+                    )
+
             outputs = model(**inputs)
             # model outputs are always tuple in transformers (see doc)
             loss = outputs[0]
@@ -322,7 +334,7 @@ def evaluate(args, model, tokenizer, prefix=""):
                 "token_type_ids": batch[2],
             }
 
-            if args.model_type in ["xlm", "roberta", "distilbert"]:
+            if args.model_type in ["xlm", "roberta", "distilbert", "camembert"]:
                 del inputs["token_type_ids"]
 
             example_indices = batch[3]
@@ -330,6 +342,11 @@ def evaluate(args, model, tokenizer, prefix=""):
             # XLNet and XLM use more arguments for their predictions
             if args.model_type in ["xlnet", "xlm"]:
                 inputs.update({"cls_index": batch[4], "p_mask": batch[5]})
+                # for lang_id-sensitive xlm models
+                if hasattr(model, "config") and hasattr(model.config, "lang2id"):
+                    inputs.update(
+                        {"langs": (torch.ones(batch[0].shape, dtype=torch.int64) * args.lang_id).to(args.device)}
+                    )
 
             outputs = model(**inputs)
 
@@ -635,6 +652,12 @@ def main():
         help="If true, all of the warnings related to data processing will be printed. "
         "A number of warnings are expected for a normal SQuAD evaluation.",
     )
+    parser.add_argument(
+        "--lang_id",
+        default=0,
+        type=int,
+        help="language id of input for language-specific xlm models (see tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)",
+    )
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
     parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
@@ -702,7 +725,7 @@ def main():
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        args.n_gpu = torch.cuda.device_count()
+        args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)

@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "distilbert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-config.json",
     "distilbert-base-uncased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-config.json",
+    "distilbert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-cased-config.json",
+    "distilbert-base-cased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-cased-distilled-squad-config.json",
     "distilbert-base-german-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-german-cased-config.json",
     "distilbert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-multilingual-cased-config.json",
     "distilbert-base-uncased-finetuned-sst-2-english": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-config.json",
@@ -58,7 +60,7 @@ class DistilBertConfig(PretrainedConfig):
                 Number of attention heads for each attention layer in the Transformer encoder.
             dim (:obj:`int`, optional, defaults to 768):
                 Dimensionality of the encoder layers and the pooler layer.
-            intermediate_size (:obj:`int`, optional, defaults to 3072):
+            hidden_dim (:obj:`int`, optional, defaults to 3072):
                 The size of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
             dropout (:obj:`float`, optional, defaults to 0.1):
                 The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.

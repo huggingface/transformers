@@ -65,20 +65,24 @@ class PretrainedConfig(object):
         self.pruned_heads = kwargs.pop("pruned_heads", {})
 
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
+        self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
         self.is_decoder = kwargs.pop("is_decoder", False)
 
         # Parameters for sequence generation
         self.max_length = kwargs.pop("max_length", 20)
+        self.min_length = kwargs.pop("min_length", 0)
         self.do_sample = kwargs.pop("do_sample", False)
+        self.early_stopping = kwargs.pop("early_stopping", False)
         self.num_beams = kwargs.pop("num_beams", 1)
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
-        self.bos_token_id = kwargs.pop("bos_token_id", 0)
-        self.pad_token_id = kwargs.pop("pad_token_id", 0)
-        self.eos_token_ids = kwargs.pop("eos_token_ids", 0)
+        self.bos_token_id = kwargs.pop("bos_token_id", None)
+        self.pad_token_id = kwargs.pop("pad_token_id", None)
+        self.eos_token_ids = kwargs.pop("eos_token_ids", None)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
+        self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
 
         # Fine-tuning task arguments
@@ -97,6 +101,18 @@ class PretrainedConfig(object):
             except AttributeError as err:
                 logger.error("Can't set {} with value {} for {}".format(key, value, self))
                 raise err
+
+    @property
+    def num_labels(self):
+        return self._num_labels
+
+    @num_labels.setter
+    def num_labels(self, num_labels):
+        self._num_labels = num_labels
+        self.id2label = {i: "LABEL_{}".format(i) for i in range(self.num_labels)}
+        self.id2label = dict((int(key), value) for key, value in self.id2label.items())
+        self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
+        self.label2id = dict((key, int(value)) for key, value in self.label2id.items())
 
     def save_pretrained(self, save_directory):
         """
@@ -198,6 +214,7 @@ class PretrainedConfig(object):
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
+        local_files_only = kwargs.pop("local_files_only", False)
 
         if pretrained_config_archive_map is None:
             pretrained_config_archive_map = cls.pretrained_config_archive_map
@@ -219,6 +236,7 @@ class PretrainedConfig(object):
                 force_download=force_download,
                 proxies=proxies,
                 resume_download=resume_download,
+                local_files_only=local_files_only,
             )
             # Load config dict
             if resolved_config_file is None:
@@ -232,10 +250,17 @@ class PretrainedConfig(object):
                 )
             else:
                 msg = (
-                    "Model name '{}' was not found in model name list. "
-                    "We assumed '{}' was a path, a model identifier, or url to a configuration file named {} or "
-                    "a directory containing such a file but couldn't find any such file at this path or url.".format(
-                        pretrained_model_name_or_path, config_file, CONFIG_NAME,
+                    "Can't load '{}'. Make sure that:\n\n"
+                    "- '{}' is either a correct model identifier of a community model from 'https://huggingface.co/models' which has a '{}' file\n\n"
+                    "- or '{}' is a model name in {}\n\n"
+                    "- or '{}' is the correct path to a directory containing a '{}' file".format(
+                        pretrained_model_name_or_path,
+                        pretrained_model_name_or_path,
+                        CONFIG_NAME,
+                        pretrained_model_name_or_path,
+                        list(pretrained_config_archive_map.keys()),
+                        pretrained_model_name_or_path,
+                        CONFIG_NAME,
                     )
                 )
             raise EnvironmentError(msg)

@@ -43,6 +43,9 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    all_generative_model_classes = (
+        (TFXLMWithLMHeadModel,) if is_tf_available() else ()
+    )  # TODO (PVP): Check other models whether language generation is also applicable
 
     class TFXLMModelTester(object):
         def __init__(
@@ -75,6 +78,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
             summary_type="last",
             use_proj=True,
             scope=None,
+            bos_token_id=0,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -105,6 +109,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
             self.num_labels = num_labels
             self.num_choices = num_choices
             self.scope = scope
+            self.bos_token_id = bos_token_id
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -145,6 +150,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
                 initializer_range=self.initializer_range,
                 summary_type=self.summary_type,
                 use_proj=self.use_proj,
+                bos_token_id=self.bos_token_id,
             )
 
             return (
@@ -305,3 +311,35 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in list(TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = TFXLMModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
+class TFXLMModelLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_xlm_mlm_en_2048(self):
+        model = TFXLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
+        input_ids = tf.convert_to_tensor([[14, 447]], dtype=tf.int32)  # the president
+        expected_output_ids = [
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+            14,
+            447,
+        ]  # the president the president the president the president the president the president the president the president the president the president
+        # TODO(PVP): this and other input_ids I tried for generation give pretty bad results. Not sure why. Model might just not be made for auto-regressive inference
+        output_ids = model.generate(input_ids, do_sample=False)
+        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)

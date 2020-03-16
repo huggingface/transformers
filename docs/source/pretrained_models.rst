@@ -179,6 +179,14 @@ For a list that includes community-uploaded models, refer to `https://huggingfac
 |                   |                                                            | | The DistilBERT model distilled from the BERT model `bert-base-uncased` checkpoint, with an additional linear layer.                 |
 |                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``distilbert-base-cased``                                  | | 6-layer, 768-hidden, 12-heads, 65M parameters                                                                                       |
+|                   |                                                            | | The DistilBERT model distilled from the BERT model `bert-base-cased` checkpoint                                                     |
+|                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``distilbert-base-cased-distilled-squad``                  | | 6-layer, 768-hidden, 12-heads, 65M parameters                                                                                       |
+|                   |                                                            | | The DistilBERT model distilled from the BERT model `bert-base-cased` checkpoint, with an additional question answering layer.       |
+|                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                   | ``distilgpt2``                                             | | 6-layer, 768-hidden, 12-heads, 82M parameters                                                                                       |
 |                   |                                                            | | The DistilGPT2 model distilled from the GPT2 model `gpt2` checkpoint.                                                               |
 |                   |                                                            | (see `details <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__)                                     |
@@ -266,6 +274,16 @@ For a list that includes community-uploaded models, refer to `https://huggingfac
 |                   | ``flaubert-large-cased``                                   | | 24-layer, 1024-hidden, 16-heads, 373M parameters                                                                                    |
 |                   |                                                            | | FlauBERT large architecture                                                                                                         |
 |                   |                                                            | (see `details <https://github.com/getalp/Flaubert>`__)                                                                                |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| Bart              | ``bart-large``                                             | | 12-layer, 1024-hidden, 16-heads, 406M parameters                                                                                    |
+|                   |                                                            | (see `details <https://github.com/pytorch/fairseq/tree/master/examples/bart>`_)                                                       |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bart-large-mnli``                                        | | Adds a 2 layer classification head with 1 million parameters                                                                        |
+|                   |                                                            | | bart-large base architecture with a classification head, finetuned on MNLI                                                          |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bart-large-cnn``                                         | | 12-layer, 1024-hidden, 16-heads, 406M parameters       (same as base)                                                               |
+|                   |                                                            | | bart-large base architecture finetuned on cnn summarization task                                                                    |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 
 

@@ -33,16 +33,21 @@ The tasks I am working on is:
     Do not use screenshots, as they are hard to read and (more importantly) don't allow others to copy-and-paste your code.
     -->
 
-## Environment
+## Environment info
+<!-- You can run the command `python transformers-cli env` and copy-and-paste its output below.
+     Don't forget to fill out the missing fields in that output! -->
+ 
+- `transformers` version:
+- Platform:
+- Python version:
+- PyTorch version (GPU?):
+- Tensorflow version (GPU?):
+- Using GPU in script?:
+- Using distributed or parallel set-up in script?:
 
-* OS:
-* Python version:
-* PyTorch version:
+<!-- IMPORTANT: which version of the former library do you use? -->
 * `pytorch-transformers` or `pytorch-pretrained-bert` version (or branch):
-* `transformers` version (or branch):
-* Using GPU?
-* Distributed or parallel setup?
-* Any other relevant information:
+
 
 ## Checklist
 

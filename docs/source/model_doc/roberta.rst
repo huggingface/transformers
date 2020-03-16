@@ -23,6 +23,9 @@ Tips:
 
 - This implementation is the same as :class:`~transformers.BertModel` with a tiny embeddings tweak as well as a
   setup for Roberta pretrained models.
+- RoBERTa has the same architecture as BERT, but uses a byte-level BPE as a tokenizer (same as GPT-2) and uses a
+  different pre-training scheme.
+- RoBERTa doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just separate your segments with the separation token `tokenizer.sep_token` (or `</s>`)
 - `Camembert <./camembert.html>`__ is a wrapper around RoBERTa. Refer to this page for usage examples.
 
 RobertaConfig
@@ -36,7 +39,8 @@ RobertaTokenizer
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RobertaTokenizer
-    :members:
+    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
+        create_token_type_ids_from_sequences, save_vocabulary
 
 
 RobertaModel

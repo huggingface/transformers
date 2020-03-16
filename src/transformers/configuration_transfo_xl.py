@@ -149,6 +149,7 @@ class TransfoXLConfig(PretrainedConfig):
         proj_init_std=0.01,
         init_std=0.02,
         layer_norm_epsilon=1e-5,
+        eos_token_id=0,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -185,6 +186,8 @@ class TransfoXLConfig(PretrainedConfig):
         self.proj_init_std = proj_init_std
         self.init_std = init_std
         self.layer_norm_epsilon = layer_norm_epsilon
+
+        self.eos_token_ids = [eos_token_id]
 
     @property
     def max_position_embeddings(self):

@@ -63,7 +63,7 @@ XNLI
 `The Cross-Lingual NLI Corpus (XNLI) <https://www.nyu.edu/projects/bowman/xnli/>`__ is a benchmark that evaluates
 the quality of cross-lingual text representations. 
 XNLI is crowd-sourced dataset based on `MultiNLI <http://www.nyu.edu/projects/bowman/multinli/>`: pairs of text are labeled with textual entailment 
-annotations for 15 different languages (including both high-ressource language such as English and low-ressource languages such as Swahili).
+annotations for 15 different languages (including both high-resource language such as English and low-resource languages such as Swahili).
 
 It was released together with the paper
 `XNLI: Evaluating Cross-lingual Sentence Representations <https://arxiv.org/abs/1809.05053>`__

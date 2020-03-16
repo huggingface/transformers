@@ -90,9 +90,9 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
                 labels :: [len*bsz]
             Return:
                 if labels is None:
-                    out :: [len*bsz] Negative log likelihood
-                else:
                     out :: [len*bsz x n_tokens] log probabilities of tokens over the vocabulary
+                else:
+                    out :: [len*bsz] Negative log likelihood
             We could replace this implementation by the native PyTorch one
             if their's had an option to set bias on all clusters in the native one.
             here: https://github.com/pytorch/pytorch/blob/dbe6a7a9ff1a364a8706bf5df58a1ca96d2fd9da/torch/nn/modules/adaptive.py#L138

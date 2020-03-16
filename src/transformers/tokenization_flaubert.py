@@ -80,14 +80,14 @@ class FlaubertTokenizer(XLMTokenizer):
     """
     BPE tokenizer for Flaubert
 
-        - Moses preprocessing & tokenization
+    - Moses preprocessing & tokenization
+    - Normalize all inputs text
+    - argument ``special_tokens`` and function ``set_special_tokens``, can be used to add additional symbols \
+      (ex: "__classify__") to a vocabulary
+    - `do_lowercase` controle lower casing (automatically set for pretrained vocabularies)
 
-        - Normalize all inputs text
-
-        - argument ``special_tokens`` and function ``set_special_tokens``, can be used to add additional symbols \
-        (ex: "__classify__") to a vocabulary
-
-        - `do_lowercase` controle lower casing (automatically set for pretrained vocabularies)
+    This tokenizer inherits from :class:`~transformers.XLMTokenizer`. Please check the superclass for usage examples
+    and documentation regarding arguments.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

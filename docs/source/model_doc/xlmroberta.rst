@@ -22,6 +22,9 @@ and XNLI benchmarks. We will make XLM-R code, data, and models publicly availabl
 
 Tips:
 
+- XLM-R is a multilingual model trained on 100 different languages. Unlike some XLM multilingual models, it does
+  not require `lang` tensors to understand which language is used, and should be able to determine the correct
+  language from the input ids.
 - This implementation is the same as RoBERTa. Refer to the `documentation of RoBERTa <./roberta.html>`__ for usage
   examples as well as the information relative to the inputs and outputs.
 
@@ -36,7 +39,8 @@ XLMRobertaTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLMRobertaTokenizer
-    :members:
+    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
+        create_token_type_ids_from_sequences, save_vocabulary
 
 
 XLMRobertaModel

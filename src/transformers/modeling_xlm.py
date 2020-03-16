@@ -26,6 +26,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
+from .activations import gelu
 from .configuration_xlm import XLMConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, SequenceSummary, SQuADHead, prune_linear_layer
@@ -53,17 +54,6 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
     out.requires_grad = False
-
-
-def gelu(x):
-    """
-    GELU activation
-    https://arxiv.org/abs/1606.08415
-    https://github.com/huggingface/pytorch-openai-transformer-lm/blob/master/model_pytorch.py#L14
-    https://github.com/huggingface/transformers/blob/master/modeling.py
-    """
-    # return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-    return 0.5 * x * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
 def get_masks(slen, lengths, causal, padding_mask=None):
@@ -522,7 +512,7 @@ class XLMModel(XLMPreTrainedModel):
             inputs_embeds = self.embeddings(input_ids)
 
         tensor = inputs_embeds + self.position_embeddings(position_ids).expand_as(inputs_embeds)
-        if langs is not None and self.use_lang_emb:
+        if langs is not None and self.use_lang_emb and self.n_langs > 1:
             tensor = tensor + self.lang_embeddings(langs)
         if token_type_ids is not None:
             tensor = tensor + self.embeddings(token_type_ids)

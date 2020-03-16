@@ -116,8 +116,21 @@ def get_pairs(word):
 
 class CTRLTokenizer(PreTrainedTokenizer):
     """
-    CTRL BPE tokenizer. Peculiarities:
-        - Byte-Pair-Encoding
+    Constructs a CTRL tokenizer. Peculiarities:
+
+    - Byte-Pair-Encoding
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
+
+    Args:
+        vocab_file (:obj:`str`):
+            Path to the vocabulary file.
+        merges_file (:obj:`str`):
+            Path to the merges file.
+        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -146,6 +159,9 @@ class CTRLTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self):
         return len(self.encoder)
+
+    def get_vocab(self):
+        return dict(self.encoder, **self.added_tokens_encoder)
 
     def bpe(self, token):
         if token in self.cache:
@@ -216,7 +232,16 @@ class CTRLTokenizer(PreTrainedTokenizer):
         return out_string
 
     def save_vocabulary(self, save_directory):
-        """Save the tokenizer vocabulary and merge files to a directory."""
+        """
+        Save the vocabulary and special tokens file to a directory.
+
+        Args:
+            save_directory (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return

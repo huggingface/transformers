@@ -50,8 +50,8 @@ class FlaubertConfig(XLMConfig):
                 Probability to drop layers during training (Fan et al., Reducing Transformer Depth on Demand
                 with Structured Dropout. ICLR 2020)
             vocab_size (:obj:`int`, optional, defaults to 30145):
-                Vocabulary size of the XLM model. Defines the different tokens that
-                can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.XLMModel`.
+                Vocabulary size of the Flaubert model. Defines the different tokens that
+                can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.FlaubertModel`.
             emb_dim (:obj:`int`, optional, defaults to 2048):
                 Dimensionality of the encoder layers and the pooler layer.
             n_layer (:obj:`int`, optional, defaults to 12):
@@ -109,11 +109,12 @@ class FlaubertConfig(XLMConfig):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:`~transformers.XLMForSequenceClassification`.
                 Is one of the following options:
-                    - 'last' => take the last token hidden state (like XLNet)
-                    - 'first' => take the first token hidden state (like Bert)
-                    - 'mean' => take the mean of all tokens hidden states
-                    - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
-                    - 'attn' => Not implemented now, use multi-head attention
+
+                - 'last' => take the last token hidden state (like XLNet)
+                - 'first' => take the first token hidden state (like Bert)
+                - 'mean' => take the mean of all tokens hidden states
+                - 'cls_index' => supply a Tensor of classification token position (GPT/GPT-2)
+                - 'attn' => Not implemented now, use multi-head attention
             summary_use_proj (:obj:`boolean`, optional, defaults to :obj:`True`):
                 Argument used when doing sequence summary. Used in for the multiple choice head in
                 :class:`~transformers.XLMForSequenceClassification`.

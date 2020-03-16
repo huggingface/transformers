@@ -24,6 +24,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
+from .activations import gelu, gelu_new, swish
 from .configuration_bert import BertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, prune_linear_layer
@@ -86,7 +87,10 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
-        if any(n in ["adam_v", "adam_m", "global_step"] for n in name):
+        if any(
+            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
+            for n in name
+        ):
             logger.info("Skipping {}".format("/".join(name)))
             continue
         pointer = model
@@ -124,26 +128,6 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
         logger.info("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array)
     return model
-
-
-def gelu(x):
-    """ Original Implementation of the gelu activation function in Google Bert repo when initially created.
-        For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
-        0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-        Also see https://arxiv.org/abs/1606.08415
-    """
-    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
-
-
-def gelu_new(x):
-    """ Implementation of the gelu activation function currently in Google Bert repo (identical to OpenAI GPT).
-        Also see https://arxiv.org/abs/1606.08415
-    """
-    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
-
-
-def swish(x):
-    return x * torch.sigmoid(x)
 
 
 def mish(x):
@@ -487,7 +471,7 @@ class BertLMPredictionHead(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states) + self.bias
+        hidden_states = self.decoder(hidden_states)
         return hidden_states
 
 
@@ -730,8 +714,8 @@ class BertModel(BertPreTrainedModel):
                 seq_ids = torch.arange(seq_length, device=device)
                 causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
                 causal_mask = causal_mask.to(
-                    torch.long
-                )  # not converting to long will cause errors with pytorch version < 1.3
+                    attention_mask.dtype
+                )  # causal and attention masks must have same type with pytorch version < 1.3
                 extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
             else:
                 extended_attention_mask = attention_mask[:, None, None, :]
@@ -1246,7 +1230,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor`` of shape ``(1,)`, `optional`, returned when :obj:`labels` is provided):
+        loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
             Classification loss.
         classification_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
             `num_choices` is the second dimension of the input tensors. (see `input_ids` above).
@@ -1398,8 +1382,10 @@ class BertForTokenClassification(BertPreTrainedModel):
             # Only keep active parts of the loss
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1) == 1
-                active_logits = logits.view(-1, self.num_labels)[active_loss]
-                active_labels = labels.view(-1)[active_loss]
+                active_logits = logits.view(-1, self.num_labels)
+                active_labels = torch.where(
+                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
+                )
                 loss = loss_fct(active_logits, active_labels)
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))

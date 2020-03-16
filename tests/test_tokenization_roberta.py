@@ -110,3 +110,41 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         assert encoded_sentence == encoded_text_from_decode
         assert encoded_pair == encoded_pair_from_decode
+
+    def test_space_encoding(self):
+        tokenizer = self.get_tokenizer()
+
+        sequence = "Encode this sequence."
+        space_encoding = tokenizer.byte_encoder[" ".encode("utf-8")[0]]
+
+        # Testing encoder arguments
+        encoded = tokenizer.encode(sequence, add_special_tokens=False)
+        first_char = tokenizer.convert_ids_to_tokens(encoded[0])[0]
+        self.assertNotEqual(first_char, space_encoding)
+
+        encoded = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
+        first_char = tokenizer.convert_ids_to_tokens(encoded[0])[0]
+        self.assertEqual(first_char, space_encoding)
+
+        tokenizer.add_special_tokens({"bos_token": "<s>"})
+        encoded = tokenizer.encode(sequence, add_special_tokens=True)
+        first_char = tokenizer.convert_ids_to_tokens(encoded[1])[0]
+        self.assertEqual(first_char, space_encoding)
+
+        # Testing spaces after special tokenss
+        mask = "<mask>"
+        tokenizer.add_special_tokens({"mask_token": mask})
+        mask_ind = tokenizer.convert_tokens_to_ids(mask)
+
+        sequence = "Encode <mask> sequence"
+        sequence_nospace = "Encode <mask>sequence"
+
+        encoded = tokenizer.encode(sequence)
+        mask_loc = encoded.index(mask_ind)
+        first_char = tokenizer.convert_ids_to_tokens(encoded[mask_loc + 1])[0]
+        self.assertEqual(first_char, space_encoding)
+
+        encoded = tokenizer.encode(sequence_nospace)
+        mask_loc = encoded.index(mask_ind)
+        first_char = tokenizer.convert_ids_to_tokens(encoded[mask_loc + 1])[0]
+        self.assertNotEqual(first_char, space_encoding)
