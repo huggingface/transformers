@@ -918,9 +918,9 @@ class T5WithLMHeadModel(T5PreTrainedModel):
         return decoder_outputs + encoder_outputs
 
     def prepare_inputs_for_generation(self, input_ids, past, encoder_inputs, attention_mask):
-        assert attention_mask.shape == encoder_inputs.shape, "attn_mask.shape != encoder_inputs.shape: {} =! {}".format(
-            attention_mask.shape, encoder_inputs.shape
-        )
+        assert (
+            attention_mask.shape == encoder_inputs.shape
+        ), "attn_mask.shape != encoder_inputs.shape: {} =! {}".format(attention_mask.shape, encoder_inputs.shape)
         # TODO: check how to use the following variables:
         # - encoder_input_embeds
         # - decoder_input_embeds

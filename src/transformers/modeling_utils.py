@@ -912,6 +912,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             attention_mask = attention_mask.contiguous().view(
                 effective_batch_size * num_beams, input_ids_len
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
+
         if self.config.is_encoder_decoder:
             assert bos_token_id is not None, "Encoder Decoder Models need to have a bos_token_id"
             # encoder decoder need to start with empty input_ids and copy the input_ids to encoder_inputs
@@ -923,7 +924,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 device=next(self.parameters()).device,
             )
             cur_len = 1
-
         else:
             encoder_inputs = None
             cur_len = input_ids.shape[-1]
@@ -1279,7 +1279,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             # re-order internal states
             # TODO: The T5 is obviously an ugly hack to make beam search work for T5 for the moment
-            if past is not None and not (hasattr(self.config, "architectures") and self.config.architectures[0] == "T5WithLMHeadModel"):
+            if past is not None and not (
+                hasattr(self.config, "architectures")
+                and isinstance(self.config.architectures, list)
+                and self.config.architectures[0] == "T5WithLMHeadModel"
+            ):
                 past = self._reorder_cache(past, beam_idx)
 
             # extend attention_mask for new generated input if only decoder
