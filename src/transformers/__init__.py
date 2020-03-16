@@ -38,6 +38,7 @@ from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
+from .configuration_electra import ElectraConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_mmbt import MMBTConfig
@@ -51,7 +52,6 @@ from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
-from .configuration_electra import ElectraConfig
 from .data import (
     DataProcessor,
     InputExample,
@@ -298,12 +298,7 @@ if is_torch_available():
         FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
-    from .modeling_electra import (
-        ElectraModel,
-        ElectraGenerator,
-        ElectraDiscriminator,
-        load_tf_weights_in_electra
-    )
+    from .modeling_electra import ElectraModel, ElectraGenerator, ElectraDiscriminator, load_tf_weights_in_electra
 
     # Optimization
     from .optimization import (

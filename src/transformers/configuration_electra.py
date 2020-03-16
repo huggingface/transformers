@@ -88,34 +88,60 @@ class ElectraConfig(PretrainedConfig):
     model_type = "electra"
 
     def __init__(
-            self,
-            vocab_size=30522,
-            embedding_size=128,
-            hidden_size=256,
-            num_hidden_layers=12,
-            num_attention_heads=4,
-            intermediate_size=1024,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=2,
-            initializer_range=0.02,
-            layer_norm_eps=1e-12,
-            **kwargs
+        self,
+        vocab_size=30522,
+        embedding_size=128,
+        discriminator_hidden_size=256,
+        discriminator_num_hidden_layers=12,
+        discriminator_num_attention_heads=4,
+        discriminator_intermediate_size=1024,
+        generator_hidden_size=256,
+        generator_num_hidden_layers=12,
+        generator_num_attention_heads=4,
+        generator_intermediate_size=1024,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=2,
+        initializer_range=0.02,
+        layer_norm_eps=1e-12,
+        **kwargs
     ):
         super().__init__(**kwargs)
 
         self.vocab_size = vocab_size
         self.embedding_size = embedding_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
+        self.discriminator_hidden_size = discriminator_hidden_size
+        self.discriminator_num_hidden_layers = discriminator_num_hidden_layers
+        self.discriminator_num_attention_heads = discriminator_num_attention_heads
+        self.discriminator_intermediate_size = discriminator_intermediate_size
+        self.generator_hidden_size = generator_hidden_size
+        self.generator_num_hidden_layers = generator_num_hidden_layers
+        self.generator_num_attention_heads = generator_num_attention_heads
+        self.generator_intermediate_size = generator_intermediate_size
         self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+
+    def get_discriminator_config(self):
+        configuration = ElectraConfig()
+        configuration.__dict__.update(self.__dict__.copy())
+        configuration.hidden_size = self.discriminator_hidden_size
+        configuration.num_hidden_layers = self.discriminator_num_hidden_layers
+        configuration.num_attention_heads = self.discriminator_num_attention_heads
+        configuration.intermediate_size = self.discriminator_intermediate_size
+        return configuration
+
+    def get_generator_config(self):
+        configuration = ElectraConfig()
+        configuration.__dict__.update(self.__dict__.copy())
+        configuration.hidden_size = self.generator_hidden_size
+        configuration.num_hidden_layers = self.generator_num_hidden_layers
+        configuration.num_attention_heads = self.generator_num_attention_heads
+        configuration.intermediate_size = self.generator_intermediate_size
+        return configuration

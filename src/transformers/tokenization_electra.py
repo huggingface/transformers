@@ -15,8 +15,8 @@
 
 from .tokenization_bert import BertTokenizer
 
+
 electra_models = ["electra-small", "electra-base", "electra-large"]
 PRETRAINED_VOCAB_FILES_MAP = {}
 
 ElectraTokenizer = BertTokenizer
-

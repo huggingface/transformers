@@ -19,17 +19,12 @@ import unittest
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 if is_torch_available():
-    from transformers import (
-        ElectraConfig,
-        ElectraModel,
-        ElectraDiscriminator,
-        ElectraGenerator
-    )
+    from transformers import ElectraConfig, ElectraModel, ElectraDiscriminator, ElectraGenerator
     from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
@@ -40,7 +35,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         (
             # ElectraModel,
             ElectraGenerator,
-            ElectraDiscriminator
+            ElectraDiscriminator,
         )
         if is_torch_available()
         else ()
@@ -131,51 +126,97 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
                 initializer_range=self.initializer_range,
             )
 
-            return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_labels
+            return (
+                config,
+                input_ids,
+                token_type_ids,
+                input_mask,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+                fake_labels,
+            )
 
         def check_loss_output(self, result):
             self.parent.assertListEqual(list(result["loss"].size()), [])
 
         def create_and_check_electra_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_labels,
         ):
             model = ElectraModel(config=config)
             model.to(torch_device)
             model.eval()
-            generator_sequence_output, generator_pooled_output, discriminator_sequence_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-            generator_sequence_output, generator_pooled_output, discriminator_sequence_output = model(input_ids, token_type_ids=token_type_ids)
+            generator_sequence_output, generator_pooled_output, discriminator_sequence_output = model(
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+            )
+            generator_sequence_output, generator_pooled_output, discriminator_sequence_output = model(
+                input_ids, token_type_ids=token_type_ids
+            )
             generator_sequence_output, generator_pooled_output, discriminator_sequence_output = model(input_ids)
 
             result = {
                 "generator_sequence_output": generator_sequence_output,
                 "generator_pooled_output": generator_pooled_output,
-                "discriminator_sequence_output": discriminator_sequence_output
+                "discriminator_sequence_output": discriminator_sequence_output,
             }
             self.parent.assertListEqual(
-                list(result["discriminator_sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["discriminator_sequence_output"].size()),
+                [self.batch_size, self.seq_length, self.hidden_size],
             )
             self.parent.assertListEqual(
                 list(result["generator_sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
-            self.parent.assertListEqual(list(result["generator_pooled_output"].size()), [self.batch_size, self.hidden_size])
+            self.parent.assertListEqual(
+                list(result["generator_pooled_output"].size()), [self.batch_size, self.hidden_size]
+            )
 
         def create_and_check_electra_generator(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_labels,
         ):
             model = ElectraGenerator(config=config)
             model.to(torch_device)
             model.eval()
             generator_sequence_output, generator_pooled_output, logits, probs, preds, loss = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_positions=token_labels, masked_lm_ids=token_labels
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                masked_lm_positions=token_labels,
+                masked_lm_ids=token_labels,
             )
-            self.parent.assertListEqual(list(generator_sequence_output.size()), [self.batch_size, self.seq_length, self.hidden_size])
+            self.parent.assertListEqual(
+                list(generator_sequence_output.size()), [self.batch_size, self.seq_length, self.hidden_size]
+            )
             self.parent.assertListEqual(list(generator_pooled_output.size()), [self.batch_size, self.hidden_size])
             self.parent.assertListEqual(list(logits.size()), [self.batch_size, self.seq_length, self.vocab_size])
             self.parent.assertListEqual(list(probs.size()), [self.batch_size, token_labels.shape[1], self.vocab_size])
             self.parent.assertListEqual(list(preds.size()), [self.batch_size, token_labels.shape[1]])
 
         def create_and_check_electra_discriminator(
-                self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_labels,
         ):
             model = ElectraDiscriminator(config=config)
             model.to(torch_device)
@@ -183,7 +224,9 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             discriminator_sequence_output, discrim_probs, discrim_preds, discrim_loss = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, fake_token_labels=fake_labels
             )
-            self.parent.assertListEqual(list(discriminator_sequence_output.size()), [self.batch_size, self.seq_length, self.hidden_size])
+            self.parent.assertListEqual(
+                list(discriminator_sequence_output.size()), [self.batch_size, self.seq_length, self.hidden_size]
+            )
             self.parent.assertListEqual(list(discrim_probs.size()), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(list(discrim_preds.size()), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(list(discrim_loss.size()), [])
@@ -192,13 +235,19 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             config_and_inputs = self.prepare_config_and_inputs()
 
             (
-                config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_labels
+                config,
+                input_ids,
+                token_type_ids,
+                input_mask,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+                fake_labels,
             ) = config_and_inputs
 
             inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids}
 
             return config, inputs_dict
-
 
     def setUp(self):
         self.model_tester = ElectraModelTest.ElectraModelTester(self)

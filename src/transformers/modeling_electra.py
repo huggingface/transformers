@@ -1,15 +1,14 @@
-import collections
+import logging
+import os
 
 import torch
-
-from transformers import PreTrainedModel, BertConfig, ElectraConfig
-from transformers.activations import get_activation
-from .modeling_bert import BertModel, BertEmbeddings, BertLayerNorm, BertEncoder, BertPreTrainedModel
 import torch.nn as nn
 
-import logging
-import math
-import os
+from transformers import BertConfig, ElectraConfig
+from transformers.activations import get_activation
+
+from .modeling_bert import BertEmbeddings, BertEncoder, BertLayerNorm, BertPreTrainedModel
+
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,8 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)
-
+    for name, array in zip(names, arrays):
+        print(name, array.shape)
     for name, array in zip(names, arrays):
         original_name = name
 
@@ -68,7 +68,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
             ]
             for n in name
         ):
-            logger.info("Skipping {}".format("/".join(name)))
+            print("Skipping {}".format("/".join(name)))
             continue
         pointer = model
         for m_name in name:
@@ -110,7 +110,6 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
 class ElectraEmbeddings(BertEmbeddings):
     def __init__(self, config):
         super().__init__(config)
-        assert config.hidden_size % 2 == 0
         self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=0)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
@@ -224,16 +223,17 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
 
         return extended_attention_mask
 
-    def get_head_mask(self, head_mask):
+    def get_head_mask(self, head_mask, config=None):
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        num_hidden_layers = self.config.num_hidden_layers if config is None else config.num_hidden_layers
         if head_mask is not None:
             if head_mask.dim() == 1:
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand(self.config.num_hidden_layers, -1, -1, -1, -1)
+                head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
             elif head_mask.dim() == 2:
                 head_mask = (
                     head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
@@ -242,7 +242,7 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
                 dtype=next(self.parameters()).dtype
             )  # switch to fload if need + fp16 compatibility
         else:
-            head_mask = [None] * self.config.num_hidden_layers
+            head_mask = [None] * num_hidden_layers
 
         return head_mask
 
@@ -257,26 +257,22 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
 
 
 class ElectraModel(ElectraPreTrainedModel):
-
-    ElectraModelOutputs = collections.namedtuple(
-        "ElectraModelOutputs",
-        ["generator_sequence_output", "generator_pooled_output", "discriminator_sequence_output"],
-    )
-
     def __init__(self, config):
         super().__init__(config)
+        self.discriminator_config = config.get_discriminator_config()
+        self.generator_config = config.get_generator_config()
 
-        self.embeddings = ElectraEmbeddings(config)
+        self.embeddings = ElectraEmbeddings(self.discriminator_config)
 
-        self.generator = ElectraTransformer(config)
-        self.generator_predictions = ElectraGeneratorPredictions(config)
+        self.generator = ElectraTransformer(self.generator_config)
+        self.generator_predictions = ElectraGeneratorPredictions(self.generator_config)
 
-        self.discriminator = ElectraTransformer(config)
-        self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
+        self.discriminator = ElectraTransformer(self.discriminator_config)
+        self.discriminator_predictions = ElectraDiscriminatorPredictions(self.discriminator_config)
 
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        self.init_weights()
+        # self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -293,7 +289,8 @@ class ElectraModel(ElectraPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
-        head_mask=None,
+        discriminator_head_mask=None,
+        generator_head_mask=None,
         inputs_embeds=None,
         masked_lm_positions=None,
         masked_lm_ids=None,
@@ -317,17 +314,18 @@ class ElectraModel(ElectraPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, device)
-        head_mask = self.get_head_mask(head_mask)
+        discriminator_head_mask = self.get_head_mask(discriminator_head_mask, self.discriminator_config)
+        generator_head_mask = self.get_head_mask(generator_head_mask, self.generator_config)
 
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
 
         generator_hidden_states = self.generator(
-            embedding_output, attention_mask=extended_attention_mask, head_mask=head_mask
+            embedding_output, attention_mask=extended_attention_mask, head_mask=generator_head_mask
         )
         discriminator_hidden_states = self.discriminator(
-            embedding_output, attention_mask=extended_attention_mask, head_mask=head_mask
+            embedding_output, attention_mask=extended_attention_mask, head_mask=discriminator_head_mask
         )
 
         generator_sequence_output = generator_hidden_states[0]
@@ -370,6 +368,7 @@ class ElectraModel(ElectraPreTrainedModel):
 
 class ElectraGenerator(ElectraPreTrainedModel):
     def __init__(self, config):
+        config = config.get_generator_config()
         super().__init__(config)
 
         self.embeddings = ElectraEmbeddings(config)
@@ -378,7 +377,7 @@ class ElectraGenerator(ElectraPreTrainedModel):
 
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        self.init_weights()
+        # self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -470,12 +469,13 @@ class ElectraGenerator(ElectraPreTrainedModel):
 
 class ElectraDiscriminator(ElectraPreTrainedModel):
     def __init__(self, config):
+        config = config.get_discriminator_config()
         super().__init__(config)
 
         self.embeddings = ElectraEmbeddings(config)
         self.discriminator = ElectraTransformer(config)
         self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
-        self.init_weights()
+        # self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
