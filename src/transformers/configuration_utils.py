@@ -250,10 +250,17 @@ class PretrainedConfig(object):
                 )
             else:
                 msg = (
-                    "Model name '{}' was not found in model name list. "
-                    "We assumed '{}' was a path, a model identifier, or url to a configuration file named {} or "
-                    "a directory containing such a file but couldn't find any such file at this path or url.".format(
-                        pretrained_model_name_or_path, config_file, CONFIG_NAME,
+                    "Can't load '{}'. Make sure that:\n\n"
+                    "- '{}' is either a correct model identifier of a community model from 'https://huggingface.co/models' which has a '{}' file\n\n"
+                    "- or '{}' is a model name in {}\n\n"
+                    "- or '{}' is the correct path to a directory containing a '{}' file".format(
+                        pretrained_model_name_or_path,
+                        pretrained_model_name_or_path,
+                        CONFIG_NAME,
+                        pretrained_model_name_or_path,
+                        list(pretrained_config_archive_map.keys()),
+                        pretrained_model_name_or_path,
+                        CONFIG_NAME,
                     )
                 )
             raise EnvironmentError(msg)
