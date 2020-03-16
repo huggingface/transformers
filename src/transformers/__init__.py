@@ -236,6 +236,7 @@ if is_torch_available():
         CamembertForSequenceClassification,
         CamembertForMultipleChoice,
         CamembertForTokenClassification,
+        CamembertForQuestionAnswering,
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_encoder_decoder import PreTrainedEncoderDecoder
