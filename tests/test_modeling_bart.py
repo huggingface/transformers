@@ -285,7 +285,7 @@ class BartHeadTests(unittest.TestCase):
 
         max_length = 5
         new_input_ids = lm_model.generate(
-            input_ids.clone(), num_return_sequences=1, num_beams=2, no_repeat_ngram_size=3, max_length=max_length
+            input_ids.clone(), do_sample=True, num_return_sequences=1, num_beams=2, no_repeat_ngram_size=3, max_length=max_length
         )
         self.assertEqual(new_input_ids.shape, (input_ids.shape[0], max_length - 1))
         # TODO(SS): uneven length batches, empty inputs
