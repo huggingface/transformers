@@ -844,7 +844,7 @@ class Translator(object):
             dec_out, dec_states = self.model.decoder(decoder_input, src_features, dec_states, step=step)
 
             # Generator forward.
-            log_probs = self.generator.forward(dec_out.transpose(0, 1).squeeze(0))
+            log_probs = self.generator(dec_out.transpose(0, 1).squeeze(0))
             vocab_size = log_probs.size(-1)
 
             if step < min_length:
