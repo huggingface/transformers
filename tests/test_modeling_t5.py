@@ -32,6 +32,7 @@ if is_torch_available():
 class T5ModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (T5Model, T5WithLMHeadModel) if is_torch_available() else ()
+    all_generative_model_classes = (T5WithLMHeadModel,) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
@@ -56,6 +57,8 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             relative_attention_num_buckets=8,
             dropout_rate=0.1,
             initializer_factor=0.002,
+            eos_token_ids=[1],
+            pad_token_id=0,
             scope=None,
         ):
             self.parent = parent
@@ -75,6 +78,8 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             self.dropout_rate = dropout_rate
             self.initializer_factor = initializer_factor
             self.scope = scope
+            self.eos_token_ids = eos_token_ids
+            self.pad_token_id = pad_token_id
 
         def prepare_config_and_inputs(self):
             encoder_input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -101,6 +106,9 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 relative_attention_num_buckets=self.relative_attention_num_buckets,
                 dropout_rate=self.dropout_rate,
                 initializer_factor=self.initializer_factor,
+                eos_token_ids=self.eos_token_ids,
+                bos_token_id=self.pad_token_id,
+                pad_token_id=self.pad_token_id,
             )
 
             return (

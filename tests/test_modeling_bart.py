@@ -82,7 +82,7 @@ class ModelTester:
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
-            eos_token_ids=[2],
+            eos_token_ids=self.eos_token_ids,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )

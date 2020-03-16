@@ -951,18 +951,17 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
         return outputs
 
-    def prepare_inputs_for_generation(self, decoder_input_ids, past, encoder_inputs, attention_mask):
-        assert attention_mask.shape == encoder_inputs.shape, "attn_mask.shape != encoder_input.shape: {} =! {}".format(
-            attention_mask.shape, encoder_inputs.shape
-        )
-        if past is None:  # first step
-            encoder_outputs, decoder_cached_states = None, None
+    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, **kwargs):
+        assert past is not None, "past has to be defined for encoder_outputs"
+
+        # first step, decoder_cached_states are empty
+        if not past[1]:
+            encoder_outputs, decoder_cached_states = past, None
         else:
             encoder_outputs, decoder_cached_states = past
 
-        input_ids = encoder_inputs
         return {
-            "input_ids": input_ids,  # ignored after first pass
+            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
             "decoder_cached_states": decoder_cached_states,
             "decoder_input_ids": decoder_input_ids,

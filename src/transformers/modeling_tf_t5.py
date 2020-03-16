@@ -791,3 +791,21 @@ class TFT5WithLMHeadModel(TFT5PreTrainedModel):
         decoder_outputs = (lm_logits,) + decoder_outputs[1:]
 
         return decoder_outputs + encoder_outputs
+
+    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
+        assert past is not None, "past has to be defined for encoder_outputs"
+
+        # first step
+        if type(past) is tuple:
+            encoder_hidden_states = past[0]
+        else:
+            encoder_hidden_states = past
+
+        return {
+            "inputs": input_ids,
+            "encoder_hidden_states": encoder_hidden_states,
+        }
+
+    def _reorder_cache(self, past, beam_idx):
+        # past does not have to be reorderd for T5.
+        return past

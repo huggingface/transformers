@@ -624,12 +624,12 @@ class ModelTesterMixin:
     def test_lm_head_model_random_generate(self):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict.get(
-            "input_ids", None
-        )  # TODO (PVP): ugly workaround to make code work for t5 for the moment - has to changed when t5 is fixed.
+        input_ids = inputs_dict.get("input_ids", None)
 
         if self.is_encoder_decoder:
             config.output_past = True  # needed for Bart TODO: might have to update for other encoder-decoder models
+            if "encoder_input_ids" in inputs_dict:
+                input_ids = inputs_dict["encoder_input_ids"]  # for T5
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)

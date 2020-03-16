@@ -917,22 +917,20 @@ class T5WithLMHeadModel(T5PreTrainedModel):
 
         return decoder_outputs + encoder_outputs
 
-    def prepare_inputs_for_generation(self, input_ids, past, encoder_inputs, attention_mask):
-        assert (
-            attention_mask.shape == encoder_inputs.shape
-        ), "attn_mask.shape != encoder_inputs.shape: {} =! {}".format(attention_mask.shape, encoder_inputs.shape)
-        # TODO: check how to use the following variables:
-        # - encoder_input_embeds
-        # - decoder_input_embeds
-        # - how to use decoder_hidden_states?
-        if past is None:  # first step
-            encoder_hidden_states = None
+    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
+        assert past is not None, "past has to be defined for encoder_outputs"
+
+        # first step
+        if type(past) is tuple:
+            encoder_hidden_states = past[0]
         else:
             encoder_hidden_states = past
 
         return {
-            "encoder_input_ids": encoder_inputs,  # ignored after first pass
-            "encoder_hidden_states": encoder_hidden_states,
             "decoder_input_ids": input_ids,
-            "encoder_attention_mask": attention_mask,
+            "encoder_hidden_states": encoder_hidden_states,
         }
+
+    def _reorder_cache(self, past, beam_idx):
+        # past does not have to be reorderd for T5.
+        return past

@@ -32,6 +32,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     is_encoder_decoder = True
     all_model_classes = (TFT5Model, TFT5WithLMHeadModel) if is_tf_available() else ()
+    all_generative_model_classes = (TFT5WithLMHeadModel,) if is_tf_available() else ()
 
     class TFT5ModelTester(object):
         def __init__(
@@ -51,6 +52,8 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             relative_attention_num_buckets=8,
             dropout_rate=0.1,
             initializer_factor=0.002,
+            eos_token_ids=[1],
+            pad_token_id=0,
             scope=None,
         ):
             self.parent = parent
@@ -68,6 +71,8 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             self.relative_attention_num_buckets = relative_attention_num_buckets
             self.dropout_rate = dropout_rate
             self.initializer_factor = initializer_factor
+            self.eos_token_ids = eos_token_ids
+            self.pad_token_id = pad_token_id
             self.scope = scope
 
         def prepare_config_and_inputs(self):
@@ -92,6 +97,9 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
                 relative_attention_num_buckets=self.relative_attention_num_buckets,
                 dropout_rate=self.dropout_rate,
                 initializer_factor=self.initializer_factor,
+                eos_token_ids=self.eos_token_ids,
+                bos_token_id=self.pad_token_id,
+                pad_token_id=self.pad_token_id,
             )
 
             return (config, input_ids, input_mask, token_labels)
@@ -122,12 +130,14 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
         def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
             model = TFT5WithLMHeadModel(config=config)
-            inputs = {
+            inputs_dict = {
                 "encoder_input_ids": input_ids,
                 "decoder_input_ids": input_ids,
                 "decoder_attention_mask": input_mask,
             }
-            prediction_scores, decoder_output = model(inputs)
+
+            prediction_scores, decoder_output = model(inputs_dict)
+
             result = {
                 "prediction_scores": prediction_scores.numpy(),
             }
