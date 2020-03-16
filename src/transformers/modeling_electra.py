@@ -556,8 +556,10 @@ class ElectraTransformer(ElectraPreTrainedModel):
         self.encoder = BertEncoder(config)
         self.config = config
 
-    def forward(self, embedding_output, attention_mask=None, head_mask=None):
-        hidden_states = self.embeddings_project(embedding_output)
+    def forward(self, hidden_states, attention_mask=None, head_mask=None):
+        if hidden_states.shape[-1] != self.config.hidden_size:
+            hidden_states = self.embeddings_project(hidden_states)
+
         hidden_states = self.encoder(hidden_states, attention_mask=attention_mask, head_mask=head_mask)
 
         return hidden_states
