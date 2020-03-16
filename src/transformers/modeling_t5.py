@@ -878,26 +878,26 @@ class T5WithLMHeadModel(T5PreTrainedModel):
         encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
         if encoder_hidden_states is None:
             # Convert encoder inputs in embeddings if needed
-            hidden_states = kwargs_encoder.pop("inputs_embeds", None)
-            if hidden_states is None:
+            encoder_hidden_states = kwargs_encoder.pop("inputs_embeds", None)
+            if encoder_hidden_states is None:
                 encoder_inputs_ids = kwargs_encoder.pop("input_ids")
-                hidden_states = self.shared(encoder_inputs_ids)  # Convert inputs in embeddings
+                encoder_hidden_states = self.shared(encoder_inputs_ids)  # Convert inputs in embeddings
 
-            encoder_outputs = self.encoder(hidden_states, **kwargs_encoder)
+            encoder_outputs = self.encoder(encoder_hidden_states, **kwargs_encoder)
             encoder_hidden_states = encoder_outputs[0]
         else:
             encoder_outputs = ()
 
         # Decode
         # Convert decoder inputs in embeddings if needed
-        hidden_states = kwargs_decoder.pop("inputs_embeds", None)
-        if hidden_states is None:
+        decoder_hidden_states = kwargs_decoder.pop("inputs_embeds", None)
+        if decoder_hidden_states is None:
             decoder_inputs_ids = kwargs_decoder.pop("input_ids")
-            hidden_states = self.shared(decoder_inputs_ids)
+            decoder_hidden_states = self.shared(decoder_inputs_ids)
 
         kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
         kwargs_decoder["encoder_attention_mask"] = kwargs_encoder.get("attention_mask", None)
-        decoder_outputs = self.decoder(hidden_states, **kwargs_decoder)
+        decoder_outputs = self.decoder(decoder_hidden_states, **kwargs_decoder)
 
         sequence_output = decoder_outputs[0]
         # Rescale output before projecting on vocab
@@ -916,3 +916,23 @@ class T5WithLMHeadModel(T5PreTrainedModel):
             ) + decoder_outputs  # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
         return decoder_outputs + encoder_outputs
+
+    def prepare_inputs_for_generation(self, input_ids, past, encoder_inputs, attention_mask):
+        assert attention_mask.shape == encoder_inputs.shape, "attn_mask.shape != encoder_inputs.shape: {} =! {}".format(
+            attention_mask.shape, encoder_inputs.shape
+        )
+        # TODO: check how to use the following variables:
+        # - encoder_input_embeds
+        # - decoder_input_embeds
+        # - how to use decoder_hidden_states?
+        if past is None:  # first step
+            encoder_hidden_states = None
+        else:
+            encoder_hidden_states = past
+
+        return {
+            "encoder_input_ids": encoder_inputs,  # ignored after first pass
+            "encoder_hidden_states": encoder_hidden_states,
+            "decoder_input_ids": input_ids,
+            "encoder_attention_mask": attention_mask,
+        }
