@@ -1152,8 +1152,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
             if self.config.is_encoder_decoder and do_sample is False:
-                # TODO: maybe give better naming
-                scores = self.prepare_scores_for_generation(scores, cur_len, max_length)
+                # TODO (PVP) still a bit hacky here - there might be a better solutino
+                scores = self.prepare_scores_for_generation(scores, cur_len=cur_len, max_length=max_length)
 
             # set eos token prob to zero if min_length is not reached
             if eos_token_ids is not None and cur_len < min_length:
@@ -1278,7 +1278,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             input_ids = torch.cat([input_ids, beam_tokens.unsqueeze(1)], dim=-1)
 
             # re-order internal states
-            if past:
+            # TODO: The T5 is obviously an ugly hack to make beam search work for T5 for the moment
+            if past is not None and not (hasattr(self.config, "architectures") and self.config.architectures[0] == "T5WithLMHeadModel"):
                 past = self._reorder_cache(past, beam_idx)
 
             # extend attention_mask for new generated input if only decoder
