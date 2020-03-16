@@ -191,7 +191,6 @@ class BaseTransformer(pl.LightningModule):
 
 
 class LoggingCallback(pl.Callback):
-
     def on_validation_end(self, trainer, pl_module):
         logger.info("***** Validation results *****")
         if pl_module.is_logger():
@@ -283,7 +282,7 @@ def generic_train(model, args):
         early_stop_callback=False,
         gradient_clip_val=args.max_grad_norm,
         checkpoint_callback=checkpoint_callback,
-        callbacks=[LoggingCallback()]
+        callbacks=[LoggingCallback()],
     )
 
     if args.fp16:
