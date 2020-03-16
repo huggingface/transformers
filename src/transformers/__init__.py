@@ -221,14 +221,6 @@ if is_torch_available():
         RobertaForQuestionAnswering,
         ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
-    from .modeling_camembert import (
-        CamembertForMaskedLM,
-        CamembertModel,
-        CamembertForSequenceClassification,
-        CamembertForTokenClassification,
-        CamembertForQuestionAnswering,
-        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-    )
     from .modeling_distilbert import (
         DistilBertPreTrainedModel,
         DistilBertForMaskedLM,
@@ -399,6 +391,13 @@ if is_tf_available():
         TFCamembertForSequenceClassification,
         TFCamembertForTokenClassification,
         TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
+
+    from .modeling_tf_flaubert import (
+        TFFlaubertModel,
+        TFFlaubertWithLMHeadModel,
+        TFFlaubertForSequenceClassification,
+        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
     from .modeling_tf_distilbert import (
