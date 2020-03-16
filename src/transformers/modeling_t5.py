@@ -933,5 +933,5 @@ class T5WithLMHeadModel(T5PreTrainedModel):
         }
 
     def _reorder_cache(self, past, beam_idx):
-        # past does not have to be reorderd for T5.
+        # past does not have to be re-ordered for T5.
         return past
