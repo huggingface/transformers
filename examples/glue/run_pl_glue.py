@@ -38,7 +38,7 @@ class GLUETransformer(BaseTransformer):
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = batch[2] if self.hparams.model_type in ["bert", "xlnet", "albert"] else None
 
-        outputs = self.forward(**inputs)
+        outputs = self(**inputs)
         loss = outputs[0]
 
         tensorboard_logs = {"loss": loss, "rate": self.lr_scheduler.get_last_lr()[-1]}
@@ -110,7 +110,7 @@ class GLUETransformer(BaseTransformer):
 
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = batch[2] if self.hparams.model_type in ["bert", "xlnet", "albert"] else None
-        outputs = self.forward(**inputs)
+        outputs = self(**inputs)
         tmp_eval_loss, logits = outputs[:2]
         preds = logits.detach().cpu().numpy()
         out_label_ids = inputs["labels"].detach().cpu().numpy()
