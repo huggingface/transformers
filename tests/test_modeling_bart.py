@@ -292,7 +292,7 @@ class BartHeadTests(unittest.TestCase):
             no_repeat_ngram_size=3,
             max_length=max_length,
         )
-        self.assertEqual(new_input_ids.shape, (input_ids.shape[0], max_length - 1))
+        self.assertEqual(new_input_ids.shape, (input_ids.shape[0], max_length))
         # TODO(SS): uneven length batches, empty inputs
 
     def test_shift_tokens_right(self):
