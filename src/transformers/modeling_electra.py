@@ -4,7 +4,7 @@ import torch
 
 from transformers import PreTrainedModel, BertConfig, ElectraConfig
 from transformers.activations import get_activation
-from .modeling_bert import BertModel, BertEmbeddings, BertLayerNorm, BertEncoder
+from .modeling_bert import BertModel, BertEmbeddings, BertLayerNorm, BertEncoder, BertPreTrainedModel
 import torch.nn as nn
 
 import logging
@@ -181,21 +181,7 @@ class ElectraGeneratorPredictions(nn.Module):
         return hidden_states
 
 
-class ElectraMainLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        self.encoder = BertEncoder(config)
-
-    def forward(self, embedding_output, attention_mask=None, head_mask=None):
-        encoder_outputs, all_selves, attention_scores = self.encoder(
-            embedding_output, attention_mask=attention_mask, head_mask=head_mask,
-        )
-
-        return encoder_outputs
-
-
-class ElectraPreTrainedModel(PreTrainedModel):
+class ElectraPreTrainedModel(BertPreTrainedModel):
 
     config_class = ElectraConfig
     # pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
@@ -290,9 +276,13 @@ class ElectraModel(ElectraPreTrainedModel):
 
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+        self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
 
     def get_output_embeddings(self):
         return self.generator_lm_head
@@ -388,12 +378,24 @@ class ElectraGenerator(ElectraPreTrainedModel):
 
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+        self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
     def get_output_embeddings(self):
         return self.generator_lm_head
+
+    def _prune_heads(self, heads_to_prune):
+        """ Prunes heads of the model.
+            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+            See base class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.generator.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(
         self,
@@ -461,6 +463,8 @@ class ElectraGenerator(ElectraPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.config.vocab_size), masked_lm_ids.view(-1))
             output = output + (logits, probs, predictions, loss)
 
+        output += generator_hidden_states[1:]
+
         return output  # generator_sequence_output, generator_pooled_output, (logits, probs, preds, loss)
 
 
@@ -471,9 +475,21 @@ class ElectraDiscriminator(ElectraPreTrainedModel):
         self.embeddings = ElectraEmbeddings(config)
         self.discriminator = ElectraTransformer(config)
         self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
+        self.init_weights()
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
+    def _prune_heads(self, heads_to_prune):
+        """ Prunes heads of the model.
+            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+            See base class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.discriminator.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(
         self,
@@ -523,6 +539,8 @@ class ElectraDiscriminator(ElectraPreTrainedModel):
             )
 
             output += (probs, preds, loss)
+
+        output += discriminator_hidden_states[1:]
 
         return output  # (probs, preds, loss), discriminator_hidden_states
 

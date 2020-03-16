@@ -38,7 +38,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            ElectraModel,
+            # ElectraModel,
             ElectraGenerator,
             ElectraDiscriminator
         )
@@ -155,9 +155,9 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
                 list(result["discriminator_sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
             self.parent.assertListEqual(
-                list(result["generator_sequence_output"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["generator_sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
-            self.parent.assertListEqual(list(result["generator_pooled_output"].size()), [self.batch_size, self.vocab_size])
+            self.parent.assertListEqual(list(result["generator_pooled_output"].size()), [self.batch_size, self.hidden_size])
 
         def create_and_check_electra_generator(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_labels
