@@ -929,7 +929,7 @@ class T5WithLMHeadModel(T5PreTrainedModel):
         return {
             "decoder_input_ids": input_ids,
             "encoder_hidden_states": encoder_hidden_states,
-            "encoder_attention_mask": attention_mask
+            "encoder_attention_mask": attention_mask,
         }
 
     def _reorder_cache(self, past, beam_idx):
