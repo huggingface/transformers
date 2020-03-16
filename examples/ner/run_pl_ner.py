@@ -122,14 +122,8 @@ class NERTransformer(BaseTransformer):
             "f1": f1_score(out_label_list, preds_list),
         }
 
-        if self.is_logger():
-            logger.info("***** Eval results *****")
-            for key in sorted(results.keys()):
-                logger.info("  %s = %s", key, str(results[key]))
-
-        tensorboard_logs = results
         ret = {k: v for k, v in results.items()}
-        ret["log"] = tensorboard_logs
+        ret["log"] = results
         return ret, preds_list, out_label_list
 
     def validation_end(self, outputs):
@@ -143,32 +137,7 @@ class NERTransformer(BaseTransformer):
         # updating to test_epoch_end instead of deprecated test_end
         ret, predictions, targets = self._eval_end(outputs)
 
-        if self.is_logger():
-            # Write output to a file:
-            # Save results
-            output_test_results_file = os.path.join(self.hparams.output_dir, "test_results.txt")
-            with open(output_test_results_file, "w") as writer:
-                for key in sorted(ret.keys()):
-                    if key != "log":
-                        writer.write("{} = {}\n".format(key, str(ret[key])))
-            # Save predictions
-            output_test_predictions_file = os.path.join(self.hparams.output_dir, "test_predictions.txt")
-            with open(output_test_predictions_file, "w") as writer:
-                with open(os.path.join(self.hparams.data_dir, "test.txt"), "r") as f:
-                    example_id = 0
-                    for line in f:
-                        if line.startswith("-DOCSTART-") or line == "" or line == "\n":
-                            writer.write(line)
-                            if not predictions[example_id]:
-                                example_id += 1
-                        elif predictions[example_id]:
-                            output_line = line.split()[0] + " " + predictions[example_id].pop(0) + "\n"
-                            writer.write(output_line)
-                        else:
-                            logger.warning(
-                                "Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0]
-                            )
-        # Converting to the dic required by pl
+        # Converting to the dict required by pl
         # https://github.com/PyTorchLightning/pytorch-lightning/blob/master/\
         # pytorch_lightning/trainer/logging.py#L139
         logs = ret["log"]
@@ -222,6 +191,6 @@ if __name__ == "__main__":
         # pl use this format to create a checkpoint:
         # https://github.com/PyTorchLightning/pytorch-lightning/blob/master\
         # /pytorch_lightning/callbacks/model_checkpoint.py#L169
-        checkpoints = list(sorted(glob.glob(args.output_dir + "/checkpointepoch=*.ckpt", recursive=True)))
+        checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
         NERTransformer.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)

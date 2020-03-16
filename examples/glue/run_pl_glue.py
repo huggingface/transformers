@@ -100,6 +100,7 @@ class GLUETransformer(BaseTransformer):
 
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = batch[2] if self.hparams.model_type in ["bert", "xlnet", "albert"] else None
+
         outputs = self(**inputs)
         tmp_eval_loss, logits = outputs[:2]
         preds = logits.detach().cpu().numpy()
@@ -122,14 +123,8 @@ class GLUETransformer(BaseTransformer):
 
         results = {**{"val_loss": val_loss_mean}, **compute_metrics(self.hparams.task, preds, out_label_ids)}
 
-        if self.is_logger():
-            logger.info("***** Eval results *****")
-            for key in sorted(results.keys()):
-                logger.info("  %s = %s", key, str(results[key]))
-
-        tensorboard_logs = results
         ret = {k: v for k, v in results.items()}
-        ret["log"] = tensorboard_logs
+        ret["log"] = results
         return ret, preds_list, out_label_list
 
     def validation_end(self, outputs: list) -> dict:
@@ -140,15 +135,6 @@ class GLUETransformer(BaseTransformer):
     def test_epoch_end(self, outputs):
         # updating to test_epoch_end instead of deprecated test_end
         ret, predictions, targets = self._eval_end(outputs)
-
-        if self.is_logger():
-            # Write output to a file:
-            # Save results
-            output_test_results_file = os.path.join(self.hparams.output_dir, "test_results.txt")
-            with open(output_test_results_file, "w") as writer:
-                for key in sorted(ret.keys()):
-                    if key != "log":
-                        writer.write("{} = {}\n".format(key, str(ret[key])))
 
         # Converting to the dic required by pl
         # https://github.com/PyTorchLightning/pytorch-lightning/blob/master/\
