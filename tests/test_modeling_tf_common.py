@@ -422,16 +422,16 @@ class TFModelTesterMixin:
 
             if config.bos_token_id is None:
                 with self.assertRaises(AssertionError):
-                    model.generate(max_length=5)
+                    model.generate(do_sample=True, max_length=5)
                 # batch_size = 1
-                self._check_generated_tokens(model.generate(input_ids))
+                self._check_generated_tokens(model.generate(input_ids, do_sample=True))
                 # batch_size = 1, num_beams > 1
-                self._check_generated_tokens(model.generate(input_ids, num_beams=3))
+                self._check_generated_tokens(model.generate(input_ids, do_sample=True, num_beams=3))
             else:
                 # batch_size = 1
-                self._check_generated_tokens(model.generate(max_length=5))
+                self._check_generated_tokens(model.generate(do_sample=True, max_length=5))
                 # batch_size = 1, num_beams > 1
-                self._check_generated_tokens(model.generate(max_length=5, num_beams=3))
+                self._check_generated_tokens(model.generate(do_sample=True, max_length=5, num_beams=3))
 
             with self.assertRaises(AssertionError):
                 # generating multiple sequences when greedy no beam generation
@@ -443,12 +443,14 @@ class TFModelTesterMixin:
                 model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 
             # batch_size > 1, sample
-            self._check_generated_tokens(model.generate(input_ids, num_return_sequences=3))
+            self._check_generated_tokens(model.generate(input_ids, do_sample=True, num_return_sequences=3))
             # batch_size > 1, greedy
             self._check_generated_tokens(model.generate(input_ids, do_sample=False))
 
             # batch_size > 1, num_beams > 1, sample
-            self._check_generated_tokens(model.generate(input_ids, num_beams=3, num_return_sequences=3,))
+            self._check_generated_tokens(
+                model.generate(input_ids, do_sample=True, num_beams=3, num_return_sequences=3,)
+            )
             # batch_size > 1, num_beams > 1, greedy
             self._check_generated_tokens(
                 model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3)
