@@ -792,7 +792,7 @@ class TFT5WithLMHeadModel(TFT5PreTrainedModel):
 
         return decoder_outputs + encoder_outputs
 
-    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
 
         # first step
@@ -804,6 +804,7 @@ class TFT5WithLMHeadModel(TFT5PreTrainedModel):
         return {
             "inputs": input_ids,
             "encoder_hidden_states": encoder_hidden_states,
+            "encoder_attention_mask": attention_mask
         }
 
     def _reorder_cache(self, past, beam_idx):
