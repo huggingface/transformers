@@ -994,6 +994,12 @@ class BartForConditionalGeneration(PretrainedBartModel):
         past = ((new_enc_out, new_enc_mask), reordered_past)
         return past
 
+    def encode(self, encoder_input_ids, **kwargs):
+        # get only encoder output ids
+        encoder_output_ids = self.model.encoder(encoder_input_ids, **kwargs)
+
+        return encoder_output_ids
+
     def get_output_embeddings(self):
         return self.lm_head
 

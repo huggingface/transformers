@@ -912,21 +912,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         if self.config.is_encoder_decoder:
             assert bos_token_id is not None, "Encoder Decoder Models need to have a bos_token_id"
-
-            # only need to generate encoder_outputs once for encoder-decoder
-            if hasattr(self, "encoder"):
-                encoder = self.encoder
-            elif hasattr(self, "model") and hasattr(self.model, "encoder"):
-                encoder = self.model.encoder
-            else:
-                raise NotImplementedError("{} does not seem to have an encoder".format(self))
-
-            # T5 needs to convert to embeddings first
-            if hasattr(self, "shared"):
-                input_ids = self.shared(input_ids)
+            assert hasattr(self, "encode"), "{} should have a 'encode' function defined".format(self)
+            assert callable(self.encode), "{} should be a method".format(self.encode)
 
             # get encoder outputs once and store them
-            encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
+            encoder_outputs = self.encode(input_ids, attention_mask=attention_mask)
 
             # create empty decoder_input_ids
             input_ids = torch.full(

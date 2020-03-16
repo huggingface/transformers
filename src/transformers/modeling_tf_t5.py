@@ -807,6 +807,13 @@ class TFT5WithLMHeadModel(TFT5PreTrainedModel):
             "encoder_attention_mask": attention_mask,
         }
 
+    def encode(self, encoder_input_ids, **kwargs):
+        # get only encoder output ids
+        encoder_embeddings = self.shared(encoder_input_ids)
+        encoder_output_ids = self.encoder(encoder_embeddings, **kwargs)
+
+        return encoder_output_ids
+
     def _reorder_cache(self, past, beam_idx):
         # past does not have to be re-ordered for T5.
         return past
