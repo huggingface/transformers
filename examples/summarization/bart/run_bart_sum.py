@@ -7,10 +7,9 @@ import random
 import numpy as np
 import pytorch_lightning as pl
 import torch
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from transformers import AdamW, BartTokenizer, get_linear_schedule_with_warmup
+from transformers import AdamW, BartConfig, BartTokenizer, get_linear_schedule_with_warmup
 from transformers.modeling_bart import BartForConditionalGeneration
 from utils import CnnDailyMailDataset, add_generic_args
 
@@ -22,33 +21,48 @@ class BartSystem(pl.LightningModule):
     def __init__(self, hparams):
         super(BartSystem, self).__init__()
         self.hparams = hparams
-        self.bart = BartForConditionalGeneration.from_pretrained("bart-large", output_past=True)
 
-        self.tokenizer = BartTokenizer.from_pretrained("bart-large")
-        self.criterion = torch.nn.CrossEntropyLoss()
+        config = BartConfig.from_pretrained(
+            self.hparams.config_name if self.hparams.config_name else self.hparams.model_name_or_path,
+            cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
+        )
+        tokenizer = BartTokenizer.from_pretrained(
+            self.hparams.tokenizer_name if self.hparams.tokenizer_name else self.hparams.model_name_or_path,
+            cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
+        )
+        model = BartForConditionalGeneration.from_pretrained(
+            self.hparams.model_name_or_path,
+            from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
+            config=config,
+            cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
+        )
+        self.config, self.tokenizer, self.model = config, tokenizer, model
 
-    def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attention_mask=None):
-        return self.bart(
+    def forward(
+        self, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attention_mask=None, lm_labels=None
+    ):
+        return self.model(
             input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            lm_labels=lm_labels,
         )
 
     def _step(self, batch):
-        outputs = self.forward(
-            batch["source_ids"], attention_mask=batch["source_mask"], decoder_input_ids=batch["target_ids"]
+        y = batch["target_ids"]
+        lm_labels = y.clone()
+        lm_labels[y == self.tokenizer.pad_token_id] = -100
+
+        outputs = self(
+            batch["source_ids"],
+            attention_mask=batch["source_mask"],
+            decoder_input_ids=batch["target_ids"],
+            lm_labels=lm_labels,
         )
 
-        out = outputs[0]
+        loss = outputs[0]
 
-        logits = F.log_softmax(out, dim=-1)
-        y = batch["target_ids"]
-        norm = (y != self.tokenizer.pad_token_id).data.sum()
-
-        targets = y.clone()
-        targets[y == self.tokenizer.pad_token_id] = -100
-        loss = self.criterion(logits.contiguous().view(-1, logits.size(-1)), targets.contiguous().view(-1)) / norm
         return loss
 
     def training_step(self, batch, batch_idx):
@@ -58,12 +72,12 @@ class BartSystem(pl.LightningModule):
         return {"loss": loss, "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
-        self.bart.model.decoder.generation_mode = False  # to be able to get loss
+        self.model.model.decoder.generation_mode = False  # to be able to get loss
         loss = self._step(batch)
-        generated_ids = self.bart.generate(
+        generated_ids = self.model.generate(
             batch["source_ids"],
             attention_mask=batch["source_mask"],
-            num_beams=5,
+            num_beams=4,
             max_length=40,
             repetition_penalty=3.0,
         )
@@ -156,6 +170,28 @@ class BartSystem(pl.LightningModule):
         )
 
         parser.add_argument(
+            "--model_name_or_path",
+            type=str,
+            default="bart-large",
+            help="Path to pre-trained model or shortcut name for BART",
+        )
+        parser.add_argument(
+            "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name"
+        )
+        parser.add_argument(
+            "--tokenizer_name",
+            default="",
+            type=str,
+            help="Pretrained tokenizer name or path if not the same as model_name",
+        )
+        parser.add_argument(
+            "--cache_dir",
+            default="",
+            type=str,
+            help="Where do you want to store the pre-trained models downloaded from s3",
+        )
+
+        parser.add_argument(
             "--data_dir",
             default=None,
             type=str,
@@ -244,5 +280,5 @@ if __name__ == "__main__":
         # https://github.com/PyTorchLightning/pytorch-lightning/blob/master\
         # /pytorch_lightning/callbacks/model_checkpoint.py#L169
         checkpoints = list(sorted(glob.glob(args.output_dir + "/checkpointepoch=*.ckpt", recursive=True)))
-        BartSystem.load_from_checkpoint(checkpoints[-1])
+        BartSystem.load_from_checkpoint("checkpointcheckpoint_ckpt_epoch_0.ckpt")
         trainer.test(model)
