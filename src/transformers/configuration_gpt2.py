@@ -59,6 +59,8 @@ class GPT2Config(PretrainedConfig):
                 Number of hidden layers in the Transformer encoder.
             n_head (:obj:`int`, optional, defaults to 12):
                 Number of attention heads for each attention layer in the Transformer encoder.
+            activation_function (:obj:`str`, optional, defaults to 'gelu'):
+                Activation function selected in the list ["relu", "swish", "gelu", "tanh", "gelu_new"].
             resid_pdrop (:obj:`float`, optional, defaults to 0.1):
                 The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
             embd_pdrop (:obj:`int`, optional, defaults to 0.1):
@@ -125,6 +127,7 @@ class GPT2Config(PretrainedConfig):
         n_embd=768,
         n_layer=12,
         n_head=12,
+        activation_function="gelu_new",
         resid_pdrop=0.1,
         embd_pdrop=0.1,
         attn_pdrop=0.1,
@@ -147,6 +150,7 @@ class GPT2Config(PretrainedConfig):
         self.n_embd = n_embd
         self.n_layer = n_layer
         self.n_head = n_head
+        self.activation_function = activation_function
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
         self.attn_pdrop = attn_pdrop
