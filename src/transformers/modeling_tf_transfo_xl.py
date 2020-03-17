@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from .configuration_transfo_xl import TransfoXLConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask, TFLogUniformSampler, sample_logits
+from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 
 
@@ -762,25 +762,18 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         super().__init__(config)
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")
         self.sample_softmax = config.sample_softmax
-        # use sampled softmax
-        if config.sample_softmax > 0:
-            self.out_layer = TFTransfoXLLMHead(config, self.transformer.word_emb.weight, name="out_layer")
-            self.sampler = TFLogUniformSampler(config.vocab_size, config.sample_softmax)
-        # use adaptive softmax (including standard softmax)
-        else:
-            self.crit = TFAdaptiveSoftmaxMask(
-                config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val, name="crit"
-            )
+        assert self.sample_softmax <= 0, "Sampling from the softmax is not implemented yet. Please look at issue: #3310: https://github.com/huggingface/transformers/issues/3310"
+
+        self.crit = TFAdaptiveSoftmaxMask(
+            config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val, name="crit"
+        )
 
     def get_output_embeddings(self):
         """ Double-check if you are using adaptive softmax.
         """
-        if self.sample_softmax > 0:
-            return self.out_layer
-        else:
-            if len(self.crit.out_layers) > 0:
-                return self.crit.out_layers[-1]
-            return None
+        if len(self.crit.out_layers) > 0:
+            return self.crit.out_layers[-1]
+        return None
 
     def reset_length(self, tgt_len, ext_len, mem_len):
         self.transformer.reset_length(tgt_len, ext_len, mem_len)
@@ -851,17 +844,8 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         pred_hid = last_hidden[:, -tgt_len:]
         outputs = transformer_outputs[1:]
 
-        if self.sample_softmax > 0 and training:
-            assert self.config.tie_weight
-            logit = sample_logits(self.transformer.word_emb, self.out_layer.bias, labels, pred_hid, self.sampler)
-            softmax_output = -tf.nn.log_softmax(logit, -1)[:, :, 0]
-            outputs = [softmax_output] + outputs
-            if labels is not None:
-                # TODO: This is not implemented
-                raise NotImplementedError
-        else:
-            softmax_output = self.crit([pred_hid, labels], training=training)
-            outputs = [softmax_output] + outputs
+        softmax_output = self.crit([pred_hid, labels], training=training)
+        outputs = [softmax_output] + outputs
 
         return outputs  # logits, new_mems, (all hidden states), (all attentions)
 

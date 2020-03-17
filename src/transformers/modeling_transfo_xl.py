@@ -27,7 +27,7 @@ import torch.nn.functional as F
 
 from .configuration_transfo_xl import TransfoXLConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_transfo_xl_utilities import LogUniformSampler, ProjectedAdaptiveLogSoftmax, sample_logits
+from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 from .modeling_utils import PreTrainedModel
 
 
@@ -809,43 +809,35 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         super().__init__(config)
         self.transformer = TransfoXLModel(config)
         self.sample_softmax = config.sample_softmax
-        # use sampled softmax
-        if config.sample_softmax > 0:
-            self.out_layer = nn.Linear(config.d_model, config.vocab_size)
-            self.sampler = LogUniformSampler(config.vocab_size, config.sample_softmax)
-        # use adaptive softmax (including standard softmax)
-        else:
-            self.crit = ProjectedAdaptiveLogSoftmax(
-                config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val
-            )
+
+        assert self.sample_softmax <= 0, "Sampling from the softmax is not implemented yet. Please look at issue: #3310: https://github.com/huggingface/transformers/issues/3310"
+
+        self.crit = ProjectedAdaptiveLogSoftmax(
+            config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val
+        )
+
         self.init_weights()
 
     def tie_weights(self):
         """
         Run this to be sure output and input (adaptive) softmax weights are tied
         """
-        # sampled softmax
-        if self.sample_softmax > 0:
-            if self.config.tie_weight:
-                # TODO: this does not make sense -> transformer.word_emb.weight does not exist
-                self.out_layer.weight = self.transformer.word_emb.weight
-        # adaptive softmax (including standard softmax)
-        else:
-            if self.config.tie_weight:
-                for i in range(len(self.crit.out_layers)):
-                    self._tie_or_clone_weights(self.crit.out_layers[i], self.transformer.word_emb.emb_layers[i])
-            if self.config.tie_projs:
-                for i, tie_proj in enumerate(self.config.tie_projs):
-                    if tie_proj and self.config.div_val == 1 and self.config.d_model != self.config.d_embed:
-                        if self.config.torchscript:
-                            self.crit.out_projs[i] = nn.Parameter(self.transformer.word_emb.emb_projs[0].clone())
-                        else:
-                            self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[0]
-                    elif tie_proj and self.config.div_val != 1:
-                        if self.config.torchscript:
-                            self.crit.out_projs[i] = nn.Parameter(self.transformer.word_emb.emb_projs[i].clone())
-                        else:
-                            self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[i]
+
+        if self.config.tie_weight:
+            for i in range(len(self.crit.out_layers)):
+                self._tie_or_clone_weights(self.crit.out_layers[i], self.transformer.word_emb.emb_layers[i])
+        if self.config.tie_projs:
+            for i, tie_proj in enumerate(self.config.tie_projs):
+                if tie_proj and self.config.div_val == 1 and self.config.d_model != self.config.d_embed:
+                    if self.config.torchscript:
+                        self.crit.out_projs[i] = nn.Parameter(self.transformer.word_emb.emb_projs[0].clone())
+                    else:
+                        self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[0]
+                elif tie_proj and self.config.div_val != 1:
+                    if self.config.torchscript:
+                        self.crit.out_projs[i] = nn.Parameter(self.transformer.word_emb.emb_projs[i].clone())
+                    else:
+                        self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[i]
 
     def reset_length(self, tgt_len, ext_len, mem_len):
         self.transformer.reset_length(tgt_len, ext_len, mem_len)
@@ -909,22 +901,14 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]
         outputs = transformer_outputs[1:]
-        if self.sample_softmax > 0 and self.training:
-            assert self.config.tie_weight
-            logit = sample_logits(self.transformer.word_emb, self.out_layer.bias, labels, pred_hid, self.sampler)
-            softmax_output = -F.log_softmax(logit, -1)[:, :, 0]
+
+        softmax_output = self.crit(pred_hid.view(-1, pred_hid.size(-1)), labels)
+        if labels is None:
+            softmax_output = softmax_output.view(bsz, tgt_len, -1)
             outputs = [softmax_output] + outputs
-            if labels is not None:
-                # TODO: This is not implemented
-                raise NotImplementedError
         else:
-            softmax_output = self.crit(pred_hid.view(-1, pred_hid.size(-1)), labels)
-            if labels is None:
-                softmax_output = softmax_output.view(bsz, tgt_len, -1)
-                outputs = [softmax_output] + outputs
-            else:
-                softmax_output = softmax_output.view(bsz, tgt_len)
-                outputs = [softmax_output, None] + outputs
+            softmax_output = softmax_output.view(bsz, tgt_len)
+            outputs = [softmax_output, None] + outputs
 
         return outputs  # (loss), logits or None if labels is not None (speed up adaptive softmax), new_mems, (all hidden states), (all attentions)
 
