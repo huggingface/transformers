@@ -460,8 +460,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         input_ids=None,
         max_length=None,
         min_length=None,
-        do_sample=True,
-        early_stopping=False,
+        do_sample=None,
+        early_stopping=None,
         num_beams=None,
         temperature=None,
         top_k=None,
@@ -494,7 +494,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 The max length of the sequence to be generated.  Between 1 and infinity. Default to 20.
 
             do_sample: (`optional`) bool
-                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `True`.
+                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False`.
 
             num_beams: (`optional`) int
                 Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
