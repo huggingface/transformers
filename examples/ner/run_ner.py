@@ -31,16 +31,16 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from transformers import (
+    ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
     WEIGHTS_NAME,
     AdamW,
     AutoConfig,
     AutoModelForTokenClassification,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
-    ALL_PRETRAINED_MODEL_ARCHIVE_MAP
 )
-from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 from transformers.modeling_auto import MODEL_MAPPING
+from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
 
 try:
@@ -384,7 +384,7 @@ def main():
         default=None,
         type=str,
         required=True,
-        help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
+        help="Model type selected in the list: " + ", ".join(MODEL_CLASSES),
     )
     parser.add_argument(
         "--model_name_or_path",
