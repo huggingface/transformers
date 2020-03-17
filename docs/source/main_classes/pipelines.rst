@@ -61,3 +61,8 @@ QuestionAnsweringPipeline
 
 .. autoclass:: transformers.QuestionAnsweringPipeline
 
+
+SummarizationPipeline
+==========================================
+
+.. autoclass:: transformers.SummarizationPipeline

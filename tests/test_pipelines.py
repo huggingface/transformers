@@ -247,6 +247,16 @@ class MonoColumnInputTestCase(unittest.TestCase):
                 expected_check_keys=["sequence"],
             )
 
+    @require_torch
+    def test_summarization(self):
+        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        invalid_inputs = [4, "<mask>"]
+        mandatory_keys = ["summary_text"]
+        nlp = pipeline(task="summarization")
+        self._test_mono_column_pipeline(
+            nlp, valid_inputs, invalid_inputs, mandatory_keys,
+        )
+
 
 class MultiColumnInputTestCase(unittest.TestCase):
     def _test_multicolumn_pipeline(self, nlp, valid_inputs: list, invalid_inputs: list, output_keys: Iterable[str]):
