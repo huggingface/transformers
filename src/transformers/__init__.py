@@ -19,6 +19,18 @@ else:
 
 import logging
 
+# Benchmarking
+from .benchmark_utils import (
+    Frame,
+    Memory,
+    MemoryState,
+    MemorySummary,
+    MemoryTrace,
+    UsedMemoryState,
+    bytes_to_human_readable,
+    start_memory_tracing,
+    stop_memory_tracing,
+)
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
 from .configuration_bart import BartConfig
