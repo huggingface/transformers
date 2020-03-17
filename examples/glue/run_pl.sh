@@ -1,5 +1,3 @@
-# Copy over transformer base
-cp -n ../transformer_base.py ./transformer_base.py
 # Install newest ptl.
 pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
 # Install example requirements
@@ -20,7 +18,11 @@ export SEED=2
 export OUTPUT_DIR_NAME=mrpc-pl-bert
 export CURRENT_DIR=${PWD}
 export OUTPUT_DIR=${CURRENT_DIR}/${OUTPUT_DIR_NAME}
+
+# Make output directory if it doesn't exist
 mkdir -p $OUTPUT_DIR
+# Add parent directory to python path to access transformer_base.py
+export PYTHONPATH="../":"${PYTHONPATH}"
 
 python3 run_pl_glue.py --data_dir $DATA_DIR \
 --model_type $MODEL_TYPE \
