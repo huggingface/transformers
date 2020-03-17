@@ -272,7 +272,8 @@ class ElectraModel(ElectraPreTrainedModel):
 
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        # self.init_weights()
+        self.generator_lm_head.bias = self.bias
+        self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -341,8 +342,7 @@ class ElectraModel(ElectraPreTrainedModel):
             hidden_states = self.generator_predictions(relevant_hidden)
 
             # Project to the vocabulary
-            hidden_states = torch.matmul(hidden_states, self.embeddings.word_embeddings.weight.T)
-            hidden_states = hidden_states + self.bias
+            hidden_states = self.generator_lm_head(hidden_states)
 
             # Compute logits, probabilities and predictions
             logits = hidden_states
@@ -377,7 +377,8 @@ class ElectraGenerator(ElectraPreTrainedModel):
 
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        # self.init_weights()
+        self.generator_lm_head.bias = self.bias
+        self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -447,8 +448,7 @@ class ElectraGenerator(ElectraPreTrainedModel):
             hidden_states = self.generator_predictions(relevant_hidden)
 
             # Project to the vocabulary
-            hidden_states = torch.matmul(hidden_states, self.embeddings.word_embeddings.weight.T)
-            hidden_states = hidden_states + self.bias
+            hidden_states = self.generator_lm_head(hidden_states)
 
             # Compute logits, probabilities and predictions
             logits = hidden_states
@@ -475,7 +475,7 @@ class ElectraDiscriminator(ElectraPreTrainedModel):
         self.embeddings = ElectraEmbeddings(config)
         self.discriminator = ElectraTransformer(config)
         self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
-        # self.init_weights()
+        self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings

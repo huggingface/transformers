@@ -131,17 +131,63 @@ class ElectraConfig(PretrainedConfig):
     def get_discriminator_config(self):
         configuration = ElectraConfig()
         configuration.__dict__.update(self.__dict__.copy())
-        configuration.hidden_size = self.discriminator_hidden_size
-        configuration.num_hidden_layers = self.discriminator_num_hidden_layers
-        configuration.num_attention_heads = self.discriminator_num_attention_heads
-        configuration.intermediate_size = self.discriminator_intermediate_size
+        configuration._hidden_size = self.discriminator_hidden_size
+        configuration._num_hidden_layers = self.discriminator_num_hidden_layers
+        configuration._num_attention_heads = self.discriminator_num_attention_heads
+        configuration._intermediate_size = self.discriminator_intermediate_size
         return configuration
 
     def get_generator_config(self):
         configuration = ElectraConfig()
         configuration.__dict__.update(self.__dict__.copy())
-        configuration.hidden_size = self.generator_hidden_size
-        configuration.num_hidden_layers = self.generator_num_hidden_layers
-        configuration.num_attention_heads = self.generator_num_attention_heads
-        configuration.intermediate_size = self.generator_intermediate_size
+        configuration._hidden_size = self.generator_hidden_size
+        configuration._num_hidden_layers = self.generator_num_hidden_layers
+        configuration._num_attention_heads = self.generator_num_attention_heads
+        configuration._intermediate_size = self.generator_intermediate_size
         return configuration
+
+    @property
+    def hidden_size(self):
+        if hasattr(self, "_hidden_size"):
+            return self._hidden_size
+        else:
+            logger.warning(
+                "The hidden size for this configuration is ambiguous as it holds information for both the "
+                "ELECTRA generator and discriminator. The value returned is the discriminator hidden size."
+            )
+            return self.discriminator_hidden_size
+
+    @property
+    def num_hidden_layers(self):
+        if hasattr(self, "_num_hidden_layers"):
+            return self._num_hidden_layers
+        else:
+            logger.warning(
+                "The number of hidden layers for this configuration is ambiguous as it holds information for both the "
+                "ELECTRA generator and discriminator. The value returned is the discriminator number of hidden layers."
+            )
+            return self.discriminator_num_hidden_layers
+
+    @property
+    def num_attention_heads(self):
+        if hasattr(self, "_num_attention_heads"):
+            return self._num_attention_heads
+        else:
+            logger.warning(
+                "The number of attention heads for this configuration is ambiguous as it holds information for both the"
+                " ELECTRA generator and discriminator. The value returned is the discriminator number of attention "
+                "heads."
+            )
+            return self.discriminator_num_attention_heads
+
+    @property
+    def intermediate_size(self):
+        if hasattr(self, "_intermediate_size"):
+            return self._intermediate_size
+        else:
+            logger.warning(
+                "The intermediate size for this configuration is ambiguous as it holds information for both the "
+                "ELECTRA generator and discriminator. The value returned is the discriminator intermediate size."
+            )
+            return self.discriminator_intermediate_size
+
