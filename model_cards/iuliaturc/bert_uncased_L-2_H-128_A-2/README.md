@@ -1,3 +1,7 @@
+---
+thumbnail: https://huggingface.co/front/thumbnails/google.png
+---
+
 BERT Miniatures
 ===
 
