@@ -1,7 +1,5 @@
 ---
-
 language: swedish
-
 ---
 
 # BERTSSON Models
