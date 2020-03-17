@@ -34,6 +34,7 @@ from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
 
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP
     ]
     for key, value, in pretrained_map.items()
 )
@@ -79,6 +81,7 @@ CONFIG_MAPPING = OrderedDict(
         ("xlnet", XLNetConfig,),
         ("xlm", XLMConfig,),
         ("ctrl", CTRLConfig,),
+        ("electra", ElectraConfig,),
     ]
 )
 
@@ -133,6 +136,7 @@ class AutoConfig:
             - contains `xlm`: :class:`~transformers.XLMConfig` (XLM model)
             - contains `ctrl` : :class:`~transformers.CTRLConfig` (CTRL model)
             - contains `flaubert` : :class:`~transformers.FlaubertConfig` (Flaubert model)
+            - contains `electra` : :class:`~transformers.ElectraConfig` (ELECTRA model)
 
 
         Args:

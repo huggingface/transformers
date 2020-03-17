@@ -24,7 +24,7 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 if is_torch_available():
-    from transformers import ElectraConfig, ElectraModel, ElectraDiscriminator, ElectraGenerator
+    from transformers import ElectraConfig, ElectraForPreTraining, ElectraModel, ElectraForMaskedLM
     from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
@@ -34,8 +34,8 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             # ElectraModel,
-            ElectraGenerator,
-            ElectraDiscriminator,
+            ElectraForMaskedLM,
+            ElectraModel,
         )
         if is_torch_available()
         else ()
@@ -161,7 +161,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             choice_labels,
             fake_labels,
         ):
-            model = ElectraModel(config=config)
+            model = ElectraForPreTraining(config=config)
             model.to(torch_device)
             model.eval()
             generator_sequence_output, generator_pooled_output, discriminator_sequence_output = model(
@@ -199,7 +199,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             choice_labels,
             fake_labels,
         ):
-            model = ElectraGenerator(config=config)
+            model = ElectraForMaskedLM(config=config)
             model.to(torch_device)
             model.eval()
             generator_sequence_output, generator_pooled_output, logits, probs, preds, loss = model(
@@ -228,7 +228,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             choice_labels,
             fake_labels,
         ):
-            model = ElectraDiscriminator(config=config)
+            model = ElectraModel(config=config)
             model.to(torch_device)
             model.eval()
             discriminator_sequence_output, discrim_probs, discrim_preds, discrim_loss = model(
@@ -281,5 +281,5 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in list(ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = ElectraModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+            model = ElectraForPreTraining.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)

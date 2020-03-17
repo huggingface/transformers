@@ -20,7 +20,7 @@ import logging
 
 import torch
 
-from transformers import ElectraConfig, ElectraModel, load_tf_weights_in_electra
+from transformers import ElectraConfig, ElectraForPreTraining, load_tf_weights_in_electra
 
 
 logging.basicConfig(level=logging.INFO)
@@ -30,7 +30,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_du
     # Initialise PyTorch model
     config = ElectraConfig.from_json_file(config_file)
     print("Building PyTorch model from configuration: {}".format(str(config)))
-    model = ElectraModel(config)
+    model = ElectraForPreTraining(config)
 
     # Load weights from tf checkpoint
     load_tf_weights_in_electra(model, config, tf_checkpoint_path)

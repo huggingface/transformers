@@ -35,6 +35,7 @@ from .configuration_auto import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
+    ElectraConfig,
 )
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
@@ -53,6 +54,7 @@ from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import XLNetTokenizer
+from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -75,6 +77,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
+        (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
     ]
 )
 
@@ -104,6 +107,7 @@ class AutoTokenizer:
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
             - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
+            - contains `electra`: ElectraTokenizer (Google ELECTRA model)
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -135,6 +139,7 @@ class AutoTokenizer:
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
             - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
+            - contains `electra`: ElectraTokenizer (Google ELECTRA model)
 
         Params:
             pretrained_model_name_or_path: either:

@@ -260,7 +260,7 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
         return torch.reshape(gathered, [batch_size, -1, dimension])
 
 
-class ElectraModel(ElectraPreTrainedModel):
+class ElectraForPreTraining(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.discriminator_config = config.get_discriminator_config()
@@ -370,7 +370,7 @@ class ElectraModel(ElectraPreTrainedModel):
         return output  # generator_sequence_output, generator_pooled_output, discriminator_sequence_output, (logits, probs, preds, loss) (probs,)
 
 
-class ElectraGenerator(ElectraPreTrainedModel):
+class ElectraForMaskedLM(ElectraPreTrainedModel):
     def __init__(self, config):
         config = config.get_generator_config()
         super().__init__(config)
@@ -471,7 +471,7 @@ class ElectraGenerator(ElectraPreTrainedModel):
         return output  # generator_sequence_output, generator_pooled_output, (logits, probs, preds, loss)
 
 
-class ElectraDiscriminator(ElectraPreTrainedModel):
+class ElectraModel(ElectraPreTrainedModel):
     def __init__(self, config):
         config = config.get_discriminator_config()
         super().__init__(config)

@@ -35,6 +35,7 @@ from .configuration_auto import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
+    ElectraConfig,
 )
 from .configuration_utils import PretrainedConfig
 from .modeling_albert import (
@@ -118,7 +119,12 @@ from .modeling_xlnet import (
     XLNetLMHeadModel,
     XLNetModel,
 )
-
+from .modeling_electra import (
+    ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    ElectraForPreTraining,
+    ElectraModel,
+    ElectraForMaskedLM
+)
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +147,7 @@ ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
         FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -162,6 +169,7 @@ MODEL_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertModel),
         (XLMConfig, XLMModel),
         (CTRLConfig, CTRLModel),
+        (ElectraConfig, ElectraModel)
     ]
 )
 
@@ -182,6 +190,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertWithLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
+        (ElectraConfig, ElectraForPreTraining)
     ]
 )
 
@@ -202,6 +211,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertWithLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
+        (ElectraConfig, ElectraForMaskedLM)
     ]
 )
 
@@ -282,6 +292,7 @@ class AutoModel(object):
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModel` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMModel` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertModel` (XLM model)
+                - isInstance of `electra` configuration class: :class:`~transformers.ElectraModel` (XLM model)
 
         Examples::
 
@@ -322,7 +333,8 @@ class AutoModel(object):
             - contains `xlnet`: :class:`~transformers.XLNetModel` (XLNet model)
             - contains `xlm`: :class:`~transformers.XLMModel` (XLM model)
             - contains `ctrl`: :class:`~transformers.CTRLModel` (Salesforce CTRL  model)
-            - contains `flaubert`: :class:`~transformers.Flaubert` (Flaubert  model)
+            - contains `flaubert`: :class:`~transformers.FlaubertModel` (Flaubert  model)
+            - contains `electra`: :class:`~transformers.ElectraModel` (Electra  model)
 
             The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
             To train the model, you should first set it back in training mode with `model.train()`
@@ -430,6 +442,7 @@ class AutoModelForPreTraining(object):
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
+                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForPreTraining` (Electra model)
 
         Examples::
 
@@ -470,6 +483,7 @@ class AutoModelForPreTraining(object):
             - contains `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
             - contains `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
             - contains `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
+            - contains `electra`: :class:`~transformers.ElectraForPreTraining` (Electra model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -571,6 +585,7 @@ class AutoModelWithLMHead(object):
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
+                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForMaskedLM` (Electra model)
 
         Examples::
 
@@ -612,6 +627,7 @@ class AutoModelWithLMHead(object):
             - contains `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
             - contains `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
             - contains `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
+            - contains `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
