@@ -34,9 +34,9 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "google/electra-small": {"do_lower_case": False},
-    "google/electra-base": {"do_lower_case": False},
-    "google/electra-large": {"do_lower_case": False},
+    "google/electra-small": {"do_lower_case": True},
+    "google/electra-base": {"do_lower_case": True},
+    "google/electra-large": {"do_lower_case": True},
 }
 
 
