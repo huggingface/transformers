@@ -1,6 +1,6 @@
 # Installation
 
-Transformers is tested on Python 3.5+ and PyTorch 1.1.0
+Transformers is tested on Python 3.6+ and PyTorch 1.1.0
 
 ## With pip
 

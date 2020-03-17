@@ -2,3 +2,4 @@ tensorboardX
 tensorboard
 scikit-learn
 seqeval
+psutil

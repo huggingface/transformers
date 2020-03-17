@@ -24,7 +24,15 @@ import timeit
 from time import time
 from typing import List
 
-from transformers import AutoConfig, AutoTokenizer, is_tf_available, is_torch_available
+from transformers import (
+    AutoConfig,
+    AutoTokenizer,
+    MemorySummary,
+    is_tf_available,
+    is_torch_available,
+    start_memory_tracing,
+    stop_memory_tracing,
+)
 
 
 if is_tf_available():
@@ -250,15 +258,21 @@ as they entered."""
 
 def create_setup_and_compute(
     model_names: List[str],
+    batch_sizes: List[int],
+    slice_sizes: List[int],
     gpu: bool = True,
     tensorflow: bool = False,
     average_over: int = 3,
+    no_speed: bool = False,
+    no_memory: bool = False,
+    verbose: bool = False,
     torchscript: bool = False,
     xla: bool = False,
     amp: bool = False,
     fp16: bool = False,
     save_to_csv: bool = False,
     csv_filename: str = f"results_{round(time())}.csv",
+    csv_memory_filename: str = f"memory_{round(time())}.csv",
 ):
     if xla:
         tf.config.optimizer.set_jit(True)
@@ -267,11 +281,25 @@ def create_setup_and_compute(
 
     if tensorflow:
         dictionary = {model_name: {} for model_name in model_names}
-        results = _compute_tensorflow(model_names, dictionary, average_over, amp)
+        results = _compute_tensorflow(
+            model_names, batch_sizes, slice_sizes, dictionary, average_over, amp, no_speed, no_memory, verbose
+        )
     else:
         device = "cuda" if (gpu and torch.cuda.is_available()) else "cpu"
         dictionary = {model_name: {} for model_name in model_names}
-        results = _compute_pytorch(model_names, dictionary, average_over, device, torchscript, fp16)
+        results = _compute_pytorch(
+            model_names,
+            batch_sizes,
+            slice_sizes,
+            dictionary,
+            average_over,
+            device,
+            torchscript,
+            fp16,
+            no_speed,
+            no_memory,
+            verbose,
+        )
 
     print("=========== RESULTS ===========")
     for model_name in model_names:
@@ -280,13 +308,19 @@ def create_setup_and_compute(
             print("\t\t" + f"===== BATCH SIZE: {batch_size} =====")
             for slice_size in results[model_name]["ss"]:
                 result = results[model_name]["results"][batch_size][slice_size]
+                memory = results[model_name]["memory"][batch_size][slice_size]
                 if isinstance(result, str):
-                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: " f"{result}")
+                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: " f"{result} " f"{memory}")
                 else:
-                    print(f"\t\t{model_name}/{batch_size}/{slice_size}: " f"{(round(1000 * result) / 1000)}" f"s")
+                    print(
+                        f"\t\t{model_name}/{batch_size}/{slice_size}: "
+                        f"{(round(1000 * result) / 1000)}"
+                        f"s "
+                        f"{memory}"
+                    )
 
     if save_to_csv:
-        with open(csv_filename, mode="w") as csv_file:
+        with open(csv_filename, mode="w") as csv_file, open(csv_memory_filename, mode="w") as csv_memory_file:
             fieldnames = [
                 "model",
                 "1x8",
@@ -317,6 +351,8 @@ def create_setup_and_compute(
 
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
             writer.writeheader()
+            memory_writer = csv.DictWriter(csv_memory_file, fieldnames=fieldnames)
+            memory_writer.writeheader()
 
             for model_name in model_names:
                 model_results = {
@@ -326,8 +362,52 @@ def create_setup_and_compute(
                 }
                 writer.writerow({"model": model_name, **model_results})
 
+                model_memory_results = {
+                    f"{bs}x{ss}": results[model_name]["memory"][bs][ss]
+                    for bs in results[model_name]["memory"]
+                    for ss in results[model_name]["memory"][bs]
+                }
+                memory_writer.writerow({"model": model_name, **model_memory_results})
 
-def _compute_pytorch(model_names, dictionary, average_over, device, torchscript, fp16):
+
+def print_summary_statistics(summary: MemorySummary):
+    print(
+        "\nLines by line memory consumption:\n"
+        + "\n".join(
+            f"{state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+            for state in summary.sequential
+        )
+    )
+    print(
+        "\nLines with top memory consumption:\n"
+        + "\n".join(
+            f"=> {state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+            for state in summary.cumulative[:6]
+        )
+    )
+    print(
+        "\nLines with lowest memory consumption:\n"
+        + "\n".join(
+            f"=> {state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+            for state in summary.cumulative[-6:]
+        )
+    )
+    print(f"\nTotal memory increase: {summary.total}")
+
+
+def _compute_pytorch(
+    model_names,
+    batch_sizes,
+    slice_sizes,
+    dictionary,
+    average_over,
+    device,
+    torchscript,
+    fp16,
+    no_speed,
+    no_memory,
+    verbose,
+):
     for c, model_name in enumerate(model_names):
         print(f"{c + 1} / {len(model_names)}")
         config = AutoConfig.from_pretrained(model_name, torchscript=torchscript)
@@ -337,17 +417,17 @@ def _compute_pytorch(model_names, dictionary, average_over, device, torchscript,
         tokenized_sequence = tokenizer.encode(input_text, add_special_tokens=False)
 
         max_input_size = tokenizer.max_model_input_sizes[model_name]
-        batch_sizes = [1, 2, 4, 8]
-        slice_sizes = [8, 64, 128, 256, 512, 1024]
 
-        dictionary[model_name] = {"bs": batch_sizes, "ss": slice_sizes, "results": {}}
+        dictionary[model_name] = {"bs": batch_sizes, "ss": slice_sizes, "results": {}, "memory": {}}
         dictionary[model_name]["results"] = {i: {} for i in batch_sizes}
+        dictionary[model_name]["memory"] = {i: {} for i in batch_sizes}
 
         for batch_size in batch_sizes:
             if fp16:
                 model.half()
             model.to(device)
             model.eval()
+
             for slice_size in slice_sizes:
                 if max_input_size is not None and slice_size > max_input_size:
                     dictionary[model_name]["results"][batch_size][slice_size] = "N/A"
@@ -362,18 +442,40 @@ def _compute_pytorch(model_names, dictionary, average_over, device, torchscript,
                             inference = model
                             inference(sequence)
 
-                        print("Going through model with sequence of shape", sequence.shape)
-                        runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
-                        average_time = sum(runtimes) / float(len(runtimes)) / 3.0
-                        dictionary[model_name]["results"][batch_size][slice_size] = average_time
+                        if not no_memory:
+                            # model.add_memory_hooks()  # Forward method tracing (only for PyTorch models)
+
+                            # Line by line memory tracing (all code in the module `transformers`) works for all models/arbitrary code
+                            trace = start_memory_tracing("transformers")
+                            inference(sequence)
+                            summary = stop_memory_tracing(trace)
+
+                            if verbose:
+                                print_summary_statistics(summary)
+
+                            dictionary[model_name]["memory"][batch_size][slice_size] = str(summary.total)
+                        else:
+                            dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
+
+                        if not no_speed:
+                            print("Going through model with sequence of shape", sequence.shape)
+                            runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
+                            average_time = sum(runtimes) / float(len(runtimes)) / 3.0
+                            dictionary[model_name]["results"][batch_size][slice_size] = average_time
+                        else:
+                            dictionary[model_name]["results"][batch_size][slice_size] = "N/A"
+
                     except RuntimeError as e:
                         print("Doesn't fit on GPU.", e)
                         torch.cuda.empty_cache()
                         dictionary[model_name]["results"][batch_size][slice_size] = "N/A"
+                        dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
     return dictionary
 
 
-def _compute_tensorflow(model_names, dictionary, average_over, amp):
+def _compute_tensorflow(
+    model_names, batch_sizes, slice_sizes, dictionary, average_over, amp, no_speed, no_memory, verbose
+):
     for c, model_name in enumerate(model_names):
         print(f"{c + 1} / {len(model_names)}")
         config = AutoConfig.from_pretrained(model_name)
@@ -383,11 +485,10 @@ def _compute_tensorflow(model_names, dictionary, average_over, amp):
         tokenized_sequence = tokenizer.encode(input_text, add_special_tokens=False)
 
         max_input_size = tokenizer.max_model_input_sizes[model_name]
-        batch_sizes = [1, 2, 4, 8]
-        slice_sizes = [8, 64, 128, 256, 512, 1024]
 
-        dictionary[model_name] = {"bs": batch_sizes, "ss": slice_sizes, "results": {}}
+        dictionary[model_name] = {"bs": batch_sizes, "ss": slice_sizes, "results": {}, "memory": {}}
         dictionary[model_name]["results"] = {i: {} for i in batch_sizes}
+        dictionary[model_name]["memory"] = {i: {} for i in batch_sizes}
 
         print("Using model", model)
 
@@ -409,13 +510,31 @@ def _compute_tensorflow(model_names, dictionary, average_over, amp):
                         # To make sure that the model is traced + that the tensors are on the appropriate device
                         inference(sequence)
 
-                        runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
-                        average_time = sum(runtimes) / float(len(runtimes)) / 3.0
-                        dictionary[model_name]["results"][batch_size][slice_size] = average_time
+                        if not no_memory:
+                            # Line by line memory tracing (all code in the module `transformers`) works for all models/arbitrary code
+                            trace = start_memory_tracing("transformers")
+                            inference(sequence)
+                            summary = stop_memory_tracing(trace)
+
+                            if verbose:
+                                print_summary_statistics(summary)
+
+                            dictionary[model_name]["memory"][batch_size][slice_size] = str(summary.total)
+                        else:
+                            dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
+
+                        if not no_speed:
+                            runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
+                            average_time = sum(runtimes) / float(len(runtimes)) / 3.0
+                            dictionary[model_name]["results"][batch_size][slice_size] = average_time
+                        else:
+                            dictionary[model_name]["results"][batch_size][slice_size] = "N/A"
+
                     except tf.errors.ResourceExhaustedError as e:
                         print("Doesn't fit on GPU.", e)
                         torch.cuda.empty_cache()
                         dictionary[model_name]["results"][batch_size][slice_size] = "N/A"
+                        dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
     return dictionary
 
 
@@ -433,6 +552,9 @@ def main():
         "of all available model "
         "architectures.",
     )
+    parser.add_argument("--verbose", required=False, action="store_true", help="Verbose memory tracing")
+    parser.add_argument("--no_speed", required=False, action="store_true", help="Don't perform speed measurments")
+    parser.add_argument("--no_memory", required=False, action="store_true", help="Don't perform memory measurments")
     parser.add_argument(
         "--torch", required=False, action="store_true", help="Benchmark the Pytorch version of the " "models"
     )
@@ -477,6 +599,8 @@ def main():
     parser.add_argument(
         "--average_over", required=False, default=30, type=int, help="Times an experiment will be run."
     )
+    parser.add_argument("--batch_sizes", nargs="+", type=int, default=[1, 2, 4, 8])
+    parser.add_argument("--slice_sizes", nargs="+", type=int, default=[8, 64, 128, 256, 512, 1024])
 
     args = parser.parse_args()
     if args.models == "all":
@@ -501,6 +625,8 @@ def main():
         if is_torch_available():
             create_setup_and_compute(
                 model_names=args.models,
+                batch_sizes=args.batch_sizes,
+                slice_sizes=args.slice_sizes,
                 tensorflow=False,
                 gpu=args.torch_cuda,
                 torchscript=args.torchscript,
@@ -508,6 +634,9 @@ def main():
                 save_to_csv=args.save_to_csv,
                 csv_filename=args.csv_filename,
                 average_over=args.average_over,
+                no_speed=args.no_speed,
+                no_memory=args.no_memory,
+                verbose=args.verbose,
             )
         else:
             raise ImportError("Trying to run a PyTorch benchmark but PyTorch was not found in the environment.")
@@ -516,12 +645,17 @@ def main():
         if is_tf_available():
             create_setup_and_compute(
                 model_names=args.models,
+                batch_sizes=args.batch_sizes,
+                slice_sizes=args.slice_sizes,
                 tensorflow=True,
                 xla=args.xla,
                 amp=args.amp,
                 save_to_csv=args.save_to_csv,
                 csv_filename=args.csv_filename,
                 average_over=args.average_over,
+                no_speed=args.no_speed,
+                no_memory=args.no_memory,
+                verbose=args.verbose,
             )
         else:
             raise ImportError("Trying to run a TensorFlow benchmark but TensorFlow was not found in the environment.")
