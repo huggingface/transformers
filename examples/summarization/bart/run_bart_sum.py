@@ -58,10 +58,11 @@ class BartSystem(pl.LightningModule):
         return {"loss": loss, "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
+        self.bart.model.decoder.generation_mode = False  # to be able to get loss
         loss = self._step(batch)
         generated_ids = self.bart.generate(
-            batch["input_ids"].cuda(),
-            attention_mask=batch["attention_mask"].cuda(),
+            batch["source_ids"],
+            attention_mask=batch["source_mask"],
             num_beams=5,
             max_length=40,
             repetition_penalty=3.0,
@@ -91,10 +92,10 @@ class BartSystem(pl.LightningModule):
         output_test_predictions_file = os.path.join(self.hparams.output_dir, "test_predictions.txt")
         output_test_targets_file = os.path.join(self.hparams.output_dir, "test_targets.txt")
         # write predictions and targets for later rouge evaluation.
-        with open(output_test_predictions_file, "w") as p_writer, open(output_test_targets_file, "w") as t_writer:
+        with open(output_test_predictions_file, "w+") as p_writer, open(output_test_targets_file, "w") as t_writer:
             for output_batch in outputs:
-                p_writer.writelines(output_batch["preds"])
-                t_writer.writelines(output_batch["target"])
+                p_writer.writelines(s + "\n" for s in output_batch["preds"])
+                t_writer.writelines(s + "\n" for s in output_batch["target"])
 
         return self.test_end(outputs)
 
