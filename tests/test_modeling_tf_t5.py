@@ -107,15 +107,13 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         def create_and_check_t5_model(self, config, input_ids, input_mask, token_labels):
             model = TFT5Model(config=config)
             inputs = {
-                "encoder_input_ids": input_ids,
+                "input_ids": input_ids,
                 "decoder_input_ids": input_ids,
                 "decoder_attention_mask": input_mask,
             }
             encoder_output, decoder_output = model(inputs)
 
-            encoder_output, decoder_output = model(
-                input_ids, decoder_attention_mask=input_mask, encoder_input_ids=input_ids
-            )
+            encoder_output, decoder_output = model(input_ids, decoder_attention_mask=input_mask, input_ids=input_ids)
 
             result = {
                 "encoder_output": encoder_output.numpy(),
@@ -131,7 +129,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
             model = TFT5ForConditionalGeneration(config=config)
             inputs_dict = {
-                "encoder_input_ids": input_ids,
+                "input_ids": input_ids,
                 "decoder_input_ids": input_ids,
                 "decoder_attention_mask": input_mask,
             }
@@ -149,7 +147,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask, token_labels) = config_and_inputs
             inputs_dict = {
-                "encoder_input_ids": input_ids,
+                "input_ids": input_ids,
                 "decoder_input_ids": input_ids,
                 "decoder_attention_mask": input_mask,
             }

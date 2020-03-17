@@ -477,7 +477,8 @@ class T5PreTrainedModel(PreTrainedModel):
         elif isinstance(module, (T5Model, T5ForConditionalGeneration)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            embed_tokens = self.get_input_embeddings()
+            embed_tokens.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, T5DenseReluDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
@@ -503,12 +504,12 @@ class T5PreTrainedModel(PreTrainedModel):
 
 
 class T5Stack(T5PreTrainedModel):
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config, shared=None):
         super().__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
-        self.embed_tokens = embed_tokens
+        self.shared = shared
         self.is_decoder = config.is_decoder
 
         self.block = nn.ModuleList(
@@ -518,6 +519,15 @@ class T5Stack(T5PreTrainedModel):
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.shared
+
+    def get_output_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
 
     def forward(
         self,
@@ -540,10 +550,11 @@ class T5Stack(T5PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
-            inputs_embeds = self.embed_tokens(input_ids)
+            assert self.shared is not None, "You have to intialize the model with valid token embeddings"
+            inputs_embeds = self.shared(input_ids)
 
         batch_size, seq_length = input_shape
+
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None:
@@ -745,22 +756,23 @@ class T5Model(T5PreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = T5Stack(encoder_config, self.shared)
+        self.encoder = T5Stack(encoder_config, shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        self.decoder = T5Stack(decoder_config, self.shared)
+        self.decoder = T5Stack(decoder_config, shared)
 
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.shared
+        return self.encoder.get_input_embeddings()
 
     def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
+        self.encoder.set_input_embeddings(new_embeddings)
+        self.decoder.set_input_embeddings(new_embeddings)
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
@@ -839,24 +851,25 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         super().__init__(config)
         self.model_dim = config.d_model
 
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
+        shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = T5Stack(encoder_config, self.shared)
+        self.encoder = T5Stack(encoder_config, shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        self.decoder = T5Stack(decoder_config, self.shared)
+        self.decoder = T5Stack(decoder_config, shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.shared
+        return self.encoder.get_input_embeddings()
 
     def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
+        self.encoder.set_input_embeddings(new_embeddings)
+        self.decoder.set_input_embeddings(new_embeddings)
 
     def get_output_embeddings(self):
         return self.lm_head

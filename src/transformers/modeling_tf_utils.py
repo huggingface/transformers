@@ -713,21 +713,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
         if self.config.is_encoder_decoder:
+
             assert bos_token_id is not None, "Encoder Decoder Models need to have a bos_token_id"
+            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
+            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
 
-            # only need to generate encoder_outputs once for encoder-decoder
-            if hasattr(self, "encoder"):
-                encoder = self.encoder
-            elif hasattr(self, "model") and hasattr(self.model, "encoder"):
-                encoder = self.model.encoder
-            else:
-                raise NotImplementedError("{} does not seem to have an encoder".format(self))
+            # get encoder and store encoder outputs
+            encoder = self.get_encoder()
 
-            # T5 needs to convert to embeddings first
-            if hasattr(self, "shared"):
-                input_ids = self.shared(input_ids)
-
-            # get encoder outputs once and store them
             encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
 
             # create empty decoder_input_ids
@@ -1144,7 +1137,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             input_ids = tf.stack([tf.identity(input_ids[x, :]) for x in beam_idx])
             input_ids = tf.concat([input_ids, tf.expand_dims(beam_tokens, 1)], axis=-1)
             # re-order internal states
-            if past:
+            if past is not None:
                 past = self._reorder_cache(past, beam_idx)
 
             if self.config.is_encoder_decoder is False:

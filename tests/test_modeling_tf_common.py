@@ -221,7 +221,7 @@ class TFModelTesterMixin:
         if self.is_encoder_decoder:
             input_ids = {
                 "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
-                "encoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="encoder_input_ids", dtype="int32"),
+                "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
             }
         else:
             input_ids = tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32")
@@ -393,9 +393,9 @@ class TFModelTesterMixin:
             input_ids = inputs_dict["input_ids"]
             del inputs_dict["input_ids"]
         else:
-            encoder_input_ids = inputs_dict["encoder_input_ids"]
+            encoder_input_ids = inputs_dict["input_ids"]
             decoder_input_ids = inputs_dict["decoder_input_ids"]
-            del inputs_dict["encoder_input_ids"]
+            del inputs_dict["input_ids"]
             del inputs_dict["decoder_input_ids"]
 
         for model_class in self.all_model_classes:
@@ -405,7 +405,7 @@ class TFModelTesterMixin:
             if not self.is_encoder_decoder:
                 inputs_dict["inputs_embeds"] = self._get_embeds(wte, input_ids)
             else:
-                inputs_dict["encoder_inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
+                inputs_dict["inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
                 inputs_dict["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
 
             model(inputs_dict)
@@ -413,12 +413,10 @@ class TFModelTesterMixin:
     def test_lm_head_model_random_generate(self):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict.get("input_ids", None)
+        input_ids = inputs_dict["input_ids"]
 
         if self.is_encoder_decoder:
             config.output_past = True  # needed for Bart TODO: might have to update for other encoder-decoder models
-            if "encoder_input_ids" in inputs_dict:
-                input_ids = inputs_dict["encoder_input_ids"]  # for T5
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
