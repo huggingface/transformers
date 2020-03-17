@@ -68,6 +68,7 @@ extras["sklearn"] = ["scikit-learn==0.22.1"]
 extras["tf"] = ["tensorflow"]
 extras["tf-cpu"] = ["tensorflow-cpu"]
 extras["torch"] = ["torch"]
+extras["xlm"] = ["sacremoses"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch"]
@@ -105,8 +106,6 @@ setup(
         "regex != 2019.12.17",
         # for XLNet
         "sentencepiece",
-        # for XLM
-        "sacremoses",
     ],
     extras_require=extras,
     scripts=["transformers-cli"],

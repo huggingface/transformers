@@ -23,8 +23,6 @@ import sys
 import unicodedata
 from typing import List, Optional
 
-import sacremoses as sm
-
 from .tokenization_utils import PreTrainedTokenizer
 
 
@@ -658,6 +656,7 @@ class XLMTokenizer(PreTrainedTokenizer):
 
     def moses_punct_norm(self, text, lang):
         if lang not in self.cache_moses_punct_normalizer:
+            import sacremoses as sm  # importing here to keep dependency optional
             punct_normalizer = sm.MosesPunctNormalizer(lang=lang)
             self.cache_moses_punct_normalizer[lang] = punct_normalizer
         else:
@@ -666,6 +665,7 @@ class XLMTokenizer(PreTrainedTokenizer):
 
     def moses_tokenize(self, text, lang):
         if lang not in self.cache_moses_tokenizer:
+            import sacremoses as sm  # importing here to keep dependency optional
             moses_tokenizer = sm.MosesTokenizer(lang=lang)
             self.cache_moses_tokenizer[lang] = moses_tokenizer
         else:
