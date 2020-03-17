@@ -27,6 +27,9 @@ from typing import List
 from transformers import (
     AutoConfig,
     AutoTokenizer,
+    MemorySummary,
+    MemoryState,
+    Frame,
     is_tf_available,
     is_torch_available,
     start_memory_tracing,
@@ -369,6 +372,31 @@ def create_setup_and_compute(
                 memory_writer.writerow({"model": model_name, **model_memory_results})
 
 
+def print_summary_statistics(summary: MemorySummary):
+    print(
+        "\nLines by line memory consumption:\n"
+        + "\n".join(
+            f"{state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+            for state in summary.sequential
+        )
+    )
+    print(
+        "\nLines with top memory consumption:\n"
+        + "\n".join(
+            f"=> {state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+            for state in summary.cumulative[:6]
+        )
+    )
+    print(
+        "\nLines with lowest memory consumption:\n"
+        + "\n".join(
+            f"=> {state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+            for state in summary.cumulative[-6:]
+        )
+    )
+    print(f"\nTotal memory increase: {summary.total}")
+
+
 def _compute_pytorch(
     model_names,
     batch_sizes,
@@ -425,29 +453,9 @@ def _compute_pytorch(
                             summary = stop_memory_tracing(trace)
 
                             if verbose:
-                                print(
-                                    "\nLines by line memory consumption:\n"
-                                    + "\n".join(
-                                        f"{frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
-                                        for frame, _, _, cpu_gpu_mem in summary.sequential
-                                    )
-                                )
-                                print(
-                                    "\nLines with top memory consumption:\n"
-                                    + "\n".join(
-                                        f"=> {frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
-                                        for frame, _, _, cpu_gpu_mem in summary.cumulative[:6]
-                                    )
-                                )
-                                print(
-                                    "\nLines with lowest memory consumption:\n"
-                                    + "\n".join(
-                                        f"=> {frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
-                                        for frame, _, _, cpu_gpu_mem in summary.cumulative[-6:]
-                                    )
-                                )
-                                print(f"\nTotal memory increase: {summary.total.string}")
-                            dictionary[model_name]["memory"][batch_size][slice_size] = summary.total.string
+                                print_summary_statistics(summary)
+
+                            dictionary[model_name]["memory"][batch_size][slice_size] = str(summary.total)
                         else:
                             dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
 
@@ -511,29 +519,9 @@ def _compute_tensorflow(
                             summary = stop_memory_tracing(trace)
 
                             if verbose:
-                                print(
-                                    "\nLines by line memory consumption:\n"
-                                    + "\n".join(
-                                        f"{frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
-                                        for frame, _, _, cpu_gpu_mem in summary.sequential
-                                    )
-                                )
-                                print(
-                                    "\nLines with top memory consumption:\n"
-                                    + "\n".join(
-                                        f"=> {frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
-                                        for frame, _, _, cpu_gpu_mem in summary.cumulative[:6]
-                                    )
-                                )
-                                print(
-                                    "\nLines with lowest memory consumption:\n"
-                                    + "\n".join(
-                                        f"=> {frame.filename}:{frame.line_number}: mem {cpu_gpu_mem.string}: {frame.line_text}"
-                                        for frame, _, _, cpu_gpu_mem in summary.cumulative[-6:]
-                                    )
-                                )
-                                print(f"\nTotal memory increase: {summary.total.string}")
-                            dictionary[model_name]["memory"][batch_size][slice_size] = summary.total.string
+                                print_summary_statistics(summary)
+
+                            dictionary[model_name]["memory"][batch_size][slice_size] = str(summary.total)
                         else:
                             dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
 
