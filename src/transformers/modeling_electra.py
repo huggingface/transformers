@@ -13,7 +13,11 @@ from .modeling_bert import BertEmbeddings, BertEncoder, BertLayerNorm, BertPreTr
 logger = logging.getLogger(__name__)
 
 
-ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP = {}
+ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP = {
+    "google/electra-small": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-small/pytorch_model.bin",
+    "google/electra-base": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-base/pytorch_model.bin",
+    "google/electra-large": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-large/pytorch_model.bin",
+}
 
 
 def load_tf_weights_in_electra(model, config, tf_checkpoint_path):

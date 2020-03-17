@@ -91,7 +91,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             self.num_choices = num_choices
             self.scope = scope
 
-        def prepare_config_and_inputs(self):
+        def prepare_config_and_inputs(self, generator_or_discriminator=None):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
             input_mask = None
@@ -113,10 +113,14 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
 
             config = ElectraConfig(
                 vocab_size=self.vocab_size,
-                hidden_size=self.hidden_size,
-                num_hidden_layers=self.num_hidden_layers,
-                num_attention_heads=self.num_attention_heads,
-                intermediate_size=self.intermediate_size,
+                discriminator_hidden_size=self.hidden_size,
+                discriminator_num_hidden_layers=self.num_hidden_layers,
+                discriminator_num_attention_heads=self.num_attention_heads,
+                discriminator_intermediate_size=self.intermediate_size,
+                generator_hidden_size=self.hidden_size,
+                generator_num_hidden_layers=self.num_hidden_layers,
+                generator_num_attention_heads=self.num_attention_heads,
+                generator_intermediate_size=self.intermediate_size,
                 hidden_act=self.hidden_act,
                 hidden_dropout_prob=self.hidden_dropout_prob,
                 attention_probs_dropout_prob=self.attention_probs_dropout_prob,
@@ -125,6 +129,12 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
                 is_decoder=False,
                 initializer_range=self.initializer_range,
             )
+
+            if generator_or_discriminator == "discriminator":
+                config = config.get_discriminator_config()
+
+            if generator_or_discriminator == "generator":
+                config = config.get_generator_config()
 
             return (
                 config,
@@ -251,7 +261,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ElectraModelTest.ElectraModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ElectraConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ElectraConfig, discriminator_hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -261,11 +271,11 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_electra_model(*config_and_inputs)
 
     def test_generator(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(generator_or_discriminator="generator")
         self.model_tester.create_and_check_electra_generator(*config_and_inputs)
 
     def test_discriminator(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(generator_or_discriminator="discriminator")
         self.model_tester.create_and_check_electra_discriminator(*config_and_inputs)
 
     @slow

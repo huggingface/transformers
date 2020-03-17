@@ -23,7 +23,11 @@ from .configuration_utils import PretrainedConfig
 
 logger = logging.getLogger(__name__)
 
-BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "google/electra-small": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-small/config.json",
+    "google/electra-base": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-base/config.json",
+    "google/electra-large": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-large/config.json",
+}
 
 
 class ElectraConfig(PretrainedConfig):
@@ -84,7 +88,7 @@ class ElectraConfig(PretrainedConfig):
             pretrained_config_archive_map (Dict[str, str]):
                 A dictionary containing all the available pre-trained checkpoints.
     """
-    # pretrained_config_archive_map = ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP
+    pretrained_config_archive_map = ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "electra"
 
     def __init__(
@@ -190,4 +194,3 @@ class ElectraConfig(PretrainedConfig):
                 "ELECTRA generator and discriminator. The value returned is the discriminator intermediate size."
             )
             return self.discriminator_intermediate_size
-
