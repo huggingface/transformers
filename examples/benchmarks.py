@@ -28,8 +28,6 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     MemorySummary,
-    MemoryState,
-    Frame,
     is_tf_available,
     is_torch_available,
     start_memory_tracing,

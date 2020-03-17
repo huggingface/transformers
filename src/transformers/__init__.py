@@ -27,9 +27,9 @@ from .benchmark_utils import (
     MemorySummary,
     MemoryTrace,
     UsedMemoryState,
+    bytes_to_human_readable,
     start_memory_tracing,
     stop_memory_tracing,
-    bytes_to_human_readable,
 )
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig

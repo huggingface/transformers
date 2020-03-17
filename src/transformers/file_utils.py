@@ -6,14 +6,12 @@ Copyright by the AllenNLP authors.
 
 import fnmatch
 import json
-import linecache
 import logging
 import os
 import shutil
 import sys
 import tarfile
 import tempfile
-from collections import defaultdict, namedtuple
 from contextlib import contextmanager
 from functools import partial, wraps
 from hashlib import sha256
