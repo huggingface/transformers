@@ -994,6 +994,7 @@ class AutoModelForTokenClassification:
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMForTokenClassification` (XLM model)
                 - isInstance of `xlm roberta` configuration class: :class:`~transformers.XLMRobertaForTokenClassification` (XLMRoberta model)
                 - isInstance of `bert` configuration class: :class:`~transformers.BertForTokenClassification` (Bert model)
+                - isInstance of `albert` configuration class: :class:`~transformers.AlbertForTokenClassification` (AlBert model)
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetForTokenClassification` (XLNet model)
                 - isInstance of `camembert` configuration class: :class:`~transformers.CamembertForTokenClassification` (Camembert model)
                 - isInstance of `roberta` configuration class: :class:`~transformers.RobertaForTokenClassification` (Roberta model)
