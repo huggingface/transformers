@@ -62,6 +62,7 @@ class GLUETransformer(BaseTransformer):
                 features = convert_examples_to_features(
                     examples,
                     self.tokenizer,
+                    max_length=args.max_seq_length,
                     task=args.task,
                     label_list=self.labels,
                     output_mode=args.glue_output_mode,
