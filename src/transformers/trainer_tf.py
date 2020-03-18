@@ -486,7 +486,7 @@ class TFTrainerForSequenceClassification(TFTrainer):
                 gradients = [(tf.clip_by_value(grad, -self.max_grad_norm, self.max_grad_norm)) for grad in gradients]
                 self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
 
-            self.train_acc_metric(labels, logits)
+            self.train_acc_metric(labels, logits[0])
 
             return loss
 
