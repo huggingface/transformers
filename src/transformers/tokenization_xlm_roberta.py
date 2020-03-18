@@ -110,9 +110,6 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
-        do_lower_case=False,
-        remove_space=True,
-        keep_accents=False,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -144,9 +141,6 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             )
             raise
 
-        self.do_lower_case = do_lower_case
-        self.remove_space = remove_space
-        self.keep_accents = keep_accents
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -276,23 +270,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def preprocess_text(self, inputs):
-        if self.remove_space:
-            outputs = " ".join(inputs.strip().split())
-        else:
-            outputs = inputs
-        outputs = outputs.replace("``", '"').replace("''", '"')
-
-        if not self.keep_accents:
-            outputs = unicodedata.normalize("NFKD", outputs)
-            outputs = "".join([c for c in outputs if not unicodedata.combining(c)])
-        if self.do_lower_case:
-            outputs = outputs.lower()
-
-        return outputs
-
     def _tokenize(self, text):
-        text = self.preprocess_text(text)
         return self.sp_model.EncodeAsPieces(text)
 
     def _convert_token_to_id(self, token):

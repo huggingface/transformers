@@ -121,66 +121,6 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ],
         )
 
-    def test_tokenizer_lower(self):
-        tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, do_lower_case=True)
-        tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
-        self.assertListEqual(
-            tokens,
-            [
-                SPIECE_UNDERLINE + "",
-                "i",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
-                "or",
-                "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
-                "9",
-                "2",
-                "0",
-                "0",
-                "0",
-                ",",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
-                "al",
-                "se",
-                ".",
-            ],
-        )
-        self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["▁he", "ll", "o"])
-
-    def test_tokenizer_no_lower(self):
-        tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, do_lower_case=False)
-        tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
-        self.assertListEqual(
-            tokens,
-            [
-                SPIECE_UNDERLINE + "I",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
-                "or",
-                "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
-                "9",
-                "2",
-                "0",
-                "0",
-                "0",
-                ",",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
-                "al",
-                "se",
-                ".",
-            ],
-        )
-
     @slow
     def test_tokenization_base_easy_symbols(self):
         tokenizer = XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
