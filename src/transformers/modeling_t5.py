@@ -755,21 +755,19 @@ class T5Model(T5PreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        shared = nn.Embedding(config.vocab_size, config.d_model)
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = T5Stack(encoder_config, shared)
+        self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        self.decoder = T5Stack(decoder_config, shared)
-
-        self.shared = shared
+        self.decoder = T5Stack(decoder_config, self.shared)
 
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.encoder.get_input_embeddings()
+        return self.shared
 
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
