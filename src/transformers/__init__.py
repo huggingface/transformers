@@ -40,6 +40,8 @@ from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
 from .data import (
     DataProcessor,
+    DataProcessorForSequenceClassificationWithCSV,
+    DataProcessorForSequenceClassificationWithTFDS,
     InputExample,
     InputFeatures,
     SingleSentenceClassificationProcessor,
@@ -420,6 +422,12 @@ if is_tf_available():
 
     # Optimization
     from .optimization_tf import WarmUp, create_optimizer, AdamWeightDecay, GradientAccumulator
+
+    # Losses
+    from .losses_tf import QALoss
+
+    # Trainers
+    from .trainer_tf import TFTrainerForSequenceClassification
 
 
 if not is_tf_available() and not is_torch_available():

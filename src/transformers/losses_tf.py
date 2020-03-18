@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-class SquadLoss(tf.keras.losses.Loss):
-    def __init__(self, name="squad_loss"):
+class QALoss(tf.keras.losses.Loss):
+    def __init__(self, name="qa_loss"):
         super().__init__(reduction=tf.keras.losses.Reduction.NONE, name=name)
     
     @tf.function

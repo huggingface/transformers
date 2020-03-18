@@ -5,6 +5,8 @@
 from .metrics import is_sklearn_available
 from .processors import (
     DataProcessor,
+    DataProcessorForSequenceClassificationWithCSV,
+    DataProcessorForSequenceClassificationWithTFDS,
     InputExample,
     InputFeatures,
     SingleSentenceClassificationProcessor,
