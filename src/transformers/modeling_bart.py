@@ -127,7 +127,7 @@ class PretrainedBartModel(PreTrainedModel):
     @property
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id
-        input_ids = torch.Tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token],]).long()
+        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]])
         decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(self.config, input_ids,)
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
@@ -141,7 +141,7 @@ class PretrainedBartModel(PreTrainedModel):
 def _make_linear_from_emb(emb):
     vocab_size, emb_size = emb.weight.shape
     lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
-    lin_layer.weight.data = emb.weight.data  # .T
+    lin_layer.weight.data = emb.weight.data
     return lin_layer
 
 
@@ -215,7 +215,7 @@ class EncoderLayer(nn.Module):
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
         residual = x
-        x, attn_weights = self.self_attn(query=x, key=x, value=x, key_padding_mask=encoder_padding_mask,)
+        x, attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask,)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
@@ -278,7 +278,7 @@ class BartEncoder(nn.Module):
         # check attention mask and invert
         if attention_mask is not None:
             assert attention_mask.dim() == 2
-            attention_mask = (1.0 - attention_mask.long()) * -10000.0
+            attention_mask = (1.0 - attention_mask.long()) * LARGE_NEGATIVE
             assert attention_mask.max() <= 0
         inputs_embeds = self.embed_tokens(input_ids)
         embed_pos = self.embed_positions(input_ids)
@@ -347,9 +347,7 @@ class DecoderLayer(nn.Module):
         if layer_state is None:
             layer_state = {}
         # next line mutates layer state
-        x, self_attn_weights = self.self_attn(
-            query=x, key=x, value=x, layer_state=layer_state, attn_mask=attention_mask,
-        )
+        x, self_attn_weights = self.self_attn(query=x, key=x, layer_state=layer_state, attn_mask=attention_mask,)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
@@ -358,11 +356,9 @@ class DecoderLayer(nn.Module):
 
         x, encoder_attn_weights = self.encoder_attn(
             query=x,
-            key=encoder_hidden_states,  # could be None
-            value=encoder_hidden_states,
+            key=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
-            static_kv=True,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -499,16 +495,15 @@ class BartDecoder(nn.Module):
         return x, next_cache, all_hidden_states, list(all_self_attns)
 
 
-def reorder_attn_buffer(input_buffer, new_order):
-    """Reorder buffered internal state (for incremental generation)."""
-    for k, input_buffer_k in input_buffer.items():
+def _reorder_buffer(attn_cache, new_order):
+    for k, input_buffer_k in attn_cache.items():
         if input_buffer_k is not None:
-            input_buffer[k] = input_buffer_k.index_select(0, new_order)
-    return input_buffer
+            attn_cache[k] = input_buffer_k.index_select(0, new_order)
+    return attn_cache
 
 
 class SelfAttention(nn.Module):
-    """Multi-headed attention from "Attention Is All You Need"""
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
         self,
@@ -540,23 +535,12 @@ class SelfAttention(nn.Module):
         self,
         query,
         key: Optional[Tensor],
-        value: Optional[Tensor],
         key_padding_mask: Optional[Tensor] = None,
-        layer_state: Optional[Dict[str, Dict[str, Optional[Tensor]]]] = None,
-        static_kv: bool = False,
+        layer_state: Optional[Dict[str, Optional[Tensor]]] = None,
         attn_mask: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor]]:
-        """Input shape: Time(SeqLen) x Batch x Channel
-
-        Args:
-
-            key_padding_mask (ByteTensor, optional): mask to exclude
-                keys that are pads, of shape `(batch, src_len)`, where
-                padding elements are indicated by 1s.
-            attn_mask (ByteTensor, optional): typically used to
-                implement causal attention, where the mask prevents the
-                attention from looking forward in time (default: None).
-        """
+        """Input shape: Time(SeqLen) x Batch x Channel"""
+        static_kv = self.encoder_decoder_attention  # type: bool
         tgt_len, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
@@ -566,16 +550,14 @@ class SelfAttention(nn.Module):
             if "prev_key" in saved_state:
                 # previous time steps are cached - no need to recompute key and value if they are static
                 if static_kv:
-                    assert self.encoder_decoder_attention
-                    key = value = None
+                    key = None
         else:
             saved_state = None
             layer_state = {}
 
         q = self.q_proj(query) * self.scaling
-        if self.encoder_decoder_attention:
+        if static_kv:
             if key is None:
-                assert value is None
                 k = v = None
             else:
                 k = self.k_proj(key)
@@ -950,7 +932,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         for layer_past in decoder_cached_states:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {
-                attn_key: reorder_attn_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
+                attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
             }
             # reordered_layer_past = [layer_past[:, i].unsqueeze(1).clone().detach() for i in beam_idx]
             # reordered_layer_past = torch.cat(reordered_layer_past, dim=1)
