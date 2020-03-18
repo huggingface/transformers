@@ -464,7 +464,7 @@ class T5PreTrainedModel(PreTrainedModel):
         input_mask = torch.tensor(DUMMY_MASK)
         dummy_inputs = {
             "decoder_input_ids": input_ids,
-            "encoder_input_ids": input_ids,
+            "input_ids": input_ids,
             "decoder_attention_mask": input_mask,
         }
         return dummy_inputs
@@ -474,7 +474,7 @@ class T5PreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, T5LayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, (T5Model, T5WithLMHeadModel)):
+        elif isinstance(module, (T5Model, T5ForConditionalGeneration)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
@@ -503,10 +503,12 @@ class T5PreTrainedModel(PreTrainedModel):
 
 
 class T5Stack(T5PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, embed_tokens=None):
         super().__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
+
+        self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
 
         self.block = nn.ModuleList(
@@ -519,19 +521,34 @@ class T5Stack(T5PreTrainedModel):
 
     def forward(
         self,
-        hidden_states,
+        input_ids=None,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        inputs_embeds=None,
         head_mask=None,
     ):
 
-        batch_size, seq_length = hidden_states.shape[0], hidden_states.shape[1]
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        batch_size, seq_length = input_shape
         if attention_mask is None:
-            attention_mask = torch.ones(batch_size, seq_length).to(hidden_states.device)
+            attention_mask = torch.ones(batch_size, seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None:
             encoder_seq_length = encoder_hidden_states.shape[1]
-            encoder_attention_mask = torch.ones(batch_size, encoder_seq_length).to(hidden_states.device)
+            encoder_attention_mask = torch.ones(batch_size, encoder_seq_length).to(inputs_embeds.device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -542,7 +559,7 @@ class T5Stack(T5PreTrainedModel):
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
             if self.config.is_decoder:
-                seq_ids = torch.arange(seq_length, device=hidden_states.device)
+                seq_ids = torch.arange(seq_length, device=inputs_embeds.device)
                 causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
                 causal_mask = causal_mask.to(attention_mask)
                 extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
@@ -605,7 +622,7 @@ class T5Stack(T5PreTrainedModel):
         position_bias = None
         encoder_decoder_position_bias = None
 
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(inputs_embeds)
         for i, layer_module in enumerate(self.block):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -731,11 +748,11 @@ class T5Model(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = T5Stack(encoder_config)
+        self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        self.decoder = T5Stack(decoder_config)
+        self.decoder = T5Stack(decoder_config, self.shared)
 
         self.init_weights()
 
@@ -753,55 +770,41 @@ class T5Model(T5PreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def forward(self, **kwargs):
-        # keyword arguments come in 3 flavors: encoder-specific (prefixed by
-        # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
-        # that apply to the model as whole.
-        # We let the specific kwargs override the common ones in case of conflict.
-        kwargs_common = dict(
-            (k, v) for k, v in kwargs.items() if not k.startswith("encoder_") and not k.startswith("decoder_")
-        )
-        kwargs_encoder = kwargs_common.copy()
-        kwargs_decoder = kwargs_common.copy()
-        kwargs_encoder.update(dict((k[len("encoder_") :], v) for k, v in kwargs.items() if k.startswith("encoder_")))
-        kwargs_decoder.update(dict((k[len("decoder_") :], v) for k, v in kwargs.items() if k.startswith("decoder_")))
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        encoder_outputs=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        head_mask=None,
+    ):
 
         # Encode if needed (training, first prediction pass)
-        encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
-        encoder_attention_mask = kwargs_encoder.get("attention_mask", None)
-        if encoder_hidden_states is None:
-            # Convert encoder inputs in embeddings if needed
-            hidden_states = kwargs_encoder.pop("inputs_embeds", None)
-            if hidden_states is None:
-                encoder_inputs_ids = kwargs_encoder.pop("input_ids")
-                hidden_states = self.shared(encoder_inputs_ids)  # Convert inputs in embeddings
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+            )
 
-            if encoder_attention_mask is not None:
-                # Apply masking
-                encoder_attention_mask = (encoder_attention_mask != 0).to(hidden_states)
-                hidden_states = hidden_states * encoder_attention_mask.unsqueeze(-1)
-
-            encoder_outputs = self.encoder(hidden_states, **kwargs_encoder)
-            encoder_hidden_states = encoder_outputs[0]
-        else:
-            encoder_outputs = ()
+        hidden_states = encoder_outputs[0]
 
         # Decode
-        # Convert decoder inputs in embeddings if needed
-        hidden_states = kwargs_decoder.pop("inputs_embeds", None)
-        if hidden_states is None:
-            decoder_inputs_ids = kwargs_decoder.pop("input_ids")
-            hidden_states = self.shared(decoder_inputs_ids)
-
-        kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
-        kwargs_decoder["encoder_attention_mask"] = encoder_attention_mask
-        decoder_outputs = self.decoder(hidden_states, **kwargs_decoder)
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            head_mask=head_mask,
+        )
 
         return decoder_outputs + encoder_outputs
 
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING, T5_INPUTS_DOCSTRING)
-class T5WithLMHeadModel(T5PreTrainedModel):
+class T5ForConditionalGeneration(T5PreTrainedModel):
     r"""
         **lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the masked language modeling loss.
@@ -825,7 +828,7 @@ class T5WithLMHeadModel(T5PreTrainedModel):
     Examples::
 
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = T5WithLMHeadModel.from_pretrained('t5-small')
+        model = T5ForConditionalGeneration.from_pretrained('t5-small')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids=input_ids, lm_labels=input_ids)
         loss, prediction_scores = outputs[:2]
@@ -839,11 +842,11 @@ class T5WithLMHeadModel(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = T5Stack(encoder_config)
+        self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        self.decoder = T5Stack(decoder_config)
+        self.decoder = T5Stack(decoder_config, self.shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -858,46 +861,40 @@ class T5WithLMHeadModel(T5PreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    def forward(self, **kwargs):
-        # keyword arguments come in 3 flavors: encoder-specific (prefixed by
-        # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
-        # that apply to the model as whole.
-        # We let the specific kwargs override the common ones in case of conflict.
+    def get_encoder(self):
+        return self.encoder
 
-        lm_labels = kwargs.pop("decoder_lm_labels", None)
-
-        kwargs_common = dict(
-            (k, v) for k, v in kwargs.items() if not k.startswith("encoder_") and not k.startswith("decoder_")
-        )
-        kwargs_encoder = kwargs_common.copy()
-        kwargs_decoder = kwargs_common.copy()
-        kwargs_encoder.update(dict((k[len("encoder_") :], v) for k, v in kwargs.items() if k.startswith("encoder_")))
-        kwargs_decoder.update(dict((k[len("decoder_") :], v) for k, v in kwargs.items() if k.startswith("decoder_")))
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        encoder_outputs=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        lm_labels=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        head_mask=None,
+    ):
 
         # Encode if needed (training, first prediction pass)
-        encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
-        if encoder_hidden_states is None:
+        if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
-            encoder_hidden_states = kwargs_encoder.pop("inputs_embeds", None)
-            if encoder_hidden_states is None:
-                encoder_inputs_ids = kwargs_encoder.pop("input_ids")
-                encoder_hidden_states = self.shared(encoder_inputs_ids)  # Convert inputs in embeddings
+            encoder_outputs = self.encoder(
+                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+            )
 
-            encoder_outputs = self.encoder(encoder_hidden_states, **kwargs_encoder)
-            encoder_hidden_states = encoder_outputs[0]
-        else:
-            encoder_outputs = ()
+        hidden_states = encoder_outputs[0]
 
         # Decode
-        # Convert decoder inputs in embeddings if needed
-        decoder_hidden_states = kwargs_decoder.pop("inputs_embeds", None)
-        if decoder_hidden_states is None:
-            decoder_inputs_ids = kwargs_decoder.pop("input_ids")
-            decoder_hidden_states = self.shared(decoder_inputs_ids)
-
-        kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
-        kwargs_decoder["encoder_attention_mask"] = kwargs_encoder.get("attention_mask", None)
-        decoder_outputs = self.decoder(decoder_hidden_states, **kwargs_decoder)
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            head_mask=head_mask,
+        )
 
         sequence_output = decoder_outputs[0]
         # Rescale output before projecting on vocab
@@ -922,22 +919,15 @@ class T5WithLMHeadModel(T5PreTrainedModel):
 
         # first step
         if type(past) is tuple:
-            encoder_hidden_states = past[0]
+            encoder_outputs = past
         else:
-            encoder_hidden_states = past
+            encoder_outputs = (past,)
 
         return {
             "decoder_input_ids": input_ids,
-            "encoder_hidden_states": encoder_hidden_states,
-            "encoder_attention_mask": attention_mask,
+            "encoder_outputs": encoder_outputs,
+            "attention_mask": attention_mask,
         }
-
-    def encode(self, encoder_input_ids, **kwargs):
-        # get only encoder output ids
-        encoder_embeddings = self.shared(encoder_input_ids)
-        encoder_outputs = self.encoder(encoder_embeddings, **kwargs)
-
-        return encoder_outputs
 
     def _reorder_cache(self, past, beam_idx):
         # past does not have to be re-ordered for T5.

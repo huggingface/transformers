@@ -24,15 +24,15 @@ from .utils import CACHE_DIR, require_tf, slow
 
 
 if is_tf_available():
-    from transformers.modeling_tf_t5 import TFT5Model, TFT5WithLMHeadModel
+    from transformers.modeling_tf_t5 import TFT5Model, TFT5ForConditionalGeneration
 
 
 @require_tf
 class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     is_encoder_decoder = True
-    all_model_classes = (TFT5Model, TFT5WithLMHeadModel) if is_tf_available() else ()
-    all_generative_model_classes = (TFT5WithLMHeadModel,) if is_tf_available() else ()
+    all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
+    all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
 
     class TFT5ModelTester(object):
         def __init__(
@@ -129,7 +129,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             )
 
         def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
-            model = TFT5WithLMHeadModel(config=config)
+            model = TFT5ForConditionalGeneration(config=config)
             inputs_dict = {
                 "encoder_input_ids": input_ids,
                 "decoder_input_ids": input_ids,

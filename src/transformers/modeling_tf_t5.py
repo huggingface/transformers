@@ -697,7 +697,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING, T5_INPUTS_DOCSTRING)
-class TFT5WithLMHeadModel(TFT5PreTrainedModel):
+class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
     r"""
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
         **prediction_scores**: ``Numpy array`` or ``tf.Tensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
@@ -713,10 +713,10 @@ class TFT5WithLMHeadModel(TFT5PreTrainedModel):
     Examples::
 
         import tensorflow as tf
-        from transformers import T5Tokenizer, TFT5WithLMHeadModel
+        from transformers import T5Tokenizer, TFT5ForConditionalGeneration
 
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
-        model = TFT5WithLMHeadModel.from_pretrained('t5-small')
+        model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids=input_ids)
         prediction_scores = outputs[0]
