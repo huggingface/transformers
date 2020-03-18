@@ -107,6 +107,9 @@ def _prepare_bart_decoder_inputs(
     return decoder_input_ids, decoder_attn_mask
 
 
+MASK_DTYPE = torch.uint8 if torch.__version__ < "1.2.0" else torch.bool
+
+
 class PretrainedBartModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
@@ -287,9 +290,7 @@ class BartEncoder(nn.Module):
         # check attention mask and invert
         if attention_mask is not None:
             assert attention_mask.dim() == 2
-
-            attention_mask = (1.0 - attention_mask.long()) * -10000.0
-            assert attention_mask.max() <= 0
+            attention_mask = attention_mask.eq(0).to(MASK_DTYPE)
         inputs_embeds = self.embed_tokens(input_ids)
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
@@ -368,7 +369,6 @@ class DecoderLayer(nn.Module):
         Returns:
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
-
         residual = x
         y = x  # TODO(SS): figure out why fairseq did this, then hopefully delete it
 
@@ -469,9 +469,7 @@ class BartDecoder(nn.Module):
         # check attention mask and invert
         if encoder_padding_mask is not None:
             assert encoder_padding_mask.dim() == 2
-
-            encoder_padding_mask = (1.0 - encoder_padding_mask.long()) * -10000.0
-            assert encoder_padding_mask.max() <= 0
+            encoder_padding_mask = encoder_padding_mask.eq(0).to(MASK_DTYPE)
 
         # embed positions
         positions = self.embed_positions(input_ids, generation_mode=generation_mode)
@@ -650,7 +648,7 @@ class SelfAttention(nn.Module):
 
         if key_padding_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool)
+            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
         attn_weights = F.softmax(attn_weights, dim=-1)
@@ -700,22 +698,17 @@ class SelfAttention(nn.Module):
         static_kv: bool,
     ) -> Optional[Tensor]:
         # saved key padding masks have shape (bsz, seq_len)
-        if prev_key_padding_mask is not None and static_kv:
-            new_key_padding_mask = prev_key_padding_mask
-        elif prev_key_padding_mask is not None and key_padding_mask is not None:
-            new_key_padding_mask = torch.cat([prev_key_padding_mask.float(), key_padding_mask.float()], dim=1)
-        # During incremental decoding, as the padding token enters and
-        # leaves the frame, there will be a time when prev or current is None
-        elif prev_key_padding_mask is not None:
-            filler = torch.zeros(batch_size, src_len - prev_key_padding_mask.size(1))
-            if prev_key_padding_mask.is_cuda:
-                filler = filler.to(prev_key_padding_mask.device)
-            new_key_padding_mask = torch.cat([prev_key_padding_mask.float(), filler.float()], dim=1)
+        if prev_key_padding_mask is not None:
+            if static_kv:
+                new_key_padding_mask = prev_key_padding_mask
+            else:
+                new_key_padding_mask = torch.cat([prev_key_padding_mask, key_padding_mask], dim=1)
+
         elif key_padding_mask is not None:
-            filler = torch.zeros(batch_size, src_len - key_padding_mask.size(1))
-            if key_padding_mask.is_cuda:
-                filler = filler.cuda()
-            new_key_padding_mask = torch.cat([filler.float(), key_padding_mask.float()], dim=1)
+            filler = torch.zeros(
+                batch_size, src_len - key_padding_mask.size(1), dtype=MASK_DTYPE, device=key_padding_mask.device
+            )
+            new_key_padding_mask = torch.cat([filler, key_padding_mask], dim=1)
         else:
             new_key_padding_mask = prev_key_padding_mask
         return new_key_padding_mask
