@@ -17,7 +17,6 @@
 
 import logging
 import os
-import unicodedata
 from shutil import copyfile
 from typing import List, Optional
 
