@@ -360,12 +360,12 @@ class TFT5Block(tf.keras.layers.Layer):
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
 class TFT5MainLayer(tf.keras.layers.Layer):
-    def __init__(self, config, embed_tokens, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
-        self.embed_tokens = embed_tokens
+        self.embed_tokens = None
         self.is_decoder = config.is_decoder
 
         self.config = config
@@ -664,17 +664,16 @@ class TFT5Model(TFT5PreTrainedModel):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
+        shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = TFT5MainLayer(encoder_config, name="encoder")
+        self.encoder = TFT5MainLayer(encoder_config, shared, name="encoder")
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        self.decoder = TFT5MainLayer(decoder_config, name="decoder")
+        self.decoder = TFT5MainLayer(decoder_config, shared, name="decoder")
 
-#        self.encoder.set_embed_tokens(self.shared)
-#        self.decoder.set_embed_tokens(self.shared)
+        self.shared = shared
 
     def get_input_embeddings(self):
         return self.shared
@@ -801,12 +800,14 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, 'shared')
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = TFT5MainLayer(encoder_config, encoder_embeds, name="encoder")
+        self.encoder = TFT5MainLayer(encoder_config, name="encoder")
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
+        self.decoder = TFT5MainLayer(decoder_config, name="decoder")
 
-        self.decoder = TFT5MainLayer(decoder_config, decoder_embeds, name="decoder")
+        self.encoder.set_embed_tokens(self.shared)
+        self.decoder.set_embed_tokens(self.shared)
 
     def get_input_embeddings(self):
         return self.shared

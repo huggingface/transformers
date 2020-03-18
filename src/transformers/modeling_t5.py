@@ -504,12 +504,12 @@ class T5PreTrainedModel(PreTrainedModel):
 
 
 class T5Stack(T5PreTrainedModel):
-    def __init__(self, config, shared=None):
+    def __init__(self, config, embed_tokens=None):
         super().__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
-        self.shared = shared
+        self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
 
         self.block = nn.ModuleList(
@@ -521,13 +521,13 @@ class T5Stack(T5PreTrainedModel):
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.shared
+        return self.embed_tokens
 
     def get_output_embeddings(self):
-        return self.shared
+        return self.embed_tokens
 
     def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
+        self.embed_tokens = new_embeddings
 
     def forward(
         self,
@@ -550,8 +550,8 @@ class T5Stack(T5PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            assert self.shared is not None, "You have to intialize the model with valid token embeddings"
-            inputs_embeds = self.shared(input_ids)
+            assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
+            inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
 
@@ -765,12 +765,15 @@ class T5Model(T5PreTrainedModel):
         decoder_config.is_decoder = True
         self.decoder = T5Stack(decoder_config, shared)
 
+        self.shared = shared
+
         self.init_weights()
 
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
 
     def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
@@ -851,23 +854,24 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         super().__init__(config)
         self.model_dim = config.d_model
 
-        shared = nn.Embedding(config.vocab_size, config.d_model)
+        self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = T5Stack(encoder_config, shared)
+        self.encoder = T5Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        self.decoder = T5Stack(decoder_config, shared)
+        self.decoder = T5Stack(decoder_config, self.shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.encoder.get_input_embeddings()
+        return self.shared
 
     def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
