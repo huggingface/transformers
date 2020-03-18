@@ -33,6 +33,7 @@ BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/pytorch_model.bin",
     "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/pytorch_model.bin",
     "bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/pytorch_model.bin",
+    "bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/pytorch_model.bin",
 }
 
 BART_START_DOCSTRING = r"""
@@ -868,10 +869,10 @@ class BartModel(PretrainedBartModel):
 class BartForConditionalGeneration(PretrainedBartModel):
     base_model_prefix = "model"
 
-    def __init__(self, config: BartConfig):
+    def __init__(self, config: BartConfig, base_model=None):
         super().__init__(config)
-        # if base_model is None:
-        base_model = BartModel(config)
+        if base_model is None:
+            base_model = BartModel(config)
         self.model = base_model
         self.lm_head = _make_linear_from_emb(self.model.shared)
 
