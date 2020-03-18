@@ -797,7 +797,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
 
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name='shared')
+        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
 
         encoder_config = copy.deepcopy(config)
         self.encoder = TFT5MainLayer(encoder_config, self.shared, name="encoder")
