@@ -355,8 +355,10 @@ class TFT5Block(tf.keras.layers.Layer):
         return outputs  # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
-class _AvoidRestoreLayer:
-
+class _NoLayerEmbedTokens(object):
+    # this class wraps a the TFSharedEmbeddingTokens layer into a
+    # python 'no-keras-layer' class to avoid problem with
+    # weight restoring
     def __init__(self, layer):
         self._layer = layer
 
@@ -372,17 +374,12 @@ class _AvoidRestoreLayer:
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
 class TFT5MainLayer(tf.keras.layers.Layer):
-    def __init__(self, config, embed_tokens=None, no_restore: bool = True, **kwargs):
+    def __init__(self, config, embed_tokens=None, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
-        if no_restore:
-            embed_tokens = _AvoidRestoreLayer(embed_tokens)
-
         self.embed_tokens = embed_tokens
-        # self._layers.pop()  # a bit hacky for the moment. We need to remove the embed_tokens from the TF layer weights, so that they are not expected when loading the model
-
         self.is_decoder = config.is_decoder
 
         self.config = config
@@ -409,10 +406,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
-
-    # def build(self, input_shape):
-        # self.embed_tokens.build(input_shape)
-        # super().build(input_shape)
 
     def call(
         self,
@@ -686,13 +679,14 @@ class TFT5Model(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
+        embed_tokens = _NoLayerEmbedTokens(self.shared)
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = TFT5MainLayer(encoder_config, self.shared, name="encoder")
+        self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        self.decoder = TFT5MainLayer(decoder_config, self.shared, name="decoder")
+        self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
 
     def get_input_embeddings(self):
         return self.shared
@@ -738,53 +732,6 @@ class TFT5Model(TFT5PreTrainedModel):
         return decoder_outputs + encoder_outputs
 
 
-#    def call(self, decoder_input_ids, **kwargs):
-# We allow two types of multi-inputs:
-# - traditional keyword arguments in the call method
-# - all the arguments provided as a dict in the first positional argument of call
-# The last option is useful to use the tf.keras fit() method.
-#
-#        if isinstance(decoder_input_ids, dict):
-#            kwargs.update(decoder_input_ids)
-#        else:
-#            kwargs["decoder_input_ids"] = decoder_input_ids
-#
-#        kwargs_common = dict(
-#            (k, v) for k, v in kwargs.items() if not k.startswith("encoder_") and not k.startswith("decoder_")
-#        )
-#        kwargs_encoder = kwargs_common.copy()
-#        kwargs_decoder = kwargs_common.copy()
-#        kwargs_encoder.update(dict((k[len("encoder_") :], v) for k, v in kwargs.items() if k.startswith("encoder_")))
-#        kwargs_decoder.update(dict((k[len("decoder_") :], v) for k, v in kwargs.items() if k.startswith("decoder_")))
-#
-# Encode if needed (training, first prediction pass)
-#        encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
-#        if encoder_hidden_states is None:
-# Convert encoder inputs in embeddings if needed
-#            hidden_states = kwargs_encoder.pop("inputs_embeds", None)
-#            if hidden_states is None:
-#                encoder_inputs_ids = kwargs_encoder.pop("input_ids")
-#                hidden_states = self.shared(encoder_inputs_ids)  # Convert inputs in embeddings
-#
-#            encoder_outputs = self.encoder(hidden_states, **kwargs_encoder)
-#            encoder_hidden_states = encoder_outputs[0]
-#        else:
-#            encoder_outputs = ()
-#
-# Decode
-# Convert decoder inputs in embeddings if needed
-#        hidden_states = kwargs_decoder.pop("inputs_embeds", None)
-#        if hidden_states is None:
-#            decoder_inputs_ids = kwargs_decoder.pop("input_ids")
-#            hidden_states = self.shared(decoder_inputs_ids)
-#
-#        kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
-#        kwargs_decoder["encoder_attention_mask"] = kwargs_encoder.get("attention_mask", None)
-#        decoder_outputs = self.decoder(hidden_states, **kwargs_decoder)
-#
-#        return decoder_outputs + encoder_outputs
-
-
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING, T5_INPUTS_DOCSTRING)
 class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
     r"""
@@ -817,14 +764,14 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         self.model_dim = config.d_model
 
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
+        embed_tokens = _NoLayerEmbedTokens(self.shared)
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = TFT5MainLayer(encoder_config, self.shared, no_restore=True, name="encoder")
+        self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-
-        self.decoder = TFT5MainLayer(decoder_config, self.shared, name="decoder")
+        self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
 
     def get_input_embeddings(self):
         return self.shared
@@ -870,44 +817,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
         )
-
-        #        if isinstance(decoder_input_ids, dict):
-        #            kwargs.update(decoder_input_ids)
-        #        else:
-        #            kwargs["decoder_input_ids"] = decoder_input_ids
-        #
-        #        kwargs_common = dict(
-        #            (k, v) for k, v in kwargs.items() if not k.startswith("encoder_") and not k.startswith("decoder_")
-        #        )
-        #        kwargs_encoder = kwargs_common.copy()
-        #        kwargs_decoder = kwargs_common.copy()
-        #        kwargs_encoder.update(dict((k[len("encoder_") :], v) for k, v in kwargs.items() if k.startswith("encoder_")))
-        #        kwargs_decoder.update(dict((k[len("decoder_") :], v) for k, v in kwargs.items() if k.startswith("decoder_")))
-        #
-        # Encode if needed (training, first prediction pass)
-        #        encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
-        #        if encoder_hidden_states is None:
-        # Convert encoder inputs in embeddings if needed
-        #            hidden_states = kwargs_encoder.pop("inputs_embeds", None)
-        #            if hidden_states is None:
-        #                encoder_inputs_ids = kwargs_encoder.pop("input_ids")
-        #                hidden_states = self.shared(encoder_inputs_ids)  # Convert inputs in embeddings
-        #
-        #            encoder_outputs = self.encoder(hidden_states, **kwargs_encoder)
-        #            encoder_hidden_states = encoder_outputs[0]
-        #        else:
-        #            encoder_outputs = ()
-        #
-        # Decode
-        # Convert decoder inputs in embeddings if needed
-        #        hidden_states = kwargs_decoder.pop("inputs_embeds", None)
-        #        if hidden_states is None:
-        #            decoder_inputs_ids = kwargs_decoder.pop("input_ids")
-        #            hidden_states = self.shared(decoder_inputs_ids)
-        #
-        #        kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
-        #        kwargs_decoder["encoder_attention_mask"] = kwargs_encoder.get("attention_mask", None)
-        #        decoder_outputs = self.decoder(hidden_states, **kwargs_decoder)
 
         sequence_output = decoder_outputs[0] * (self.model_dim ** -0.5)
         embed_tokens = self.get_output_embeddings()
