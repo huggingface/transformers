@@ -416,6 +416,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
+            import ipdb
+            ipdb.set_trace()
             inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
@@ -668,13 +670,14 @@ class TFT5Model(TFT5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         self.encoder = TFT5MainLayer(encoder_config, name="encoder")
+        self.encoder_
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         self.decoder = TFT5MainLayer(decoder_config, name="decoder")
 
-#        self.encoder.set_embed_tokens(self.shared)
-#        self.decoder.set_embed_tokens(self.shared)
+        self.encoder.set_embed_tokens(self.shared)
+        self.decoder.set_embed_tokens(self.shared)
 
     def get_input_embeddings(self):
         return self.shared
@@ -798,15 +801,20 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
 
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, 'shared')
+        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name='shared')
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = TFT5MainLayer(encoder_config, encoder_embeds, name="encoder")
+        self.encoder = TFT5MainLayer(encoder_config, self.shared, name="encoder")
+        self.encoder.set_embed_tokens(self.shared)
+        
+        import ipdb
+        ipdb.set_trace()
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
 
-        self.decoder = TFT5MainLayer(decoder_config, decoder_embeds, name="decoder")
+        self.decoder = TFT5MainLayer(decoder_config, self.shared, name="decoder")
+        self.decoder.set_embed_tokens(self.shared)
 
     def get_input_embeddings(self):
         return self.shared
