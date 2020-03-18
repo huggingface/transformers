@@ -98,13 +98,15 @@ def _prepare_bart_decoder_inputs(
             causal_lm_mask = torch.triu(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1)
         else:
             causal_lm_mask = None
-        new_shape = (bsz, tgt_len, tgt_len)
-        # make it broadcastable so can just be added to the attention coefficients
-        decoder_attn_mask = _combine_masks(decoder_padding_mask, causal_lm_mask, new_shape).to(device=input_ids.device)
-        if mask_dtype is not None:
-            decoder_attn_mask = decoder_attn_mask.to(mask_dtype)
-    assert decoder_attn_mask is None or decoder_attn_mask.shape == (bsz, 1, tgt_len, tgt_len)
-    return decoder_input_ids, decoder_attn_mask
+        return decoder_input_ids, decoder_padding_mask, causal_lm_mask
+    #
+    #     new_shape = (bsz, tgt_len, tgt_len)
+    #     # make it broadcastable so can just be added to the attention coefficients
+    #     decoder_attn_mask = _combine_masks(decoder_padding_mask, causal_lm_mask, new_shape).to(device=input_ids.device)
+    #     if mask_dtype is not None:
+    #         decoder_attn_mask = decoder_attn_mask.to(mask_dtype)
+    # assert decoder_attn_mask is None or decoder_attn_mask.shape == (bsz, 1, tgt_len, tgt_len)
+    # return decoder_input_ids, decoder_attn_mask
 
 
 class PretrainedBartModel(PreTrainedModel):
@@ -351,7 +353,7 @@ class DecoderLayer(nn.Module):
         self,
         x,
         encoder_hidden_states,
-        encoder_attn_mask=None,
+        key_padding_mask=None,
         layer_state=None,
         attention_mask=None,
         need_attn_weights=False,
@@ -359,7 +361,7 @@ class DecoderLayer(nn.Module):
         """
         Args:
             x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attn_mask (ByteTensor, optional): binary
+            key_padding_mask (ByteTensor, optional): binary
                 ByteTensor of shape `(batch, src_len)` where padding
                 elements are indicated by ``1``.
             need_attn_weights (bool, optional): return attention weights
@@ -388,7 +390,7 @@ class DecoderLayer(nn.Module):
             query=x,
             key=encoder_hidden_states,  # could be None
             value=encoder_hidden_states,
-            key_padding_mask=encoder_attn_mask,
+            key_padding_mask=key_padding_mask,
             layer_state=layer_state,  # mutates layer state
             static_kv=True,
         )
@@ -443,7 +445,8 @@ class BartDecoder(nn.Module):
         input_ids,
         encoder_hidden_states,
         encoder_padding_mask,
-        combined_mask,
+        decoder_padding_mask,
+        decoder_causal_mask,
         decoder_cached_states=None,
         generation_mode=False,
         **unused
@@ -504,8 +507,9 @@ class BartDecoder(nn.Module):
                 x,
                 encoder_hidden_states,
                 encoder_padding_mask,
+                decoder_padding_mask,
                 layer_state=layer_state,
-                attention_mask=combined_mask,
+                attention_mask=decoder_causal_mask,
                 need_attn_weights=self.output_attentions,
             )
 
@@ -825,7 +829,7 @@ class BartModel(PretrainedBartModel):
 
         # make masks if user doesn't supply
         if not generation_mode:
-            decoder_input_ids, decoder_attention_mask = _prepare_bart_decoder_inputs(
+            decoder_input_ids, decoder_padding_mask, causal_mask = _prepare_bart_decoder_inputs(
                 self.config,
                 input_ids,
                 decoder_input_ids=decoder_input_ids,
@@ -837,11 +841,12 @@ class BartModel(PretrainedBartModel):
             encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
         assert isinstance(encoder_outputs, tuple)
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        decoder_outputs = self.decoder(
+        decoder_outputs = self.decoder.forward(
             decoder_input_ids,
             encoder_outputs[0],
             attention_mask,
-            decoder_attention_mask,
+            decoder_padding_mask,
+            causal_mask=decoder_attention_mask,
             decoder_cached_states=decoder_cached_states,
             generation_mode=generation_mode,
         )
