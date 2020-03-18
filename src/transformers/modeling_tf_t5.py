@@ -360,12 +360,14 @@ class TFT5Block(tf.keras.layers.Layer):
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
 class TFT5MainLayer(tf.keras.layers.Layer):
-    def __init__(self, config, embed_tokens, **kwargs):
+    def __init__(self, config, embed_tokens=None, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
         self.embed_tokens = embed_tokens
+        self._layers.pop()  # a bit hacky for the moment. We need to remove the embed_tokens from the TF layer weights, so that they are not expected when loading the model
+
         self.is_decoder = config.is_decoder
 
         self.config = config
@@ -667,15 +669,11 @@ class TFT5Model(TFT5PreTrainedModel):
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = TFT5MainLayer(encoder_config, name="encoder")
-        self.encoder_
+        self.encoder = TFT5MainLayer(encoder_config, self.shared, name="encoder")
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        self.decoder = TFT5MainLayer(decoder_config, name="decoder")
-
-        self.encoder.set_embed_tokens(self.shared)
-        self.decoder.set_embed_tokens(self.shared)
+        self.decoder = TFT5MainLayer(decoder_config, self.shared, name="decoder")
 
     def get_input_embeddings(self):
         return self.shared
@@ -803,15 +801,11 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         self.encoder = TFT5MainLayer(encoder_config, self.shared, name="encoder")
-        self.encoder.set_embed_tokens(self.shared)
-        self.encoder._layers.pop(0)
-        
+
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
 
         self.decoder = TFT5MainLayer(decoder_config, self.shared, name="decoder")
-        self.decoder.set_embed_tokens(self.shared)
-        self.decoder._layers.pop(0)
 
     def get_input_embeddings(self):
         return self.shared
