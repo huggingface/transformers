@@ -10,7 +10,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install .[sklearn,tf-cpu,torch,testing]
+            - run: sudo pip install .[xlm,sklearn,tf-cpu,torch,testing]
             - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
@@ -25,7 +25,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install .[sklearn,torch,testing]
+            - run: sudo pip install .[xlm,sklearn,torch,testing]
             - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
@@ -39,7 +39,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install .[sklearn,tf-cpu,testing]
+            - run: sudo pip install .[xlm,sklearn,tf-cpu,testing]
             - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
             - run: codecov
