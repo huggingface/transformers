@@ -924,8 +924,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         else:
             decoded = input_ids
 
-        if self.config.is_encoder_decoder and decoder_start_token_id != bos_token_id:
-            return decoded[:, 1:]
         return decoded
 
     def _generate_beam_search(
@@ -1215,8 +1213,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             assert (len(hypo) == max_length for hypo in best)
             decoded = tf.stack(best)
 
-        if self.config.is_encoder_decoder and decoder_start_token_id != bos_token_id:
-            return decoded[:, 1:]
         return decoded
 
     @staticmethod
