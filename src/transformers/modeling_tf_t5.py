@@ -355,18 +355,33 @@ class TFT5Block(tf.keras.layers.Layer):
         return outputs  # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
+class _AvoidRestoreLayer:
+
+    def __init__(self, layer):
+        self._layer = layer
+
+    def call(self, inputs, mode="embedding"):
+        return self._layer.call(inputs, mode)
+
+    def __call__(self, inputs, mode="embedding"):
+        return self._layer(inputs, mode)
+
+
 ####################################################
 # The full model without a specific pretrained or finetuning head is
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
 class TFT5MainLayer(tf.keras.layers.Layer):
-    def __init__(self, config, embed_tokens=None, **kwargs):
+    def __init__(self, config, embed_tokens=None, no_restore: bool = True, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
+        if no_restore:
+            embed_tokens = _AvoidRestoreLayer(embed_tokens)
+
         self.embed_tokens = embed_tokens
-        self._layers.pop()  # a bit hacky for the moment. We need to remove the embed_tokens from the TF layer weights, so that they are not expected when loading the model
+        # self._layers.pop()  # a bit hacky for the moment. We need to remove the embed_tokens from the TF layer weights, so that they are not expected when loading the model
 
         self.is_decoder = config.is_decoder
 
@@ -394,6 +409,10 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
+
+    # def build(self, input_shape):
+        # self.embed_tokens.build(input_shape)
+        # super().build(input_shape)
 
     def call(
         self,
@@ -800,7 +819,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
 
         encoder_config = copy.deepcopy(config)
-        self.encoder = TFT5MainLayer(encoder_config, self.shared, name="encoder")
+        self.encoder = TFT5MainLayer(encoder_config, self.shared, no_restore=True, name="encoder")
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
