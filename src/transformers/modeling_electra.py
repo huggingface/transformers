@@ -367,7 +367,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 
             output += (probs, preds, loss)
 
-        return output  # generator_sequence_output, generator_pooled_output, discriminator_sequence_output, (logits, probs, preds, loss) (probs,)
+        return output  # generator_sequence_output, generator_pooled_output, discriminator_sequence_output, (gen_logits, gen_probs, gen_preds, gen_loss) (discrim_probs, discrim_preds, discrim_loss)
 
 
 class ElectraForMaskedLM(ElectraPreTrainedModel):
@@ -409,8 +409,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        masked_lm_positions=None,
-        masked_lm_ids=None,
+        masked_lm_labels=None,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -441,34 +440,21 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         )
 
         generator_sequence_output = generator_hidden_states[0]
-        generator_pooled_output = generator_hidden_states[0][:, 0]
 
-        output = (generator_sequence_output, generator_pooled_output)
+        prediction_scores = self.generator_predictions(generator_sequence_output)
+        prediction_scores = self.generator_lm_head(prediction_scores)
+
+        output = (prediction_scores, generator_sequence_output)
 
         # Masked language modeling softmax layer
-        if masked_lm_positions is not None:
-            # Gather only the relevant values in the indices that were masked
-            relevant_hidden = self._gather_positions(generator_sequence_output, masked_lm_positions)
-            hidden_states = self.generator_predictions(relevant_hidden)
-
-            # Project to the vocabulary
-            hidden_states = self.generator_lm_head(hidden_states)
-
-            # Compute logits, probabilities and predictions
-            logits = hidden_states
-            probs = torch.softmax(hidden_states, dim=-1)
-
-            log_probs = torch.log_softmax(hidden_states, -1)
-            # label_log_probs = -
-            predictions = torch.argmax(log_probs, dim=-1)
-
+        if masked_lm_labels is not None:
             loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
-            loss = loss_fct(logits.view(-1, self.config.vocab_size), masked_lm_ids.view(-1))
-            output = output + (logits, probs, predictions, loss)
+            loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            output = (loss,) + output
 
         output += generator_hidden_states[1:]
 
-        return output  # generator_sequence_output, generator_pooled_output, (logits, probs, preds, loss)
+        return output  # (loss), prediction_scores, generator_sequence_output, (hidden_states), (attentions)
 
 
 class ElectraModel(ElectraPreTrainedModel):

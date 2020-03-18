@@ -202,7 +202,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             model = ElectraForMaskedLM(config=config)
             model.to(torch_device)
             model.eval()
-            generator_sequence_output, generator_pooled_output, logits, probs, preds, loss = model(
+            loss, generator_sequence_output = model(
                 input_ids,
                 attention_mask=input_mask,
                 token_type_ids=token_type_ids,
@@ -212,10 +212,6 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(
                 list(generator_sequence_output.size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
-            self.parent.assertListEqual(list(generator_pooled_output.size()), [self.batch_size, self.hidden_size])
-            self.parent.assertListEqual(list(logits.size()), [self.batch_size, self.seq_length, self.vocab_size])
-            self.parent.assertListEqual(list(probs.size()), [self.batch_size, token_labels.shape[1], self.vocab_size])
-            self.parent.assertListEqual(list(preds.size()), [self.batch_size, token_labels.shape[1]])
 
         def create_and_check_electra_discriminator(
             self,
