@@ -477,7 +477,7 @@ class T5PreTrainedModel(PreTrainedModel):
         elif isinstance(module, (T5Model, T5ForConditionalGeneration)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            self.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
         elif isinstance(module, T5DenseReluDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
