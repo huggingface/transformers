@@ -356,17 +356,33 @@ class TFT5Block(tf.keras.layers.Layer):
 
 
 class _NoLayerEmbedTokens(object):
-    # this class wraps a the TFSharedEmbeddingTokens layer into a
-    # python 'no-keras-layer' class to avoid problem with
-    # weight restoring
-    def __init__(self, layer):
+    """
+     this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer'
+     class to avoid problem with weight restoring. Also it makes sure that the layer is
+     called from the correct scope to avoid problem with saving/storing the correct weights
+    """
+
+    def __init__(self, layer, abs_scope_name=None):
         self._layer = layer
+        self._abs_scope_name = abs_scope_name
 
     def call(self, inputs, mode="embedding"):
-        return self._layer.call(inputs, mode)
+        if self._abs_scope_name is None:
+            return self._layer.call(inputs, mode)
+
+        # if an abs scope name is given to the embedding variable, call variable from absolute scope
+        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
+            with tf.name_scope(abs_scope_name.original_name_scope):
+                return self._layer.call(inputs, mode)
 
     def __call__(self, inputs, mode="embedding"):
-        return self._layer(inputs, mode)
+        if self._abs_scope_name is None:
+            return self._layer(inputs, mode)
+
+        # if an abs scope name is given to the embedding variable, call variable from absolute scope
+        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
+            with tf.name_scope(abs_scope_name.original_name_scope):
+                return self._layer(inputs, mode)
 
 
 ####################################################
@@ -679,7 +695,12 @@ class TFT5Model(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
-        embed_tokens = _NoLayerEmbedTokens(self.shared)
+
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
+
+        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
         self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
@@ -764,7 +785,12 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         self.model_dim = config.d_model
 
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
-        embed_tokens = _NoLayerEmbedTokens(self.shared)
+
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
+
+        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
 
         encoder_config = copy.deepcopy(config)
         self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
