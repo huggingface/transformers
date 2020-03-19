@@ -93,7 +93,7 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-from .modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP, T5Model, T5WithLMHeadModel
+from .modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP, T5ForConditionalGeneration, T5Model
 from .modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP, TransfoXLLMHeadModel, TransfoXLModel
 from .modeling_xlm import (
     XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -166,7 +166,7 @@ MODEL_MAPPING = OrderedDict(
 
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
-        (T5Config, T5WithLMHeadModel),
+        (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
         (CamembertConfig, CamembertForMaskedLM),
@@ -186,7 +186,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
-        (T5Config, T5WithLMHeadModel),
+        (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
         (CamembertConfig, CamembertForMaskedLM),

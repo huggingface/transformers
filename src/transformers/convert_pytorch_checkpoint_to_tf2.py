@@ -57,7 +57,7 @@ from transformers import (
     TFOpenAIGPTLMHeadModel,
     TFRobertaForMaskedLM,
     TFRobertaForSequenceClassification,
-    TFT5WithLMHeadModel,
+    TFT5ForConditionalGeneration,
     TFTransfoXLLMHeadModel,
     TFXLMRobertaForMaskedLM,
     TFXLMWithLMHeadModel,
@@ -108,7 +108,7 @@ if is_torch_available():
         CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
         AlbertForMaskedLM,
         ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        T5WithLMHeadModel,
+        T5ForConditionalGeneration,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 else:
@@ -145,7 +145,7 @@ else:
         CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
         AlbertForMaskedLM,
         ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        T5WithLMHeadModel,
+        T5ForConditionalGeneration,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
     ) = (
         None,
@@ -316,8 +316,8 @@ MODEL_CLASSES = {
     ),
     "t5": (
         T5Config,
-        TFT5WithLMHeadModel,
-        T5WithLMHeadModel,
+        TFT5ForConditionalGeneration,
+        T5ForConditionalGeneration,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
         T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
