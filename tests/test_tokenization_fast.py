@@ -30,6 +30,10 @@ def filter_non_english(_: Tokenizer, pretrained_name: str):
     return not any([lang in pretrained_name for lang in NON_ENGLISH_TAGS])
 
 
+def filter_roberta_detectors(_: Tokenizer, pretrained_name: str):
+    return "detector" not in pretrained_name
+
+
 class CommonFastTokenizerTest(unittest.TestCase):
 
     TOKENIZERS_CLASSES = frozenset([])
@@ -450,7 +454,9 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
 
 
 class RobertaFastTokenizerTest(CommonFastTokenizerTest):
-    TOKENIZERS_CLASSES = frozenset([Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file", None),])
+    TOKENIZERS_CLASSES = frozenset([
+        Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file", filter_roberta_detectors),
+    ])
 
 
 class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
