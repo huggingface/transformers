@@ -24,14 +24,15 @@ from .utils import CACHE_DIR, require_tf, slow
 
 
 if is_tf_available():
-    from transformers.modeling_tf_t5 import TFT5Model, TFT5WithLMHeadModel
+    from transformers.modeling_tf_t5 import TFT5Model, TFT5ForConditionalGeneration
 
 
 @require_tf
 class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     is_encoder_decoder = True
-    all_model_classes = (TFT5Model, TFT5WithLMHeadModel) if is_tf_available() else ()
+    all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
+    all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
 
     class TFT5ModelTester(object):
         def __init__(
@@ -51,6 +52,8 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             relative_attention_num_buckets=8,
             dropout_rate=0.1,
             initializer_factor=0.002,
+            eos_token_ids=[1],
+            pad_token_id=0,
             scope=None,
         ):
             self.parent = parent
@@ -68,6 +71,8 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             self.relative_attention_num_buckets = relative_attention_num_buckets
             self.dropout_rate = dropout_rate
             self.initializer_factor = initializer_factor
+            self.eos_token_ids = eos_token_ids
+            self.pad_token_id = pad_token_id
             self.scope = scope
 
         def prepare_config_and_inputs(self):
@@ -92,6 +97,9 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
                 relative_attention_num_buckets=self.relative_attention_num_buckets,
                 dropout_rate=self.dropout_rate,
                 initializer_factor=self.initializer_factor,
+                eos_token_ids=self.eos_token_ids,
+                bos_token_id=self.pad_token_id,
+                pad_token_id=self.pad_token_id,
             )
 
             return (config, input_ids, input_mask, token_labels)
@@ -99,15 +107,13 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         def create_and_check_t5_model(self, config, input_ids, input_mask, token_labels):
             model = TFT5Model(config=config)
             inputs = {
-                "encoder_input_ids": input_ids,
+                "input_ids": input_ids,
                 "decoder_input_ids": input_ids,
                 "decoder_attention_mask": input_mask,
             }
             encoder_output, decoder_output = model(inputs)
 
-            encoder_output, decoder_output = model(
-                input_ids, decoder_attention_mask=input_mask, encoder_input_ids=input_ids
-            )
+            encoder_output, decoder_output = model(input_ids, decoder_attention_mask=input_mask, input_ids=input_ids)
 
             result = {
                 "encoder_output": encoder_output.numpy(),
@@ -121,13 +127,15 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             )
 
         def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
-            model = TFT5WithLMHeadModel(config=config)
-            inputs = {
-                "encoder_input_ids": input_ids,
+            model = TFT5ForConditionalGeneration(config=config)
+            inputs_dict = {
+                "input_ids": input_ids,
                 "decoder_input_ids": input_ids,
                 "decoder_attention_mask": input_mask,
             }
-            prediction_scores, decoder_output = model(inputs)
+
+            prediction_scores, decoder_output = model(inputs_dict)
+
             result = {
                 "prediction_scores": prediction_scores.numpy(),
             }
@@ -139,7 +147,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask, token_labels) = config_and_inputs
             inputs_dict = {
-                "encoder_input_ids": input_ids,
+                "input_ids": input_ids,
                 "decoder_input_ids": input_ids,
                 "decoder_attention_mask": input_mask,
             }
