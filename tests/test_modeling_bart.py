@@ -330,6 +330,17 @@ class BartHeadTests(unittest.TestCase):
         lm_model = BartForConditionalGeneration(config).eval().to(torch_device).half()
         lm_model(input_ids, attention_mask=attention_mask)
 
+    def test_default_generate_kwargs(self):
+        config, input_ids, _ = self._get_config_and_data(output_past=True)
+        model = BartForConditionalGeneration(config).eval().to(torch_device)
+        model.generate(input_ids)
+        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    def test_dummy_inputs(self):
+        config, *_ = self._get_config_and_data(output_past=True)
+        model = BartForConditionalGeneration(config).eval().to(torch_device)
+        model(**model.dummy_inputs)
+
     def test_prepare_bart_decoder_inputs(self):
         config, *_ = self._get_config_and_data(output_past=False)
         input_ids = _long_tensor(([4, 4, 2]))  # only used for .device if decoder_input_ids is passed
