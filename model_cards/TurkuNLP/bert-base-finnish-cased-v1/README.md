@@ -1,3 +1,7 @@
+---
+language: finnish
+---
+
 ## Quickstart
 
 **Release 1.0** (November 25, 2019)
