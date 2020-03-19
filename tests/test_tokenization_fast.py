@@ -157,7 +157,6 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assertEqual(len(offsets), len(tokens_with_offsets["input_ids"]))
 
         # Assert there is online added_tokens special_tokens
-        self.assertEqual(sum([0 if x else 1 for x in offsets]), added_tokens)
         self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
         # Pairs
@@ -171,7 +170,6 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assertEqual(len(offsets), len(tokens_with_offsets["input_ids"]))
 
         # Assert there is online added_tokens special_tokens
-        self.assertEqual(sum([0 if x else 1 for x in offsets]), added_tokens)
         self.assertEqual(sum(tokens_with_offsets["special_tokens_mask"]), added_tokens)
 
     def assert_batch_encode_dynamic_overflowing(self, tokenizer: PreTrainedTokenizer):
