@@ -357,6 +357,7 @@ if is_tf_available():
         TFTransfoXLModel,
         TFTransfoXLLMHeadModel,
         TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TFAdaptiveEmbedding,
     )
 
     from .modeling_tf_xlnet import (
