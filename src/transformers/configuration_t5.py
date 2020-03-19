@@ -76,6 +76,8 @@ class T5Config(PretrainedConfig):
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
         is_encoder_decoder=True,
+        pad_token_id=0,
+        eos_token_ids=[1],
         **kwargs
     ):
         super().__init__(
