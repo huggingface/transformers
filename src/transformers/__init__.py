@@ -435,6 +435,7 @@ if is_tf_available():
 
     from .modeling_tf_albert import (
         TFAlbertPreTrainedModel,
+        TFAlbertMainLayer,
         TFAlbertModel,
         TFAlbertForMaskedLM,
         TFAlbertForSequenceClassification,
