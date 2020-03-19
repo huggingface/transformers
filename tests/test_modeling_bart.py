@@ -61,7 +61,7 @@ class ModelTester:
         self.hidden_dropout_prob = 0.1
         self.attention_probs_dropout_prob = 0.1
         self.max_position_embeddings = 20
-        self.eos_token_ids = [2]
+        self.eos_token_id = 2
         self.pad_token_id = 1
         self.bos_token_id = 0
         torch.manual_seed(0)
@@ -483,7 +483,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             no_repeat_ngram_size=3,
             do_sample=False,
             early_stopping=True,
-            decoder_start_token_id=hf.config.eos_token_ids[0],
+            decoder_start_token_id=hf.config.eos_token_id,
         )
 
         decoded = [

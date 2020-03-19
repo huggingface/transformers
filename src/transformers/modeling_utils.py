@@ -831,7 +831,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert pad_token_id is None or (
             isinstance(pad_token_id, int) and (pad_token_id >= 0)
         ), "`pad_token_id` should be a positive integer."
-        assert decoder_start_token_id is not None or self.config.is_encoder_decoder is False, "`decoder_start_token_id` has to be defined if model is encoder-decoder model"
+        assert (
+            decoder_start_token_id is not None or self.config.is_encoder_decoder is False
+        ), "`decoder_start_token_id` has to be defined if model is encoder-decoder model"
         assert (eos_token_id is None) or (
             isinstance(eos_token_id, int) and (eos_token_id >= 0)
         ), "`eos_token_id` should be a positive integer."
