@@ -251,14 +251,10 @@ class PretrainedConfig(object):
             else:
                 msg = (
                     "Can't load '{}'. Make sure that:\n\n"
-                    "- '{}' is either a correct model identifier of a community model from 'https://huggingface.co/models' which has a '{}' file\n\n"
-                    "- or '{}' is a model name in {}\n\n"
-                    "- or '{}' is the correct path to a directory containing a '{}' file".format(
+                    "- '{}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    "- or '{}' is the correct path to a directory containing a '{}' file\n\n".format(
                         pretrained_model_name_or_path,
                         pretrained_model_name_or_path,
-                        CONFIG_NAME,
-                        pretrained_model_name_or_path,
-                        list(pretrained_config_archive_map.keys()),
                         pretrained_model_name_or_path,
                         CONFIG_NAME,
                     )
