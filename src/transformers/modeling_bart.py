@@ -21,6 +21,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from .activations import ACT2FN
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
@@ -105,9 +106,6 @@ def _prepare_bart_decoder_inputs(
             decoder_attn_mask = decoder_attn_mask.to(mask_dtype)
     assert decoder_attn_mask is None or decoder_attn_mask.shape == (bsz, 1, tgt_len, tgt_len)
     return decoder_input_ids, decoder_attn_mask
-
-
-MASK_DTYPE = torch.uint8 if torch.__version__ < "1.2.0" else torch.bool
 
 
 class PretrainedBartModel(PreTrainedModel):
@@ -207,7 +205,7 @@ class EncoderLayer(nn.Module):
         )
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
-        self.activation_fn = F.gelu
+        self.activation_fn = ACT2FN["gelu"]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
@@ -290,7 +288,7 @@ class BartEncoder(nn.Module):
         # check attention mask and invert
         if attention_mask is not None:
             assert attention_mask.dim() == 2
-            attention_mask = attention_mask.eq(0).to(MASK_DTYPE)
+            attention_mask = attention_mask.eq(0)
         inputs_embeds = self.embed_tokens(input_ids)
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
@@ -333,7 +331,7 @@ class DecoderLayer(nn.Module):
             embed_dim=self.embed_dim, num_heads=config.decoder_attention_heads, dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
-        self.activation_fn = F.gelu
+        self.activation_fn = ACT2FN["gelu"]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
@@ -469,7 +467,7 @@ class BartDecoder(nn.Module):
         # check attention mask and invert
         if encoder_padding_mask is not None:
             assert encoder_padding_mask.dim() == 2
-            encoder_padding_mask = encoder_padding_mask.eq(0).to(MASK_DTYPE)
+            encoder_padding_mask = encoder_padding_mask.eq(0)
 
         # embed positions
         positions = self.embed_positions(input_ids, generation_mode=generation_mode)
@@ -706,7 +704,10 @@ class SelfAttention(nn.Module):
 
         elif key_padding_mask is not None:
             filler = torch.zeros(
-                batch_size, src_len - key_padding_mask.size(1), dtype=MASK_DTYPE, device=key_padding_mask.device
+                batch_size,
+                src_len - key_padding_mask.size(1),
+                dtype=key_padding_mask.dtype,
+                device=key_padding_mask.device,
             )
             new_key_padding_mask = torch.cat([filler, key_padding_mask], dim=1)
         else:
