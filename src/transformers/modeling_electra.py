@@ -152,7 +152,7 @@ class ElectraDiscriminatorPredictions(nn.Module):
         super().__init__()
 
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dense_prediction = nn.Linear(config.hidden_size, 1)
+        self.dense_prediction = nn.Linear(config.hidden_size, config.num_labels)
         self.config = config
 
     def forward(self, discriminator_hidden_states, attention_mask, labels):
@@ -163,8 +163,26 @@ class ElectraDiscriminatorPredictions(nn.Module):
         probs = torch.nn.Sigmoid()(logits)
         preds = torch.round((logits.sign() + 1) / 2)
 
-        loss_fct = nn.BCEWithLogitsLoss()
-        loss = loss_fct(logits.view(-1, discriminator_hidden_states.shape[1]), labels.float())
+        if self.config.num_classes == 2:
+            loss_fct = nn.BCEWithLogitsLoss()
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.num_labels)[active_loss]
+                active_labels = labels.view(-1)[active_loss]
+                loss = loss_fct(active_logits, active_labels)
+            else:
+                loss = loss_fct(logits.view(-1, discriminator_hidden_states.shape[1]), labels.float())
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+        else:
+            loss_fct = nn.CrossEntropyLoss()
+            # Only keep active parts of the loss
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.num_labels)[active_loss]
+                active_labels = labels.view(-1)[active_loss]
+                loss = loss_fct(active_logits, active_labels)
+            else:
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         return probs, preds, loss
 
@@ -291,11 +309,11 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
     def get_fake_data(self, input_ids, masked_lm_positions, mlm_logits, ignore_index=-100):
         sampled = mlm_logits.argmax(dim=-1)
         actual_ids = input_ids.gather(1, masked_lm_positions)
-        incorrect_indices = (sampled == actual_ids).long()
+        incorrect_indices = (sampled != actual_ids).long()
         fake_ids = torch.zeros_like(input_ids)
 
         batch_dimensions = torch.arange(masked_lm_positions.shape[0])
-        fake_ids[batch_dimensions, masked_lm_positions] = incorrect_indices
+        fake_ids[batch_dimensions, masked_lm_positions.T] = incorrect_indices.T
 
         return fake_ids
 
@@ -355,7 +373,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
             # Gather only the relevant values in the indices that were masked
             relevant_hidden = self._gather_positions(generator_sequence_output, masked_lm_positions)
 
-            assert len(masked_lm_labels.shape) == 2, "Masked LM labels should be of shape [batch_size, sequence_length"
+            assert len(masked_lm_labels.shape) == 2, "Masked LM labels should be of shape [batch_size, sequence_length]"
             relevant_masked_lm_labels = self._gather_positions(masked_lm_labels.unsqueeze(-1), masked_lm_positions)
 
             hidden_states = self.generator_predictions(relevant_hidden)
@@ -472,7 +490,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         return output  # (loss), prediction_scores, generator_sequence_output, (hidden_states), (attentions)
 
 
-class ElectraModel(ElectraPreTrainedModel):
+class ElectraForTokenClassification(ElectraPreTrainedModel):
     def __init__(self, config):
         config = config.get_discriminator_config()
         super().__init__(config)
