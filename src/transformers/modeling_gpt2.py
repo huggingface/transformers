@@ -402,8 +402,10 @@ class GPT2Model(GPT2PreTrainedModel):
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
+            batch_size = input_ids.shape[0]
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+            batch_size = inputs_embeds.shape[0]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -424,7 +426,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
         # Attention mask.
         if attention_mask is not None:
-            batch_size = input_shape[0]
+            assert batch_size > 0, "batch_size has to be defined and > 0"
             attention_mask = attention_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
