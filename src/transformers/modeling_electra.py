@@ -288,6 +288,18 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
     def get_output_embeddings(self):
         return self.generator_lm_head
 
+    def get_fake_data(self, input_ids, masked_lm_positions, mlm_logits, ignore_index=-100):
+        sampled = mlm_logits.argmax(dim=-1)
+        actual_ids = input_ids.gather(1, masked_lm_positions)
+        incorrect_indices = (sampled == actual_ids).long()
+        fake_ids = torch.zeros_like(input_ids)
+
+        batch_dimensions = torch.arange(masked_lm_positions.shape[0])
+        fake_ids[batch_dimensions, masked_lm_positions] = incorrect_indices
+
+        return fake_ids
+
+
     def forward(
         self,
         input_ids=None,
@@ -297,9 +309,8 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         discriminator_head_mask=None,
         generator_head_mask=None,
         inputs_embeds=None,
+        masked_lm_labels=None,
         masked_lm_positions=None,
-        masked_lm_ids=None,
-        fake_token_labels=None,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -343,6 +354,10 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         if masked_lm_positions is not None:
             # Gather only the relevant values in the indices that were masked
             relevant_hidden = self._gather_positions(generator_sequence_output, masked_lm_positions)
+
+            assert len(masked_lm_labels.shape) == 2, "Masked LM labels should be of shape [batch_size, sequence_length"
+            relevant_masked_lm_labels = self._gather_positions(masked_lm_labels.unsqueeze(-1), masked_lm_positions)
+
             hidden_states = self.generator_predictions(relevant_hidden)
 
             # Project to the vocabulary
@@ -357,10 +372,10 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
             predictions = torch.argmax(log_probs, dim=-1)
 
             loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
-            loss = loss_fct(logits.view(-1, self.config.vocab_size), masked_lm_ids.view(-1))
+            loss = loss_fct(logits.view(-1, self.config.vocab_size), relevant_masked_lm_labels.view(-1))
             output += (logits, probs, predictions, loss)
 
-        if fake_token_labels is not None:
+            fake_token_labels = self.get_fake_data(masked_lm_labels, masked_lm_positions, logits)
             probs, preds, loss = self.discriminator_predictions(
                 discriminator_sequence_output, attention_mask, fake_token_labels
             )
