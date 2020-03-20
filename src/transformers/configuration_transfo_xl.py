@@ -187,7 +187,7 @@ class TransfoXLConfig(PretrainedConfig):
         self.init_std = init_std
         self.layer_norm_epsilon = layer_norm_epsilon
 
-        self.eos_token_ids = [eos_token_id]
+        self.eos_token_id = eos_token_id
 
     @property
     def max_position_embeddings(self):

@@ -82,7 +82,7 @@ class ModelTester:
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
-            eos_token_ids=self.eos_token_ids,
+            eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
@@ -214,7 +214,7 @@ class BartHeadTests(unittest.TestCase):
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             output_past=output_past,
-            eos_token_ids=[2],
+            eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
         )
@@ -274,7 +274,7 @@ class BartHeadTests(unittest.TestCase):
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             output_past=True,
-            eos_token_ids=[2],
+            eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
         )

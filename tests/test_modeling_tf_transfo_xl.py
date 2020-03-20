@@ -107,7 +107,7 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
                 d_inner=self.d_inner,
                 div_val=self.div_val,
                 n_layer=self.num_hidden_layers,
-                eos_token_ids=self.eos_token_id,
+                eos_token_id=self.eos_token_id,
             )
 
             return (config, input_ids_1, input_ids_2, lm_labels)

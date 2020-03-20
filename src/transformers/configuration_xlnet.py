@@ -193,7 +193,7 @@ class XLNetConfig(PretrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
-        self.eos_token_ids = [eos_token_id]
+        self.eos_token_id = eos_token_id
 
     @property
     def max_position_embeddings(self):

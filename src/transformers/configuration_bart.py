@@ -43,7 +43,7 @@ class BartConfig(PretrainedConfig):
         vocab_size=50265,
         bos_token_id=0,
         pad_token_id=1,
-        eos_token_ids=[2],
+        eos_token_id=2,
         d_model=1024,
         encoder_ffn_dim=4096,
         encoder_layers=12,
@@ -74,7 +74,7 @@ class BartConfig(PretrainedConfig):
             output_past=output_past,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
-            eos_token_ids=eos_token_ids,
+            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             **common_kwargs,
         )

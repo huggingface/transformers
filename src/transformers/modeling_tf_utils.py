@@ -469,7 +469,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         repetition_penalty=None,
         bos_token_id=None,
         pad_token_id=None,
-        eos_token_ids=None,
+        eos_token_id=None,
         length_penalty=None,
         no_repeat_ngram_size=None,
         num_return_sequences=None,
@@ -518,13 +518,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
 
             bos_token_id: (`optional`) int
-                Beginning of sentence token if no prompt is provided. Default to 0.
+                Beginning of sentence token if no prompt is provided. Default to specicic model bos_token_id or None if it does not exist.
 
             pad_token_id: (`optional`) int
                 Pad token. Defaults to pad_token_id as defined in the models config.
 
             eos_token_ids: (`optional`) int or list of int
                 End of sequence token or list of tokens to stop the generation. Default to 0.
+
             length_penalty: (`optional`) float
                 Exponential penalty to the length. Default to 1.
 
@@ -601,7 +602,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
-        eos_token_ids = eos_token_ids if eos_token_ids is not None else self.config.eos_token_ids
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
@@ -615,8 +616,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             batch_size = shape_list(input_ids)[0]  # overriden by the input batch_size
         else:
             batch_size = 1
-        if isinstance(eos_token_ids, int):
-            eos_token_ids = [eos_token_ids]
 
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictely positive integer."
         assert isinstance(min_length, int) and min_length >= 0, "`min_length` should be a positive integer."
@@ -633,9 +632,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         assert pad_token_id is None or (
             isinstance(pad_token_id, int) and (pad_token_id >= 0)
         ), "`pad_token_id` should be a positive integer."
-        assert (eos_token_ids is None) or (
-            isinstance(eos_token_ids, (list, tuple)) and ((isinstance(e, int) and e >= 0) for e in eos_token_ids)
-        ), "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
+        assert (eos_token_id is None) or (
+            isinstance(eos_token_id, int) and (eos_token_id >= 0)
+        ), "`eos_token_id` should be a positive integer."
         assert (
             decoder_start_token_id is not None or self.config.is_encoder_decoder is False
         ), "`decoder_start_token_id` has to be defined if model is encoder-decoder model"
@@ -674,11 +673,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         elif attention_mask is None:
             attention_mask = tf.ones_like(input_ids)
 
-        if pad_token_id is None and eos_token_ids is not None:
+        if pad_token_id is None and eos_token_id is not None:
             logger.warning(
-                "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_ids[0])
+                "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_id)
             )
-            pad_token_id = eos_token_ids[0]
+            pad_token_id = eos_token_id
 
         # current position and vocab size
         cur_len = shape_list(input_ids)[1]
@@ -742,7 +741,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                eos_token_ids=eos_token_ids,
+                eos_token_id=eos_token_id,
                 decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
                 num_return_sequences=num_return_sequences,
@@ -766,7 +765,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                eos_token_ids=eos_token_ids,
+                eos_token_id=eos_token_id,
                 decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
                 vocab_size=vocab_size,
@@ -790,7 +789,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         no_repeat_ngram_size,
         bos_token_id,
         pad_token_id,
-        eos_token_ids,
+        eos_token_id,
         decoder_start_token_id,
         batch_size,
         vocab_size,
@@ -839,10 +838,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 )
 
             # set eos token prob to zero if min_length is not reached
-            if eos_token_ids is not None and cur_len < min_length:
-                # create eos_token_ids boolean mask
+            if eos_token_id is not None and cur_len < min_length:
+                # create eos_token_id boolean mask
                 is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token in eos_token_ids else False for token in range(vocab_size)], dtype=tf.bool
+                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [batch_size, vocab_size])
 
@@ -865,28 +864,27 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 next_token = tf.math.argmax(next_token_logits, axis=-1, output_type=tf.int32)
 
             # update generations and finished sentences
-            if eos_token_ids is not None:
-                # pad finished sentences if eos_token_ids exist
+            if eos_token_id is not None:
+                # pad finished sentences if eos_token_id exist
                 tokens_to_add = next_token * unfinished_sents + (pad_token_id) * (1 - unfinished_sents)
             else:
                 tokens_to_add = next_token
 
             input_ids = tf.concat([input_ids, tf.expand_dims(tokens_to_add, -1)], 1)
 
-            if eos_token_ids is not None:
-                for eos_token_id in eos_token_ids:
-                    eos_in_sents = tokens_to_add == eos_token_id
-                    # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
-                    is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(
-                        unfinished_sents, tf.cast(eos_in_sents, tf.int32)
-                    )
-                    sent_lengths = (
-                        sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
-                        + cur_len * is_sents_unfinished_and_token_to_add_is_eos
-                    )
+            if eos_token_id is not None:
+                eos_in_sents = tokens_to_add == eos_token_id
+                # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
+                is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(
+                    unfinished_sents, tf.cast(eos_in_sents, tf.int32)
+                )
+                sent_lengths = (
+                    sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
+                    + cur_len * is_sents_unfinished_and_token_to_add_is_eos
+                )
 
-                    # unfinished_sents is set to zero if eos in sentence
-                    unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
+                # unfinished_sents is set to zero if eos in sentence
+                unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
 
             # stop when there is a </s> in each sentence, or if we exceed the maximul length
             if tf.math.reduce_max(unfinished_sents) == 0:
@@ -937,8 +935,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         no_repeat_ngram_size,
         bos_token_id,
         pad_token_id,
-        eos_token_ids,
         decoder_start_token_id,
+        eos_token_id,
         batch_size,
         num_return_sequences,
         length_penalty,
@@ -996,10 +994,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
 
             # set eos token prob to zero if min_length is not reached
-            if eos_token_ids is not None and cur_len < min_length:
-                # create eos_token_ids boolean mask
+            if eos_token_id is not None and cur_len < min_length:
+                # create eos_token_id boolean mask
                 is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token in eos_token_ids else False for token in range(vocab_size)], dtype=tf.bool
+                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [batch_size, vocab_size])
 
@@ -1072,7 +1070,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                         len(generated_hyps[batch_idx]) >= num_beams
                     ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
                     assert (
-                        eos_token_ids is not None and pad_token_id is not None
+                        eos_token_id is not None and pad_token_id is not None
                     ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
                     next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
                     continue
@@ -1091,7 +1089,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
                     effective_beam_id = batch_idx * num_beams + beam_id
                     # add to generated hypotheses if end of sentence or last iteration
-                    if eos_token_ids is not None and token_id.numpy() in eos_token_ids:
+                    if eos_token_id is not None and token_id.numpy() is eos_token_id:
                         # if beam_token does not belong to top num_beams tokens, it should not be added
                         is_beam_token_worse_than_top_num_beams = beam_token_rank >= num_beams
                         if is_beam_token_worse_than_top_num_beams:
@@ -1148,8 +1146,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             if done[batch_idx]:
                 continue
             # test that beam scores match previously calculated scores if not eos and batch_idx not done
-            if eos_token_ids is not None and all(
-                (token_id % vocab_size).numpy().item() not in eos_token_ids for token_id in next_tokens[batch_idx]
+            if eos_token_id is not None and all(
+                (token_id % vocab_size).numpy().item() is not eos_token_id for token_id in next_tokens[batch_idx]
             ):
                 assert tf.reduce_all(
                     next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
@@ -1199,7 +1197,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 if sent_lengths[i] < max_length:
                     decoded_hypo = tf.where(
                         tf.range(max_length) == sent_lengths[i],
-                        eos_token_ids[0] * tf.ones((sent_max_len,), dtype=tf.int32),
+                        eos_token_id * tf.ones((sent_max_len,), dtype=tf.int32),
                         decoded_hypo,
                     )
                 decoded_list.append(decoded_hypo)
