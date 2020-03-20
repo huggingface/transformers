@@ -205,6 +205,8 @@ class LSHAttention(nn.Module):
             buckets = torch.argmax(rotated, dim=-1)
             buckets = (buckets + offsets).view(x.size(0), -1)
 
+        return buckets
+
 
 class ReformerSelfAttention(nn.Module):
     def __init__(self, config):
