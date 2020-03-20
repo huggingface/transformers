@@ -672,8 +672,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         attention_mask=None,
         decoder_start_token_id=None,
     ):
-        r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
-        and beam-search.
+        r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
 
         Adapted in part from `Facebook's XLM beam search code`_.
 
@@ -688,10 +687,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 it as an empty `torch.LongTensor` of shape `(1,)`.
 
             max_length: (`optional`) int
-                The max length of the sequence to be generated.  Between 1 and infinity. Default to 20.
+                The max length of the sequence to be generated.  Between `min_length` and infinity. Default to 20.
+
+            min_length: (`optional`) int
+                The min length of the sequence to be generated.  Between 0 and infinity. Default to 0.
 
             do_sample: (`optional`) bool
-                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False`.
+                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
+
+            early_stopping: (`optional`) bool
+                if set to `True` beam search is stopped when at least `num_beams` sentences finished per batch. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
 
             num_beams: (`optional`) int
                 Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
@@ -709,15 +714,34 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
 
             bos_token_id: (`optional`) int
-                Beginning of sentence token if no prompt is provided. Default to 0.
+                BOS token. Defaults to bos_token_id as defined in the models config.
+
+            pad_token_id: (`optional`) int
+                Pad token. Defaults to pad_token_id as defined in the models config.
 
             eos_token_ids: (`optional`) int or list of int
-                End of sequence token or list of tokens to stop the generation. Default to 0.
+                End of sequence token or list of tokens to stop the generation. Default to eos_token_ids as defined in the models config.
+
             length_penalty: (`optional`) float
                 Exponential penalty to the length. Default to 1.
 
+            no_repeat_ngram_size: (`optional`) int
+                If set to int > 0, all ngrams of size `no_repeat_ngram_size` can only occur once.
+
             num_return_sequences: (`optional`) int
                 The number of independently computed returned sequences for each element in the batch. Default to 1.
+
+            attention_mask (`optional`) obj: `torch.LongTensor` of same shape as `input_ids`
+                Mask to avoid performing attention on padding token indices.
+                Mask values selected in ``[0, 1]``:
+                ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+                Defaults to `None`.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+
+            decoder_start_token_id=None: (`optional`) int
+                If an encoder-decoder model starts decoding with a different token than BOS.
+                Defaults to `None` and is changed to `BOS` later.
 
         Return:
 
@@ -728,13 +752,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
-            outputs = model.generate(max_length=40, do_sample=False)  # do greedy decoding
+            outputs = model.generate(max_length=40)  # do greedy decoding
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
-            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
             outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
@@ -742,7 +766,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
-            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3)  # 3 generate sequences using by sampling
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
@@ -750,7 +774,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
             model = AutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
             input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
-            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
@@ -760,7 +784,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         if self.get_output_embeddings() is None:
             raise AttributeError(
                 "You tried to generate sequences with a model that does not have a LM Head."
-                "Please use another model class (e.g. `OpenAIGPTLMHeadModel`, `XLNetLMHeadModel`, `GPT2LMHeadModel`, `CTRLLMHeadModel`, `T5WithLMHeadModel`, `TransfoXLLMHeadModel`)"
+                "Please use another model class (e.g. `OpenAIGPTLMHeadModel`, `XLNetLMHeadModel`, `GPT2LMHeadModel`, `CTRLLMHeadModel`, `T5WithLMHeadModel`, `TransfoXLLMHeadModel`, `XLMWithLMHeadModel`, `BartForConditionalGeneration` )"
             )
 
         max_length = max_length if max_length is not None else self.config.max_length
@@ -782,10 +806,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
-        # TODO: think about how to make this cleaner
-        decoder_start_token_id = (
-            decoder_start_token_id if decoder_start_token_id is not None else self.config.bos_token_id
-        )
+        decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else bos_token_id
 
         if input_ids is not None:
             batch_size = input_ids.shape[0]  # overriden by the input batch_size
@@ -888,20 +909,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             attention_mask = attention_mask.contiguous().view(
                 effective_batch_size * num_beams, input_ids_len
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
+
         if self.config.is_encoder_decoder:
             assert bos_token_id is not None, "Encoder Decoder Models need to have a bos_token_id"
-            # encoder decoder need to start with empty input_ids and copy the input_ids to encoder_inputs
-            encoder_inputs = input_ids
+            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
+            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
+
+            # get encoder and store encoder outputs
+            encoder = self.get_encoder()
+
+            encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
+
+            # create empty decoder_input_ids
             input_ids = torch.full(
                 (effective_batch_size * num_beams, 1),
-                decoder_start_token_id,  # TODO: see whether this is the best result
+                decoder_start_token_id,
                 dtype=torch.long,
                 device=next(self.parameters()).device,
             )
             cur_len = 1
-
         else:
-            encoder_inputs = None
+            encoder_outputs = None
             cur_len = input_ids.shape[-1]
 
         if num_beams > 1:
@@ -920,12 +948,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
                 eos_token_ids=eos_token_ids,
+                decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
                 num_return_sequences=num_return_sequences,
                 length_penalty=length_penalty,
                 num_beams=num_beams,
                 vocab_size=vocab_size,
-                encoder_inputs=encoder_inputs,
+                encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
             )
         else:
@@ -940,10 +969,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
+                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
                 eos_token_ids=eos_token_ids,
+                decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
-                encoder_inputs=encoder_inputs,
+                encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
             )
 
@@ -961,10 +992,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         top_p,
         repetition_penalty,
         no_repeat_ngram_size,
+        bos_token_id,
         pad_token_id,
         eos_token_ids,
+        decoder_start_token_id,
         batch_size,
-        encoder_inputs,
+        encoder_outputs,
         attention_mask,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
@@ -974,11 +1007,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         unfinished_sents = input_ids.new(batch_size).fill_(1)
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
 
-        past = None
+        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
+
         while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, encoder_inputs=encoder_inputs, attention_mask=attention_mask
-            )
+            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
 
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
@@ -1075,12 +1107,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         bos_token_id,
         pad_token_id,
         eos_token_ids,
+        decoder_start_token_id,
         batch_size,
         num_return_sequences,
         length_penalty,
         num_beams,
         vocab_size,
-        encoder_inputs,
+        encoder_outputs,
         attention_mask,
     ):
         """ Generate sequences for each example with beam search.
@@ -1101,15 +1134,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
 
         # cache compute states
-        past = None
+        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
 
         # done sentences
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
-            model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, encoder_inputs=encoder_inputs, attention_mask=attention_mask
-            )
+            model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
 
@@ -1128,8 +1159,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
             if self.config.is_encoder_decoder and do_sample is False:
-                # TODO: maybe give better naming
-                scores = self.prepare_scores_for_generation(scores, cur_len, max_length)
+                # TODO (PVP) still a bit hacky here - there might be a better solutino
+                scores = self.prepare_scores_for_generation(scores, cur_len=cur_len, max_length=max_length)
 
             # set eos token prob to zero if min_length is not reached
             if eos_token_ids is not None and cur_len < min_length:
@@ -1254,7 +1285,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             input_ids = torch.cat([input_ids, beam_tokens.unsqueeze(1)], dim=-1)
 
             # re-order internal states
-            if past:
+            if past is not None:
                 past = self._reorder_cache(past, beam_idx)
 
             # extend attention_mask for new generated input if only decoder
@@ -1321,8 +1352,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             assert (len(hypo) == max_length for hypo in best)
             decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
 
-        if self.config.is_encoder_decoder:
-            return decoded[:, 1:]
         return decoded
 
     # force one of token_ids to be generated by setting prob of all other tokens to 0.

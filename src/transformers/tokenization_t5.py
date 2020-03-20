@@ -141,7 +141,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             import sentencepiece as spm
         except ImportError:
             logger.warning(
-                "You need to install SentencePiece to use XLNetTokenizer: https://github.com/google/sentencepiece"
+                "You need to install SentencePiece to use T5Tokenizer: https://github.com/google/sentencepiece"
                 "pip install sentencepiece"
             )
             raise
