@@ -77,11 +77,11 @@ class T5Config(PretrainedConfig):
         initializer_factor=1.0,
         is_encoder_decoder=True,
         pad_token_id=0,
-        eos_token_ids=[1],
+        eos_token_id=1,
         **kwargs
     ):
         super().__init__(
-            is_encoder_decoder=is_encoder_decoder, **kwargs,
+            pad_token_id=pad_token_id, eos_token_id=eos_token_id, is_encoder_decoder=is_encoder_decoder, **kwargs,
         )
         self.vocab_size = vocab_size
         self.n_positions = n_positions
