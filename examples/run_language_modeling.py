@@ -232,7 +232,7 @@ def mask_tokens(inputs: torch.Tensor, tokenizer: PreTrainedTokenizer, args) -> T
 
 def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedTokenizer) -> Tuple[int, float]:
     """ Train the model """
-    if args.local_rank in [-1, 0]:
+    if (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         tb_writer = SummaryWriter()
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
@@ -375,7 +375,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
                 model.zero_grad()
                 global_step += 1
 
-                if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
+                if (args.local_rank == -1 or torch.distributed.get_rank() == 0) and args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     # Log metrics
                     if (
                         args.local_rank == -1 and args.evaluate_during_training
@@ -387,7 +387,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
                     tb_writer.add_scalar("loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
                     logging_loss = tr_loss
 
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                if (args.local_rank == -1 or torch.distributed.get_rank() == 0) and args.save_steps > 0 and global_step % args.save_steps == 0:
                     checkpoint_prefix = "checkpoint"
                     # Save model checkpoint
                     output_dir = os.path.join(args.output_dir, "{}-{}".format(checkpoint_prefix, global_step))
@@ -414,7 +414,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             train_iterator.close()
             break
 
-    if args.local_rank in [-1, 0]:
+    if (args.local_rank == -1 or torch.distributed.get_rank() == 0):
         tb_writer.close()
 
     return global_step, tr_loss / global_step
@@ -738,12 +738,12 @@ def main():
 
     # Training
     if args.do_train:
-        if args.local_rank not in [-1, 0]:
+        if not (args.local_rank == -1 or torch.distributed.get_rank() == 0):
             torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training process the dataset, and the others will use the cache
 
         train_dataset = load_and_cache_examples(args, tokenizer, evaluate=False)
 
-        if args.local_rank == 0:
+        if args.local_rank == 0 and torch.distributed.get_rank() == 0:
             torch.distributed.barrier()
 
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
