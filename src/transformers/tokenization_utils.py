@@ -1038,7 +1038,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         **kwargs
-    ):
+    ) -> BatchEncoding :
         """
         Returns a dictionary containing the encoded sequence or sequence pair and additional information:
         the mask for sequence classification and the overflowing elements if a ``max_length`` is specified.
@@ -1186,7 +1186,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         return_offsets_mapping: bool = False,
         return_input_lengths: bool = False,
         **kwargs
-    ):
+    ) -> BatchEncoding:
         """
         Returns a dictionary containing the encoded sequence or sequence pair and additional information:
         the mask for sequence classification and the overflowing elements if a ``max_length`` is specified.
@@ -1378,7 +1378,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                         )
                     )
 
-        return batch_outputs
+        return BatchEncoding(batch_outputs)
 
     def prepare_for_model(
         self,
@@ -1575,7 +1575,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 )
             )
 
-        return encoded_inputs
+        return BatchEncoding(encoded_inputs)
 
     def prepare_for_tokenization(self, text, **kwargs):
         """ Performs any necessary transformations before tokenization """
@@ -2034,7 +2034,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         **kwargs
-    ) -> BatchEncoding :
+    ) -> BatchEncoding:
         batched_input = [(text, text_pair)] if text_pair else [text]
         batched_output = self.batch_encode_plus(
             batched_input,
