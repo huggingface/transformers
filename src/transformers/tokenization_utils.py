@@ -20,10 +20,11 @@ import json
 import logging
 import os
 import re
-from collections import defaultdict
+from collections import defaultdict, UserDict
 from contextlib import contextmanager
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Sequence, Union, Tuple, List
 
+from tokenizers import Encoding
 from tokenizers.implementations import BaseTokenizer
 
 from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
@@ -101,6 +102,62 @@ def truncate_and_pad(
 
     if pad_to_max_length and (pad_token and pad_token_id >= 0):
         tokenizer.no_padding()
+
+
+class BatchEncoding(UserDict):
+
+    def __init__(self, data: dict, encoding: Optional[Union[Encoding, Sequence[Encoding]]] = None):
+        super().__init__(data)
+
+        if isinstance(encoding, Encoding):
+            encoding = [encoding]
+
+        self._encodings = encoding
+
+    def __getitem__(self, item: Union[int, str]) -> Encoding:
+        if isinstance(item, str):
+            return self.data[item]
+        elif self._encodings is not None:
+            return self._encodings[item]
+        else:
+            raise KeyError("int index is supported only on {} from a Rust tokenizer".format(type(self).__name__))
+
+    def __getattr__(self, item: str):
+        return self.data[item]
+
+    @property
+    def encodings(self) -> Optional[List[Encoding]]:
+        return self._encodings
+
+    def keys(self):
+        return self.data.keys()
+
+    def values(self):
+        return self.data.values()
+
+    def items(self):
+        return self.data.items()
+
+    def char_to_token(self, sample: int, char: int) -> Tuple[int, int]:
+        if not self._encodings:
+            raise ValueError()
+        return self[sample].char_to_token(char)
+
+    def char_to_word(self, sample: int, char: int) -> Tuple[int, int]:
+        if not self._encodings:
+            raise ValueError()
+        return self[sample].char_to_word(char)
+
+    def word_boundaries(self, sample: int, pos: int) -> Optional[Tuple[int, int]]:
+        if not self._encodings:
+            raise ValueError()
+        return self[sample].word_boundaries(pos)
+
+    def token_to_word(self, sample: int, index: int) -> Optional[Tuple[int, int]]:
+        """ Find the offsets of the word that contains the token at the given index """
+        if not self._encodings:
+            raise ValueError()
+        return self[sample].word_boundaries(index)
 
 
 class SpecialTokensMixin:
@@ -1804,7 +1861,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             if return_special_tokens_mask:
                 encoding_dict["special_tokens_mask"].append(e.special_tokens_mask)
             if return_offsets_mapping:
-                encoding_dict["offset_mapping"].append([e.original_str.offsets(o) for o in e.offsets])
+                encoding_dict["offset_mapping"] = [o for o in e.offsets]
 
         # Prepare inputs as tensors if asked
         if return_tensors == "tf" and is_tf_available():
@@ -1880,7 +1937,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         **kwargs
-    ):
+    ) -> BatchEncoding:
 
         if batch_text_or_text_pairs is None:
             raise ValueError(
@@ -1915,14 +1972,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             # Avoid thread overhead if only one example.
             if len(batch_text_or_text_pairs) == 1:
                 if isinstance(batch_text_or_text_pairs[0], (tuple, list)):
-                    tokens = self._tokenizer.encode(
+                    encodings = self._tokenizer.encode(
                         *batch_text_or_text_pairs[0], add_special_tokens=add_special_tokens
                     )
                 else:
-                    tokens = self._tokenizer.encode(batch_text_or_text_pairs[0], add_special_tokens=add_special_tokens)
-                tokens = [tokens]
+                    encodings = self._tokenizer.encode(batch_text_or_text_pairs[0], add_special_tokens=add_special_tokens)
+                encodings = [encodings]
             else:
-                tokens = self._tokenizer.encode_batch(batch_text_or_text_pairs, add_special_tokens=add_special_tokens)
+                encodings = self._tokenizer.encode_batch(batch_text_or_text_pairs, add_special_tokens=add_special_tokens)
 
         # Convert encoding to dict
         tokens = [
@@ -1935,7 +1992,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
             )
-            for encoding in tokens
+            for encoding in encodings
         ]
 
         # Sanitize the output to have dict[list] from list[dict]
@@ -1958,7 +2015,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 i if len(item["input_ids"]) == 1 else [i] * len(item["input_ids"]) for i, item in enumerate(tokens)
             ]
             sanitized["overflow_to_sample_mapping"] = overflow_to_sample_mapping
-        return sanitized
+
+        return BatchEncoding(sanitized, encodings)
 
     def encode_plus(
         self,
@@ -1976,7 +2034,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         **kwargs
-    ):
+    ) -> BatchEncoding :
         batched_input = [(text, text_pair)] if text_pair else [text]
         batched_output = self.batch_encode_plus(
             batched_input,
@@ -1996,10 +2054,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
         # Return tensor is None, then we can remove the leading batch axis
         if not return_tensors:
-            return {
+            return BatchEncoding({
                 key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
                 for key, value in batched_output.items()
-            }
+            }, batched_output.encodings)
         else:
             return batched_output
 
