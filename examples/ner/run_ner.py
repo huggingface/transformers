@@ -521,7 +521,8 @@ def main():
         "--save_total_limit",
         type=int,
         default=None,
-        help="Limit the total amount of checkpoints, delete the older checkpoints in the output_dir, does not delete by default",
+        help="""Limit the total amount of checkpoints, delete the older checkpoints in the output_dir, 
+                does not delete by default""",
     )    
     parser.add_argument(
         "--eval_all_checkpoints",
