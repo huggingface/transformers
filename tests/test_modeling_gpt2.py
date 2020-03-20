@@ -132,7 +132,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 # type_vocab_size=self.type_vocab_size,
                 # initializer_range=self.initializer_range
                 bos_token_id=self.bos_token_id,
-                eos_token_ids=self.eos_token_id,
+                eos_token_id=self.eos_token_id,
             )
 
             head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
