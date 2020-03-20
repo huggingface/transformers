@@ -142,7 +142,11 @@ class GPT2Config(PretrainedConfig):
         eos_token_id=50256,
         **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs
+        )
 
         self.vocab_size = vocab_size
         self.n_ctx = n_ctx

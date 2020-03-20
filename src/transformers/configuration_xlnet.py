@@ -155,14 +155,19 @@ class XLNetConfig(PretrainedConfig):
         summary_last_dropout=0.1,
         start_n_top=5,
         end_n_top=5,
-        bos_token_id=1,
         pad_token_id=5,
+        bos_token_id=1,
         eos_token_id=2,
         **kwargs
     ):
         """Constructs XLNetConfig.
         """
-        super().__init__(**kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs
+        )
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.n_layer = n_layer

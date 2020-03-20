@@ -124,9 +124,17 @@ class AlbertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         classifier_dropout_prob=0.1,
+        pad_token_id=0,
+        bos_token_id=2,
+        eos_token_id=3,
         **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs
+        )
 
         self.vocab_size = vocab_size
         self.embedding_size = embedding_size
