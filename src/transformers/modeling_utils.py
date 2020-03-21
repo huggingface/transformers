@@ -896,6 +896,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             effective_batch_size = batch_size
             effective_batch_mult = 1
 
+        if self.config.is_encoder_decoder:
+            assert bos_token_id is not None, "Encoder Decoder Models need to have a bos_token_id"
+            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
+            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
+
+            # get encoder and store encoder outputs
+            encoder = self.get_encoder()
+
+            encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
+            assert encoder_outputs[0].shape[1] == input_ids.shape[0]
+
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
             input_ids_len = input_ids.shape[-1]
@@ -911,16 +922,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 effective_batch_size * num_beams, input_ids_len
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
+
         if self.config.is_encoder_decoder:
-            assert bos_token_id is not None, "Encoder Decoder Models need to have a bos_token_id"
-            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
-            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
-
-            # get encoder and store encoder outputs
-            encoder = self.get_encoder()
-
-            encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
-
             # create empty decoder_input_ids
             input_ids = torch.full(
                 (effective_batch_size * num_beams, 1),
@@ -929,9 +932,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 device=next(self.parameters()).device,
             )
             cur_len = 1
+            assert batch_size == encoder_outputs[0].shape[1], f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[1]} "
+            expanded_index = torch.arange(batch_size).view(-1, 1).repeat(1, num_beams* effective_batch_mult).view(-1).to(input_ids.device)
+            encoder_outputs = (encoder_outputs[0].index_select(1, expanded_index), *encoder_outputs[1:])
         else:
             encoder_outputs = None
             cur_len = input_ids.shape[-1]
+
 
         if num_beams > 1:
             output = self._generate_beam_search(
