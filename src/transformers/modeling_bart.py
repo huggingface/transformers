@@ -539,6 +539,7 @@ class SelfAttention(LoggingModule):
         attn_mask: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
+        self.log_mem(f'\t attn_forward: q:{query.shape}')
         static_kv = self.encoder_decoder_attention  # type: bool
         tgt_len, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
