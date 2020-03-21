@@ -459,10 +459,42 @@ class TFModelTesterMixin:
                 model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3)
             )
 
+            # check bad words tokens language generation
+            bad_words_tokens = [
+                tf.squeeze(ids_tensor((1, 1), self.model_tester.vocab_size), -1).numpy().tolist(),
+                tf.squeeze(ids_tensor((2, 1), self.model_tester.vocab_size), -1).numpy().tolist(),
+            ]
+
+            # sampling
+            output_tokens = model.generate(
+                input_ids, do_sample=True, bad_words_tokens=bad_words_tokens, num_return_sequences=3
+            )
+            generated_tokens = output_tokens[:, input_ids.shape[-1] :]
+            self.assertFalse(self._check_match_tokens(generated_tokens.numpy().tolist(), bad_words_tokens))
+
+            # beam search
+            output_tokens = model.generate(
+                input_ids, do_sample=False, bad_words_tokens=bad_words_tokens, num_beams=3, num_return_sequences=3
+            )
+            generated_tokens = output_tokens[:, input_ids.shape[-1] :]
+            self.assertFalse(self._check_match_tokens(generated_tokens.numpy().tolist(), bad_words_tokens))
+
     def _check_generated_tokens(self, output_ids):
         for token_id in output_ids[0].numpy().tolist():
             self.assertGreaterEqual(token_id, 0)
             self.assertLess(token_id, self.model_tester.vocab_size)
+
+    def _check_match_tokens(self, generated_tokens, bad_words_tokens):
+        # for all bad word tokens
+        for bad_word_tokens in bad_words_tokens:
+            # for all slices in batch
+            for generated_tokens_slice in generated_tokens:
+                # for all word idx
+                for i in range(len(bad_word_tokens), len(generated_tokens_slice)):
+                    # if tokens match
+                    if generated_tokens_slice[i - len(bad_word_tokens) : i] == bad_word_tokens:
+                        return True
+        return False
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):

@@ -1452,7 +1452,6 @@ def calc_banned_ngram_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cu
 
 
 def calc_banned_bad_words_tokens(prev_input_ids, bad_words_tokens):
-
     banned_tokens = []
 
     def _tokens_match(prev_tokens, tokens):
