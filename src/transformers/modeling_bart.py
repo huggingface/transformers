@@ -347,12 +347,15 @@ class DecoderLayer(LoggingModule):
         if layer_state is None:
             layer_state = {}
         # next line mutates layer state
-        x, self_attn_weights = self.self_attn.forward(x, key=x, key_padding_mask=decoder_padding_mask, layer_state=layer_state, attn_mask=causal_mask,)
+        self.log_mem(f'\t DecoderLayer: causal_mask:{_get_shape(causal_mask)}')
+        x, self_attn_weights = self.self_attn.forward(x, key=x, key_padding_mask=decoder_padding_mask, layer_state=layer_state,
+                                                      attn_mask=causal_mask,)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
+
 
         x, encoder_attn_weights = self.encoder_attn.forward(
             query=x,
@@ -458,7 +461,7 @@ class BartDecoder(LoggingModule):
         all_hidden_states = ()
         all_self_attns = ()
         next_decoder_cache = []
-
+        self.log_mem(f'\t BartDecoder: causal_mask:{_get_shape(decoder_causal_mask)}')
         for i, decoder_layer in enumerate(self.layers):
             decoder_layer  # type: DecoderLayer
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -740,6 +743,7 @@ def _filter_out_falsey_values(tup) -> Tuple:
 
 
 # Public API
+def _get_shape(t): return getattr(t, 'shape', None)
 
 
 @add_start_docstrings(
@@ -780,7 +784,7 @@ class BartModel(PretrainedBartModel):
                 decoder_attn_mask=decoder_attention_mask,
                 mask_dtype=self.shared.weight.dtype,
             )
-            _get_shape = lambda t: getattr(t, 'shape', None)
+
             self.log_mem(
                 f'made masks: causal_mask {_get_shape(causal_mask)}, decoder_padding_mask {_get_shape(decoder_padding_mask)}')
         else:
@@ -796,7 +800,7 @@ class BartModel(PretrainedBartModel):
             encoder_outputs[0],
             attention_mask,
             decoder_padding_mask,
-            decoder_causal_mask=decoder_attention_mask,
+            decoder_causal_mask=causal_mask,
             decoder_cached_states=decoder_cached_states,
             generation_mode=generation_mode,
         )

@@ -239,8 +239,6 @@ class BartHeadTests(unittest.TestCase):
         lm_model.to(torch_device)
         loss, logits, enc_features = lm_model(input_ids=input_ids, lm_labels=lm_labels)
         log_df = lm_model.combine_logs()
-
-        import ipdb; ipdb.set_trace()
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
         self.assertIsInstance(loss.item(), float)
