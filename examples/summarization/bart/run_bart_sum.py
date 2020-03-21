@@ -55,7 +55,6 @@ class BartSystem(BaseTransformer):
         return {"loss": loss, "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
-        self.model.model.decoder.generation_mode = False  # to be able to get loss
         loss = self._step(batch)
         return {"val_loss": loss}
 
