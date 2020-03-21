@@ -38,7 +38,7 @@ BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
 
 BART_START_DOCSTRING = r"""
 
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use it as a regular PyTorch Module and
+    This model is a PyTorch `torch.LoggingModule <https://pytorch.org/docs/stable/nn.html#torch.LoggingModule>`_ sub-class. Use it as a regular PyTorch Module and
     refer to the PyTorch documentation for all matters related to general usage and behavior.
 
     Parameters:
@@ -81,6 +81,9 @@ BART_INPUTS_DOCSTRING = r"""
 """
 LARGE_NEGATIVE = -1e8
 
+from durbango.logging_utils import LoggingMixin, LoggingModule
+
+
 
 def _prepare_bart_decoder_inputs(
     config, input_ids, decoder_input_ids=None, decoder_attn_mask=None, mask_dtype=None,
@@ -111,7 +114,7 @@ def _prepare_bart_decoder_inputs(
     # return decoder_input_ids, decoder_attn_mask
 
 
-class PretrainedBartModel(PreTrainedModel):
+class PretrainedBartModel(PreTrainedModel, LoggingMixin):
     config_class = BartConfig
     base_model_prefix = "model"
     pretrained_model_archive_map = BART_PRETRAINED_MODEL_ARCHIVE_MAP
@@ -189,7 +192,7 @@ def make_padding_mask(input_ids, padding_idx=1):
 # Helper Modules
 
 
-class EncoderLayer(nn.Module):
+class EncoderLayer(LoggingModule):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -233,7 +236,7 @@ class EncoderLayer(nn.Module):
         return x, attn_weights
 
 
-class BartEncoder(nn.Module):
+class BartEncoder(LoggingModule):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
     is a :class:`EncoderLayer`.
@@ -313,7 +316,7 @@ class BartEncoder(nn.Module):
         return x, encoder_states, all_attentions
 
 
-class DecoderLayer(nn.Module):
+class DecoderLayer(LoggingModule):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -376,7 +379,7 @@ class DecoderLayer(nn.Module):
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
 
-class BartDecoder(nn.Module):
+class BartDecoder(LoggingModule):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer
     is a :class:`DecoderLayer`.
@@ -498,7 +501,7 @@ def _reorder_buffer(attn_cache, new_order):
     return attn_cache
 
 
-class SelfAttention(nn.Module):
+class SelfAttention(LoggingModule):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -663,7 +666,7 @@ class SelfAttention(nn.Module):
         return new_key_padding_mask
 
 
-class BartClassificationHead(nn.Module):
+class BartClassificationHead(LoggingModule):
     """Head for sentence-level classification tasks."""
 
     # This can trivially be shared with RobertaClassificationHead
@@ -877,6 +880,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             tokenizer.decode(predictions).split()
             # ['good', 'great', 'all', 'really', 'very']
         """
+        self.log_mem('starting fwd')
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
@@ -886,6 +890,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             decoder_cached_states=decoder_cached_states,
             generation_mode=generation_mode,
         )
+        self.log_mem('done fwd')
         lm_logits = self.lm_head(outputs[0])
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
         if lm_labels is not None:
