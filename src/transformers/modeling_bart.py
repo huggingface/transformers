@@ -779,8 +779,12 @@ class BartModel(PretrainedBartModel):
                 decoder_attn_mask=decoder_attention_mask,
                 mask_dtype=self.shared.weight.dtype,
             )
+            _get_shape = lambda t: getattr(t, 'shape', None)
+            self.log_mem(
+                f'made masks: causal_mask {_get_shape(causal_mask)}, decoder_padding_mask {_get_shape(decoder_padding_mask)}')
         else:
             decoder_padding_mask, causal_mask = None, None
+
         assert decoder_input_ids is not None
         if encoder_outputs is None:
             encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
