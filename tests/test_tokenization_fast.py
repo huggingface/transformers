@@ -458,6 +458,30 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
         Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file", filter_roberta_detectors),
     ])
 
+    def assert_embeded_special_tokens(self, tokenizer_r, tokenizer_p):
+        sentence = "A, <mask> AllenNLP sentence."
+        tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True, return_attention_mask=True)
+        tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_attention_mask=True)
+
+        # Rust correctly handles the space before the mask while python doesnt
+        self.assertSequenceEqual(tokens_r['input_ids'], [0, 83, 6, 1437, 50264, 3823, 487, 21992, 3645, 4, 2])
+        self.assertSequenceEqual(tokens_p['input_ids'], [0, 83, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
+
+        # token_type_ids should put 0 everywhere
+        self.assertEquals(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
+
+        # attention_mask should put 1 everywhere, so sum over length should be 1
+        self.assertEquals(
+            sum(tokens_r["attention_mask"]) / len(tokens_r["attention_mask"]),
+            sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"])
+        )
+
+        # Rust should have 'Ġ' before <mask> which should be left as an entire token
+        tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
+        self.assertSequenceEqual(
+            tokens_r, ['<s>', 'ĠA', ',', 'Ġ', '<mask>', 'ĠAllen', 'N', 'LP', 'Ġsentence', '.', '</s>']
+        )
+
 
 class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
     TOKENIZERS_CLASSES = [

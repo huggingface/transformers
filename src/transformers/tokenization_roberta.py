@@ -259,7 +259,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        add_prefix_space=False,
+        add_prefix_space=True,
         **kwargs
     ):
         kwargs.setdefault("pad_token", pad_token)
