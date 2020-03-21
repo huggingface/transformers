@@ -192,7 +192,7 @@ def make_padding_mask(input_ids, padding_idx=1):
 # Helper Modules
 
 
-class EncoderLayer(nn.Module, LoggingMixin):
+class EncoderLayer(LoggingModule):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -236,7 +236,7 @@ class EncoderLayer(nn.Module, LoggingMixin):
         return x, attn_weights
 
 
-class BartEncoder(nn.Module, LoggingMixin):
+class BartEncoder(LoggingModule):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
     is a :class:`EncoderLayer`.
@@ -316,7 +316,7 @@ class BartEncoder(nn.Module, LoggingMixin):
         return x, encoder_states, all_attentions
 
 
-class DecoderLayer(nn.Module, LoggingMixin):
+class DecoderLayer(LoggingModule):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -382,7 +382,7 @@ class DecoderLayer(nn.Module, LoggingMixin):
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
 
-class BartDecoder(nn.Module, LoggingMixin):
+class BartDecoder(LoggingModule):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer
     is a :class:`DecoderLayer`.
@@ -504,7 +504,7 @@ def _reorder_buffer(attn_cache, new_order):
     return attn_cache
 
 
-class SelfAttention(nn.Module, LoggingMixin):
+class SelfAttention(LoggingModule):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -672,7 +672,7 @@ class SelfAttention(nn.Module, LoggingMixin):
         return new_key_padding_mask
 
 
-class BartClassificationHead(nn.Module, LoggingMixin):
+class BartClassificationHead(LoggingModule):
     """Head for sentence-level classification tasks."""
 
     # This can trivially be shared with RobertaClassificationHead
