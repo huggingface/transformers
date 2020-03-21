@@ -894,7 +894,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
             encoder_outputs, decoder_cached_states = past, None
         else:
             encoder_outputs, decoder_cached_states = past
-        print(encoder_outputs.shape)
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
