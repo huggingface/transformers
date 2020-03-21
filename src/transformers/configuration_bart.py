@@ -39,6 +39,7 @@ class BartConfig(PretrainedConfig):
     def __init__(
         self,
         activation_dropout=0.0,
+        activation_function="gelu",
         vocab_size=50265,
         bos_token_id=0,
         pad_token_id=1,
@@ -89,6 +90,7 @@ class BartConfig(PretrainedConfig):
         self.decoder_attention_heads = decoder_attention_heads
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
+        self.activation_function = activation_function
 
         # 3 Types of Dropout
         self.attention_dropout = attention_dropout

@@ -255,7 +255,7 @@ if is_torch_available():
     from .modeling_t5 import (
         T5PreTrainedModel,
         T5Model,
-        T5WithLMHeadModel,
+        T5ForConditionalGeneration,
         load_tf_weights_in_t5,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
@@ -357,6 +357,7 @@ if is_tf_available():
         TFTransfoXLModel,
         TFTransfoXLLMHeadModel,
         TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TFAdaptiveEmbedding,
     )
 
     from .modeling_tf_xlnet import (
@@ -433,6 +434,7 @@ if is_tf_available():
 
     from .modeling_tf_albert import (
         TFAlbertPreTrainedModel,
+        TFAlbertMainLayer,
         TFAlbertModel,
         TFAlbertForMaskedLM,
         TFAlbertForSequenceClassification,
@@ -442,7 +444,7 @@ if is_tf_available():
     from .modeling_tf_t5 import (
         TFT5PreTrainedModel,
         TFT5Model,
-        TFT5WithLMHeadModel,
+        TFT5ForConditionalGeneration,
         TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
