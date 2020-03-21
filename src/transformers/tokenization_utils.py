@@ -20,9 +20,9 @@ import json
 import logging
 import os
 import re
-from collections import defaultdict, UserDict
+from collections import UserDict, defaultdict
 from contextlib import contextmanager
-from typing import Optional, Sequence, Union, Tuple, List
+from typing import List, Optional, Sequence, Tuple, Union
 
 from tokenizers import Encoding
 from tokenizers.implementations import BaseTokenizer
@@ -105,7 +105,6 @@ def truncate_and_pad(
 
 
 class BatchEncoding(UserDict):
-
     def __init__(self, data: dict, encoding: Optional[Union[Encoding, Sequence[Encoding]]] = None):
         super().__init__(data)
 
@@ -1038,7 +1037,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         **kwargs
-    ) -> BatchEncoding :
+    ) -> BatchEncoding:
         """
         Returns a dictionary containing the encoded sequence or sequence pair and additional information:
         the mask for sequence classification and the overflowing elements if a ``max_length`` is specified.
@@ -1976,10 +1975,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                         *batch_text_or_text_pairs[0], add_special_tokens=add_special_tokens
                     )
                 else:
-                    encodings = self._tokenizer.encode(batch_text_or_text_pairs[0], add_special_tokens=add_special_tokens)
+                    encodings = self._tokenizer.encode(
+                        batch_text_or_text_pairs[0], add_special_tokens=add_special_tokens
+                    )
                 encodings = [encodings]
             else:
-                encodings = self._tokenizer.encode_batch(batch_text_or_text_pairs, add_special_tokens=add_special_tokens)
+                encodings = self._tokenizer.encode_batch(
+                    batch_text_or_text_pairs, add_special_tokens=add_special_tokens
+                )
 
         # Convert encoding to dict
         tokens = [
@@ -2054,10 +2057,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
         # Return tensor is None, then we can remove the leading batch axis
         if not return_tensors:
-            return BatchEncoding({
-                key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
-                for key, value in batched_output.items()
-            }, batched_output.encodings)
+            return BatchEncoding(
+                {
+                    key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
+                    for key, value in batched_output.items()
+                },
+                batched_output.encodings,
+            )
         else:
             return batched_output
 
