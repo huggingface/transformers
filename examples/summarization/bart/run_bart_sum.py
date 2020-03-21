@@ -51,14 +51,11 @@ class BartSystem(pl.LightningModule):
 
     def _step(self, batch):
         y = batch["target_ids"]
-        lm_labels = y.clone()
-        lm_labels[y == self.tokenizer.pad_token_id] = -100
-
+        y_ids = y[:, :-1].contiguous()
+        lm_labels = y[:, 1:].clone()
+        lm_labels[y[:, 1:] == self.tokenizer.pad_token_id] = -100
         outputs = self(
-            batch["source_ids"],
-            attention_mask=batch["source_mask"],
-            decoder_input_ids=batch["target_ids"],
-            lm_labels=lm_labels,
+            batch["source_ids"], attention_mask=batch["source_mask"], decoder_input_ids=y_ids, lm_labels=lm_labels,
         )
 
         loss = outputs[0]
@@ -72,7 +69,6 @@ class BartSystem(pl.LightningModule):
         return {"loss": loss, "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
-        self.model.model.decoder.generation_mode = False  # to be able to get loss
         loss = self._step(batch)
         generated_ids = self.model.generate(
             batch["source_ids"],
@@ -89,6 +85,7 @@ class BartSystem(pl.LightningModule):
             self.tokenizer.decode(t, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             for t in batch["target_ids"]
         ]
+        self.model.model.decoder.generation_mode = False  # to be able to get loss
         return {"val_loss": loss, "preds": preds, "target": target}
 
     def validation_end(self, outputs):
@@ -106,10 +103,12 @@ class BartSystem(pl.LightningModule):
         output_test_predictions_file = os.path.join(self.hparams.output_dir, "test_predictions.txt")
         output_test_targets_file = os.path.join(self.hparams.output_dir, "test_targets.txt")
         # write predictions and targets for later rouge evaluation.
-        with open(output_test_predictions_file, "w+") as p_writer, open(output_test_targets_file, "w") as t_writer:
+        with open(output_test_predictions_file, "w+") as p_writer, open(output_test_targets_file, "w+") as t_writer:
             for output_batch in outputs:
                 p_writer.writelines(s + "\n" for s in output_batch["preds"])
                 t_writer.writelines(s + "\n" for s in output_batch["target"])
+            p_writer.close()
+            t_writer.close()
 
         return self.test_end(outputs)
 
@@ -140,7 +139,7 @@ class BartSystem(pl.LightningModule):
 
     def prepare_data(self):
         self.train_dataset = CnnDailyMailDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, block_size=self.hparams.max_seq_length
+            self.tokenizer, data_dir=self.hparams.data_dir, type_path="train", block_size=self.hparams.max_seq_length
         )
         self.val_dataset = CnnDailyMailDataset(
             self.tokenizer, data_dir=self.hparams.data_dir, type_path="val", block_size=self.hparams.max_seq_length
@@ -196,7 +195,7 @@ class BartSystem(pl.LightningModule):
             default=None,
             type=str,
             required=True,
-            help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.",
+            help="The input data dir. Should contain the training files for the CNN/DM summarization task.",
         )
 
         parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
@@ -280,5 +279,5 @@ if __name__ == "__main__":
         # https://github.com/PyTorchLightning/pytorch-lightning/blob/master\
         # /pytorch_lightning/callbacks/model_checkpoint.py#L169
         checkpoints = list(sorted(glob.glob(args.output_dir + "/checkpointepoch=*.ckpt", recursive=True)))
-        BartSystem.load_from_checkpoint("checkpointcheckpoint_ckpt_epoch_0.ckpt")
+        BartSystem.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)

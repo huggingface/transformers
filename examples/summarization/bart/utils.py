@@ -19,6 +19,7 @@ class CnnDailyMailDataset(Dataset):
                     [text], max_length=block_size, pad_to_max_length=True, return_tensors="pt"
                 )
                 self.source.append(tokenized)
+            f.close()
 
         print("loading " + type_path + " target.")
 
@@ -28,6 +29,7 @@ class CnnDailyMailDataset(Dataset):
                     [text], max_length=56, pad_to_max_length=True, return_tensors="pt"
                 )
                 self.target.append(tokenized)
+            f.close()
 
     def __len__(self):
         return len(self.source)
