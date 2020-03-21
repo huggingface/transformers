@@ -674,16 +674,23 @@ class ModelTesterMixin:
             )
 
             # check bad words tokens language generation
-            bad_words_tokens = [ids_tensor((1, 1), self.model_tester.vocab_size).squeeze(-1).tolist(), ids_tensor((2, 1), self.model_tester.vocab_size).squeeze(-1).tolist()]
+            bad_words_tokens = [
+                ids_tensor((1, 1), self.model_tester.vocab_size).squeeze(-1).tolist(),
+                ids_tensor((2, 1), self.model_tester.vocab_size).squeeze(-1).tolist(),
+            ]
 
             # sampling
-            output_tokens = model.generate(input_ids, do_sample=True, bad_words_tokens=bad_words_tokens, num_return_sequences=3)
-            generated_tokens = output_tokens[:, input_ids.shape[-1]:]
+            output_tokens = model.generate(
+                input_ids, do_sample=True, bad_words_tokens=bad_words_tokens, num_return_sequences=3
+            )
+            generated_tokens = output_tokens[:, input_ids.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_tokens.tolist(), bad_words_tokens))
 
             # beam search
-            output_tokens = model.generate(input_ids, do_sample=False, bad_words_tokens=bad_words_tokens, num_beams=3, num_return_sequences=3)
-            generated_tokens = output_tokens[:, input_ids.shape[-1]:]
+            output_tokens = model.generate(
+                input_ids, do_sample=False, bad_words_tokens=bad_words_tokens, num_beams=3, num_return_sequences=3
+            )
+            generated_tokens = output_tokens[:, input_ids.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_tokens.tolist(), bad_words_tokens))
 
     def _check_generated_tokens(self, output_ids):
@@ -699,7 +706,7 @@ class ModelTesterMixin:
                 # for all word idx
                 for i in range(len(bad_word_tokens), len(generated_tokens_slice)):
                     # if tokens match
-                    if generated_tokens_slice[i - len(bad_word_tokens): i] == bad_word_tokens:
+                    if generated_tokens_slice[i - len(bad_word_tokens) : i] == bad_word_tokens:
                         return True
         return False
 

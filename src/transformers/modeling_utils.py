@@ -1463,7 +1463,7 @@ def calc_banned_bad_words_tokens(prev_input_ids, bad_words_tokens):
             # if bad word tokens are longer then prev input_ids they can't be equal
             return False
 
-        if prev_tokens[-len(tokens):] == tokens:
+        if prev_tokens[-len(tokens) :] == tokens:
             # if tokens match
             return True
         else:
@@ -1473,7 +1473,9 @@ def calc_banned_bad_words_tokens(prev_input_ids, bad_words_tokens):
         banned_tokens_slice = []
 
         for banned_token_seq in bad_words_tokens:
-            assert len(banned_token_seq) > 0, 'Banned words token sequences {} cannot have an empty list'.format(bad_words_tokens)
+            assert len(banned_token_seq) > 0, "Banned words token sequences {} cannot have an empty list".format(
+                bad_words_tokens
+            )
 
             if _tokens_match(prev_input_ids_slice.tolist(), banned_token_seq[:-1]) is False:
                 # if tokens do not match continue
