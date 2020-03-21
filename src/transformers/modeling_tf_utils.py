@@ -1044,7 +1044,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
                 # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
                 num_batch_hypotheses = batch_size * num_beams
-                banned_tokens = calc_banned_ngram_tokens(input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len)
+                banned_tokens = calc_banned_ngram_tokens(
+                    input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
+                )
                 # create banned_tokens boolean mask
                 banned_tokens_indices_mask = []
                 for banned_tokens_slice in banned_tokens:
