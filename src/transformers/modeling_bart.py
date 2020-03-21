@@ -591,10 +591,10 @@ class SelfAttention(LoggingModule):
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
-            self.log_mem(f'\t attn: causal mask shaped {attn_mask.shape}')
+            self.log_mem(f'\t attn: using causal mask shaped {attn_mask.shape}')
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-            self.log_mem(f'\t attn: done causal mask {attn_mask.shape}')
+            self.log_mem(f'\t attn: done using causal mask {attn_mask.shape}')
 
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if key_padding_mask is not None and key_padding_mask.dim() == 0:
