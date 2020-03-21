@@ -113,6 +113,7 @@ class PretrainedBartModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
     pretrained_model_archive_map = BART_PRETRAINED_MODEL_ARCHIVE_MAP
+    encoder_outputs_batch_idx = 1  # outputs shaped (bs, ...)
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -887,7 +888,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
-
 
         # first step, decoder_cached_states are empty
         if not past[1]:
