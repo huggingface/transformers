@@ -80,6 +80,7 @@ class PretrainedConfig(object):
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
+        self.bad_words_tokens = kwargs.pop("bad_words_tokens", None)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
 
         # Fine-tuning task arguments

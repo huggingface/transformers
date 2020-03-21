@@ -667,6 +667,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         top_k=None,
         top_p=None,
         repetition_penalty=None,
+        bad_words_tokens=None,
         bos_token_id=None,
         pad_token_id=None,
         eos_token_id=None,
@@ -731,6 +732,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             no_repeat_ngram_size: (`optional`) int
                 If set to int > 0, all ngrams of size `no_repeat_ngram_size` can only occur once.
+            bad_words_tokens: (`optional`) list of lists of int
+                `bad_words_tokens` contains tokens that are not allowed to be generated. In order to get the tokens of the words that should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
 
             num_return_sequences: (`optional`) int
                 The number of independently computed returned sequences for each element in the batch. Default to 1.
@@ -782,6 +785,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
+            tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
+            model = AutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
+            input_context = 'My cute dog'  # "Legal" is one of the control codes for ctrl
+            bad_words = [tokenizer.encode(bard_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
+            input_ids = tokenizer.encode(input_context, return_tensors='pt')  # encode input context
+            outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_tokens=bad_words_tokens)  # generate sequences without allowing bad_words to be generated
         """
 
         # We cannot generate if the model does not have a LM head
@@ -807,6 +816,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
         )
+        bad_words_tokens = bad_words_tokens if bad_words_tokens is not None else self.config.bad_words_tokens
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
@@ -844,6 +854,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert (
             isinstance(num_return_sequences, int) and num_return_sequences > 0
         ), "`num_return_sequences` should be a strictly positive integer."
+        assert (
+            bad_words_tokens is None or isinstance(bad_words_tokens, list) and isinstance(bad_words_tokens[0], list)
+        ), "`bad_words_tokens` is either `None` or a list of lists of tokens that should not be generated"
 
         if input_ids is None:
             assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
@@ -964,6 +977,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_tokens=bad_words_tokens,
                 bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
                 decoder_start_token_id=decoder_start_token_id,
@@ -988,6 +1002,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
+                bad_words_tokens=bad_words_tokens,
                 bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
                 decoder_start_token_id=decoder_start_token_id,
@@ -1011,6 +1026,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         top_p,
         repetition_penalty,
         no_repeat_ngram_size,
+        bad_words_tokens,
         bos_token_id,
         pad_token_id,
         eos_token_id,
@@ -1045,7 +1061,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if no_repeat_ngram_size > 0:
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
                 # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
-                banned_tokens = calc_banned_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
+                banned_tokens = calc_banned_ngram_tokens(input_ids, batch_size, no_repeat_ngram_size, cur_len)
+                for batch_idx in range(batch_size):
+                    next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
+
+            if bad_words_tokens is not None:
+                # calculate a list of banned tokens according to bad words
+                banned_tokens = calc_banned_bad_words_tokens(input_ids, bad_words_tokens)
+
                 for batch_idx in range(batch_size):
                     next_token_logits[batch_idx, banned_tokens[batch_idx]] = -float("inf")
 
@@ -1121,6 +1144,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         top_p,
         repetition_penalty,
         no_repeat_ngram_size,
+        bad_words_tokens,
         bos_token_id,
         pad_token_id,
         eos_token_id,
@@ -1187,10 +1211,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 # calculate a list of banned tokens to prevent repetitively generating the same ngrams
                 num_batch_hypotheses = batch_size * num_beams
                 # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
-                banned_batch_tokens = calc_banned_tokens(
+                banned_batch_tokens = calc_banned_ngram_tokens(
                     input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
                 )
                 for i, banned_tokens in enumerate(banned_batch_tokens):
+                    scores[i, banned_tokens] = -float("inf")
+
+            if bad_words_tokens is not None:
+                # calculate a list of banned tokens according to bad words
+                banned_tokens = calc_banned_bad_words_tokens(input_ids, bad_words_tokens)
+
+                for i, banned_tokens in enumerate(banned_tokens):
                     scores[i, banned_tokens] = -float("inf")
 
             assert scores.shape == (batch_size * num_beams, vocab_size), "Shapes of scores: {} != {}".format(
@@ -1397,7 +1428,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         return past
 
 
-def calc_banned_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len):
+def calc_banned_ngram_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len):
     # Copied from fairseq for no_repeat_ngram in beam_search"""
     if cur_len + 1 < no_repeat_ngram_size:
         # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
@@ -1417,6 +1448,41 @@ def calc_banned_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len)
         return generated_ngrams[hypo_idx].get(ngram_idx, [])
 
     banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
+    return banned_tokens
+
+
+def calc_banned_bad_words_tokens(prev_input_ids, bad_words_tokens):
+
+    banned_tokens = []
+
+    def _tokens_match(prev_tokens, tokens):
+        if len(tokens) == 0:
+            # if bad word tokens is just one token always ban it
+            return True
+        if len(tokens) > len(prev_input_ids):
+            # if bad word tokens are longer then prev input_ids they can't be equal
+            return False
+
+        if prev_tokens[-len(tokens):] == tokens:
+            # if tokens match
+            return True
+        else:
+            return False
+
+    for prev_input_ids_slice in prev_input_ids:
+        banned_tokens_slice = []
+
+        for banned_token_seq in bad_words_tokens:
+            assert len(banned_token_seq) > 0, 'Banned words token sequences {} cannot have an empty list'.format(bad_words_tokens)
+
+            if _tokens_match(prev_input_ids_slice.tolist(), banned_token_seq[:-1]) is False:
+                # if tokens do not match continue
+                continue
+
+            banned_tokens_slice.append(banned_token_seq[-1])
+
+        banned_tokens.append(banned_tokens_slice)
+
     return banned_tokens
 
 
