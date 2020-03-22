@@ -264,7 +264,7 @@ if is_torch_available():
         CamembertForQuestionAnswering,
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
-    from .modeling_encoder_decoder import PreTrainedEncoderDecoder
+    from .modeling_encoder_decoder import EncoderDecoderModel
     from .modeling_t5 import (
         T5PreTrainedModel,
         T5Model,
