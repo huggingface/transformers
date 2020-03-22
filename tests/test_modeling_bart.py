@@ -125,9 +125,6 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_initialization_more(self):
         # (config, input_ids, token_type_ids, input_mask, *unused) = \
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
-            config, inputs_dict["input_ids"]
-        )
         model = BartModel(config)
         model.to(torch_device)
         model.eval()
