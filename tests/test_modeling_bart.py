@@ -36,6 +36,7 @@ if is_torch_available():
     from transformers.modeling_bart import (
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
         shift_tokens_right,
+        flip_mask,
         _prepare_bart_decoder_inputs,
     )
     from transformers.tokenization_bart import BartTokenizer
@@ -152,7 +153,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
         decoder_features_with_created_mask = model(**inputs_dict)[0]
         decoder_features_with_passed_mask = model(
-            decoder_attention_mask=decoder_attn_mask, decoder_input_ids=decoder_input_ids, **inputs_dict
+            decoder_attention_mask=flip_mask(decoder_attn_mask), decoder_input_ids=decoder_input_ids, **inputs_dict
         )[0]
         _assert_tensors_equal(decoder_features_with_passed_mask, decoder_features_with_created_mask)
         useless_mask = torch.zeros_like(decoder_attn_mask)

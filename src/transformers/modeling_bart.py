@@ -74,11 +74,16 @@ BART_INPUTS_DOCSTRING = r"""
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
-        decoder_attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, 1, tgt_seq_len, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
-            Default behavior: generate a tensor that ignores pad tokens and future tokens, as in the paper.
+        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
+            Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
             If you want to change padding behavior, you should read :func:`~transformers.modeling_bart._prepare_decoder_inputs` and modify.
             See diagram 1 in the paper for more info on the default strategy
 """
+
+
+def flip_mask(attention_mask):
+    assert attention_mask.dim() == 2
+    return attention_mask.eq(0)
 
 
 def _prepare_bart_decoder_inputs(
@@ -95,6 +100,8 @@ def _prepare_bart_decoder_inputs(
     bsz, tgt_len = decoder_input_ids.size()[:2]
     if decoder_padding_mask is None:
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
+    else:
+        decoder_padding_mask = flip_mask(decoder_padding_mask)
     if need_causal_mask:
         causal_lm_mask = torch.triu(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1).to(mask_dtype)
     else:
@@ -256,8 +263,7 @@ class BartEncoder(nn.Module):
         """
         # check attention mask and invert
         if attention_mask is not None:
-            assert attention_mask.dim() == 2
-            attention_mask = attention_mask.eq(0)
+            attention_mask = flip_mask(attention_mask)
 
         inputs_embeds = self.embed_tokens(input_ids)
         embed_pos = self.embed_positions(input_ids)
@@ -418,8 +424,7 @@ class BartDecoder(nn.Module):
         """
         # check attention mask and invert
         if encoder_padding_mask is not None:
-            assert encoder_padding_mask.dim() == 2
-            encoder_padding_mask = encoder_padding_mask.eq(0)
+            encoder_padding_mask = flip_mask(encoder_padding_mask)
 
         # embed positions
         positions = self.embed_positions(input_ids, generation_mode=generation_mode)
