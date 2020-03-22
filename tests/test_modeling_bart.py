@@ -373,10 +373,10 @@ class BartHeadTests(unittest.TestCase):
 
     def test_resize_tokens_embeddings_more(self):
         config, input_ids, _ = self._get_config_and_data()
-        _get_embs = lambda m: (
-            m.get_input_embeddings().weight.data.clone(),
-            m.get_output_embeddings().weight.data.clone(),
-        )
+
+        def _get_embs(m):
+            return (m.get_input_embeddings().weight.data.clone(), m.get_output_embeddings().weight.data.clone())
+
         model = BartForConditionalGeneration(config).eval().to(torch_device)
         input, output = _get_embs(model)
         self.assertTrue(torch.eq(input, output).all())
