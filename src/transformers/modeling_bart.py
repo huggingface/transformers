@@ -79,11 +79,11 @@ BART_INPUTS_DOCSTRING = r"""
             If you want to change padding behavior, you should read :func:`~transformers.modeling_bart._prepare_decoder_inputs` and modify.
             See diagram 1 in the paper for more info on the default strategy
 """
-LARGE_NEGATIVE = -1e8
 
 
-
-def _prepare_bart_decoder_inputs(config, input_ids, decoder_input_ids=None, decoder_padding_mask=None):
+def _prepare_bart_decoder_inputs(
+    config, input_ids, decoder_input_ids=None, decoder_padding_mask=None, mask_dtype=torch.float32
+):
     """Prepare masks that ignore padding tokens in the decoder and a causal lm mask for the decoder if
     none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
     Note: this is not called during generation
@@ -95,10 +95,10 @@ def _prepare_bart_decoder_inputs(config, input_ids, decoder_input_ids=None, deco
     bsz, tgt_len = decoder_input_ids.size()[:2]
     if decoder_padding_mask is None:
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
-        if need_causal_mask:
-            causal_lm_mask = torch.triu(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1)
-        else:
-            causal_lm_mask = None
+    if need_causal_mask:
+        causal_lm_mask = torch.triu(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1).to(mask_dtype)
+    else:
+        causal_lm_mask = None
     return decoder_input_ids, decoder_padding_mask, causal_lm_mask
 
 
@@ -122,12 +122,12 @@ class PretrainedBartModel(PreTrainedModel):
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id
         input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]])
-        #decoder_input_ids, decoder_padding_mask, causal_mask = _prepare_bart_decoder_inputs(self.config, input_ids,)
+        # decoder_input_ids, decoder_padding_mask, causal_mask = _prepare_bart_decoder_inputs(self.config, input_ids,)
         dummy_inputs = {
-            #"decoder_input_ids": decoder_input_ids,
+            # "decoder_input_ids": decoder_input_ids,
             "attention_mask": input_ids.ne(pad_token),
             "input_ids": input_ids,
-            #"decoder_attention_mask": decoder_padding_mask,
+            # "decoder_attention_mask": decoder_padding_mask,
         }
         return dummy_inputs
 
@@ -143,21 +143,6 @@ def _make_linear_from_emb(emb):
 def _check_shapes(shape_1, shape2):
     if shape_1 != shape2:
         raise AssertionError("shape mismatch: {} != {}".format(shape_1, shape2))
-
-
-def _combine_masks(key_padding_mask, causal_lm_mask, targ_size):
-    """Make one mask of shape (bsz, 1, tgt_len, src_len) """
-    a = torch.zeros(targ_size)  # targ_size is(bsz, tgt_len, src_len)
-    b = torch.zeros(targ_size)
-    if key_padding_mask is not None:  # (bsz, tgt_len) -> targ_size
-        _check_shapes(key_padding_mask.shape, targ_size[:2])
-        reshaped = key_padding_mask.unsqueeze(2).expand(*targ_size)
-        a[reshaped] = LARGE_NEGATIVE
-
-    if causal_lm_mask is not None:  # (tgt_len, src_len) -> targ_size
-        _check_shapes(causal_lm_mask.shape, targ_size[-2:])
-        b = causal_lm_mask.unsqueeze(0).expand(*targ_size)
-    return (a + b).unsqueeze(1).clamp(LARGE_NEGATIVE,)
 
 
 def shift_tokens_right(input_ids, pad_token_id):
@@ -328,21 +313,27 @@ class DecoderLayer(nn.Module):
         self.final_layer_norm = LayerNorm(self.embed_dim)
 
     def forward(
-        self, x, encoder_hidden_states, encoder_attn_mask=None, layer_state=None, causal_mask=None, decoder_padding_mask=None
+        self,
+        x,
+        encoder_hidden_states,
+        encoder_attn_mask=None,
+        layer_state=None,
+        causal_mask=None,
+        decoder_padding_mask=None,
     ):
         residual = x
 
         if layer_state is None:
             layer_state = {}
         # next line mutates layer state
-        x, self_attn_weights = self.self_attn.forward(x, key=x, key_padding_mask=decoder_padding_mask, layer_state=layer_state,
-                                                      attn_mask=causal_mask,)
+        x, self_attn_weights = self.self_attn.forward(
+            x, key=x, key_padding_mask=decoder_padding_mask, layer_state=layer_state, attn_mask=causal_mask,
+        )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
-
 
         x, encoder_attn_weights = self.encoder_attn.forward(
             query=x,
@@ -726,7 +717,8 @@ def _filter_out_falsey_values(tup) -> Tuple:
 
 
 # Public API
-def _get_shape(t): return getattr(t, 'shape', None)
+def _get_shape(t):
+    return getattr(t, "shape", None)
 
 
 @add_start_docstrings(
