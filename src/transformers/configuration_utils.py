@@ -80,7 +80,7 @@ class PretrainedConfig(object):
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
         self.bos_token_id = kwargs.pop("bos_token_id", None)
         self.pad_token_id = kwargs.pop("pad_token_id", None)
-        self.eos_token_ids = kwargs.pop("eos_token_ids", None)
+        self.eos_token_id = kwargs.pop("eos_token_id", None)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
