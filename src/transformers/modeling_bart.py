@@ -102,7 +102,7 @@ def _prepare_bart_decoder_inputs(
     else:
         decoder_padding_mask = invert_mask(decoder_padding_mask)
     causal_mask = torch.triu(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1).to(
-        causal_mask_dtype, device=decoder_input_ids.device
+        dtype=causal_mask_dtype, device=decoder_input_ids.device
     )
     return decoder_input_ids, decoder_padding_mask, causal_mask
 
