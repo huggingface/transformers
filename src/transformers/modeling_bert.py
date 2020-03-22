@@ -959,6 +959,21 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         return outputs  # (ltr_lm_loss), (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 
+    def prepare_inputs_for_generation(self, input_ids, attention_mask, **model_kwargs):
+        # Add dummy token at the end (no attention on this one)
+
+        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
+
+        effective_batch_size = input_ids.shape[0]
+        dummy_token = torch.full((effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device)
+        input_ids = torch.cat([input_ids, dummy_token], dim=1)
+
+        attention_mask = torch.cat(
+            [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+        )
+
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
+
 
 @add_start_docstrings(
     """Bert Model with a `next sentence prediction (classification)` head on top. """, BERT_START_DOCSTRING,
