@@ -1023,7 +1023,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
         attention_mask = torch.cat(
-            [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+            [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1
         )
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
