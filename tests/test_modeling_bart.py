@@ -113,7 +113,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_head_masking = False
-    test_resize_embeddings = False  # This requires inputs_dict['input_ids']
+    test_resize_embeddings = True  # This requires inputs_dict['input_ids']
 
     def setUp(self):
         self.model_tester = ModelTester(self)
