@@ -42,7 +42,9 @@ class EncoderDecoderModel(PreTrainedModel):
         super().__init__(config)
 
         self.encoder = encoder
-        assert self.encoder.get_output_embeddings() is None, "The encoder {} should not have a LM Head. Please use a model without LM Head"
+        assert (
+            self.encoder.get_output_embeddings() is None
+        ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
         self.decoder = decoder
 
     def _init_config(self, encoder_config, decoder_config):
@@ -67,11 +69,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
     @classmethod
     def from_pretrained(
-        cls,
-        pretrained_model_name_or_path=None,
-        decoder_pretrained_model_name_or_path=None,
-        *model_args,
-        **kwargs
+        cls, pretrained_model_name_or_path=None, decoder_pretrained_model_name_or_path=None, *model_args, **kwargs
     ):
         r""" Instantiates an encoder and a decoder from one or two base classes of the library from pre-trained model checkpoints.
 
@@ -142,16 +140,10 @@ class EncoderDecoderModel(PreTrainedModel):
         # that apply to the model as a whole.
         # We let the specific kwargs override the common ones in case of conflict.
 
-        kwargs_encoder = {
-            argument: value
-            for argument, value in kwargs.items()
-            if not argument.startswith("decoder_")
-        }
+        kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
         kwargs_decoder = {
-            argument[len("decoder_") :]: value
-            for argument, value in kwargs.items()
-            if argument.startswith("decoder_")
+            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
         # Load and initialize the encoder and decoder
@@ -159,13 +151,17 @@ class EncoderDecoderModel(PreTrainedModel):
         # by the value of the flag `is_decoder` that we need to set correctly.
         encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
-            assert pretrained_model_name_or_path is not None, "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
+            assert (
+                pretrained_model_name_or_path is not None
+            ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
             encoder = AutoModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs_encoder)
         encoder.config.is_decoder = False
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
-            assert decoder_pretrained_model_name_or_path is not None, "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+            assert (
+                decoder_pretrained_model_name_or_path is not None
+            ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
 
             # TODO: Maybe make two classes 1) AutoModel 2) AutoModelWithLMHead
 
@@ -258,7 +254,7 @@ class EncoderDecoderModel(PreTrainedModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            head_mask=head_mask
+            head_mask=head_mask,
         )
 
         return decoder_outputs + encoder_outputs
@@ -275,9 +271,9 @@ class EncoderDecoderModel(PreTrainedModel):
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, attention_mask)
 
         return {
-            "decoder_input_ids": decoder_inputs['input_ids'],
+            "decoder_input_ids": decoder_inputs["input_ids"],
             "encoder_outputs": encoder_outputs,
-            "attention_mask": decoder_inputs['attention_mask'],
+            "attention_mask": decoder_inputs["attention_mask"],
         }
 
     def _reorder_cache(self, past, beam_idx):
