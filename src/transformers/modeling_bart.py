@@ -81,13 +81,13 @@ BART_INPUTS_DOCSTRING = r"""
 """
 
 
-def flip_mask(attention_mask):
+def invert_mask(attention_mask):
     assert attention_mask.dim() == 2
     return attention_mask.eq(0)
 
 
 def _prepare_bart_decoder_inputs(
-    config, input_ids, decoder_input_ids=None, decoder_padding_mask=None, mask_dtype=torch.float32
+    config, input_ids, decoder_input_ids=None, decoder_padding_mask=None, causal_mask_dtype=torch.float32
 ):
     """Prepare masks that ignore padding tokens in the decoder and a causal lm mask for the decoder if
     none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
@@ -101,12 +101,12 @@ def _prepare_bart_decoder_inputs(
     if decoder_padding_mask is None:
         decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
     else:
-        decoder_padding_mask = flip_mask(decoder_padding_mask)
+        decoder_padding_mask = invert_mask(decoder_padding_mask)
     if need_causal_mask:
-        causal_lm_mask = torch.triu(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1).to(mask_dtype)
+        causal_mask = torch.triu(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1).to(causal_mask_dtype)
     else:
-        causal_lm_mask = None
-    return decoder_input_ids, decoder_padding_mask, causal_lm_mask
+        causal_mask = None
+    return decoder_input_ids, decoder_padding_mask, causal_mask
 
 
 class PretrainedBartModel(PreTrainedModel):
@@ -129,12 +129,9 @@ class PretrainedBartModel(PreTrainedModel):
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id
         input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]])
-        # decoder_input_ids, decoder_padding_mask, causal_mask = _prepare_bart_decoder_inputs(self.config, input_ids,)
         dummy_inputs = {
-            # "decoder_input_ids": decoder_input_ids,
             "attention_mask": input_ids.ne(pad_token),
             "input_ids": input_ids,
-            # "decoder_attention_mask": decoder_padding_mask,
         }
         return dummy_inputs
 
@@ -263,7 +260,7 @@ class BartEncoder(nn.Module):
         """
         # check attention mask and invert
         if attention_mask is not None:
-            attention_mask = flip_mask(attention_mask)
+            attention_mask = invert_mask(attention_mask)
 
         inputs_embeds = self.embed_tokens(input_ids)
         embed_pos = self.embed_positions(input_ids)
@@ -332,7 +329,7 @@ class DecoderLayer(nn.Module):
         if layer_state is None:
             layer_state = {}
         # next line mutates layer state
-        x, self_attn_weights = self.self_attn.forward(
+        x, self_attn_weights = self.self_attn(
             x, key=x, key_padding_mask=decoder_padding_mask, layer_state=layer_state, attn_mask=causal_mask,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -341,7 +338,7 @@ class DecoderLayer(nn.Module):
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
 
-        x, encoder_attn_weights = self.encoder_attn.forward(
+        x, encoder_attn_weights = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
@@ -424,7 +421,7 @@ class BartDecoder(nn.Module):
         """
         # check attention mask and invert
         if encoder_padding_mask is not None:
-            encoder_padding_mask = flip_mask(encoder_padding_mask)
+            encoder_padding_mask = invert_mask(encoder_padding_mask)
 
         # embed positions
         positions = self.embed_positions(input_ids, generation_mode=generation_mode)
@@ -452,7 +449,7 @@ class BartDecoder(nn.Module):
                 continue
 
             layer_state = decoder_cached_states[i] if decoder_cached_states is not None else None
-            x, layer_self_attn, layer_past = decoder_layer.forward(
+            x, layer_self_attn, layer_past = decoder_layer(
                 x,
                 encoder_hidden_states,
                 encoder_attn_mask=encoder_padding_mask,
@@ -762,7 +759,7 @@ class BartModel(PretrainedBartModel):
                 input_ids,
                 decoder_input_ids=decoder_input_ids,
                 decoder_padding_mask=decoder_attention_mask,
-                mask_dtype=self.shared.weight.dtype,
+                causal_mask_dtype=self.shared.weight.dtype,
             )
         else:
             decoder_padding_mask, causal_mask = None, None
@@ -772,7 +769,7 @@ class BartModel(PretrainedBartModel):
             encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
         assert isinstance(encoder_outputs, tuple)
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        decoder_outputs = self.decoder.forward(
+        decoder_outputs = self.decoder(
             decoder_input_ids,
             encoder_outputs[0],
             attention_mask,
