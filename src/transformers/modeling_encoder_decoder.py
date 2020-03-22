@@ -18,17 +18,16 @@
 import logging
 import os
 
-from torch import nn
-
 from .modeling_auto import AutoModel, AutoModelWithLMHead
+from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
 
-class PreTrainedEncoderDecoder(nn.Module):
+class EncoderDecoderModel(PreTrainedModel):
     r"""
-        :class:`~transformers.PreTrainedEncoderDecoder` is a generic model class that will be
+        :class:`~transformers.EncoderDecoder` is a generic model class that will be
         instantiated as a transformer architecture with one of the base model
         classes of the library as encoder and (optionally) another one as
         decoder when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
@@ -36,14 +35,39 @@ class PreTrainedEncoderDecoder(nn.Module):
     """
 
     def __init__(self, encoder, decoder):
-        super().__init__()
+        assert encoder is not None, "The encoder has to be defined"
+        assert decoder is not None, "The encoder has to be defined"
+
+        # TODO: think about how to handle the config
+        config = self._init_config(encoder.config, decoder.config)
+        super().__init__(config)
+
+        import ipdb
+        ipdb.set_trace()
+
         self.encoder = encoder
+        assert self.encoder.get_output_embeddings() is None, "The encoder {} should not have a LM Head. Please use a model without LM Head"
         self.decoder = decoder
+        self.is_encoder_decoder = True
+
+    def _init_config(self, encoder_config, decoder_config):
+        # TODO: correct the function here
+        # Seq-2-Seq should have at least same word embeddings for encoder and decoder
+        # so all special tokens should be the same
+        assert encoder_config.pad_token_id == decoder_config.pad_token_id
+        assert encoder_config.bos_token_id == decoder_config.bos_token_id
+        assert encoder_config.eos_token_id == decoder_config.eos_token_id
+        assert encoder_config.vocab_size == decoder_config.vocab_size
+
+        return decoder_config
+
+    def get_encoder(self):
+        return self.encoder
 
     @classmethod
     def from_pretrained(
         cls,
-        encoder_pretrained_model_name_or_path=None,
+        pretrained_model_name_or_path=None,
         decoder_pretrained_model_name_or_path=None,
         *model_args,
         **kwargs
@@ -116,38 +140,34 @@ class PreTrainedEncoderDecoder(nn.Module):
         # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
         # that apply to the model as a whole.
         # We let the specific kwargs override the common ones in case of conflict.
-        kwargs_common = {
+
+        kwargs_encoder = {
             argument: value
             for argument, value in kwargs.items()
-            if not argument.startswith("encoder_") and not argument.startswith("decoder_")
+            if not argument.startswith("decoder_")
         }
-        kwargs_decoder = kwargs_common.copy()
-        kwargs_encoder = kwargs_common.copy()
-        kwargs_encoder.update(
-            {
-                argument[len("encoder_") :]: value
-                for argument, value in kwargs.items()
-                if argument.startswith("encoder_")
-            }
-        )
-        kwargs_decoder.update(
-            {
-                argument[len("decoder_") :]: value
-                for argument, value in kwargs.items()
-                if argument.startswith("decoder_")
-            }
-        )
+
+        kwargs_decoder = {
+            argument[len("decoder_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("decoder_")
+        }
 
         # Load and initialize the encoder and decoder
         # The distinction between encoder and decoder at the model level is made
         # by the value of the flag `is_decoder` that we need to set correctly.
         encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
-            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
+            assert pretrained_model_name_or_path is not None, "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
+            encoder = AutoModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs_encoder)
         encoder.config.is_decoder = False
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
+            assert decoder_pretrained_model_name_or_path is not None, "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+
+            # TODO: Maybe make two classes 1) AutoModel 2) AutoModelWithLMHead
+
             decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
         decoder.config.is_decoder = True
 
@@ -201,18 +221,20 @@ class PreTrainedEncoderDecoder(nn.Module):
             os.mkdir(os.path.join(save_directory, "decoder"))
         self.decoder.save_pretrained(os.path.join(save_directory, "decoder"))
 
-    def forward(self, encoder_input_ids, decoder_input_ids, **kwargs):
-        """ The forward pass on a seq2eq depends what we are performing:
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        encoder_outputs=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        lm_labels=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        head_mask=None,
+    ):
 
-        - During training we perform one forward pass through both the encoder
-          and decoder;
-        - During prediction, we perform one forward pass through the encoder,
-          and then perform several forward passes with the encoder's hidden
-          state through the decoder to decode a full sequence.
-
-        Therefore, we skip the forward pass on the encoder if an argument named
-        `encoder_hidden_state` is passed to this function.
-
+        """
         Params:
             encoder_input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
                 Indices of encoder input sequence tokens in the vocabulary.
@@ -220,17 +242,44 @@ class PreTrainedEncoderDecoder(nn.Module):
                 Indices of decoder input sequence tokens in the vocabulary.
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
         """
-        kwargs_encoder, kwargs_decoder = self.prepare_model_kwargs(**kwargs)
 
-        # Encode if needed (training, first prediction pass)
-        encoder_hidden_states = kwargs_encoder.pop("hidden_states", None)
-        if encoder_hidden_states is None:
-            encoder_outputs = self.encoder(encoder_input_ids, **kwargs_encoder)
-            encoder_hidden_states = encoder_outputs[0]
-        else:
-            encoder_outputs = ()
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+            )
 
-        kwargs_decoder["encoder_hidden_states"] = encoder_hidden_states
-        decoder_outputs = self.decoder(decoder_input_ids, **kwargs_decoder)
+        hidden_states = encoder_outputs[0]
+
+        # Decode
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            inputs_embeds=decoder_inputs_embeds,
+            attention_mask=attention_mask,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=attention_mask,
+            head_mask=head_mask
+        )
 
         return decoder_outputs + encoder_outputs
+
+    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, **kwargs):
+        assert past is not None, "past has to be defined for encoder_outputs"
+
+        # first step
+        if type(past) is tuple:
+            encoder_outputs = past
+        else:
+            encoder_outputs = (past,)
+
+        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, attention_mask)
+
+        return {
+            "decoder_input_ids": decoder_inputs['input_ids'],
+            "encoder_outputs": encoder_outputs,
+            "attention_mask": decoder_inputs['attention_mask'],
+        }
+
+    def _reorder_cache(self, past, beam_idx):
+        # as a default encoder-decoder models do not re-order the past. TODO: might
+        # have to be updated, e.g. if GPT2 is to be used as a decoder
+        return past
