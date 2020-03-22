@@ -804,10 +804,8 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
-        # if base_model is None:
         base_model = BartModel(config)
         self.model = base_model
-
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def forward(
