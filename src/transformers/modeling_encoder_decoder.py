@@ -38,19 +38,15 @@ class EncoderDecoderModel(PreTrainedModel):
         assert encoder is not None, "The encoder has to be defined"
         assert decoder is not None, "The encoder has to be defined"
 
-        # TODO: think about how to handle the config
         config = self._init_config(encoder.config, decoder.config)
         super().__init__(config)
-
-        import ipdb
-        ipdb.set_trace()
 
         self.encoder = encoder
         assert self.encoder.get_output_embeddings() is None, "The encoder {} should not have a LM Head. Please use a model without LM Head"
         self.decoder = decoder
-        self.is_encoder_decoder = True
 
     def _init_config(self, encoder_config, decoder_config):
+        # TODO: think about how to handle the config
         # TODO: correct the function here
         # Seq-2-Seq should have at least same word embeddings for encoder and decoder
         # so all special tokens should be the same
@@ -59,10 +55,15 @@ class EncoderDecoderModel(PreTrainedModel):
         assert encoder_config.eos_token_id == decoder_config.eos_token_id
         assert encoder_config.vocab_size == decoder_config.vocab_size
 
-        return decoder_config
+        config = decoder_config
+        config.is_encoder_decoder = True
+        return config
 
     def get_encoder(self):
         return self.encoder
+
+    def get_output_embeddings(self):
+        return self.decoder.get_output_embeddings()
 
     @classmethod
     def from_pretrained(
@@ -254,7 +255,7 @@ class EncoderDecoderModel(PreTrainedModel):
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             inputs_embeds=decoder_inputs_embeds,
-            attention_mask=attention_mask,
+            attention_mask=decoder_attention_mask,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=head_mask
