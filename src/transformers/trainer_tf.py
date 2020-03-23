@@ -17,7 +17,7 @@ from .optimization_tf import WarmUp, AdamWeightDecay
 from .losses_tf import QALoss
 from .configuration_auto import AutoConfig
 from .tokenization_auto import AutoTokenizer
-from .data.processors.task_processors import DataProcessorForSequenceClassificationWithCSV, DataProcessorForSequenceClassificationWithTFDS
+from .data.processors.task_processors import DataProcessorForSequenceClassificationWithTFDS
 from .modeling_tf_auto import TFAutoModelForSequenceClassification
 
 
@@ -35,7 +35,7 @@ class TFTrainer(ABC):
         self.warmup_steps = kwargs.pop("warmup_steps", None)
         self.decay_steps = kwargs.pop("decay_steps", None)
         self.learning_rate = kwargs.pop("learning_rate", None)
-        self.epsilon = kwargs.pop("epsilon", 1e-08)
+        self.adam_epsilon = kwargs.pop("adam_epsilon", 1e-08)
         self.loss_name = kwargs.pop("loss_name", None)
         self.batch_size = kwargs.pop("batch_size", None)
         self.eval_batch_size = kwargs.pop("eval_batch_size", None)
@@ -48,11 +48,21 @@ class TFTrainer(ABC):
         self.datasets = {}
         self.labels = []
         self.processor = None
-        self.architecture = None
+        self.model_class = None
+
+        if self.distributed:
+            self.strategy = tf.distribute.MirroredStrategy()
+            self.batch_size *= self.strategy.num_replicas_in_sync
+            self.eval_batch_size *= self.strategy.num_replicas_in_sync
+        else:
+            if len(tf.config.list_physical_devices('GPU')) >= 1:
+                self.strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
+            else:
+                self.strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
 
         # assert len(kwargs) == 0, "unrecognized params passed: %s" % ",".join(kwargs.keys())
 
-    def setup_training(self, checkpoint_path="checkpoints", log_path="logs", cache_dir="cache"):
+    def setup_training(self, checkpoint_path="checkpoints", log_path="logs", data_cache_dir="cache", model_cache_dir=None):
         """
         Setup the different steps to train a model:
           - check if all the data are given
@@ -67,38 +77,20 @@ class TFTrainer(ABC):
             "./cache" folder by default.
           data_dir (optional): the directoty path where the data are. This parameter becomes mandatory if
             the parameters training_data and validation_data are not given.
-          training_data (optional): the training data, either as a list of example or as a tf.data.Dataset.
-            This parameter becomes mandatory if the parameter data_dir is not given.
-          validation_data (optional): the validation data, either as a list of example or as a tf.data.Dataset.
-            This parameter becomes mandatory if the parameter data_dir is not given.
-          test_data (optional): the test data, either as a list of example or as a tf.data.Dataset.
-            This parameter will take the validation data as value if nothing is given.
         """
-        if self.distributed:
-            self.strategy = tf.distribute.MirroredStrategy()
-            self.batch_size *= self.strategy.num_replicas_in_sync
-            self.eval_batch_size *= self.strategy.num_replicas_in_sync
-        else:
-            if len(tf.config.list_physical_devices('GPU')) >= 1:
-                self.strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
-            else:
-                self.strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
+        self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name_or_path, cache_dir=model_cache_dir, use_fast=False)
 
-        tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name_or_path, cache_dir=cache_dir, use_fast=False)
+        self._preprocess_data(data_cache_dir)
 
-        self._preprocessing_data(tokenizer, cache_dir)
-
-        if len(self.labels) == 0:
-            self.labels = self.processor.get_labels()
-
+        self.labels = self.processor.get_labels()
         self.label2id = {label: i for i, label in enumerate(self.labels)}
         self.id2label = {i: label for i, label in enumerate(self.labels)}
-        config = AutoConfig.from_pretrained(self.pretrained_model_name_or_path, num_labels=len(self.labels), id2label=self.id2label, label2id=self.label2id, cache_dir=cache_dir)
+        config = AutoConfig.from_pretrained(self.pretrained_model_name_or_path, num_labels=len(self.labels), id2label=self.id2label, label2id=self.label2id, cache_dir=model_cache_dir)
 
         with self.strategy.scope():
-            self.model = self.architecture.from_pretrained(self.pretrained_model_name_or_path, config=config, cache_dir=cache_dir)
+            self.model = self.model_class.from_pretrained(self.pretrained_model_name_or_path, config=config, cache_dir=model_cache_dir)
             self._create_optimizer()
-            self._get_loss_and_metric()
+            self._set_loss_and_metric()
             self._create_checkpoint_manager(checkpoint_path)
             self._create_summary_writer(log_path)
 
@@ -108,7 +100,7 @@ class TFTrainer(ABC):
         """
         return self.labels
 
-    def _get_loss_and_metric(self):
+    def _set_loss_and_metric(self):
         """
         Use the loss corresponding to the loss_name field.
         """
@@ -144,13 +136,9 @@ class TFTrainer(ABC):
         self.test_writer = tf.summary.create_file_writer(log_path + "/test")
 
     @abstractmethod
-    def _create_features(self, tokenizer, data_dir):
+    def _create_features(self):
         """
         Create the features for the training and validation data.
-        Args:
-          tokenizer: the tokenizer used for encoding the textual data into features.
-          data_dir: the directory path where the data are.
-          cache_dir: the directory path where the cached data are.
         """
         pass
 
@@ -173,7 +161,7 @@ class TFTrainer(ABC):
         """
         pass
 
-    def _preprocessing_data(self, tokenizer, cache_dir):
+    def _preprocess_data(self, cache_dir):
         """
         Preprocess the training and validation data.
         Args:
@@ -206,7 +194,7 @@ class TFTrainer(ABC):
             self.datasets["test"] = self._load_cache(cached_test_features_file)
         else:
             os.makedirs(cache_dir, exist_ok=True)
-            self._create_features(tokenizer)
+            self._create_features()
             logger.info("Create cache file %s", cached_training_features_file)
             self._save_cache("train", cached_training_features_file)
             logger.info("Create cache file %s", cached_validation_features_file)
@@ -214,13 +202,13 @@ class TFTrainer(ABC):
             logger.info("Create cache file %s", cached_test_features_file)
             self._save_cache("test", cached_test_features_file)
 
-        self.train_steps = math.ceil(len(list(self.datasets["train"].as_numpy_iterator())) / self.batch_size)
+        self.train_steps = math.ceil(self.processor.num_examples("train") / self.batch_size)
         self.datasets["train"] = self.datasets["train"].shuffle(128).batch(self.batch_size).repeat(-1)
         self.datasets["train"] = self.strategy.experimental_distribute_dataset(self.datasets["train"])
-        self.validation_steps = math.ceil(len(list(self.datasets["validation"].as_numpy_iterator())) / self.eval_batch_size)
+        self.validation_steps = math.ceil(self.processor.num_examples("validation") / self.eval_batch_size)
         self.datasets["validation"] = self.datasets["validation"].batch(self.eval_batch_size)
         self.datasets["validation"] = self.strategy.experimental_distribute_dataset(self.datasets["validation"])
-        self.test_steps = math.ceil(len(list(self.datasets["test"].as_numpy_iterator())) / (self.eval_batch_size / self.strategy.num_replicas_in_sync))
+        self.test_steps = math.ceil(self.processor.num_examples["test"] / (self.eval_batch_size / self.strategy.num_replicas_in_sync))
         self.datasets["test"] = self.datasets["test"].batch(self.eval_batch_size // self.strategy.num_replicas_in_sync)
 
     def _create_optimizer(self):
@@ -243,14 +231,14 @@ class TFTrainer(ABC):
                 learning_rate_fn = WarmUp(initial_learning_rate=self.learning_rate, decay_schedule_fn=learning_rate_fn,
                                           warmup_steps=self.warmup_steps)
 
-            self.optimizer = AdamWeightDecay(learning_rate=learning_rate_fn, weight_decay_rate=0.01, epsilon=self.epsilon,
+            self.optimizer = AdamWeightDecay(learning_rate=learning_rate_fn, weight_decay_rate=0.01, epsilon=self.adam_epsilon,
                                              exclude_from_weight_decay=["layer_norm", "bias"])
         elif self.optimizer_name == "adam":
-            self.optimizer = tf.keras.optimizers.Adam(self.learning_rate, epsilon=self.epsilon)
+            self.optimizer = tf.keras.optimizers.Adam(self.learning_rate, epsilon=self.adam_epsilon)
         elif self.optimizer_name == "adadelta":
-            self.optimizer = tf.keras.optimizers.Adadelta(self.learning_rate, epsilon=self.epsilon)
+            self.optimizer = tf.keras.optimizers.Adadelta(self.learning_rate, epsilon=self.adam_epsilon)
         elif self.optimizer_name == "rms":
-            self.optimizer = tf.keras.optimizers.RMSprop(self.learning_rate, epsilon=self.epsilon)
+            self.optimizer = tf.keras.optimizers.RMSprop(self.learning_rate, epsilon=self.adam_epsilon)
         elif self.optimizer_name == "sgd":
             self.optimizer = tf.keras.optimizers.SGD(self.learning_rate)
         else:
@@ -385,27 +373,21 @@ class TFTrainer(ABC):
 
 
 class TFTrainerForSequenceClassification(TFTrainer):
-    def __init__(self, train_examples=None, dev_examples=None, test_examples=None, **config):
+    def __init__(self, **config):
         model_config = config.pop("model_config", None)
         data_processor_config = config.pop("data_processor_config", None)
+
+        if model_config is None or data_processor_config is None:
+            raise ValueError("the model_config and data_processor_config properties should not be empty from the configuration")
+
         super().__init__(**model_config)
-        data_type = data_processor_config.pop("data_type", None)
+        self.processor = DataProcessorForSequenceClassificationWithTFDS(**data_processor_config)
+        self.model_class = TFAutoModelForSequenceClassification
 
-        if data_type == "csv":
-            self.processor = DataProcessorForSequenceClassificationWithCSV(**data_processor_config)
-        elif data_type == "tfds":
-            self.processor = DataProcessorForSequenceClassificationWithTFDS(train_examples, dev_examples, test_examples, **data_processor_config)
-        else:
-            raise ValueError(
-                "Allowed data types are csv or tfds. Given: {}".format(data_type)
-            )
-
-        self.architecture = TFAutoModelForSequenceClassification
-
-    def _create_features(self, tokenizer):
-        self.datasets["train"] = self.processor.convert_examples_to_features("train", tokenizer, self.max_len, return_dataset="tf")
-        self.datasets["validation"] = self.processor.convert_examples_to_features("dev", tokenizer, self.max_len, return_dataset="tf")
-        self.datasets["test"] = self.processor.convert_examples_to_features("test", tokenizer, self.max_len, return_dataset="tf")
+    def _create_features(self):
+        self.datasets["train"] = self.processor.convert_examples_to_features("train", self.tokenizer, self.max_len, return_dataset="tf")
+        self.datasets["validation"] = self.processor.convert_examples_to_features("validation", self.tokenizer, self.max_len, return_dataset="tf")
+        self.datasets["test"] = self.processor.convert_examples_to_features("test", self.tokenizer, self.max_len, return_dataset="tf")
 
         if self.datasets["test"] is None:
             self.datasets["test"] = self.datasets["validation"]

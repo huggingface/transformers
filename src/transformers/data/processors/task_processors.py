@@ -1,169 +1,113 @@
 # coding=utf-8
 """Data processors per task"""
 
-import copy
 import csv
-import json
 import logging
 from abc import ABC, abstractmethod
 
+from .tfds import SequenceClassification  # noqa: F401
+import tensorflow_datasets as tfds
+
 from ...file_utils import is_tf_available, is_torch_available
+from .utils import InputExample, InputFeatures
 
 
 logger = logging.getLogger(__name__)
 
 
-class InputExample(object):
-    """
-    A single training/test example for simple sequence classification.
-
-    Args:
-        guid: Unique id for the example.
-        text_a: string. The untokenized text of the first sequence. For single
-        sequence tasks, only this sequence must be specified.
-        text_b: (Optional) string. The untokenized text of the second sequence.
-        Only must be specified for sequence pair tasks.
-        label: (Optional) string. The label of the example. This should be
-        specified for train and dev examples, but not for test examples.
-    """
-
-    def __init__(self, guid, text_a, text_b=None, label=None):
-        self.guid = guid
-        self.text_a = text_a
-        self.text_b = text_b
-        self.label = label
-
-    def __repr__(self):
-        return str(self.to_json_string())
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
-
-    def to_json_string(self):
-        """Serializes this instance to a JSON string."""
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
-
-
-class InputFeatures(object):
-    """
-    A single set of features of data.
-
-    Args:
-        input_ids: Indices of input sequence tokens in the vocabulary.
-        attention_mask: Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
-            Usually  ``1`` for tokens that are NOT MASKED, ``0`` for MASKED (padded) tokens.
-        token_type_ids: Segment token indices to indicate first and second portions of the inputs.
-        label: Label corresponding to the input
-    """
-
-    def __init__(self, input_ids, attention_mask=None, token_type_ids=None, label=None):
-        self.input_ids = input_ids
-        self.attention_mask = attention_mask
-        self.token_type_ids = token_type_ids
-        self.label = label
-
-    def __repr__(self):
-        return str(self.to_json_string())
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
-
-    def to_json_string(self):
-        """Serializes this instance to a JSON string."""
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
-
-
 class CSVData(ABC):
     def __init__(self, **config):
-        self.skip_first_row = config.pop("skip_first_row", False)
+        self.skip_first_row = config.pop("skip_first_row", True)
         self.delimiter = config.pop("delimiter", "\t")
-        self.quotechar = config.pop("quotechar", None)
+        self.quotechar = config.pop("quotechar", "\"")
+        self.is_column_id = config.pip("is_column_id", False)
 
     def read_csv(self, input_file):
         if input_file is None:
             return []
 
         with open(input_file, "r", encoding="utf-8-sig") as f:
+            reader = csv.reader(f, delimiter=self.delimiter, quotechar=self.quotechar)
+
             if self.skip_first_row:
-                return list(csv.reader(f, delimiter=self.delimiter, quotechar=self.quotechar))[1:]
+                lines = list(reader)[1:]
+            else:
+                lines = list(reader)
 
-            return list(csv.reader(f, delimiter=self.delimiter, quotechar=self.quotechar))
+            if len(lines[0]) == 3 and self.is_column_id:
+                column_id = 0
+                column_label = 1
+                column_text_a = 2
+                column_text_b = -1
+            elif len(lines[0]) == 3 and not self.is_column_id:
+                column_id = -1
+                column_label = 0
+                column_text_a = 1
+                column_text_b = 2
+            elif len(lines[0]) == 4 and self.is_column_id:
+                column_id = 0
+                column_label = 1
+                column_text_a = 2
+                column_text_b = 3
+            elif len(lines[0]) == 2 and not self.is_column_id:
+                column_id = -1
+                column_label = 0
+                column_text_a = 1
+                column_text_b = -1
+            else:
+                raise csv.Error("The CSV file " + input_file + " is malformed")
 
-    @abstractmethod
-    def _create_examples(self, lines, mode):
-        pass
+        return lines, [column_id, column_label, column_text_a, column_text_b]
 
 
 class TFDSData(ABC):
     def __init__(self, **config):
-        self.guid = config.pop("guid", None)
-        self.text_a = config.pop("text_a", None)
-        self.text_b = config.pop("text_b", None)
-        self.label = config.pop("label", None)
+        self.guid = config.pop("guid", "guid")
+        self.text_a = config.pop("text_a", "text_a")
+        self.text_b = config.pop("text_b", "text_b")
+        self.label = config.pop("label", "label")
 
-    def get_example_from_tensor_dict(self, tensor_dict, guid):
+    def get_example_from_tensor_dict(self, tensor_dict):
         """Get an example from a dict with tensorflow tensors
         Args:
             tensor_dict: Keys and values should match the corresponding Glue
                 tensorflow_dataset examples.
-            guid: ID of the given example
         """
-        guid = guid if self.guid is None else tensor_dict[self.guid].numpy()
-        text_b = self.text_b if self.text_b is None else tensor_dict[self.text_b].numpy().decode("utf-8")
-
         return InputExample(
-            guid,
+            tensor_dict[self.guid].numpy(),
             tensor_dict[self.text_a].numpy().decode("utf-8"),
-            text_b,
+            tensor_dict[self.text_b].numpy().decode("utf-8"),
             str(tensor_dict[self.label].numpy()),
         )
-
-    @abstractmethod
-    def _create_examples(self, mode):
-        pass
 
 
 class DataProcessor(ABC):
     """Base class for data converters for sequence classification data sets."""
-    def __init__(self, labels=None, train_examples=None, dev_examples=None, test_examples=None, **config):
-        self.labels = [] if labels is None else labels
+    def __init__(self, **config):
+        self.labels = []
         self.examples = {}
-        self.examples["train"] = [] if train_examples is None else train_examples
-        self.examples["dev"] = [] if dev_examples is None else dev_examples
-        self.examples["test"] = [] if test_examples is None else test_examples
-        self.train_file = config.pop("train_file", None)
-        self.dev_file = config.pop("dev_file", None)
-        self.test_file = config.pop("test_file", None)
+        self.examples["train"] = []
+        self.examples["validation"] = []
+        self.examples["test"] = []
+        self.files = {}
+        self.files["train"] = config.pop("train_file", None)
+        self.files["validation"] = config.pop("dev_file", None)
+        self.files["test"] = config.pop("test_file", None)
 
-        self.create_train_examples()
-        self.create_dev_examples()
-        self.create_test_examples()
+        self._create_examples()
 
         # assert len(config) == 0, "unrecognized params passed: %s" % ",".join(config.keys())
-
-    @abstractmethod
-    def create_train_examples(self):
-        """Create a collection of `InputExample`s for the train set."""
-        pass
-
-    @abstractmethod
-    def create_dev_examples(self):
-        """Create a collection of `InputExample`s for the dev set."""
-        pass
-
-    @abstractmethod
-    def create_test_examples(self):
-        """Create a collection of `InputExample`s for the test set."""
-        pass
 
     def get_labels(self):
         """Gets the list of labels for this data set."""
         return self.labels
+
+    def num_examples(self, mode):
+        return len(self.examples[mode])
+
+    @abstractmethod
+    def _create_examples(self):
+        pass
 
     def convert_examples_to_features(self, mode, tokenizer, max_len, return_dataset="tf"):
         if max_len is None:
@@ -234,80 +178,59 @@ class DataProcessor(ABC):
 
 
 class DataProcessorForSequenceClassificationWithTFDS(DataProcessor, TFDSData):
-    def __init__(self, labels=None, train_examples=None, dev_examples=None, test_examples=None, **config):
-        TFDSData.__init__(self, **config)
-        DataProcessor.__init__(self, labels, train_examples, dev_examples, test_examples, **config)
+    def __init__(self, **config):
+        features = config.pop("features", {})
+        TFDSData.__init__(self, **features)
+        DataProcessor.__init__(self, **config)
+        self.dataset_name = config.pop("dataset_name", None)
 
-    def create_train_examples(self):
-        self._create_examples("train")
+        if self.dataset_name in tfds.list_builders():
+            self.ds, info = tfds.load(self.dataset_name, with_info=True)
+        else:
+            self.ds, info = tfds.load("sequence_classification",
+                                      builder_kwargs={
+                                          "train_file": self.train_file,
+                                          "dev_file": self.dev_file,
+                                          "test_file": self.test_file,
+                                          "dataset_name": self.dataset_name})
 
-    def create_dev_examples(self):
-        self._create_examples("dev")
+        self.labels = info.features[features["label"]].names
 
-    def create_test_examples(self):
-        self._create_examples("test")
+    def _create_examples(self):
+        for mode in ["train", "validation", "test"]:
+            tf_dataset = self.ds[mode]
 
-    def _create_examples(self, mode):
-        td_dataset = self.examples[mode]
-        examples = []
-        added_labels = set()
+            for entry in tf_dataset:
+                example = self.get_example_from_tensor_dict(entry)
 
-        for (ex_index, entry) in enumerate(td_dataset):
-            example = self.get_example_from_tensor_dict(entry, str(entry))
-
-            added_labels.add(example.label)
-            examples.append(example)
-
-        self.labels = list(added_labels)
-        self.examples[mode] = examples
+                self.examples[mode].append(example)
 
 
 class DataProcessorForSequenceClassificationWithCSV(DataProcessor, CSVData):
     """ Generic processor for sentence classification data set."""
-    def __init__(self, labels=None, train_examples=None, dev_examples=None, test_examples=None, **config):
-        self.column_label = config.pop("column_label", 0)
-        self.column_text = config.pop("column_text", 1)
-        self.column_id = config.pop("column_id", None)
+    def __init__(self, **config):
         CSVData.__init__(self, **config)
-        DataProcessor.__init__(self, labels, train_examples, dev_examples, test_examples, **config)
+        DataProcessor.__init__(self, **config)
 
-    def create_train_examples(self):
-        lines = self.read_csv(self.train_file)
+    def _create_examples(self):
+        for mode in ["train", "validation", "test"]:
+            lines, columns = self.read_csv(self.files[mode])
+            column_id = columns[0]
+            column_label = columns[1]
+            column_text_a = columns[2]
+            column_text_b = columns[3]
 
-        self._create_examples(lines, "train")
+            for (i, line) in enumerate(lines):
+                if column_id == -1:
+                    id = i
+                else:
+                    id = line[column_id]
 
-    def create_dev_examples(self):
-        lines = self.read_csv(self.dev_file)
+                if column_text_b == -1:
+                    text_b = ""
+                else:
+                    text_b = line[column_text_b]
 
-        self._create_examples(lines, "dev")
+                self.labels = list(set(self.labels).union(set([line[column_label]])))
 
-    def create_test_examples(self):
-        lines = self.read_csv(self.test_file)
-
-        self._create_examples(lines, "test")
-
-    def _create_examples(self, lines, mode):
-        texts = []
-        labels = []
-        ids = []
-
-        for (i, line) in enumerate(lines):
-            texts.append(line[self.column_text])
-            labels.append(line[self.column_label])
-
-            if self.column_id is not None:
-                ids.append(line[self.column_id])
-            else:
-                guid = "%s" % i
-                ids.append(guid)
-
-        assert len(texts) == len(labels)
-        assert len(texts) == len(ids)
-
-        added_labels = set()
-
-        for (text, label, guid) in zip(texts, labels, ids):
-            added_labels.add(label)
-            self.examples[mode].append(InputExample(guid=guid, text_a=text, text_b=None, label=label))
-
-        self.labels = list(set(self.labels).union(added_labels))
+                self.examples[mode].append(InputExample(guid=id, text_a=line[column_text_a], text_b=text_b, label=line[column_label]))
