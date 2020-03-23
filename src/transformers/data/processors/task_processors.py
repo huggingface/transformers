@@ -47,8 +47,6 @@ class DataProcessor(ABC):
         self.files["validation"] = config.pop("dev_file", None)
         self.files["test"] = config.pop("test_file", None)
 
-        self._create_examples()
-
         # assert len(config) == 0, "unrecognized params passed: %s" % ",".join(config.keys())
 
     def num_examples(self, mode):
@@ -138,12 +136,14 @@ class DataProcessorForSequenceClassification(DataProcessor, TFDSData):
         else:
             self.ds, info = tfds.load("sequence_classification",
                                       builder_kwargs={
-                                          "train_file": self.train_file,
-                                          "dev_file": self.dev_file,
-                                          "test_file": self.test_file,
+                                          "train_file": self.files["train"],
+                                          "dev_file": self.files["validation"],
+                                          "test_file": self.files["test"],
                                           "dataset_name": self.dataset_name})
 
         self.labels = info.features[features["label"]].names
+
+        self._create_examples()
 
     def _create_examples(self):
         for mode in ["train", "validation", "test"]:
