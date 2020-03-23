@@ -22,7 +22,6 @@ class SequenceClassification(tfds.core.GeneratorBasedBuilder):
         self.skip_first_row = config.pop("skip_first_row", True)
         self.delimiter = config.pop("delimiter", "\t")
         self.quotechar = config.pop("quotechar", "\"")
-        self.labels = []
         super(SequenceClassification, self).__init__(**config)
 
     def _info(self):

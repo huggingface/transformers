@@ -14,27 +14,6 @@ from .utils import InputExample, InputFeatures
 logger = logging.getLogger(__name__)
 
 
-class TFDSData(ABC):
-    def __init__(self, **config):
-        self.guid = config.pop("guid", "guid")
-        self.text_a = config.pop("text_a", "text_a")
-        self.text_b = config.pop("text_b", "text_b")
-        self.label = config.pop("label", "label")
-
-    def get_example_from_tensor_dict(self, tensor_dict):
-        """Get an example from a dict with tensorflow tensors
-        Args:
-            tensor_dict: Keys and values should match the corresponding Glue
-                tensorflow_dataset examples.
-        """
-        return InputExample(
-            tensor_dict[self.guid].numpy(),
-            tensor_dict[self.text_a].numpy().decode("utf-8"),
-            tensor_dict[self.text_b].numpy().decode("utf-8"),
-            str(tensor_dict[self.label].numpy()),
-        )
-
-
 class DataProcessor(ABC):
     """Base class for data converters for sequence classification data sets."""
     def __init__(self, **config):
@@ -56,11 +35,56 @@ class DataProcessor(ABC):
     def _create_examples(self):
         pass
 
+    @abstractmethod
+    def get_example_from_tensor_dict(self, tensor_dict):
+        pass
+
+    @abstractmethod
+    def convert_examples_to_features(self, mode, tokenizer, max_len, return_dataset="tf"):
+        pass
+
+
+class DataProcessorForSequenceClassification(DataProcessor):
+    def __init__(self, **config):
+        self.guid = config.pop("guid", "guid")
+        self.text_a = config.pop("text_a", "text_a")
+        self.text_b = config.pop("text_b", "text_b")
+        self.label = config.pop("label", "label")
+        DataProcessor.__init__(self, **config)
+        self.dataset_name = config.pop("dataset_name", None)
+
+        if self.dataset_name in tfds.list_builders():
+            self.ds, info = tfds.load(self.dataset_name, with_info=True)
+        else:
+            self.ds, self.info = tfds.load("sequence_classification",
+                                           builder_kwargs={
+                                               "train_file": self.files["train"],
+                                               "dev_file": self.files["validation"],
+                                               "test_file": self.files["test"],
+                                               "dataset_name": self.dataset_name}, with_info=True)
+
+        self._create_examples()
+
+    def _create_examples(self):
+        for mode in ["train", "validation", "test"]:
+            tf_dataset = self.ds[mode]
+
+            for ex_index, entry in enumerate(tf_dataset):
+                if ex_index % 10000 == 0:
+                    logger.info("Creating example %d", ex_index)
+
+                example = self.get_example_from_tensor_dict(entry)
+
+                self.examples[mode].append(example)
+
+    def get_labels(self):
+        """Gets the list of labels for this data set."""
+        return self.info.features[self.label].names
+
     def convert_examples_to_features(self, mode, tokenizer, max_len, return_dataset="tf"):
         if max_len is None:
             max_len = tokenizer.max_len
 
-        label_map = {label: i for i, label in enumerate(self.labels)}
         features = []
 
         for (ex_index, example) in enumerate(self.examples[mode]):
@@ -68,7 +92,7 @@ class DataProcessor(ABC):
                 logger.info("Tokenizing example %d", ex_index)
 
             feature = tokenizer.encode_plus(example.text_a, add_special_tokens=True, max_length=max_len, pad_to_max_length=True)
-            label = label_map[example.label]
+            label = self.info.features[self.label].str2int(example.label)
 
             assert len(feature["input_ids"]) == max_len
             assert len(feature["attention_mask"]) == max_len
@@ -123,42 +147,15 @@ class DataProcessor(ABC):
         else:
             raise ValueError("return_tensors should be one of 'tf' or 'pt'")
 
-
-class DataProcessorForSequenceClassification(DataProcessor, TFDSData):
-    def __init__(self, **config):
-        features = config.pop("features", {
-            "guid": "guid",
-            "text_a": "text_a",
-            "text_b": "text_b",
-            "label": "label"
-        })
-        TFDSData.__init__(self, **features)
-        DataProcessor.__init__(self, **config)
-        self.dataset_name = config.pop("dataset_name", None)
-
-        if self.dataset_name in tfds.list_builders():
-            self.ds, info = tfds.load(self.dataset_name, with_info=True)
-        else:
-            self.ds, info = tfds.load("sequence_classification",
-                                      builder_kwargs={
-                                          "train_file": self.files["train"],
-                                          "dev_file": self.files["validation"],
-                                          "test_file": self.files["test"],
-                                          "dataset_name": self.dataset_name}, with_info=True)
-
-        self.labels = info.features[features["label"]].names
-
-        self._create_examples()
-
-    def _create_examples(self):
-        for mode in ["train", "validation", "test"]:
-            tf_dataset = self.ds[mode]
-
-            for entry in tf_dataset:
-                example = self.get_example_from_tensor_dict(entry)
-
-                self.examples[mode].append(example)
-
-    def get_labels(self):
-        """Gets the list of labels for this data set."""
-        return self.labels
+    def get_example_from_tensor_dict(self, tensor_dict):
+        """Get an example from a dict with tensorflow tensors
+        Args:
+            tensor_dict: Keys and values should match the corresponding Glue
+                tensorflow_dataset examples.
+        """
+        return InputExample(
+            tensor_dict[self.guid].numpy(),
+            tensor_dict[self.text_a].numpy().decode("utf-8"),
+            tensor_dict[self.text_b].numpy().decode("utf-8"),
+            self.info.features[self.label].int2str(tensor_dict[self.label].numpy())
+        )
