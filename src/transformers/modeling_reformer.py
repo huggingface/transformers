@@ -29,6 +29,9 @@ from .configuration_reformer import ReformerConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, prune_linear_layer
 
+# DELETE later
+import numpy
+
 
 logger = logging.getLogger(__name__)
 
@@ -173,25 +176,29 @@ class LSHSelfAttention(nn.Module):
 #                attention_dropout=0.0, n_parallel_heads=1,
 #                use_python_loop=False, use_reference_code=False
 #                ):
-        if config.hidden_size % config.num_attention_heads != 0:
+        if config['hidden_size'] % config['num_attention_heads'] != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                "heads (%d)" % (config['hidden_size'], config['num_attention_heads'])
             )
-        self.output_attentions = config.output_attentions
 
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.num_attention_heads = config['num_attention_heads']
+        self.hidden_size = config['hidden_size']
+        self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query_key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.query_key = nn.Linear(self.hidden_size, self.all_head_size)
+        self.value = nn.Linear(self.hidden_size, self.all_head_size)
+        self.dense = nn.Linear(self.hidden_size, self.hidden_size)
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        # add Dropout
+        self.python_seed = config['seed']
 
-        self.num_hashes = config.num_hashes
-        self.num_buckets = config.num_buckets
+        self.num_hashes = config['num_hashes']
+        self.num_buckets = config['num_buckets']
+        self.query_key_chunk_len = config['query_key_chunk_len']
+        self.num_chunks_before = config['num_chunks_before']
+        self.num_chunks_after = config['num_chunks_after']
 
     def forward(
         self,
@@ -263,7 +270,7 @@ class LSHSelfAttention(nn.Module):
             probs = torch.exp(logits - torch.logsumexp(logits, dim=0, keepdim=True))
             out = torch.sum(out * probs, dim=0)
 
-        assert out.shape == (sequence_len, self.value[-1])
+        assert out.shape == (sequence_len, self.value_vectors[-1])
         out = self.dense(out)
 
         # TODO: apply broadcasted dropout
@@ -288,7 +295,10 @@ class LSHSelfAttention(nn.Module):
 
         rotations_shape = (vectors.shape[-1], self.num_hashes, rotation_size // 2)
 
-        random_rotations = torch.randn(rotations_shape, device=vectors.device)
+        numpy.random.seed(self.hash_seed)
+        random_rotations = torch.tensor(numpy.random.normal(size=rotations_shape), dtype=torch.float32)
+
+#        random_rotations = torch.randn(rotations_shape, device=vectors.device)
         # TODO: check with dimensions here!
         rotated_vectors = torch.einsum('td,dhb->htb', vectors, random_rotations)
 
