@@ -128,8 +128,8 @@ class PretrainedBartModel(PreTrainedModel):
     @property
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id
-        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]])
-        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(self.config, input_ids,)
+        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]], device=self.device)
+        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(self.config, input_ids)
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": input_ids.ne(pad_token),
@@ -137,6 +137,10 @@ class PretrainedBartModel(PreTrainedModel):
             "decoder_attention_mask": decoder_attn_mask,
         }
         return dummy_inputs
+
+    @property
+    def device(self):
+        return next(self.parameters()).device
 
 
 def _make_linear_from_emb(emb):
