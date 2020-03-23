@@ -4,7 +4,7 @@ import os
 import torch
 import torch.nn as nn
 
-from transformers import BertConfig, ElectraConfig
+from transformers import ElectraConfig
 from transformers.activations import get_activation
 
 from .modeling_bert import BertEmbeddings, BertEncoder, BertLayerNorm, BertPreTrainedModel
@@ -45,9 +45,6 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
         names.append(name)
         arrays.append(array)
     for name, array in zip(names, arrays):
-        print(name, array.shape)
-
-    for name, array in zip(names, arrays):
         original_name = name
 
         try:
@@ -75,7 +72,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
                 ]
                 for n in name
             ):
-                print("Skipping {}".format("/".join(name)))
+                logger.info("Skipping {}".format(original_name))
                 continue
             pointer = model
             for m_name in name:
@@ -108,7 +105,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
             logger.info("Initialize PyTorch weight {}".format(name))
             pointer.data = torch.from_numpy(array)
         except AttributeError:
-            print("Skipping {}".format(original_name))
+            logging.info("Skipping {}".format(original_name))
             continue
     return model
 
@@ -401,9 +398,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
         logits = self.discriminator_predictions(discriminator_sequence_output, attention_mask)
 
-        output = (
-            logits,
-        )
+        output = (logits,)
 
         if labels is not None:
             if self.config.num_labels == 1:
