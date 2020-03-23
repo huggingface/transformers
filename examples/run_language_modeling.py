@@ -29,6 +29,8 @@ import random
 import re
 import shutil
 from typing import Dict, List, Tuple
+import linecache
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -144,8 +146,87 @@ class LineByLineTextDataset(Dataset):
         return torch.tensor(self.examples[i], dtype=torch.long)
 
 
+class LazyUnsupervisedTextDataset(Dataset):
+    """
+    Credit: @bramvanroy for this linecache implementation.
+    """
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.num_entries = self._get_n_lines(self.file_path)
+
+    @staticmethod
+    def _get_n_lines(file_path):
+        with Path(file_path).resolve().open(encoding='utf-8') as fhin:
+            for line_idx, _ in enumerate(fhin, 1):
+                pass
+
+        return line_idx
+
+    def __getitem__(self, idx):
+        """
+
+        :param idx (int): the index of the line to get
+        :return (str or None): The line as a string (newline removed) or None if there is an exception.
+        """
+        # linecache starts counting from one, not zero, +1 the given index
+        try:
+            line = linecache.getline(self.file_path, idx + 1).strip()
+        except:
+            # N.B. we really want a bare exception here because any uncaught exception here could halt an entire training run.
+            line = None
+        return line
+
+    def __len__(self):
+        return self.num_entries
+
+
+def make_collate(tokenizer, block_size, lazy=False):
+    """
+    Constructs collate function for Dataloader.
+
+    :param tokenizer: tokenizer object (instantiated) used to tokenize lines of text.
+    :param block_size: (int) tokenized sequences truncated so as to not exceed this length.
+    :param lazy: (bool) whether or not to use return a collate function for lazy text loading.
+    :return: (fn: list[str or torch.tensor[int] (1d)] -> torch.tensor[int] (2d)
+    """
+
+    def lazy_collate(examples):
+        """
+        Dataloader collate_fn for Lazy data loading.
+
+        :param examples: (list[str]) the text lines to be collated in this batch.
+        :return: (torch.tensor) of the tokenized examples padded/truncated to form a 2d tensor of ints.
+        """
+        # Lazy Dataset returns None when an exception is encountered when reading a line.
+        examples = [ex for ex in examples if ex is not None]
+        examples = tokenizer.batch_encode_plus(examples, max_len=block_size)
+        examples = [torch.tensor(ex) for ex in examples['input_ids']]
+        if tokenizer._pad_token is None:
+            return pad_sequence(examples, batch_first=True)
+        return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
+
+    def simple_collate(examples):
+        """
+        Dataloader collate_fn for Lazy data loading.
+
+        :param examples: (list[torch.tensor]) the tokenized text examples (as tensors) to be collated in this batch.
+
+        :return: (torch.tensor) of the tokenized examples padded/truncated to form a 2d tensor of ints.
+        """
+        if tokenizer._pad_token is None:
+            return pad_sequence(examples, batch_first=True)
+        return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
+
+    if lazy:
+        return lazy_collate
+    else:
+        return simple_collate
+
+
 def load_and_cache_examples(args, tokenizer, evaluate=False):
     file_path = args.eval_data_file if evaluate else args.train_data_file
+    if args.lazy_loading:
+        return LazyUnsupervisedTextDataset(file_path)
     if args.line_by_line:
         return LineByLineTextDataset(tokenizer, args, file_path=file_path, block_size=args.block_size)
     else:
@@ -237,10 +318,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
 
-    def collate(examples: List[torch.Tensor]):
-        if tokenizer._pad_token is None:
-            return pad_sequence(examples, batch_first=True)
-        return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
+    collate = make_collate(tokenizer, args.block_size, lazy=args.lazy_loading)
 
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(
@@ -424,6 +502,8 @@ def evaluate(args, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, prefi
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_output_dir = args.output_dir
 
+    collate = make_collate(tokenizer, args.block_size, lazy=args.lazy_loading)
+
     eval_dataset = load_and_cache_examples(args, tokenizer, evaluate=True)
 
     if args.local_rank in [-1, 0]:
@@ -476,7 +556,9 @@ def evaluate(args, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, prefi
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(result[key]))
             writer.write("%s = %s\n" % (key, str(result[key])))
-
+    if hasattr(eval_dataset, "close"):
+        # For lazy loaders, clean up file handles.
+        eval_dataset.close()
     return result
 
 
@@ -508,6 +590,11 @@ def main():
         "--line_by_line",
         action="store_true",
         help="Whether distinct lines of text in the dataset are to be handled as distinct sequences.",
+    )
+    parser.add_argument(
+        "--lazy_loading",
+        action="store_true",
+        help="Whether to use lazy data loading. Is necessarily line-by-line as well.",
     )
     parser.add_argument(
         "--should_continue", action="store_true", help="Whether to continue from latest checkpoint in output_dir"
@@ -748,6 +835,9 @@ def main():
 
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
+        if hasattr(train_dataset, "close"):
+            # For lazy loaders, clean up file handles.
+            train_dataset.close()
 
     # Saving best-practices: if you use save_pretrained for the model and tokenizer, you can reload them using from_pretrained()
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
