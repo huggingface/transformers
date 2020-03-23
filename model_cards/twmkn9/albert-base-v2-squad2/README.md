@@ -4,7 +4,9 @@ This model is ALBERT base v2 trained on SQuAD v2 as:
 python run_squad.py 
 --model_type albert 
 --model_name_or_path albert-base-v2 
---do_train --do_eval 
+--do_train 
+--do_eval 
+--overwrite_cache 
 --do_lower_case 
 --version_2_with_negative 
 --train_file $SQUAD_DIR/train-v2.0.json 

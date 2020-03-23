@@ -103,7 +103,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
                 d_inner=self.d_inner,
                 div_val=self.div_val,
                 n_layer=self.num_hidden_layers,
-                eos_token_ids=self.eos_token_id,
+                eos_token_id=self.eos_token_id,
             )
 
             return (config, input_ids_1, input_ids_2, lm_labels)
@@ -129,10 +129,10 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
 
         def check_transfo_xl_model_output(self, result):
             self.parent.assertListEqual(
-                list(result["hidden_states_1"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["hidden_states_1"].size()), [self.batch_size, self.seq_length, self.hidden_size],
             )
             self.parent.assertListEqual(
-                list(result["hidden_states_2"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["hidden_states_2"].size()), [self.batch_size, self.seq_length, self.hidden_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -166,7 +166,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
         def check_transfo_xl_lm_head_output(self, result):
             self.parent.assertListEqual(list(result["loss_1"].size()), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(
-                list(result["lm_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["lm_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -175,7 +175,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss_2"].size()), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(
-                list(result["lm_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["lm_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_2"]),

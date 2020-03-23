@@ -469,11 +469,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         repetition_penalty=None,
         bos_token_id=None,
         pad_token_id=None,
-        eos_token_ids=None,
+        eos_token_id=None,
         length_penalty=None,
         no_repeat_ngram_size=None,
         num_return_sequences=None,
         attention_mask=None,
+        decoder_start_token_id=None,
     ):
         r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
         and beam-search.
@@ -486,15 +487,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         Parameters:
 
-            input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
+            input_ids: (`optional`) `tf.Tensor` of `dtype=tf.int32` of shape `(batch_size, sequence_length)`
                 The sequence used as a prompt for the generation. If `None` the method initializes
                 it as an empty `torch.LongTensor` of shape `(1,)`.
 
             max_length: (`optional`) int
                 The max length of the sequence to be generated.  Between 1 and infinity. Default to 20.
 
+            min_length: (`optional`) int
+                The min length of the sequence to be generated.  Between 0 and infinity. Default to 0.
             do_sample: (`optional`) bool
-                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False`.
+                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
+
+            early_stopping: (`optional`) bool
+                if set to `True` beam search is stopped when at least `num_beams` sentences finished per batch. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
 
             num_beams: (`optional`) int
                 Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
@@ -512,48 +518,67 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 The parameter for repetition penalty. Between 1.0 and infinity. 1.0 means no penalty. Default to 1.0.
 
             bos_token_id: (`optional`) int
-                Beginning of sentence token if no prompt is provided. Default to 0.
+                Beginning of sentence token if no prompt is provided. Default to specicic model bos_token_id or None if it does not exist.
+
+            pad_token_id: (`optional`) int
+                Pad token. Defaults to pad_token_id as defined in the models config.
 
             eos_token_ids: (`optional`) int or list of int
                 End of sequence token or list of tokens to stop the generation. Default to 0.
+
             length_penalty: (`optional`) float
                 Exponential penalty to the length. Default to 1.
+
+            no_repeat_ngram_size: (`optional`) int
+                If set to int > 0, all ngrams of size `no_repeat_ngram_size` can only occur once.
 
             num_return_sequences: (`optional`) int
                 The number of independently computed returned sequences for each element in the batch. Default to 1.
 
+            attention_mask (`optional`) obj: `tf.Tensor` with `dtype=tf.int32` of same shape as `input_ids`
+                Mask to avoid performing attention on padding token indices.
+                Mask values selected in ``[0, 1]``:
+                ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+                Defaults to `None`.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+
+            decoder_start_token_id=None: (`optional`) int
+                If an encoder-decoder model starts decoding with a different token than BOS.
+                Defaults to `None` and is changed to `BOS` later.
+
         Return:
 
-            output: `torch.LongTensor` of shape `(batch_size * num_return_sequences, sequence_length)`
+            output: `tf.Tensor` of `dtype=tf.int32` shape `(batch_size * num_return_sequences, sequence_length)`
                 sequence_length is either equal to max_length or shorter if all batches finished early due to the `eos_token_id`
 
         Examples::
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
-            outputs = model.generate(max_length=40, bos_token_id=tokenizer.bos_token_id, eos_token_ids=tokenizer.eos_token_id, do_sample=False)  # do greedy decoding
+            model = TFAutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            outputs = model.generate(max_length=40)  # do greedy decoding
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('openai-gpt')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
+            model = TFAutoModelWithLMHead.from_pretrained('openai-gpt')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
-            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
             outputs = model.generate(input_ids=input_ids, num_beams=5, num_return_sequences=3, temperature=1.5)  # generate 3 independent sequences using beam search decoding (5 beams) with sampling from initial context 'The dog'
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('distilgpt2')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
+            model = TFAutoModelWithLMHead.from_pretrained('distilgpt2')    # Download model and configuration from S3 and cache.
             input_context = 'The dog'
-            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, bos_token_id=tokenizer.bos_token_id, pad_token_id=tokenizer.pad_token_id, eos_token_ids=tokenizer.eos_token_id, num_return_sequences=3)  # 3 generate sequences using by sampling
+            input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
+            outputs = model.generate(input_ids=input_ids, max_length=40, temperature=0.7, num_return_sequences=3)  # 3 generate sequences using by sampling
             for i in range(3): #  3 output sequences were generated
                 print('Generated {}: {}'.format(i, tokenizer.decode(outputs[i], skip_special_tokens=True)))
 
             tokenizer = AutoTokenizer.from_pretrained('ctrl')   # Initialize tokenizer
-            model = AutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
+            model = TFAutoModelWithLMHead.from_pretrained('ctrl')    # Download model and configuration from S3 and cache.
             input_context = 'Legal My neighbor is'  # "Legal" is one of the control codes for ctrl
-            input_ids = torch.tensor(tokenizer.encode(input_context)).unsqueeze(0)  # encode input context
+            input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
             outputs = model.generate(input_ids=input_ids, max_length=50, temperature=0.7, repetition_penalty=1.2)  # generate sequences
             print('Generated: {}'.format(tokenizer.decode(outputs[0], skip_special_tokens=True)))
 
@@ -563,7 +588,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         if self.get_output_embeddings() is None:
             raise AttributeError(
                 "You tried to generate sequences with a model that does not have a LM Head."
-                "Please use another model class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`, `TFCTRLLMHeadModel`, `TFT5WithLMHeadModel`, `TFTransfoXLLMHeadModel`)"
+                "Please use another model class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`, `TFCTRLLMHeadModel`, `TFT5ForConditionalGeneration`, `TFTransfoXLLMHeadModel`)"
             )
 
         max_length = max_length if max_length is not None else self.config.max_length
@@ -577,7 +602,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
-        eos_token_ids = eos_token_ids if eos_token_ids is not None else self.config.eos_token_ids
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
@@ -585,13 +610,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
+        decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else bos_token_id
 
         if input_ids is not None:
             batch_size = shape_list(input_ids)[0]  # overriden by the input batch_size
         else:
             batch_size = 1
-        if isinstance(eos_token_ids, int):
-            eos_token_ids = [eos_token_ids]
 
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictely positive integer."
         assert isinstance(min_length, int) and min_length >= 0, "`min_length` should be a positive integer."
@@ -608,9 +632,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         assert pad_token_id is None or (
             isinstance(pad_token_id, int) and (pad_token_id >= 0)
         ), "`pad_token_id` should be a positive integer."
-        assert (eos_token_ids is None) or (
-            isinstance(eos_token_ids, (list, tuple)) and ((isinstance(e, int) and e >= 0) for e in eos_token_ids)
-        ), "`eos_token_ids` should be a positive integer or a list/tuple of positive integers."
+        assert (eos_token_id is None) or (
+            isinstance(eos_token_id, int) and (eos_token_id >= 0)
+        ), "`eos_token_id` should be a positive integer."
+        assert (
+            decoder_start_token_id is not None or self.config.is_encoder_decoder is False
+        ), "`decoder_start_token_id` has to be defined if model is encoder-decoder model"
         assert length_penalty > 0, "`length_penalty` should be strictely positive."
         assert (
             isinstance(num_return_sequences, int) and num_return_sequences > 0
@@ -646,11 +673,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         elif attention_mask is None:
             attention_mask = tf.ones_like(input_ids)
 
-        if pad_token_id is None and eos_token_ids is not None:
+        if pad_token_id is None and eos_token_id is not None:
             logger.warning(
-                "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_ids[0])
+                "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_id)
             )
-            pad_token_id = eos_token_ids[0]
+            pad_token_id = eos_token_id
 
         # current position and vocab size
         cur_len = shape_list(input_ids)[1]
@@ -680,6 +707,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 attention_mask, (effective_batch_size * num_beams, input_ids_len)
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
+        if self.config.is_encoder_decoder:
+
+            assert bos_token_id is not None, "Encoder Decoder Models need to have a bos_token_id"
+            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
+            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
+
+            # get encoder and store encoder outputs
+            encoder = self.get_encoder()
+
+            encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
+
+            # create empty decoder_input_ids
+            input_ids = tf.ones((effective_batch_size * num_beams, 1), dtype=tf.int32,) * decoder_start_token_id
+            cur_len = 1
+
+        else:
+            encoder_outputs = None
+            cur_len = shape_list(input_ids)[-1]
+
         if num_beams > 1:
             output = self._generate_beam_search(
                 input_ids,
@@ -693,13 +739,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
+                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                eos_token_ids=eos_token_ids,
+                eos_token_id=eos_token_id,
+                decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
                 num_return_sequences=num_return_sequences,
                 length_penalty=length_penalty,
                 num_beams=num_beams,
                 vocab_size=vocab_size,
+                encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
             )
         else:
@@ -714,10 +763,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
+                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                eos_token_ids=eos_token_ids,
+                eos_token_id=eos_token_id,
+                decoder_start_token_id=decoder_start_token_id,
                 batch_size=effective_batch_size,
                 vocab_size=vocab_size,
+                encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
             )
 
@@ -735,10 +787,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         top_p,
         repetition_penalty,
         no_repeat_ngram_size,
+        bos_token_id,
         pad_token_id,
-        eos_token_ids,
+        eos_token_id,
+        decoder_start_token_id,
         batch_size,
         vocab_size,
+        encoder_outputs,
         attention_mask,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
@@ -749,7 +804,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         unfinished_sents = tf.ones_like(input_ids[:, 0])
         sent_lengths = tf.ones_like(input_ids[:, 0]) * max_length
 
-        past = None
+        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
@@ -783,10 +838,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 )
 
             # set eos token prob to zero if min_length is not reached
-            if eos_token_ids is not None and cur_len < min_length:
-                # create eos_token_ids boolean mask
+            if eos_token_id is not None and cur_len < min_length:
+                # create eos_token_id boolean mask
                 is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token in eos_token_ids else False for token in range(vocab_size)], dtype=tf.bool
+                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [batch_size, vocab_size])
 
@@ -809,32 +864,37 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 next_token = tf.math.argmax(next_token_logits, axis=-1, output_type=tf.int32)
 
             # update generations and finished sentences
-            if eos_token_ids is not None:
-                # pad finished sentences if eos_token_ids exist
+            if eos_token_id is not None:
+                # pad finished sentences if eos_token_id exist
                 tokens_to_add = next_token * unfinished_sents + (pad_token_id) * (1 - unfinished_sents)
             else:
                 tokens_to_add = next_token
 
             input_ids = tf.concat([input_ids, tf.expand_dims(tokens_to_add, -1)], 1)
 
-            if eos_token_ids is not None:
-                for eos_token_id in eos_token_ids:
-                    eos_in_sents = tokens_to_add == eos_token_id
-                    # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
-                    is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(
-                        unfinished_sents, tf.cast(eos_in_sents, tf.int32)
-                    )
-                    sent_lengths = (
-                        sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
-                        + cur_len * is_sents_unfinished_and_token_to_add_is_eos
-                    )
+            if eos_token_id is not None:
+                eos_in_sents = tokens_to_add == eos_token_id
+                # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
+                is_sents_unfinished_and_token_to_add_is_eos = tf.math.multiply(
+                    unfinished_sents, tf.cast(eos_in_sents, tf.int32)
+                )
+                sent_lengths = (
+                    sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
+                    + cur_len * is_sents_unfinished_and_token_to_add_is_eos
+                )
 
-                    # unfinished_sents is set to zero if eos in sentence
-                    unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
+                # unfinished_sents is set to zero if eos in sentence
+                unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
 
             # stop when there is a </s> in each sentence, or if we exceed the maximul length
             if tf.math.reduce_max(unfinished_sents) == 0:
                 break
+
+            # extend attention_mask for new generated input if only decoder
+            if self.config.is_encoder_decoder is False:
+                attention_mask = tf.concat(
+                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                )
 
             cur_len = cur_len + 1
 
@@ -873,13 +933,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         top_p,
         repetition_penalty,
         no_repeat_ngram_size,
+        bos_token_id,
         pad_token_id,
-        eos_token_ids,
+        decoder_start_token_id,
+        eos_token_id,
         batch_size,
         num_return_sequences,
         length_penalty,
         num_beams,
         vocab_size,
+        encoder_outputs,
         attention_mask,
     ):
         """ Generate sequences for each example with beam search.
@@ -900,8 +963,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             beam_scores = tf.zeros((batch_size, num_beams), dtype=tf.float32)
 
         beam_scores = tf.reshape(beam_scores, (batch_size * num_beams,))
+
         # cache compute states
-        past = None
+        past = encoder_outputs
 
         # done sentences
         done = [False for _ in range(batch_size)]
@@ -930,10 +994,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
 
             # set eos token prob to zero if min_length is not reached
-            if eos_token_ids is not None and cur_len < min_length:
-                # create eos_token_ids boolean mask
+            if eos_token_id is not None and cur_len < min_length:
+                # create eos_token_id boolean mask
                 is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token in eos_token_ids else False for token in range(vocab_size)], dtype=tf.bool
+                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [batch_size, vocab_size])
 
@@ -1006,7 +1070,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                         len(generated_hyps[batch_idx]) >= num_beams
                     ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
                     assert (
-                        eos_token_ids is not None and pad_token_id is not None
+                        eos_token_id is not None and pad_token_id is not None
                     ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
                     next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
                     continue
@@ -1025,7 +1089,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
                     effective_beam_id = batch_idx * num_beams + beam_id
                     # add to generated hypotheses if end of sentence or last iteration
-                    if eos_token_ids is not None and token_id.numpy() in eos_token_ids:
+                    if eos_token_id is not None and token_id.numpy() is eos_token_id:
                         # if beam_token does not belong to top num_beams tokens, it should not be added
                         is_beam_token_worse_than_top_num_beams = beam_token_rank >= num_beams
                         if is_beam_token_worse_than_top_num_beams:
@@ -1065,8 +1129,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             input_ids = tf.stack([tf.identity(input_ids[x, :]) for x in beam_idx])
             input_ids = tf.concat([input_ids, tf.expand_dims(beam_tokens, 1)], axis=-1)
             # re-order internal states
-            if past:
+            if past is not None:
                 past = self._reorder_cache(past, beam_idx)
+
+            if self.config.is_encoder_decoder is False:
+                attention_mask = tf.concat(
+                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                )
 
             # update current length
             cur_len = cur_len + 1
@@ -1077,8 +1146,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             if done[batch_idx]:
                 continue
             # test that beam scores match previously calculated scores if not eos and batch_idx not done
-            if eos_token_ids is not None and all(
-                (token_id % vocab_size).numpy().item() not in eos_token_ids for token_id in next_tokens[batch_idx]
+            if eos_token_id is not None and all(
+                (token_id % vocab_size).numpy().item() is not eos_token_id for token_id in next_tokens[batch_idx]
             ):
                 assert tf.reduce_all(
                     next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
@@ -1128,7 +1197,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 if sent_lengths[i] < max_length:
                     decoded_hypo = tf.where(
                         tf.range(max_length) == sent_lengths[i],
-                        eos_token_ids[0] * tf.ones((sent_max_len,), dtype=tf.int32),
+                        eos_token_id * tf.ones((sent_max_len,), dtype=tf.int32),
                         decoded_hypo,
                     )
                 decoded_list.append(decoded_hypo)

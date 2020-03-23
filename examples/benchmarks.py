@@ -532,7 +532,6 @@ def _compute_tensorflow(
 
                     except tf.errors.ResourceExhaustedError as e:
                         print("Doesn't fit on GPU.", e)
-                        torch.cuda.empty_cache()
                         dictionary[model_name]["results"][batch_size][slice_size] = "N/A"
                         dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
     return dictionary
