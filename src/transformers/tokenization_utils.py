@@ -2045,15 +2045,18 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         # Check for pretokenized path (ie [token1, token2, ..., tokenN] -> [id1, id2, ..., idN]
         if isinstance(text, list) and text_pair is None:
             encoding = self._tokenizer.encode_tokenized(text)
-            batched_output = BatchEncoding(self._convert_encoding(
+            batched_output = BatchEncoding(
+                self._convert_encoding(
+                    encoding,
+                    return_tensors=return_tensors,
+                    return_token_type_ids=return_token_type_ids,
+                    return_attention_mask=return_attention_mask,
+                    return_overflowing_tokens=return_overflowing_tokens,
+                    return_special_tokens_mask=return_special_tokens_mask,
+                    return_offsets_mapping=return_offsets_mapping,
+                ),
                 encoding,
-                return_tensors=return_tensors,
-                return_token_type_ids=return_token_type_ids,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping
-            ), encoding)
+            )
         else:
             batched_input = [(text, text_pair)] if text_pair else [text]
             batched_output = self.batch_encode_plus(
