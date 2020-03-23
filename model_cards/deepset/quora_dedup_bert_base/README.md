@@ -1,7 +1,7 @@
 This language model is trained using sentence_transformers (https://github.com/UKPLab/sentence-transformers)
 Started with bert-base-nli-stsb-mean-tokens
 Continue training on quora questions deduplication dataset (https://www.kaggle.com/c/quora-question-pairs)
-See quora.py for script used
+See train_script.py for script used
 
 Below is the performance over the course of training
 epoch,steps,cosine_pearson,cosine_spearman,euclidean_pearson,euclidean_spearman,manhattan_pearson,manhattan_spearman,dot_pearson,dot_spearman
