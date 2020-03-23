@@ -95,14 +95,10 @@ class ElectraConfig(PretrainedConfig):
         self,
         vocab_size=30522,
         embedding_size=128,
-        discriminator_hidden_size=256,
-        discriminator_num_hidden_layers=12,
-        discriminator_num_attention_heads=4,
-        discriminator_intermediate_size=1024,
-        generator_hidden_size=256,
-        generator_num_hidden_layers=12,
-        generator_num_attention_heads=4,
-        generator_intermediate_size=1024,
+        hidden_size=256,
+        num_hidden_layers=12,
+        num_attention_heads=4,
+        intermediate_size=1024,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -117,14 +113,10 @@ class ElectraConfig(PretrainedConfig):
 
         self.vocab_size = vocab_size
         self.embedding_size = embedding_size
-        self.discriminator_hidden_size = discriminator_hidden_size
-        self.discriminator_num_hidden_layers = discriminator_num_hidden_layers
-        self.discriminator_num_attention_heads = discriminator_num_attention_heads
-        self.discriminator_intermediate_size = discriminator_intermediate_size
-        self.generator_hidden_size = generator_hidden_size
-        self.generator_num_hidden_layers = generator_num_hidden_layers
-        self.generator_num_attention_heads = generator_num_attention_heads
-        self.generator_intermediate_size = generator_intermediate_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -133,66 +125,3 @@ class ElectraConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.num_labels = num_labels
-
-    def get_discriminator_config(self):
-        configuration = ElectraConfig()
-        configuration.__dict__.update(self.__dict__.copy())
-        configuration._hidden_size = self.discriminator_hidden_size
-        configuration._num_hidden_layers = self.discriminator_num_hidden_layers
-        configuration._num_attention_heads = self.discriminator_num_attention_heads
-        configuration._intermediate_size = self.discriminator_intermediate_size
-        return configuration
-
-    def get_generator_config(self):
-        configuration = ElectraConfig()
-        configuration.__dict__.update(self.__dict__.copy())
-        configuration._hidden_size = self.generator_hidden_size
-        configuration._num_hidden_layers = self.generator_num_hidden_layers
-        configuration._num_attention_heads = self.generator_num_attention_heads
-        configuration._intermediate_size = self.generator_intermediate_size
-        return configuration
-
-    @property
-    def hidden_size(self):
-        if hasattr(self, "_hidden_size"):
-            return self._hidden_size
-        else:
-            logger.warning(
-                "The hidden size for this configuration is ambiguous as it holds information for both the "
-                "ELECTRA generator and discriminator. The value returned is the discriminator hidden size."
-            )
-            return self.discriminator_hidden_size
-
-    @property
-    def num_hidden_layers(self):
-        if hasattr(self, "_num_hidden_layers"):
-            return self._num_hidden_layers
-        else:
-            logger.warning(
-                "The number of hidden layers for this configuration is ambiguous as it holds information for both the "
-                "ELECTRA generator and discriminator. The value returned is the discriminator number of hidden layers."
-            )
-            return self.discriminator_num_hidden_layers
-
-    @property
-    def num_attention_heads(self):
-        if hasattr(self, "_num_attention_heads"):
-            return self._num_attention_heads
-        else:
-            logger.warning(
-                "The number of attention heads for this configuration is ambiguous as it holds information for both the"
-                " ELECTRA generator and discriminator. The value returned is the discriminator number of attention "
-                "heads."
-            )
-            return self.discriminator_num_attention_heads
-
-    @property
-    def intermediate_size(self):
-        if hasattr(self, "_intermediate_size"):
-            return self._intermediate_size
-        else:
-            logger.warning(
-                "The intermediate size for this configuration is ambiguous as it holds information for both the "
-                "ELECTRA generator and discriminator. The value returned is the discriminator intermediate size."
-            )
-            return self.discriminator_intermediate_size

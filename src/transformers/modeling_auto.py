@@ -77,10 +77,7 @@ from .modeling_distilbert import (
     DistilBertForTokenClassification,
     DistilBertModel,
 )
-from .modeling_electra import (
-    ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
-    ElectraForMaskedLM,
-)
+from .modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP, ElectraForMaskedLM
 from .modeling_flaubert import (
     FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     FlaubertForQuestionAnsweringSimple,

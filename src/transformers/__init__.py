@@ -299,7 +299,13 @@ if is_torch_available():
         FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
-    from .modeling_electra import ElectraForMaskedLM, load_tf_weights_in_electra
+    from .modeling_electra import (
+        ElectraForMaskedLM,
+        ElectraForTokenClassification,
+        ElectraModel,
+        load_tf_weights_in_electra,
+        ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
+    )
 
     # Optimization
     from .optimization import (

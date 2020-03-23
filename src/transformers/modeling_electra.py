@@ -266,15 +266,30 @@ class ElectraModel(ElectraPreTrainedModel):
         self.embeddings_project = nn.Linear(config.embedding_size, config.hidden_size)
         self.encoder = BertEncoder(config)
         self.config = config
+        self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
+    def _prune_heads(self, heads_to_prune):
+        """ Prunes heads of the model.
+            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+            See base class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
     ):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -312,7 +327,6 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
     base_model_prefix = "generator"
 
     def __init__(self, config):
-        config = config.get_generator_config()
         super().__init__(config)
 
         self.generator = ElectraModel(config)
@@ -323,22 +337,8 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         self.generator_lm_head.bias = self.bias
         self.init_weights()
 
-    def get_input_embeddings(self):
-        return self.generator.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.generator.embeddings.word_embeddings = value
-
     def get_output_embeddings(self):
         return self.generator_lm_head
-
-    def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.generator.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(
         self,
@@ -351,13 +351,15 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         masked_lm_labels=None,
     ):
 
-        generator_hidden_states = self.generator(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds)
+        generator_hidden_states = self.generator(
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
+        )
         generator_sequence_output = generator_hidden_states[0]
 
         prediction_scores = self.generator_predictions(generator_sequence_output)
         prediction_scores = self.generator_lm_head(prediction_scores)
 
-        output = (prediction_scores, generator_sequence_output)
+        output = (prediction_scores,)
 
         # Masked language modeling softmax layer
         if masked_lm_labels is not None:
@@ -367,7 +369,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
 
         output += generator_hidden_states[1:]
 
-        return output  # (loss), prediction_scores, generator_sequence_output, (hidden_states), (attentions)
+        return output  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 
 
 class ElectraForTokenClassification(ElectraPreTrainedModel):
@@ -375,26 +377,11 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
     base_model_prefix = "discriminator"
 
     def __init__(self, config):
-        config = config.get_discriminator_config()
         super().__init__(config)
 
         self.discriminator = ElectraModel(config)
         self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
         self.init_weights()
-
-    def get_input_embeddings(self):
-        return self.discriminator.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.discriminator.embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        """ Prunes heads of the model.
-            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-            See base class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.discriminator.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(
         self,
@@ -407,14 +394,16 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         labels=None,
     ):
 
-        discriminator_hidden_states = self.discriminator(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds)
+        discriminator_hidden_states = self.discriminator(
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
+        )
         discriminator_sequence_output = discriminator_hidden_states[0]
 
-        logits = self.discriminator_predictions(
-            discriminator_sequence_output, attention_mask
-        )
+        logits = self.discriminator_predictions(discriminator_sequence_output, attention_mask)
 
-        output = (logits, discriminator_sequence_output,)
+        output = (
+            logits,
+        )
 
         if labels is not None:
             if self.config.num_labels == 1:
@@ -441,5 +430,4 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
         output += discriminator_hidden_states[1:]
 
-        return output  # (logits, loss), discriminator_hidden_states
-
+        return output  # (loss), scores, (hidden_states), (attentions)
