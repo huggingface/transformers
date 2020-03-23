@@ -126,7 +126,12 @@ class DataProcessor(ABC):
 
 class DataProcessorForSequenceClassification(DataProcessor, TFDSData):
     def __init__(self, **config):
-        features = config.pop("features", {})
+        features = config.pop("features", {
+            "guid": "guid",
+            "text_a": "text_a",
+            "text_b": "text_b",
+            "label": "label"
+        })
         TFDSData.__init__(self, **features)
         DataProcessor.__init__(self, **config)
         self.dataset_name = config.pop("dataset_name", None)
@@ -139,7 +144,7 @@ class DataProcessorForSequenceClassification(DataProcessor, TFDSData):
                                           "train_file": self.files["train"],
                                           "dev_file": self.files["validation"],
                                           "test_file": self.files["test"],
-                                          "dataset_name": self.dataset_name})
+                                          "dataset_name": self.dataset_name}, with_info=True)
 
         self.labels = info.features[features["label"]].names
 
