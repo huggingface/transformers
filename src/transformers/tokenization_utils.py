@@ -24,7 +24,8 @@ from collections import UserDict, defaultdict
 from contextlib import contextmanager
 from typing import List, Optional, Sequence, Tuple, Union
 
-from tokenizers import Encoding, Decoder
+from tokenizers import Encoding
+from tokenizers.decoders import Decoder
 from tokenizers.implementations import BaseTokenizer
 
 from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
@@ -1925,7 +1926,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Optional[Union[List[str], List[(str, str)]]] = None,
+        batch_text_or_text_pairs: Union[List[str], List[Tuple[str, str]]] = None,
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         stride: int = 0,
@@ -2027,7 +2028,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         self,
         text: Union[str, List[str]],
         text_pair: Optional[str] = None,
-        add_special_tokens: bool = False,
+        add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         pad_to_max_length: bool = False,
         stride: int = 0,
@@ -2040,34 +2041,48 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         **kwargs
     ) -> BatchEncoding:
-        batched_input = [(text, text_pair)] if text_pair else [text]
-        batched_output = self.batch_encode_plus(
-            batched_input,
-            add_special_tokens=add_special_tokens,
-            max_length=max_length,
-            stride=stride,
-            truncation_strategy=truncation_strategy,
-            return_tensors=return_tensors,
-            return_token_type_ids=return_token_type_ids,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-            return_offsets_mapping=return_offsets_mapping,
-            pad_to_max_length=pad_to_max_length,
-            **kwargs,
-        )
 
-        # Return tensor is None, then we can remove the leading batch axis
-        if not return_tensors:
-            return BatchEncoding(
-                {
-                    key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
-                    for key, value in batched_output.items()
-                },
-                batched_output.encodings,
-            )
+        # Check for pretokenized path (ie [token1, token2, ..., tokenN] -> [id1, id2, ..., idN]
+        if isinstance(text, list) and text_pair is None:
+            encoding = self._tokenizer.encode_tokenized(text)
+            batched_output = BatchEncoding(self._convert_encoding(
+                encoding,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping
+            ), encoding)
         else:
-            return batched_output
+            batched_input = [(text, text_pair)] if text_pair else [text]
+            batched_output = self.batch_encode_plus(
+                batched_input,
+                add_special_tokens=add_special_tokens,
+                max_length=max_length,
+                stride=stride,
+                truncation_strategy=truncation_strategy,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                pad_to_max_length=pad_to_max_length,
+                **kwargs,
+            )
+
+            # Return tensor is None, then we can remove the leading batch axis
+            if not return_tensors:
+                batched_output = BatchEncoding(
+                    {
+                        key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
+                        for key, value in batched_output.items()
+                    },
+                    batched_output.encodings,
+                )
+
+        return batched_output
 
     def decode(
         self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
