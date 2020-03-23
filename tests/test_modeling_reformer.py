@@ -68,37 +68,36 @@ class TraxUtils(object):
     def get_lsh_self_attention_layer(
         self,
         shape=None,
-        n_heads=5,
-        d_qk=7,
-        d_v=17,
-        causal=True,
-        chunk_len=8,
-        n_chunks_before=1,
-        n_chunks_after=0,
-        n_hashes=2,
-        n_buckets=4,
+        num_attention_heads=None,
+        hidden_size=None,
+        query_key_chunk_len=None,
+        num_chunks_before=None,
+        num_chunks_after=None,
+        num_hashes=None,
+        num_buckets=None,
         use_reference_code=True,
         attention_dropout=0.0,
         mode="train",
-        hash_seed=0
+        seed=0
     ):
 
         with trax_math.use_backend("jax"):
             if shape is None:
                 shape = self._shape
             layer = self.LSHSelfAttention(
-                n_heads=n_heads,
-                d_qk=d_qk,
-                d_v=d_v,
-                causal=causal,
-                chunk_len=chunk_len,
-                n_chunks_before=n_chunks_before,
-                n_chunks_after=n_chunks_after,
-                n_hashes=n_hashes,
-                n_buckets=n_buckets,
+                n_heads=num_attention_heads,
+                d_qk=hidden_size,
+                d_v=hidden_size,
+                causal=False,
+                chunk_len=query_key_chunk_len,
+                n_chunks_before=num_chunks_before,
+                n_chunks_after=num_chunks_after,
+                n_hashes=num_hashes,
+                n_buckets=num_buckets,
                 use_reference_code=use_reference_code,
                 attention_dropout=attention_dropout,
                 mode=mode,
+                hash_seed=seed
             )
 
         return layer
@@ -139,12 +138,26 @@ class ReformerIntegrationTests(unittest.TestCase):
     def _get_trax_utils(self, shape):
         return TraxUtils(shape)
 
+    def _create_config(self, num_attention_heads=6, hidden_size=17, num_hashes=2, num_buckets=4, query_key_chunk_len=5, num_chunks_before=1, num_chunks_after=0, seed=0):
+        return {
+                'hidden_size': hidden_size,
+                'num_hashes': num_hashes,
+                'num_buckets': num_buckets,
+                'query_key_chunk_len': query_key_chunk_len,
+                'num_chunks_before': num_chunks_before,
+                'num_chunks_after': num_chunks_after,
+                'seed': seed
+        }
+
     def test_lsh_hashing(self):
         shape = (3, 32, 8)
+
+        config_dict = self._create_config()
 
         np_input = self._get_random_input(shape)
         trax_utils = self._get_trax_utils(shape)
 
-        lsh_trax_output = trax_utils.forward_layer(np_input)  # noqa: F841
+        trax_layer = trax_utils.get_layer(**config_dict)
+        lsh_trax_output = trax_utils.forward_layer(np_input, layer=trax_layer)  # noqa: F841
 
         pass
