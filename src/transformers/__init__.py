@@ -40,8 +40,7 @@ from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
 from .data import (
     DataProcessor,
-    DataProcessorForSequenceClassificationWithCSV,
-    DataProcessorForSequenceClassificationWithTFDS,
+    DataProcessorForSequenceClassification,
     InputExample,
     InputFeatures,
     SingleSentenceClassificationProcessor,

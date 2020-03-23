@@ -1,7 +1,6 @@
 # coding=utf-8
 """Data processors per task"""
 
-import csv
 import logging
 from abc import ABC, abstractmethod
 
@@ -13,51 +12,6 @@ from .utils import InputExample, InputFeatures
 
 
 logger = logging.getLogger(__name__)
-
-
-class CSVData(ABC):
-    def __init__(self, **config):
-        self.skip_first_row = config.pop("skip_first_row", True)
-        self.delimiter = config.pop("delimiter", "\t")
-        self.quotechar = config.pop("quotechar", "\"")
-        self.is_column_id = config.pip("is_column_id", False)
-
-    def read_csv(self, input_file):
-        if input_file is None:
-            return []
-
-        with open(input_file, "r", encoding="utf-8-sig") as f:
-            reader = csv.reader(f, delimiter=self.delimiter, quotechar=self.quotechar)
-
-            if self.skip_first_row:
-                lines = list(reader)[1:]
-            else:
-                lines = list(reader)
-
-            if len(lines[0]) == 3 and self.is_column_id:
-                column_id = 0
-                column_label = 1
-                column_text_a = 2
-                column_text_b = -1
-            elif len(lines[0]) == 3 and not self.is_column_id:
-                column_id = -1
-                column_label = 0
-                column_text_a = 1
-                column_text_b = 2
-            elif len(lines[0]) == 4 and self.is_column_id:
-                column_id = 0
-                column_label = 1
-                column_text_a = 2
-                column_text_b = 3
-            elif len(lines[0]) == 2 and not self.is_column_id:
-                column_id = -1
-                column_label = 0
-                column_text_a = 1
-                column_text_b = -1
-            else:
-                raise csv.Error("The CSV file " + input_file + " is malformed")
-
-        return lines, [column_id, column_label, column_text_a, column_text_b]
 
 
 class TFDSData(ABC):
@@ -84,7 +38,6 @@ class TFDSData(ABC):
 class DataProcessor(ABC):
     """Base class for data converters for sequence classification data sets."""
     def __init__(self, **config):
-        self.labels = []
         self.examples = {}
         self.examples["train"] = []
         self.examples["validation"] = []
@@ -97,10 +50,6 @@ class DataProcessor(ABC):
         self._create_examples()
 
         # assert len(config) == 0, "unrecognized params passed: %s" % ",".join(config.keys())
-
-    def get_labels(self):
-        """Gets the list of labels for this data set."""
-        return self.labels
 
     def num_examples(self, mode):
         return len(self.examples[mode])
@@ -177,7 +126,7 @@ class DataProcessor(ABC):
             raise ValueError("return_tensors should be one of 'tf' or 'pt'")
 
 
-class DataProcessorForSequenceClassificationWithTFDS(DataProcessor, TFDSData):
+class DataProcessorForSequenceClassification(DataProcessor, TFDSData):
     def __init__(self, **config):
         features = config.pop("features", {})
         TFDSData.__init__(self, **features)
@@ -205,32 +154,6 @@ class DataProcessorForSequenceClassificationWithTFDS(DataProcessor, TFDSData):
 
                 self.examples[mode].append(example)
 
-
-class DataProcessorForSequenceClassificationWithCSV(DataProcessor, CSVData):
-    """ Generic processor for sentence classification data set."""
-    def __init__(self, **config):
-        CSVData.__init__(self, **config)
-        DataProcessor.__init__(self, **config)
-
-    def _create_examples(self):
-        for mode in ["train", "validation", "test"]:
-            lines, columns = self.read_csv(self.files[mode])
-            column_id = columns[0]
-            column_label = columns[1]
-            column_text_a = columns[2]
-            column_text_b = columns[3]
-
-            for (i, line) in enumerate(lines):
-                if column_id == -1:
-                    id = i
-                else:
-                    id = line[column_id]
-
-                if column_text_b == -1:
-                    text_b = ""
-                else:
-                    text_b = line[column_text_b]
-
-                self.labels = list(set(self.labels).union(set([line[column_label]])))
-
-                self.examples[mode].append(InputExample(guid=id, text_a=line[column_text_a], text_b=text_b, label=line[column_label]))
+    def get_labels(self):
+        """Gets the list of labels for this data set."""
+        return self.labels

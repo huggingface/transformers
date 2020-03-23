@@ -17,7 +17,7 @@ from .optimization_tf import WarmUp, AdamWeightDecay
 from .losses_tf import QALoss
 from .configuration_auto import AutoConfig
 from .tokenization_auto import AutoTokenizer
-from .data.processors.task_processors import DataProcessorForSequenceClassificationWithTFDS
+from .data.processors.task_processors import DataProcessorForSequenceClassification
 from .modeling_tf_auto import TFAutoModelForSequenceClassification
 
 
@@ -46,7 +46,6 @@ class TFTrainer(ABC):
         self.max_len = kwargs.pop("max_len", None)
         self.task = kwargs.pop("task", None)
         self.datasets = {}
-        self.labels = []
         self.processor = None
         self.model_class = None
 
@@ -81,49 +80,39 @@ class TFTrainer(ABC):
         self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name_or_path, cache_dir=model_cache_dir, use_fast=False)
 
         self._preprocess_data(data_cache_dir)
-
-        self.labels = self.processor.get_labels()
-        self.label2id = {label: i for i, label in enumerate(self.labels)}
-        self.id2label = {i: label for i, label in enumerate(self.labels)}
-        config = AutoConfig.from_pretrained(self.pretrained_model_name_or_path, num_labels=len(self.labels), id2label=self.id2label, label2id=self.label2id, cache_dir=model_cache_dir)
+        self._config_trainer()
 
         with self.strategy.scope():
-            self.model = self.model_class.from_pretrained(self.pretrained_model_name_or_path, config=config, cache_dir=model_cache_dir)
+            self.model = self.model_class.from_pretrained(self.pretrained_model_name_or_path, config=self.config, cache_dir=model_cache_dir)
             self._create_optimizer()
             self._set_loss_and_metric()
             self._create_checkpoint_manager(checkpoint_path)
             self._create_summary_writer(log_path)
 
-    def get_labels(self):
+    def _config_trainer(self, model_cache_dir):
         """
-        Returns the list of labels associated to the trained model.
+        This method set all the required fields for a specific task. For example
+        in case of a classification set all the labels.
         """
-        return self.labels
+        self.config = AutoConfig.from_pretrained(self.pretrained_model_name_or_path, cache_dir=model_cache_dir)
 
     def _set_loss_and_metric(self):
         """
         Use the loss corresponding to the loss_name field.
         """
-        if self.loss_name == "mean_squared_error":
-            self.loss = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
-        elif self.loss_name == "sparse_categorical_crossentropy":
-            self.loss = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE, from_logits=True)
-        elif self.loss_name == "qa_loss":
+        if self.loss_name == "qa_loss":
             self.loss = QALoss()
         else:
-            raise ValueError(
-                "Allowed losses are mean_squared_error or sparse_categorical_crossentropy. Given: {}".format(self.loss_name)
-            )
+            try:
+                self.loss = tf.keras.losses.get({"class_name": self.loss_name, "config": {"from_logits": True, "reduction": tf.keras.losses.Reduction.NONE}})
+            except TypeError:
+                self.loss = tf.keras.losses.get({"class_name": self.loss_name, "config": {"reduction": tf.keras.losses.Reduction.NONE}})
 
-        if self.metric_name == "sparse_categorical_accuracy":
-            self.train_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
-            self.test_acc_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='test_accuracy')
-        elif self.metric_name == "qa_metric":
+        if self.metric_name == "qa_metric":
             pass
         else:
-            raise ValueError(
-                "Allowed metrics are sparse_categorical_accuracy and qa_metric. Given: {}".format(self.metric_name)
-            )
+            self.train_acc_metric = tf.keras.metrics.get({"class_name": self.metric_name, "config": {"name": "train_accuracy"}})
+            self.test_acc_metric = tf.keras.metrics.get({"class_name": self.metric_name, "config": {"name": "test_accuracy"}})
 
         self.test_loss_metric = tf.keras.metrics.Mean(name='test_loss')
 
@@ -233,18 +222,12 @@ class TFTrainer(ABC):
 
             self.optimizer = AdamWeightDecay(learning_rate=learning_rate_fn, weight_decay_rate=0.01, epsilon=self.adam_epsilon,
                                              exclude_from_weight_decay=["layer_norm", "bias"])
-        elif self.optimizer_name == "adam":
-            self.optimizer = tf.keras.optimizers.Adam(self.learning_rate, epsilon=self.adam_epsilon)
-        elif self.optimizer_name == "adadelta":
-            self.optimizer = tf.keras.optimizers.Adadelta(self.learning_rate, epsilon=self.adam_epsilon)
-        elif self.optimizer_name == "rms":
-            self.optimizer = tf.keras.optimizers.RMSprop(self.learning_rate, epsilon=self.adam_epsilon)
-        elif self.optimizer_name == "sgd":
-            self.optimizer = tf.keras.optimizers.SGD(self.learning_rate)
         else:
-            raise ValueError(
-                "Allowed optimizers are adam, adamw, adadelta, rmsprop or sgd. Given: {}".format(self.optimizer_name)
-            )
+            try:
+                self.optimizer = tf.keras.optimizers.get({"class_name": self.optimizer_name, "config" : {"learning_rate": self.learning_rate, "epsilon": self.adam_epsilon}})
+            except TypeError:
+                # This is for the case where the optimizer is not Adam-like such as SGD
+                self.optimizer = tf.keras.optimizers.get({"class_name": self.optimizer_name, "config" : {"learning_rate": self.learning_rate}})
 
     def _create_checkpoint_manager(self, checkpoint_path, max_to_keep=5, load_model=True):
         """
@@ -381,8 +364,9 @@ class TFTrainerForSequenceClassification(TFTrainer):
             raise ValueError("the model_config and data_processor_config properties should not be empty from the configuration")
 
         super().__init__(**model_config)
-        self.processor = DataProcessorForSequenceClassificationWithTFDS(**data_processor_config)
+        self.processor = DataProcessorForSequenceClassification(**data_processor_config)
         self.model_class = TFAutoModelForSequenceClassification
+        self.labels = []
 
     def _create_features(self):
         self.datasets["train"] = self.processor.convert_examples_to_features("train", self.tokenizer, self.max_len, return_dataset="tf")
@@ -391,6 +375,18 @@ class TFTrainerForSequenceClassification(TFTrainer):
 
         if self.datasets["test"] is None:
             self.datasets["test"] = self.datasets["validation"]
+
+    def get_labels(self):
+        """
+        Returns the list of labels associated to the trained model.
+        """
+        return self.labels
+
+    def _config_trainer(self, model_cache_dir):
+        self.labels = self.processor.get_labels()
+        self.label2id = {label: i for i, label in enumerate(self.labels)}
+        self.id2label = {i: label for i, label in enumerate(self.labels)}
+        self.config = AutoConfig.from_pretrained(self.pretrained_model_name_or_path, num_labels=len(self.labels), id2label=self.id2label, label2id=self.label2id, cache_dir=model_cache_dir)
 
     def _load_cache(self, cached_file):
         name_to_features = {
