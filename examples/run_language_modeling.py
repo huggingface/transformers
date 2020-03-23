@@ -170,11 +170,7 @@ class LazyUnsupervisedTextDataset(Dataset):
         :return (str or None): The line as a string (newline removed) or None if there is an exception.
         """
         # linecache starts counting from one, not zero, +1 the given index
-        try:
-            line = linecache.getline(self.file_path, idx + 1).strip()
-        except:
-            # N.B. we really want a bare exception here because any uncaught exception here could halt an entire training run.
-            line = None
+        line = linecache.getline(self.file_path, idx + 1).strip()
         return line
 
     def __len__(self):
@@ -198,8 +194,8 @@ def make_collate(tokenizer, block_size, lazy=False):
         :param examples: (list[str]) the text lines to be collated in this batch.
         :return: (torch.tensor) of the tokenized examples padded/truncated to form a 2d tensor of ints.
         """
-        # Lazy Dataset returns None when an exception is encountered when reading a line.
-        examples = [ex for ex in examples if ex is not None]
+        # Filter empty strings. LazyUnsupervisedTextDataset will return empty string if there is an error on a line.
+        examples = [ex for ex in examples if ex]
         examples = tokenizer.batch_encode_plus(examples, max_len=block_size)
         examples = [torch.tensor(ex) for ex in examples["input_ids"]]
         if tokenizer._pad_token is None:
