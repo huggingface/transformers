@@ -64,7 +64,7 @@ if stale_egg_info.exists():
 extras = {}
 
 extras["mecab"] = ["mecab-python3"]
-extras["sklearn"] = ["scikit-learn==0.22.1"]
+extras["sklearn"] = ["scikit-learn"]
 extras["tf"] = ["tensorflow"]
 extras["tf-cpu"] = ["tensorflow-cpu"]
 extras["torch"] = ["torch"]
