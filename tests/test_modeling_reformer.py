@@ -17,6 +17,13 @@
 import unittest
 import numpy as np
 
+# trax imports - to be deleted later
+from trax import math as trax_math
+from trax.shapes import ShapeDtype as trax_ShapeDtype
+import jax
+from trax.layers.research.efficient_attention_v2 import LSHSelfAttention
+
+
 from transformers import is_torch_available  # noqa: F401
 from .utils import require_torch, torch_device  # noqa: F401
 
@@ -45,27 +52,17 @@ class TraxUtils(object):
     """
 
     def __init__(self, shape=(3, 32, 8)):
-        from trax import math
-        from trax.math import numpy as trax_np
-        from trax.shapes import ShapeDtype
-        import jax
-        from trax.layers.research.efficient_attention_v2 import LSHSelfAttention
-
-        self.math = math
-        self.np_trax = trax_np
-        self.ShapeDtype = ShapeDtype
-        self.jax = jax
         self.LSHSelfAttention = LSHSelfAttention
         self._shape = shape
 
     def convert_to_jax_array(self, np_array):
-        return self.jax.numpy.asarray(np_array)
+        return jax.numpy.asarray(np_array)
 
     def get_input_signature(self, shape=None):
-        with self.math.use_backend("jax"):
+        with trax_math.use_backend("jax"):
             if shape is None:
                 shape = self._shape
-            input_signature = self.ShapeDtype(shape)
+            input_signature = trax_ShapeDtype(shape)
         return input_signature
 
     def get_lsh_self_attention_layer(
@@ -85,7 +82,7 @@ class TraxUtils(object):
         mode="train",
     ):
 
-        with self.math.use_backend("jax"):
+        with trax_math.use_backend("jax"):
             if shape is None:
                 shape = self._shape
             layer = self.LSHSelfAttention(
@@ -112,7 +109,7 @@ class TraxUtils(object):
         input_signature=None,
         random_number_generator=None,
     ):
-        with self.math.use_backend("jax"):
+        with trax_math.use_backend("jax"):
             input_data = self.convert_to_jax_array(np_input_data)
 
             if layer is None:
@@ -120,9 +117,6 @@ class TraxUtils(object):
 
             if input_signature is None:
                 input_signature = self.get_input_signature()
-
-            import ipdb
-            ipdb.set_trace()
 
             weights, state = layer.init(input_signature)
 
