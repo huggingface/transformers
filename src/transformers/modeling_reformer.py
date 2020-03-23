@@ -186,11 +186,89 @@ class LSHSelfAttention(nn.Module):
 
         self.query_key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
         self.num_hashes = config.num_hashes
         self.num_buckets = config.num_buckets
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+    ):
+        mixed_query_key_vectors = self.query_key(hidden_states)
+        mixed_value_vectors = self.value(hidden_states)
+
+        query_key_vectors = self.transpose_for_scores(mixed_query_key_vectors)
+        value_vectors = self.transpose_for_scores(mixed_value_vectors)
+
+        buckets = self._hash_vectors(query_key_vectors)
+
+        sequence_len = hidden_states.shape[1]
+
+        # TODO: check shapes here
+        assert int(buckets.shape[0]) == self.num_hashes * sequence_len
+
+        # TODO: what is ticker?
+        ticker = torch.arange(self.num_hashes * sequence_len, device=buckets.device)
+        buckets_and_t = sequence_len * buckets + (ticker % sequence_len)
+
+        # Hash-based sort
+        sorted_buckets, sorted_ticker = torch.sort(buckets_and_t, dim=-1)
+        _, undo_sort_indices = torch.sort(sorted_ticker, dim=-1)
+
+        sorted_ticker = (sorted_ticker % sequence_len)
+        sorted_query_key_vectors = torch.gather(query_key_vectors, sorted_ticker, dim=0)
+        sorted_value_vectors = torch.gather(value_vectors, sorted_ticker, dim=0)
+
+        query_info = sorted_ticker
+
+        sorted_query_key_vectors = torch.reshape(sorted_query_key_vectors, (-1, self.query_key_chunk_len, sorted_query_key_vectors.shape[-1]))
+        query_info = torch.reshape(query_info, (-1, self.query_key_chunk_len))
+
+        key_vectors = sorted_query_key_vectors
+        key_value_chunk_len = self.query_key_chunk_len
+        key_value_info = query_info
+
+        sorted_value_vectors = torch.reshape(sorted_value_vectors, (-1, key_value_chunk_len, value_vectors.shape[-1]))
+
+        key_vectors = self._length_normalize(key_vectors)
+
+        key_vectors = self._look_adjacent(key_vectors, self.num_chunks_before, self.num_chunks_after)
+        sorted_value_vectors = self._look_adjacent(sorted_value_vectors, self.num_chunks_before, self.num_chunks_after)
+        key_value_info = self._look_adjacent(key_value_info, self.num_chunks_before, self.num_chunks_after)
+
+        dots = torch.matmul(sorted_query_key_vectors, key_vectors.transpose(-1, -2))
+
+        # TODO: add masking here
+
+        dots_logsumexp = torch.logsumexp(dots, dim=-1, keepdim=True)
+        dots = torch.exp(dots - dots_logsumexp)
+
+        # TODO: add dropout here
+
+        sorted_out = torch.matmul(dots, sorted_value_vectors)
+        sorted_out = torch.reshape(sorted_out, (-1, sorted_out.shape[-1]))
+        dots_logsumexp = torch.reshape(dots_logsumexp, (-1,))
+
+        out = torch.gather(sorted_out, undo_sort_indices, dim=0)
+        logits = torch.gather(dots_logsumexp, undo_sort_indices, dim=0)
+
+        if self.num_hashes > 1:
+            out = torch.reshape(out, (self.num_hashes, sequence_len, out.shape[-1]))
+            logits = torch.reshape(logits, (self.num_hashes, sequence_len, 1))
+            probs = torch.exp(logits - torch.logsumexp(logits, dim=0, keepdim=True))
+            out = torch.sum(out * probs, dim=0)
+
+        assert out.shape == (sequence_len, self.value[-1])
+        out = self.dense(out)
+
+        # TODO: apply broadcasted dropout
+
+        return out
 
     def _hash_vectors(self, vectors):
         # See https://arxiv.org/pdf/1509.02897.pdf
@@ -238,81 +316,37 @@ class LSHSelfAttention(nn.Module):
 
         return buckets
 
+    def _look_adjacent(self, x, n_chunks_before, n_chunks_after):
+        """ Used to implement attention between consecutive chunks.
+
+            Args:
+                x: array of shape [n_chunks, chunk_len, ...]
+                n_chunks_before: Number of previous chunks to attend to.
+                n_chunks_after: Number of subsequent chunks to attend to.
+            Returns:
+                array of shape [n_chunks, N * chunk_len, ...], where
+                N = (1 + n_chunks_before + n_chunks_after).
+        """
+        if n_chunks_before == 0 and n_chunks_after == 0:
+            return x
+
+        slices = []
+        for i in range(-n_chunks_before, n_chunks_after + 1):
+            if i == 0:
+                slices.append(x)
+            else:
+                slices.append(torch.cat([x[i:, ...], x[:i, ...]], dim=0))
+        return torch.cat(slices, dim=1)
+
+    def _length_normalize(self, x, epsilon=1e-6):
+        variance = torch.mean(x**2, -1, keepdim=True)
+        norm_x = x / torch.sqrt(variance + epsilon)
+        return norm_x
+
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-    ):
-        mixed_query_key_vectors = self.query_key(hidden_states)
-        mixed_value_vectors = self.value(hidden_states)
-
-        query_key_vectors = self.transpose_for_scores(mixed_query_key_vectors)
-        value_vectors = self.transpose_for_scores(mixed_value_vectors)
-
-        buckets = self._hash_vectors(query_key_vectors)
-        
-        sequence_len = hidden_states.shape[1]
-
-        # TODO: check shapes here
-        assert int(buckets.shape[0]) == self.num_hashes * sequence_len
-
-        # TODO: what is ticker? 
-        ticker = torch.arange(self.num_hashes * sequence_len, device=buckets.device)
-        buckets_and_t = sequence_len * buckets + (ticker % sequence_len)
-
-        # Hash-based sort 
-        sorted_buckets, sorted_ticker = torch.sort(buckets_and_t, dim=-1)
-        _, undo_sort_indices = torch.sort(sorted_ticker, dim=-1)
-
-        sorted_ticker = (sorted_ticker % sequence_len)
-        sorted_query_key_vectors = torch.gather(query_key_vectors, sorted_ticker, dim=0)
-        sorted_value_vectors = torch.gather(value_vectors, sorted_ticker, dim=0)
-
-        # Hash-based sort 
-#        _, undo_sort = jax.lax.sort_key_val(sticker, ticker, dimension=-1)
-#        sbuckets_and_t = jax.lax.stop_gradient(sbuckets_and_t)
-#        sticker = jax.lax.stop_gradient(sticker)
-#        undo_sort = jax.lax.stop_gradient(undo_sort)
-#
-#        st = (sticker % seqlen)
-#        sq = np.take(q, st, axis=0)
-#        sv = np.take(v, st, axis=0)
-#        mask_fn = functools.partial(
-#            mask_self_attention, causal=self.causal, exclude_self=True)
-#        q_info = st
-
-        query_info = sorted_ticker 
-
-        so, slogits = attend(
-            sq, k=None, v=sv,
-            q_chunk_len=self.chunk_len,
-            n_chunks_before=self.n_chunks_before,
-            n_chunks_after=self.n_chunks_after,
-            mask_fn=mask_fn, q_info=q_info,
-            dropout=self.attention_dropout, rng=attend_rng,
-            )
-
-        # np.take(so, undo_sort, axis=0); np.take(slogits, undo_sort, axis=0) would
-        # also work, but these helpers include performance optimizations for TPU.
-        o = permute_via_gather(so, undo_sort, sticker, axis=0)
-        logits = permute_via_sort(slogits, sticker, buckets_and_t, axis=-1)
-
-        if self.n_hashes > 1:
-          o = np.reshape(o, (self.n_hashes, seqlen, o.shape[-1]))
-          logits = np.reshape(logits, (self.n_hashes, seqlen, 1))
-          probs = np.exp(logits - logsumexp(logits, axis=0, keepdims=True))
-          o = np.sum(o * probs, axis=0)
-
-        assert o.shape == (seqlen, w_v.shape[-1])
-        out = np.matmul(o, w_o)
-        out = apply_broadcasted_dropout(out, self.output_dropout, output_rng)
-        return out, state
 
 
 class LSHAttention(nn.Module):

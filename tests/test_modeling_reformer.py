@@ -80,6 +80,7 @@ class TraxUtils(object):
         use_reference_code=True,
         attention_dropout=0.0,
         mode="train",
+        hash_seed=0
     ):
 
         with trax_math.use_backend("jax"):
