@@ -163,6 +163,158 @@ class ReformerEmbeddings(nn.Module):
         return embeddings
 
 
+class LSHSelfAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+#    def __init__(self, n_heads=2, dim_qk=64, dim_v=64, share_qk='unused',
+#                causal=False, chunk_len=None, n_chunks_before=1, n_chunks_after=0,
+#                n_hashes=1, n_buckets=256, mode='train',
+#                predict_mem_len=2048, predict_drop_len=256,
+#                attention_dropout=0.0, n_parallel_heads=1,
+#                use_python_loop=False, use_reference_code=False
+#                ):
+        if config.hidden_size % config.num_attention_heads != 0:
+            raise ValueError(
+                "The hidden size (%d) is not a multiple of the number of attention "
+                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+            )
+        self.output_attentions = config.output_attentions
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query_key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+
+        self.num_hashes = config.num_hashes
+        self.num_buckets = config.num_buckets
+
+    def _hash_vectors(self, vectors):
+        # See https://arxiv.org/pdf/1509.02897.pdf
+        # We sample a different random rotation for each round of hashing to
+        # decrease the probability of hash misses.
+        if isinstance(self.num_buckets, int):
+            assert self.num_buckets % 2 == 0, 'There should be an even number of bucktes, but `self.num_bucktes`: {}'.format(self.num_buckets)
+            rotation_size = self.num_buckets
+            num_buckets = self.num_buckets
+        else:
+            # Factorize the hash if self.n_buckets is a list or tuple
+            rotation_size, num_buckets = 0, 1
+            for num_bucket in self.num_buckets:
+                assert num_bucket % 2 == 0, 'The number of buckets should be even, but `num_bucket`: {}'.format(num_bucket)
+                rotation_size += num_bucket
+                num_buckets *= num_bucket
+
+        rotations_shape = (vectors.shape[-1], self.num_hashes, rotation_size // 2)
+
+        random_rotations = torch.randn(rotations_shape, device=vectors.device)
+        # TODO: check with dimensions here!
+        rotated_vectors = torch.einsum('td,dhb->htb', vectors, random_rotations)
+
+        if isinstance(self.num_buckets, int) or len(self.num_buckets) == 1:
+            rotated_vectors = torch.cat([rotated_vectors, -rotated_vectors], dim=-1)
+            buckets = torch.argmax(rotated_vectors, dim=-1)
+        else:
+            # Get the buckets for them and combine.
+            buckets, cur_sum, cur_product = None, 0, 1
+            for num_bucket in self.num_buckets:
+                rotated_vectors = rotated_vectors[..., cur_sum:cur_sum + (num_bucket // 2)]
+                cur_sum += num_bucket // 2
+                rotated_vectors = torch.cat([rotated_vectors, -rotated_vectors], dim=-1)
+                if buckets is None:
+                    buckets = torch.argmax(rotated_vectors, dim=-1)
+                else:
+                    buckets += cur_product * torch.argmax(rotated_vectors, dim=-1)
+                cur_product *= num_bucket
+
+        # buckets is now (self.n_hashes, seqlen). Next we add offsets so that
+        # bucket numbers from different hashing rounds don't overlap.
+        offsets = torch.arange(self.num_hashes, device=vectors.device)
+        offsets = torch.reshape(offsets * num_buckets, (-1, 1))
+        buckets = torch.reshape(buckets + offsets, (-1,))
+
+        return buckets
+
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+    ):
+        mixed_query_key_vectors = self.query_key(hidden_states)
+        mixed_value_vectors = self.value(hidden_states)
+
+        query_key_vectors = self.transpose_for_scores(mixed_query_key_vectors)
+        value_vectors = self.transpose_for_scores(mixed_value_vectors)
+
+        buckets = self._hash_vectors(query_key_vectors)
+        
+        sequence_len = hidden_states.shape[1]
+
+        # TODO: check shapes here
+        assert int(buckets.shape[0]) == self.num_hashes * sequence_len
+
+        # TODO: what is ticker? 
+        ticker = torch.arange(self.num_hashes * sequence_len, device=buckets.device)
+        buckets_and_t = sequence_len * buckets + (ticker % sequence_len)
+
+        # Hash-based sort 
+        sorted_buckets, sorted_ticker = torch.sort(buckets_and_t, dim=-1)
+        _, undo_sort_indices = torch.sort(sorted_ticker, dim=-1)
+
+        sorted_ticker = (sorted_ticker % sequence_len)
+        sorted_query_key_vectors = torch.gather(query_key_vectors, sorted_ticker, dim=0)
+        sorted_value_vectors = torch.gather(value_vectors, sorted_ticker, dim=0)
+
+        # Hash-based sort 
+#        _, undo_sort = jax.lax.sort_key_val(sticker, ticker, dimension=-1)
+#        sbuckets_and_t = jax.lax.stop_gradient(sbuckets_and_t)
+#        sticker = jax.lax.stop_gradient(sticker)
+#        undo_sort = jax.lax.stop_gradient(undo_sort)
+#
+#        st = (sticker % seqlen)
+#        sq = np.take(q, st, axis=0)
+#        sv = np.take(v, st, axis=0)
+#        mask_fn = functools.partial(
+#            mask_self_attention, causal=self.causal, exclude_self=True)
+#        q_info = st
+
+        query_info = sorted_ticker 
+
+        so, slogits = attend(
+            sq, k=None, v=sv,
+            q_chunk_len=self.chunk_len,
+            n_chunks_before=self.n_chunks_before,
+            n_chunks_after=self.n_chunks_after,
+            mask_fn=mask_fn, q_info=q_info,
+            dropout=self.attention_dropout, rng=attend_rng,
+            )
+
+        # np.take(so, undo_sort, axis=0); np.take(slogits, undo_sort, axis=0) would
+        # also work, but these helpers include performance optimizations for TPU.
+        o = permute_via_gather(so, undo_sort, sticker, axis=0)
+        logits = permute_via_sort(slogits, sticker, buckets_and_t, axis=-1)
+
+        if self.n_hashes > 1:
+          o = np.reshape(o, (self.n_hashes, seqlen, o.shape[-1]))
+          logits = np.reshape(logits, (self.n_hashes, seqlen, 1))
+          probs = np.exp(logits - logsumexp(logits, axis=0, keepdims=True))
+          o = np.sum(o * probs, axis=0)
+
+        assert o.shape == (seqlen, w_v.shape[-1])
+        out = np.matmul(o, w_o)
+        out = apply_broadcasted_dropout(out, self.output_dropout, output_rng)
+        return out, state
+
+
 class LSHAttention(nn.Module):
     def __init__(self, bucket_size: int, nb_hashs: int = 1):
         super().__init__()
