@@ -22,15 +22,15 @@ using a masked language modeling (MLM) loss.
 
 import argparse
 import glob
+import linecache
 import logging
 import os
 import pickle
 import random
 import re
 import shutil
-from typing import Dict, List, Tuple
-import linecache
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -150,13 +150,14 @@ class LazyUnsupervisedTextDataset(Dataset):
     """
     Credit: @bramvanroy for this linecache implementation.
     """
+
     def __init__(self, file_path):
         self.file_path = file_path
         self.num_entries = self._get_n_lines(self.file_path)
 
     @staticmethod
     def _get_n_lines(file_path):
-        with Path(file_path).resolve().open(encoding='utf-8') as fhin:
+        with Path(file_path).resolve().open(encoding="utf-8") as fhin:
             for line_idx, _ in enumerate(fhin, 1):
                 pass
 
@@ -200,7 +201,7 @@ def make_collate(tokenizer, block_size, lazy=False):
         # Lazy Dataset returns None when an exception is encountered when reading a line.
         examples = [ex for ex in examples if ex is not None]
         examples = tokenizer.batch_encode_plus(examples, max_len=block_size)
-        examples = [torch.tensor(ex) for ex in examples['input_ids']]
+        examples = [torch.tensor(ex) for ex in examples["input_ids"]]
         if tokenizer._pad_token is None:
             return pad_sequence(examples, batch_first=True)
         return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
