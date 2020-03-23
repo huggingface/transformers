@@ -110,6 +110,7 @@ class ElectraConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        num_labels=1,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -131,6 +132,7 @@ class ElectraConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.num_labels = num_labels
 
     def get_discriminator_config(self):
         configuration = ElectraConfig()
