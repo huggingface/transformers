@@ -160,17 +160,17 @@ class TFTrainer(ABC):
         """
         cached_training_features_file = os.path.join(
             cache_dir, "cached_train_{}_{}_{}.tf_record".format(
-                self.task, list(filter(None, self.pretrained_model_name_or_path.split("/"))).pop(), str(self.max_len)
+                self.task.replace("/", "-"), list(filter(None, self.pretrained_model_name_or_path.split("/"))).pop(), str(self.max_len)
             ),
         )
         cached_validation_features_file = os.path.join(
             cache_dir, "cached_validation_{}_{}_{}.tf_record".format(
-                self.task, list(filter(None, self.pretrained_model_name_or_path.split("/"))).pop(), str(self.max_len)
+                self.task.replace("/", "-"), list(filter(None, self.pretrained_model_name_or_path.split("/"))).pop(), str(self.max_len)
             ),
         )
         cached_test_features_file = os.path.join(
             cache_dir, "cached_test_{}_{}_{}.tf_record".format(
-                self.task, list(filter(None, self.pretrained_model_name_or_path.split("/"))).pop(), str(self.max_len)
+                self.task.replace("/", "-"), list(filter(None, self.pretrained_model_name_or_path.split("/"))).pop(), str(self.max_len)
             ),
         )
 
@@ -352,6 +352,7 @@ class TFTrainer(ABC):
 
         os.makedirs(path, exist_ok=True)
         self.model.save_pretrained(save_path)
+        self.tokenizer.save_pretrained(save_path)
         tf.saved_model.save(self.model, path)
 
 
@@ -441,7 +442,7 @@ class TFTrainerForSequenceClassification(TFTrainer):
             logits = self.model(features, training=False)
             loss = self.loss(labels, logits[0]) + sum(self.model.losses)
 
-            self.test_acc_metric(labels, logits)
+            self.test_acc_metric(labels, logits[0])
             self.test_loss_metric(loss)
 
         self.strategy.experimental_run_v2(step_fn, args=(dist_inputs,))

@@ -19,7 +19,7 @@ class SequenceClassification(tfds.core.GeneratorBasedBuilder):
         self.files["dev"] = config.pop("dev_file", None)
         self.files["test"] = config.pop("test_file", None)
         self.is_column_id = config.pop("is_column_id", False)
-        self.skip_first_row = config.pop("skip_first_row", True)
+        self.skip_first_row = config.pop("skip_first_row", False)
         self.delimiter = config.pop("delimiter", "\t")
         self.quotechar = config.pop("quotechar", "\"")
         super(SequenceClassification, self).__init__(**config)

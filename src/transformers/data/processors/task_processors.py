@@ -54,8 +54,8 @@ class DataProcessorForSequenceClassification(DataProcessor):
         DataProcessor.__init__(self, **config)
         self.dataset_name = config.pop("dataset_name", None)
 
-        if self.dataset_name in tfds.list_builders():
-            self.ds, info = tfds.load(self.dataset_name, with_info=True)
+        if self.dataset_name.split("/")[0] in tfds.list_builders():
+            self.ds, self.info = tfds.load(self.dataset_name, with_info=True)
         else:
             self.ds, self.info = tfds.load("sequence_classification",
                                            builder_kwargs={
