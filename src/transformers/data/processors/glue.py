@@ -312,6 +312,9 @@ class ColaProcessor(DataProcessor):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
         examples = []
+        # just the test file has a header row.
+        if set_type == 'test':
+            lines = lines[1:]
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
 
