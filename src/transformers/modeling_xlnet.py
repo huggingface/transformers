@@ -953,7 +953,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         target_mapping = torch.zeros(
             (effective_batch_size, 1, sequence_length), dtype=torch.float, device=input_ids.device
         )
-        target_mapping[0, 0, -1] = 1.0
+        target_mapping[:, 0, -1] = 1.0
 
         inputs = {"input_ids": input_ids, "perm_mask": perm_mask, "target_mapping": target_mapping}
 
