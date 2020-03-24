@@ -29,9 +29,9 @@ import numpy as np
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
 from .configuration_bart import BartConfig
-from .configuration_t5 import T5Config
 from .configuration_distilbert import DistilBertConfig
 from .configuration_roberta import RobertaConfig
+from .configuration_t5 import T5Config
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLMConfig
 from .data import SquadExample, squad_convert_examples_to_features
@@ -1217,9 +1217,9 @@ class SummarizationPipeline(Pipeline):
         if is_t5:
             assert len(documents) > 0, "Please provide a document to summarize"
             if isinstance(documents[0], str):
-                documents = (T5_PREFIX_PATTERNS['summarization'] + documents[0],)
+                documents = (T5_PREFIX_PATTERNS["summarization"] + documents[0],)
             elif isinstance(documents[0], list):
-                documents = ([T5_PREFIX_PATTERNS['summarization'] + document for document in documents[0]],)
+                documents = ([T5_PREFIX_PATTERNS["summarization"] + document for document in documents[0]],)
 
         if isinstance(documents[0], list):
             assert (
