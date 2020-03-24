@@ -79,6 +79,7 @@ from .modeling_distilbert import (
 )
 from .modeling_electra import (
     ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    ElectraForPreTraining,
     ElectraForMaskedLM,
     ElectraForTokenClassification,
     ElectraModel,
@@ -192,7 +193,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
         # ELECTRA's main model is for classifying tokens as being generated or not, hence the token classification model
-        (ElectraConfig, ElectraForTokenClassification),
+        (ElectraConfig, ElectraForPreTraining),
     ]
 )
 
@@ -445,7 +446,7 @@ class AutoModelForPreTraining(object):
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
                 - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
-                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForTokenClassification` (Electra model)
+                - isInstance of `electra` configuration class: :class:`~transformers.ElectraForPreTraining` (Electra model)
 
         Examples::
 

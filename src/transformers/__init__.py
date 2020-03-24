@@ -300,6 +300,7 @@ if is_torch_available():
     )
 
     from .modeling_electra import (
+        ElectraForPreTraining,
         ElectraForMaskedLM,
         ElectraForTokenClassification,
         ElectraModel,

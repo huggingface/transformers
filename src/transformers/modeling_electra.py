@@ -259,6 +259,7 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
 class ElectraModel(ElectraPreTrainedModel):
 
     config_class = ElectraConfig
+    base_model_prefix = "discriminator"
 
     def __init__(self, config):
         super().__init__(config)
@@ -372,7 +373,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         return output  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 
 
-class ElectraForTokenClassification(ElectraPreTrainedModel):
+class ElectraForPreTraining(ElectraPreTrainedModel):
 
     base_model_prefix = "discriminator"
 
@@ -381,6 +382,55 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
         self.discriminator = ElectraModel(config)
         self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
+        self.init_weights()
+
+    def forward(
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
+    ):
+
+        discriminator_hidden_states = self.discriminator(
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
+        )
+        discriminator_sequence_output = discriminator_hidden_states[0]
+
+        logits = self.discriminator_predictions(discriminator_sequence_output, attention_mask)
+
+        output = (logits,)
+
+        if labels is not None:
+            loss_fct = nn.BCEWithLogitsLoss()
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1, discriminator_sequence_output.shape[1]) == 1
+                active_logits = logits.view(-1, discriminator_sequence_output.shape[1])[active_loss]
+                active_labels = labels[active_loss]
+                loss = loss_fct(active_logits, active_labels.float())
+            else:
+                loss = loss_fct(logits.view(-1, discriminator_sequence_output.shape[1]), labels.float())
+
+            output = (loss,) + output
+
+        output += discriminator_hidden_states[1:]
+
+        return output  # (loss), scores, (hidden_states), (attentions)
+
+
+class ElectraForTokenClassification(ElectraPreTrainedModel):
+
+    base_model_prefix = "discriminator"
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.discriminator = ElectraModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.init_weights()
 
     def forward(
@@ -399,33 +449,25 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 
-        logits = self.discriminator_predictions(discriminator_sequence_output, attention_mask)
+        discriminator_sequence_output = self.dropout(discriminator_sequence_output)
+        logits = self.classifier(discriminator_sequence_output)
 
         output = (logits,)
 
         if labels is not None:
-            if self.config.num_labels == 1:
-                loss_fct = nn.BCEWithLogitsLoss()
-                if attention_mask is not None:
-                    active_loss = attention_mask.view(-1, discriminator_sequence_output.shape[1]) == 1
-                    active_logits = logits.view(-1, discriminator_sequence_output.shape[1])[active_loss]
-                    active_labels = labels[active_loss]
-                    loss = loss_fct(active_logits, active_labels.float())
-                else:
-                    loss = loss_fct(logits.view(-1, discriminator_sequence_output.shape[1]), labels.float())
+            loss_fct = nn.CrossEntropyLoss()
+            # Only keep active parts of the loss
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.config.num_labels)[active_loss]
+                active_labels = labels.view(-1)[active_loss]
+                loss = loss_fct(active_logits, active_labels)
             else:
-                loss_fct = nn.CrossEntropyLoss()
-                # Only keep active parts of the loss
-                if attention_mask is not None:
-                    active_loss = attention_mask.view(-1) == 1
-                    active_logits = logits.view(-1, self.config.num_labels)[active_loss]
-                    active_labels = labels.view(-1)[active_loss]
-                    loss = loss_fct(active_logits, active_labels)
-                else:
-                    loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
             output = (loss,) + output
 
         output += discriminator_hidden_states[1:]
 
         return output  # (loss), scores, (hidden_states), (attentions)
+
