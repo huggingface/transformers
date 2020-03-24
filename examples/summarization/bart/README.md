@@ -16,13 +16,16 @@ the default batch size, 8, fits in 16GB GPU memory, but may need to be adjusted 
 
 
 ### Training
-Clone the repository and preprocess the data:
+
+
+
+After downloading the CNN and Daily Mail datasets, preprocess the dataset:
 ```commandline
 git clone https://github.com/artmatsak/cnn-dailymail
 cd cnn-dailymail && python make_datafiles.py ../cnn/stories/ ../dailymail/stories/
 ```
 
-To train run the `pl_train.sh` script.
+Run the training script: `run_train.sh`
 
 ### Where is the code?
 The core model is in `src/transformers/modeling_bart.py`. This directory only contains examples.
