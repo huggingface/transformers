@@ -131,10 +131,8 @@ class BartSystem(BaseTransformer):
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
+        BaseTransformer.add_model_specific_args(parser, root_dir)
         # Add BART specific options
-        parser.add_argument(
-            "--model_type", default="bart", type=str, help="Bart model type",
-        )
         parser.add_argument(
             "--max_seq_length",
             default=1024,
@@ -144,49 +142,12 @@ class BartSystem(BaseTransformer):
         )
 
         parser.add_argument(
-            "--model_name_or_path",
-            type=str,
-            default="bart-large",
-            help="Path to pre-trained model or shortcut name for BART",
-        )
-        parser.add_argument(
-            "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name"
-        )
-        parser.add_argument(
-            "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model."
-        )
-        parser.add_argument(
-            "--tokenizer_name",
-            default="",
-            type=str,
-            help="Pretrained tokenizer name or path if not the same as model_name",
-        )
-        parser.add_argument(
-            "--cache_dir",
-            default="",
-            type=str,
-            help="Where do you want to store the pre-trained models downloaded from s3",
-        )
-
-        parser.add_argument(
             "--data_dir",
             default=None,
             type=str,
             required=True,
-            help="The input data dir. Should contain the training files for the CNN/DM summarization task.",
+            help="The input data dir. Should contain the dataset files for the CNN/DM summarization task.",
         )
-
-        parser.add_argument("--learning_rate", default=3e-5, type=float, help="The initial learning rate for Adam.")
-        parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
-        parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
-        parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
-        parser.add_argument(
-            "--num_train_epochs", default=1, type=int, help="Total number of training epochs to perform."
-        )
-
-        parser.add_argument("--train_batch_size", default=4, type=int)
-        parser.add_argument("--eval_batch_size", default=4, type=int)
-
         return parser
 
 
