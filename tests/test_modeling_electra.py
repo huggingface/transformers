@@ -19,7 +19,7 @@ import unittest
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
@@ -125,14 +125,30 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
                 initializer_range=self.initializer_range,
             )
 
-            return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_token_labels
-
+            return (
+                config,
+                input_ids,
+                token_type_ids,
+                input_mask,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+                fake_token_labels,
+            )
 
         def check_loss_output(self, result):
             self.parent.assertListEqual(list(result["loss"].size()), [])
 
         def create_and_check_electra_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_token_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_token_labels,
         ):
             model = ElectraModel(config=config)
             model.to(torch_device)
@@ -149,7 +165,15 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             )
 
         def create_and_check_electra_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_token_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_token_labels,
         ):
             model = ElectraForMaskedLM(config=config)
             model.to(torch_device)
@@ -167,7 +191,15 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             self.check_loss_output(result)
 
         def create_and_check_electra_for_token_classification(
-                self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_token_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_token_labels,
         ):
             config.num_labels = self.num_labels
             model = ElectraForTokenClassification(config=config)
@@ -186,10 +218,18 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             self.check_loss_output(result)
 
         def create_and_check_electra_for_pretraining(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels, fake_token_labels
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_token_labels,
         ):
             config.num_labels = self.num_labels
-            model = ElectraForTokenClassification(config=config)
+            model = ElectraForPreTraining(config=config)
             model.to(torch_device)
             model.eval()
             loss, logits = model(
@@ -199,9 +239,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
                 "loss": loss,
                 "logits": logits,
             }
-            self.parent.assertListEqual(
-                list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels]
-            )
+            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length])
             self.check_loss_output(result)
 
         def prepare_config_and_inputs_for_common(self):
@@ -214,7 +252,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
                 sequence_labels,
                 token_labels,
                 choice_labels,
-                fake_token_labels
+                fake_token_labels,
             ) = config_and_inputs
             inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
             return config, inputs_dict

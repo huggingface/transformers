@@ -154,7 +154,7 @@ class ElectraDiscriminatorPredictions(nn.Module):
         super().__init__()
 
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dense_prediction = nn.Linear(config.hidden_size, config.num_labels)
+        self.dense_prediction = nn.Linear(config.hidden_size, 1)
         self.config = config
 
     def forward(self, discriminator_hidden_states, attention_mask):
@@ -385,14 +385,14 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         self.init_weights()
 
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
     ):
 
         discriminator_hidden_states = self.discriminator(
@@ -470,4 +470,3 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         output += discriminator_hidden_states[1:]
 
         return output  # (loss), scores, (hidden_states), (attentions)
-

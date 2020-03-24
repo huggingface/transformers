@@ -79,8 +79,8 @@ from .modeling_distilbert import (
 )
 from .modeling_electra import (
     ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
-    ElectraForPreTraining,
     ElectraForMaskedLM,
+    ElectraForPreTraining,
     ElectraForTokenClassification,
     ElectraModel,
 )
