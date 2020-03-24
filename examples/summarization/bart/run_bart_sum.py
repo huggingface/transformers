@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from transformer_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
-from utils import CnnDailyMailDataset
+from utils import SummarizationDataset
 
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ class BartSystem(BaseTransformer):
         return self.test_end(outputs)
 
     def train_dataloader(self):
-        train_dataset = CnnDailyMailDataset(
+        train_dataset = SummarizationDataset(
             self.tokenizer, data_dir=self.hparams.data_dir, type_path="train", block_size=self.hparams.max_seq_length
         )
         dataloader = DataLoader(train_dataset, batch_size=self.hparams.train_batch_size)
@@ -118,13 +118,13 @@ class BartSystem(BaseTransformer):
         return dataloader
 
     def val_dataloader(self):
-        val_dataset = CnnDailyMailDataset(
+        val_dataset = SummarizationDataset(
             self.tokenizer, data_dir=self.hparams.data_dir, type_path="val", block_size=self.hparams.max_seq_length
         )
         return DataLoader(val_dataset, batch_size=self.hparams.eval_batch_size)
 
     def test_dataloader(self):
-        test_dataset = CnnDailyMailDataset(
+        test_dataset = SummarizationDataset(
             self.tokenizer, data_dir=self.hparams.data_dir, type_path="test", block_size=self.hparams.max_seq_length
         )
         return DataLoader(test_dataset, batch_size=self.hparams.eval_batch_size)

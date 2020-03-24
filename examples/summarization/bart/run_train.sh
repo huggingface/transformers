@@ -7,9 +7,9 @@ export PYTHONPATH="../../":"${PYTHONPATH}"
 python run_bart_sum.py \
 --data_dir=./cnn-dailymail/cnn_dm \
 --model_type=bart \
+--model_name_or_path=bart-large \
 --learning_rate=3e-5 \
 --train_batch_size=4 \
 --eval_batch_size=4 \
 --output_dir=./results \
---do_train \
---train_batch_size=4
+--do_train

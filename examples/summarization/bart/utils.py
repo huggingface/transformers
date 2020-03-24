@@ -3,9 +3,9 @@ import os
 from torch.utils.data import Dataset
 
 
-class CnnDailyMailDataset(Dataset):
+class SummarizationDataset(Dataset):
     def __init__(self, tokenizer, data_dir="./cnn-dailymail/cnn_dm/", type_path="train", block_size=1024):
-        super(CnnDailyMailDataset,).__init__()
+        super(SummarizationDataset,).__init__()
         self.tokenizer = tokenizer
 
         self.source = []
