@@ -146,7 +146,7 @@ class LineByLineTextDataset(Dataset):
         return torch.tensor(self.examples[i], dtype=torch.long)
 
 
-class LazyUnsupervisedTextDataset(Dataset):
+class LazyLineByLineTextDataset(Dataset):
     """
     Credit: @bramvanroy for this linecache implementation.
     """
@@ -194,7 +194,7 @@ def make_collate(tokenizer, block_size, lazy=False):
         :param examples: (list[str]) the text lines to be collated in this batch.
         :return: (torch.tensor) of the tokenized examples padded/truncated to form a 2d tensor of ints.
         """
-        # Filter empty strings. LazyUnsupervisedTextDataset will return empty string if there is an error on a line.
+        # Filter empty strings. LazyLineByLineTextDataset will return empty string if there is an error on a line.
         examples = [ex for ex in examples if ex]
         examples = tokenizer.batch_encode_plus(examples, max_len=block_size)
         examples = [torch.tensor(ex) for ex in examples["input_ids"]]
@@ -223,7 +223,7 @@ def make_collate(tokenizer, block_size, lazy=False):
 def load_and_cache_examples(args, tokenizer, evaluate=False):
     file_path = args.eval_data_file if evaluate else args.train_data_file
     if args.lazy_loading:
-        return LazyUnsupervisedTextDataset(file_path)
+        return LazyLineByLineTextDataset(file_path)
     if args.line_by_line:
         return LineByLineTextDataset(tokenizer, args, file_path=file_path, block_size=args.block_size)
     else:
