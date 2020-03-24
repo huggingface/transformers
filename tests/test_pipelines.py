@@ -78,9 +78,8 @@ TF_FILL_MASK_FINETUNED_MODELS = [
     (("distilroberta-base", {"use_fast": False}), "distilroberta-base", None),
 ]
 
-SUMMARIZATION_FINETUNED_MODELS = {("bart-large-cnn", "bart-large-cnn"), ("t5-base", "t5-base")}
-
-TF_SUMMARIZATION_FINETUNED_MODELS = {("t5-base", "t5-base")}
+SUMMARIZATION_FINETUNED_MODELS = {("bart-large-cnn", "bart-large-cnn"), ("t5-small", "t5-small")}
+TF_SUMMARIZATION_FINETUNED_MODELS = {("t5-small", "t5-small")}
 
 
 class MonoColumnInputTestCase(unittest.TestCase):

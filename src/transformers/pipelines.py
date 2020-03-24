@@ -431,14 +431,18 @@ class Pipeline(_ScikitCompat):
         else:
             return {k: [feature[k] for feature in features] for k in args}
 
-    def _parse_and_tokenize(self, *texts, **kwargs):
+    def _parse_and_tokenize(self, *texts, pad_to_max_length=False, **kwargs):
         """
         Parse arguments and tokenize
         """
         # Parse arguments
         inputs = self._args_parser(*texts, **kwargs)
         inputs = self.tokenizer.batch_encode_plus(
-            inputs, add_special_tokens=True, return_tensors=self.framework, max_length=self.tokenizer.max_len
+            inputs,
+            add_special_tokens=True,
+            return_tensors=self.framework,
+            max_length=self.tokenizer.max_len,
+            pad_to_max_length=pad_to_max_length,
         )
 
         # Filter out features not available on specific models
@@ -1209,10 +1213,17 @@ class SummarizationPipeline(Pipeline):
             )
 
         if is_t5:
-            documents = tuple(["summarize: " + document for document in list(documents)])
+            assert len(documents) > 0, "Please provide a document to summarize"
+            if isinstance(documents[0], str):
+                documents = ("summarize: " + documents[0],)
+            elif isinstance(documents[0], list):
+                assert (
+                    self.tokenizer.pad_token_id is not None
+                ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
+                documents = (["summarize: " + document for document in documents[0]],)
 
         with self.device_placement():
-            inputs = self._parse_and_tokenize(*documents)
+            inputs = self._parse_and_tokenize(*documents, pad_to_max_length=True)
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
