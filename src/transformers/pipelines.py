@@ -1205,6 +1205,13 @@ class SummarizationPipeline(Pipeline):
             elif self.framework == "tf":
                 input_length = tf.shape(inputs["input_ids"])[-1]
 
+            if is_bart:
+                decoder_start_token_id = self.tokenizer.eos_token_id
+            elif is_t5:
+                decoder_start_token_id = self.tokenizer.pad_token_id
+            else:
+                decoder_start_token_id = None
+
             if input_length < min_length // 2:
                 logger.warning(
                     "Your min_length is set to {}, but you input_length is only {}. You might consider decreasing min_length, e.g. summarizer('...', min_length=...)".format(
@@ -1218,13 +1225,6 @@ class SummarizationPipeline(Pipeline):
                         max_length, input_length
                     )
                 )
-
-            if is_bart:
-                decoder_start_token_id = self.tokenizer.eos_token_id
-            elif is_t5:
-                decoder_start_token_id = self.tokenizer.pad_token_id
-            else:
-                decoder_start_token_id = None
 
             summaries = self.model.generate(
                 inputs["input_ids"],
