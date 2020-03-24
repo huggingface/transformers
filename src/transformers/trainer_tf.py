@@ -183,6 +183,7 @@ class TFTrainer(ABC):
             self.datasets["test"] = self._load_cache(cached_test_features_file)
         else:
             os.makedirs(cache_dir, exist_ok=True)
+            self.processor.create_examples()
             self._create_features()
             logger.info("Create cache file %s", cached_training_features_file)
             self._save_cache("train", cached_training_features_file)
@@ -197,7 +198,7 @@ class TFTrainer(ABC):
         self.validation_steps = math.ceil(self.processor.num_examples("validation") / self.eval_batch_size)
         self.datasets["validation"] = self.datasets["validation"].batch(self.eval_batch_size)
         self.datasets["validation"] = self.strategy.experimental_distribute_dataset(self.datasets["validation"])
-        self.test_steps = math.ceil(self.processor.num_examples["test"] / (self.eval_batch_size / self.strategy.num_replicas_in_sync))
+        self.test_steps = math.ceil(self.processor.num_examples("test") / (self.eval_batch_size / self.strategy.num_replicas_in_sync))
         self.datasets["test"] = self.datasets["test"].batch(self.eval_batch_size // self.strategy.num_replicas_in_sync)
 
     def _create_optimizer(self):

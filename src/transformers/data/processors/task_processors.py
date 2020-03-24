@@ -36,7 +36,7 @@ class DataProcessor(ABC):
         pass
 
     @abstractmethod
-    def get_example_from_tensor_dict(self, tensor_dict):
+    def get_example_from_tensor_dict(self, tensor_dict, id):
         pass
 
     @abstractmethod
@@ -46,10 +46,10 @@ class DataProcessor(ABC):
 
 class DataProcessorForSequenceClassification(DataProcessor):
     def __init__(self, **config):
-        self.guid = config.pop("guid", "guid")
-        self.text_a = config.pop("text_a", "text_a")
-        self.text_b = config.pop("text_b", "text_b")
-        self.label = config.pop("label", "label")
+        self.guid = config.pop("guid", None)
+        self.text_a = config.pop("text_a", None)
+        self.text_b = config.pop("text_b", None)
+        self.label = config.pop("label", None)
         DataProcessor.__init__(self, **config)
         self.dataset_name = config.pop("dataset_name", None)
 
@@ -63,9 +63,7 @@ class DataProcessorForSequenceClassification(DataProcessor):
                                                "test_file": self.files["test"],
                                                "dataset_name": self.dataset_name}, with_info=True)
 
-        self._create_examples()
-
-    def _create_examples(self):
+    def create_examples(self):
         for mode in ["train", "validation", "test"]:
             tf_dataset = self.ds[mode]
 
@@ -73,7 +71,7 @@ class DataProcessorForSequenceClassification(DataProcessor):
                 if ex_index % 10000 == 0:
                     logger.info("Creating example %d", ex_index)
 
-                example = self.get_example_from_tensor_dict(entry)
+                example = self.get_example_from_tensor_dict(entry, ex_index)
 
                 self.examples[mode].append(example)
 
@@ -91,7 +89,7 @@ class DataProcessorForSequenceClassification(DataProcessor):
             if ex_index % 10000 == 0:
                 logger.info("Tokenizing example %d", ex_index)
 
-            feature = tokenizer.encode_plus(example.text_a, add_special_tokens=True, max_length=max_len, pad_to_max_length=True)
+            feature = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_len, pad_to_max_length=True)
             label = self.info.features[self.label].str2int(example.label)
 
             assert len(feature["input_ids"]) == max_len
@@ -147,15 +145,25 @@ class DataProcessorForSequenceClassification(DataProcessor):
         else:
             raise ValueError("return_tensors should be one of 'tf' or 'pt'")
 
-    def get_example_from_tensor_dict(self, tensor_dict):
+    def get_example_from_tensor_dict(self, tensor_dict, id):
         """Get an example from a dict with tensorflow tensors
         Args:
             tensor_dict: Keys and values should match the corresponding Glue
                 tensorflow_dataset examples.
         """
+        if self.guid is None:
+            guid = id
+        else:
+            guid = tensor_dict[self.guid].numpy()
+
+        if self.text_b is None:
+            text_b = None
+        else:
+            text_b = tensor_dict[self.text_b].numpy().decode("utf-8")
+
         return InputExample(
-            tensor_dict[self.guid].numpy(),
+            guid,
             tensor_dict[self.text_a].numpy().decode("utf-8"),
-            tensor_dict[self.text_b].numpy().decode("utf-8"),
+            text_b,
             self.info.features[self.label].int2str(tensor_dict[self.label].numpy())
         )
