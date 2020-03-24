@@ -40,16 +40,58 @@ class BertConfig:
 
 class BertModel(nn.Module):
 
+    def apply(self, input_ids, token_type_ids, attention_mask,
+              vocab_size: int, hidden_size: int, type_vocab_size: int, max_length: int,
+              emb_init: Callable[..., np.ndarray] = nn.initializers.normal(stddev=0.1)):
+
+        # Embed
+        word_embeddings = self.param('bert.embeddings.word_embeddings.weight', (vocab_size, hidden_size), emb_init)
+        pos_embeddings  = self.param('bert.embeddings.position_embeddings.weight', (max_length, hidden_size), emb_init)
+        type_embeddings = self.param('bert.embeddings.token_type_embeddings.weight', (type_vocab_size, hidden_size), emb_init)
+
+        w_emb = word_embeddings[jnp.atleast_2d(input_ids.astype('i4'))]
+        p_emb = pos_embeddings[jnp.atleast_2d(np.arange(input_ids.shape[-1]))]
+        t_emb = type_embeddings[jnp.atleast_2d(token_type_ids.astype('i4'))]
+
+        # Sum all embeddings
+        summed_emb = w_emb + jnp.broadcast_to(p_emb, w_emb.shape) + t_emb
+
+        # Layer Norm
+        norm_gamma = self.param('bert.embeddings.LayerNorm.gamma', (hidden_size, ), emb_init)
+        norm_beta  = self.param('bert.embeddings.LayerNorm.beta', (hidden_size, ), emb_init)
+        norm = LayerNorm.call({"scale": norm_gamma, "bias": norm_beta, "epsilon": 1e-12}, summed_emb)
+
+        return norm
+
 
 class FXBertModel:
     """
     BERT implementation using JAX/Flax as backend
     """
 
-    def __init__(self, config, **kwargs):
-        self.vocab_size = config.vocab_size
-        self.hidden_size = config.hidden_size
-        self.initializer_range = config.initializer_range
+    def __init__(self, config: BertConfig, **kwargs):
+        self.config = config
+        self.key = PRNGKey(0)
+        self.state = None
+
+    def __call__(self, input_ids, token_type_ids, attention_mask):
+        inputs_shape = [(1, len(input_ids))] * 3
+
+        model_def = BertModel.partial(
+            name="bert",
+            vocab_size=self.config.vocab_size,
+            hidden_size=self.config.hidden_size,
+            type_vocab_size=2,
+            max_length=self.config.max_length
+        )
+
+        _ = model_def.init_by_shape(self.key, inputs_shape)
+        bert = Model(model_def, self.state)
+        return bert(
+            jnp.array(input_ids, dtype='i4'),
+            jnp.array(token_type_ids, dtype='i4'),
+            jnp.array(attention_mask, dtype='i4')
+        )
 
     def from_pretrained(self, state):
         self.state = from_state_dict(BertModel, state)
