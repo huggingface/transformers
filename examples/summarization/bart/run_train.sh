@@ -11,5 +11,4 @@ python run_bart_sum.py \
 --learning_rate=3e-5 \
 --train_batch_size=4 \
 --eval_batch_size=4 \
---output_dir=./results \
 --do_train
