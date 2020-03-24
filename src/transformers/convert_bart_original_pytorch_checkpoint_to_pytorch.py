@@ -17,6 +17,7 @@
 
 import argparse
 import logging
+import os
 from pathlib import Path
 
 import fairseq
@@ -30,9 +31,9 @@ from transformers import (
     BartModel,
     BartTokenizer,
 )
-import os
 
-FAIRSEQ_MODELS = ["bart.large", "bart.large.mnli", "bart.large.cnn", 'bart_xsum/model.pt']
+
+FAIRSEQ_MODELS = ["bart.large", "bart.large.mnli", "bart.large.cnn", "bart_xsum/model.pt"]
 
 if version.parse(fairseq.__version__) < version.parse("0.9.0"):
     raise Exception("requires fairseq >= 0.9.0")
@@ -56,13 +57,12 @@ def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
 
+
 def load_xsum_checkpoint(checkpoint_path):
-    sd = torch.load(checkpoint_path, map_location='cpu')
-    cnn_bart_task = torch.hub.load('pytorch/fairseq', 'bart.large.cnn').task
-    model = fairseq.models.bart.BARTModel.build_model(sd['args'], cnn_bart_task)
+    sd = torch.load(checkpoint_path, map_location="cpu")
+    cnn_bart_task = torch.hub.load("pytorch/fairseq", "bart.large.cnn").task
+    model = fairseq.models.bart.BARTModel.build_model(sd["args"], cnn_bart_task)
     return model
-
-
 
 
 def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
@@ -82,7 +82,7 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     tokens2 = BartTokenizer.from_pretrained(hf_model_name).encode(SAMPLE_TEXT, return_tensors="pt").unsqueeze(0)
     assert torch.eq(tokens, tokens2).all()
 
-    if checkpoint_path in ["bart.large", "bart.large.cnn", 'bart.large.xsum']:
+    if checkpoint_path in ["bart.large", "bart.large.cnn", "bart.large.xsum"]:
         state_dict = bart.model.state_dict()
         for k in IGNORE_KEYS:
             state_dict.pop(k, None)
@@ -104,7 +104,7 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path):
     model.eval()
     # Check results
 
-    if checkpoint_path ==  "bart.large.cnn" or 'xsum' in checkpoint_path:
+    if checkpoint_path == "bart.large.cnn" or "xsum" in checkpoint_path:
         model = BartForConditionalGeneration(config, base_model=model)
         assert "lm_head.weight" in model.state_dict()
         assert model.lm_head.out_features == config.max_position_embeddings
