@@ -468,9 +468,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         decoded = [
             tok.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in hypotheses_batch
         ]
-        self.assertListEqual(
-            [EXPECTED_SUMMARY,], decoded,
-        )
+        self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
         config = BartConfig.from_pretrained("bart-large-xsum")
