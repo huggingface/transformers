@@ -3,7 +3,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from transformers import TFT5ForConditionalGeneration, T5Tokenizer
+from transformers import T5Tokenizer, TFT5ForConditionalGeneration
 
 
 def chunks(lst, n):
@@ -22,7 +22,7 @@ def generate_summaries(lns, out_file, batch_size):
     min_length = 55
 
     for batch in tqdm(list(chunks(lns, batch_size))):
-        batch = ['summarize:' + text for text in batch]
+        batch = ["summarize:" + text for text in batch]
 
         dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="tf", pad_to_max_length=True)
         summaries = model.generate(
