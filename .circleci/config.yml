@@ -66,6 +66,19 @@ jobs:
             - run: sudo pip install .[sklearn,torch,testing]
             - run: sudo pip install -r examples/requirements.txt
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./examples/
+    run_examples_torch_37:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install .[sklearn,torch,testing]
+            - run: sudo pip install -r examples/requirements.txt
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./examples/
     deploy_doc:
         working_directory: ~/transformers
         docker:
@@ -113,6 +126,7 @@ workflows:
             - check_code_quality
             - check_repository_consistency
             - run_examples_torch
+            - run_examples_torch_37
             - run_tests_custom_tokenizers
             - run_tests_torch_and_tf
             - run_tests_torch
