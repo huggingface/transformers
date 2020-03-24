@@ -28,8 +28,9 @@ class DataProcessor(ABC):
 
         # assert len(config) == 0, "unrecognized params passed: %s" % ",".join(config.keys())
 
+    @abstractmethod
     def num_examples(self, mode):
-        return len(self.examples[mode])
+        pass
 
     @abstractmethod
     def create_examples(self):
@@ -62,6 +63,9 @@ class DataProcessorForSequenceClassification(DataProcessor):
                                                "dev_file": self.files["validation"],
                                                "test_file": self.files["test"],
                                                "dataset_name": self.dataset_name}, with_info=True)
+
+    def num_examples(self, mode):
+        return self.info.splits[mode].num_examples
 
     def create_examples(self):
         for mode in ["train", "validation", "test"]:

@@ -80,7 +80,7 @@ class TFTrainer(ABC):
         self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name_or_path, cache_dir=model_cache_dir, use_fast=False)
 
         self._preprocess_data(data_cache_dir)
-        self._config_trainer()
+        self._config_trainer(model_cache_dir)
 
         with self.strategy.scope():
             self.model = self.model_class.from_pretrained(self.pretrained_model_name_or_path, config=self.config, cache_dir=model_cache_dir)
@@ -271,7 +271,6 @@ class TFTrainer(ABC):
         """
         with self.strategy.scope():
             tf.summary.trace_on(graph=True, profiler=True)
-
             step = 1
             train_loss = 0.0
 
