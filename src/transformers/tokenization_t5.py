@@ -57,6 +57,13 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "t5-3b": 512,
     "t5-11b": 512,
 }
+####################################################
+# Mapping from task to prefix pattern that input_str should start with
+####################################################
+T5_PREFIX_PATTERNS = {
+    "summarization": "summarize: ",
+    "translation": "translate {} to {} ",
+}
 
 
 class T5Tokenizer(PreTrainedTokenizer):

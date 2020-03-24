@@ -29,6 +29,7 @@ import numpy as np
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
 from .configuration_bart import BartConfig
+from .configuration_t5 import T5Config
 from .configuration_distilbert import DistilBertConfig
 from .configuration_roberta import RobertaConfig
 from .configuration_utils import PretrainedConfig
@@ -38,6 +39,7 @@ from .file_utils import is_tf_available, is_torch_available
 from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
+from .tokenization_t5 import T5_PREFIX_PATTERNS
 from .tokenization_utils import PreTrainedTokenizer
 
 
@@ -419,7 +421,7 @@ class Pipeline(_ScikitCompat):
         """
         args = ["input_ids", "attention_mask"]
 
-        if not isinstance(self.model.config, (DistilBertConfig, XLMConfig, RobertaConfig, BartConfig)):
+        if not isinstance(self.model.config, (DistilBertConfig, XLMConfig, RobertaConfig, BartConfig, T5Config)):
             args += ["token_type_ids"]
 
         # PR #1548 (CLI) There is an issue with attention_mask
@@ -1215,12 +1217,14 @@ class SummarizationPipeline(Pipeline):
         if is_t5:
             assert len(documents) > 0, "Please provide a document to summarize"
             if isinstance(documents[0], str):
-                documents = ("summarize: " + documents[0],)
+                documents = (T5_PREFIX_PATTERNS['summarization'] + documents[0],)
             elif isinstance(documents[0], list):
-                assert (
-                    self.tokenizer.pad_token_id is not None
-                ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
-                documents = (["summarize: " + document for document in documents[0]],)
+                documents = ([T5_PREFIX_PATTERNS['summarization'] + document for document in documents[0]],)
+
+        if isinstance(documents[0], list):
+            assert (
+                self.tokenizer.pad_token_id is not None
+            ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
 
         with self.device_placement():
             inputs = self._parse_and_tokenize(*documents, pad_to_max_length=True)
