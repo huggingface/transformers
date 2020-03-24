@@ -97,6 +97,8 @@ setup(
     install_requires=[
         "numpy",
         "tokenizers == 0.5.2",
+        # dataclasses for Python versions that don't have it
+        "dataclasses;python_version<'3.7'",
         # accessing files from S3 directly
         "boto3",
         # filesystem locks e.g. to prevent parallel downloads
