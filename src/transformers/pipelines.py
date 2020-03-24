@@ -1110,9 +1110,11 @@ class SummarizationPipeline(Pipeline):
 
     Usage::
 
+        # use bart in pytorch
         summarizer = pipeline("summarization")
         summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
 
+        # use t5 in tf
         summarizer = pipeline("summarization", model="t5-base", tokenizer="t5-base", framework="tf")
         summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
 
@@ -1155,8 +1157,8 @@ class SummarizationPipeline(Pipeline):
         *documents,
         return_tensors=False,
         return_text=True,
-        max_length=142,
-        min_length=21,
+        max_length=140,
+        min_length=20,
         do_sample=False,
         early_stopping=True,
         num_beams=4,
@@ -1171,9 +1173,22 @@ class SummarizationPipeline(Pipeline):
             return_tensors: (bool, default=False) whether to return the raw "summary_token_ids" to each result
 
             max_length: (`optional`) int
-                The max length of the sequence to be generated. Does not include tokens in input_ids.
+                The max length of the sequence to be generated.  Between `min_length` and infinity. Default to 140.
             min_len: (`optional`) int
-            no_repeat_ngram_size:  (`optional`) int. ban ngrams of this length from being repeated in the generated text
+                The min length of the sequence to be generated.  Between 0 and infinity. Default to 20.
+
+            do_sample: (`optional`) bool
+                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False`.
+
+            early_stopping: (`optional`) bool
+                if set to `True` beam search is stopped when at least `num_beams` sentences finished per batch. Defaults to `True`.
+
+            num_beams: (`optional`) int
+                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 4.
+
+            length_penalty: (`optional`) float
+                Exponential penalty to the length. Default to 2.0.
+
             clean_up_tokenization_spaces: (`optional`) bool whether to include extra spaces in the output
             **generate_kwargs: extra kwargs passed to `self.model.generate`_
 
@@ -1210,7 +1225,7 @@ class SummarizationPipeline(Pipeline):
             elif is_t5:
                 decoder_start_token_id = self.tokenizer.pad_token_id
             else:
-                decoder_start_token_id = None
+                raise ValueError("`decoder_start_token_id` has to be defined")
 
             if input_length < min_length // 2:
                 logger.warning(
