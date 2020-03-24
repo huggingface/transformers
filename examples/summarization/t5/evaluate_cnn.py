@@ -24,15 +24,14 @@ def generate_summaries(lns, out_file, batch_size):
     for batch in tqdm(list(chunks(lns, batch_size))):
         batch = ['summarize:' + text for text in batch]
 
-        dct = tokenizer.batch_encode_plus(batch, max_length=1024, return_tensors="tf", pad_to_max_length=True)
+        dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="tf", pad_to_max_length=True)
         summaries = model.generate(
             input_ids=dct["input_ids"],
             attention_mask=dct["attention_mask"],
             num_beams=4,
-            length_penalty=0.6,
+            length_penalty=2.0,
             max_length=max_length,
             min_length=min_length,
-            no_repeat_ngram_size=3,
             early_stopping=True,
             bos_token_id=tokenizer.pad_token_id,
         )
