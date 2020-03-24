@@ -47,10 +47,10 @@ class DataProcessor(ABC):
 
 class DataProcessorForSequenceClassification(DataProcessor):
     def __init__(self, **config):
-        self.guid = config.pop("guid", "guid")
-        self.text_a = config.pop("text_a", "text_a")
-        self.text_b = config.pop("text_b", "text_b")
-        self.label = config.pop("label", "label")
+        self.guid = config.pop("guid", None)
+        self.text_a = config.pop("text_a", None)
+        self.text_b = config.pop("text_b", None)
+        self.label = config.pop("label", None)
         DataProcessor.__init__(self, **config)
         self.dataset_name = config.pop("dataset_name", None)
 
