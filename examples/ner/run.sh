@@ -7,19 +7,19 @@ curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-test.tsv?attr
  wget "https://raw.githubusercontent.com/stefan-it/fine-tuned-berts-seq/master/scripts/preprocess.py"
 export MAX_LENGTH=128
 export BERT_MODEL=bert-base-multilingual-cased
-python3 preprocess.py train.txt.tmp $BERT_MODEL $MAX_LENGTH > train.txt
-python3 preprocess.py dev.txt.tmp $BERT_MODEL $MAX_LENGTH > dev.txt
-python3 preprocess.py test.txt.tmp $BERT_MODEL $MAX_LENGTH > test.txt
-cat train.txt dev.txt test.txt | cut -d " " -f 2 | grep -v "^$"| sort | uniq > labels.txt
-export OUTPUT_DIR=germeval-model
+python3 preprocess.py train.txt.tmp $BERT_MODEL $MAX_LENGTH > $DATA_DIR/transformers_ner_test/train.txt
+python3 preprocess.py dev.txt.tmp $BERT_MODEL $MAX_LENGTH > $DATA_DIR/transformers_ner_test/dev.txt
+python3 preprocess.py test.txt.tmp $BERT_MODEL $MAX_LENGTH > $DATA_DIR/transformers_ner_test/test.txt
+cat $DATA_DIR/transformers_ner_test/train.txt $DATA_DIR/transformers_ner_test/dev.txt $DATA_DIR/transformers_ner_test/test.txt | cut -d " " -f 2 | grep -v "^$"| sort | uniq > $DATA_DIR/transformers_ner_test/labels.txt
+export OUTPUT_DIR=$MODEL_DIR/germeval-model
 export BATCH_SIZE=32
 export NUM_EPOCHS=3
 export SAVE_STEPS=750
 export SEED=1
 
-python3 run_ner.py --data_dir ./ \
+python3 run_ner.py --data_dir $DATA_DIR/transformers_ner_test \
 --model_type bert \
---labels ./labels.txt \
+--labels $DATA_DIR/transformers_ner_test/labels.txt \
 --model_name_or_path $BERT_MODEL \
 --output_dir $OUTPUT_DIR \
 --max_seq_length  $MAX_LENGTH \

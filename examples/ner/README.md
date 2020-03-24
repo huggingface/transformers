@@ -2,6 +2,9 @@
 
 Based on the scripts [`run_ner.py`](https://github.com/huggingface/transformers/blob/master/examples/ner/run_ner.py) for Pytorch and
 [`run_tf_ner.py`](https://github.com/huggingface/transformers/blob/master/examples/ner/run_tf_ner.py) for Tensorflow 2.
+
+## GermEval 2014
+
 This example fine-tune Bert Multilingual on GermEval 2014 (German NER).
 Details and results for the fine-tuning provided by @stefan-it.
 
@@ -184,3 +187,51 @@ On the test dataset the following results could be achieved:
 micro avg     0.8722    0.8774    0.8748     13869
 macro avg     0.8712    0.8774    0.8740     13869
 ```
+
+## FiNER
+
+This example fine-tune `bert-base-finnish-cased-v1` and `bert-base-finnish-uncased-v1` on FiNER (Finnish NER). Details and results for the fine-tuning provided by @bmichele
+
+### Run the Pytorch version
+
+#### Evaluation - bert-base-finnish-cased-v1
+
+Evaluation on development dataset outputs the following for our example:
+
+```
+03/23/2020 18:31:41 - INFO - __main__ -   ***** Eval results  *****
+03/23/2020 18:31:41 - INFO - __main__ -     f1 = 0.9308227589029882
+03/23/2020 18:31:41 - INFO - __main__ -     loss = 0.03493800052064539
+03/23/2020 18:31:41 - INFO - __main__ -     precision = 0.9319672131147541
+03/23/2020 18:31:41 - INFO - __main__ -     recall = 0.9296811120196239
+```
+
+On the test dataset the following results could be achieved:
+
+```
+03/23/2020 18:32:49 - INFO - __main__ -   ***** Eval results  *****
+03/23/2020 18:32:49 - INFO - __main__ -     f1 = 0.9166069295101553
+03/23/2020 18:32:49 - INFO - __main__ -     loss = 0.06830704841334574
+03/23/2020 18:32:49 - INFO - __main__ -     precision = 0.9036513545347468
+03/23/2020 18:32:49 - INFO - __main__ -     recall = 0.929939393939394
+```
+
+#### Evaluation - bert-base-finnish-uncased-v1
+
+Evaluation on development dataset outputs the following for our example:
+
+```
+TODO
+```
+
+On the test dataset the following results could be achieved:
+
+```
+TODO
+```
+
+### Run the Tensorflow 2 version
+
+#### Evaluation - bert-base-finnish-cased-v1
+
+#### Evaluation - bert-base-finnish-uncased-v1
