@@ -2,41 +2,24 @@ import argparse
 import glob
 import logging
 import os
-import random
+import time
 
-import numpy as np
-import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader
 
-from transformers import AdamW, BartConfig, BartTokenizer, get_linear_schedule_with_warmup
-from transformers.modeling_bart import BartForConditionalGeneration
-from utils import CnnDailyMailDataset, add_generic_args
+from transformer_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
+from utils import CnnDailyMailDataset
 
 
 logger = logging.getLogger(__name__)
 
 
-class BartSystem(pl.LightningModule):
-    def __init__(self, hparams):
-        super(BartSystem, self).__init__()
-        self.hparams = hparams
+class BartSystem(BaseTransformer):
 
-        config = BartConfig.from_pretrained(
-            self.hparams.config_name if self.hparams.config_name else self.hparams.model_name_or_path,
-            cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
-        )
-        tokenizer = BartTokenizer.from_pretrained(
-            self.hparams.tokenizer_name if self.hparams.tokenizer_name else self.hparams.model_name_or_path,
-            cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
-        )
-        model = BartForConditionalGeneration.from_pretrained(
-            self.hparams.model_name_or_path,
-            from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
-            config=config,
-            cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
-        )
-        self.config, self.tokenizer, self.model = config, tokenizer, model
+    mode = "language-modeling"
+
+    def __init__(self, hparams):
+        super(BartSystem, self).__init__(hparams, num_labels=None, mode=self.mode)
 
     def forward(
         self, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attention_mask=None, lm_labels=None
@@ -55,7 +38,10 @@ class BartSystem(pl.LightningModule):
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == self.tokenizer.pad_token_id] = -100
         outputs = self(
-            batch["source_ids"], attention_mask=batch["source_mask"], decoder_input_ids=y_ids, lm_labels=lm_labels,
+            input_ids=batch["source_ids"],
+            attention_mask=batch["source_mask"],
+            decoder_input_ids=y_ids,
+            lm_labels=lm_labels,
         )
 
         loss = outputs[0]
@@ -70,12 +56,22 @@ class BartSystem(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         loss = self._step(batch)
+        return {"val_loss": loss}
+
+    def validation_end(self, outputs):
+        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
+        tensorboard_logs = {"val_loss": avg_loss}
+        return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
+
+    def test_step(self, batch, batch_idx):
         generated_ids = self.model.generate(
             batch["source_ids"],
             attention_mask=batch["source_mask"],
-            num_beams=4,
-            max_length=40,
-            repetition_penalty=3.0,
+            num_beams=1,
+            max_length=80,
+            repetition_penalty=2.5,
+            length_penalty=1.0,
+            early_stopping=True,
         )
         preds = [
             self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -85,16 +81,9 @@ class BartSystem(pl.LightningModule):
             self.tokenizer.decode(t, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             for t in batch["target_ids"]
         ]
-        self.model.model.decoder.generation_mode = False  # to be able to get loss
+        loss = self._step(batch)
+
         return {"val_loss": loss, "preds": preds, "target": target}
-
-    def validation_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        tensorboard_logs = {"val_loss": avg_loss}
-        return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
-
-    def test_step(self, batch, batch_idx):
-        return self.validation_step(batch, batch_idx)
 
     def test_end(self, outputs):
         return self.validation_end(outputs)
@@ -112,54 +101,40 @@ class BartSystem(pl.LightningModule):
 
         return self.test_end(outputs)
 
-    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx, second_order_closure=None):
-        optimizer.step()
-        optimizer.zero_grad()
-        self.lr_scheduler.step()
-
-    def configure_optimizers(self):
-        t_total = len(self.train_dataloader())
-        no_decay = ["bias", "LayerNorm.weight"]
-        optimizer_grouped_parameters = [
-            {
-                "params": [p for n, p in self.named_parameters() if not any(nd in n for nd in no_decay)],
-                "weight_decay": self.hparams.weight_decay,
-            },
-            {
-                "params": [p for n, p in self.named_parameters() if any(nd in n for nd in no_decay)],
-                "weight_decay": 0.0,
-            },
-        ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
-        )
-        self.lr_scheduler = scheduler
-        return [optimizer]
-
-    def prepare_data(self):
-        self.train_dataset = CnnDailyMailDataset(
+    def train_dataloader(self):
+        train_dataset = CnnDailyMailDataset(
             self.tokenizer, data_dir=self.hparams.data_dir, type_path="train", block_size=self.hparams.max_seq_length
         )
-        self.val_dataset = CnnDailyMailDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, type_path="val", block_size=self.hparams.max_seq_length
+        dataloader = DataLoader(train_dataset, batch_size=self.hparams.train_batch_size)
+        t_total = (
+            (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.n_gpu)))
+            // self.hparams.gradient_accumulation_steps
+            * float(self.hparams.num_train_epochs)
         )
-        self.test_dataset = CnnDailyMailDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, type_path="test", block_size=self.hparams.max_seq_length
+        scheduler = get_linear_schedule_with_warmup(
+            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
         )
-
-    def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.hparams.train_batch_size)
+        self.lr_scheduler = scheduler
+        return dataloader
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.hparams.eval_batch_size)
+        val_dataset = CnnDailyMailDataset(
+            self.tokenizer, data_dir=self.hparams.data_dir, type_path="val", block_size=self.hparams.max_seq_length
+        )
+        return DataLoader(val_dataset, batch_size=self.hparams.eval_batch_size)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.hparams.eval_batch_size)
+        test_dataset = CnnDailyMailDataset(
+            self.tokenizer, data_dir=self.hparams.data_dir, type_path="test", block_size=self.hparams.max_seq_length
+        )
+        return DataLoader(test_dataset, batch_size=self.hparams.eval_batch_size)
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         # Add BART specific options
+        parser.add_argument(
+            "--model_type", default="bart", type=str, help="Bart model type",
+        )
         parser.add_argument(
             "--max_seq_length",
             default=1024,
@@ -176,6 +151,9 @@ class BartSystem(pl.LightningModule):
         )
         parser.add_argument(
             "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name"
+        )
+        parser.add_argument(
+            "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model."
         )
         parser.add_argument(
             "--tokenizer_name",
@@ -212,72 +190,22 @@ class BartSystem(pl.LightningModule):
         return parser
 
 
-def set_seed(args):
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
-
-
-def generic_train(model, args):
-    # init model
-    set_seed(args)
-
-    # Setup distant debugging if needed
-    if args.server_ip and args.server_port:
-        # Distant debugging - see https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
-        import ptvsd
-
-        print("Waiting for debugger attach")
-        ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
-        ptvsd.wait_for_attach()
-
-    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
-
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5
-    )
-
-    train_params = dict(
-        accumulate_grad_batches=args.gradient_accumulation_steps,
-        gpus=args.n_gpu,
-        max_epochs=args.num_train_epochs,
-        early_stop_callback=False,
-        gradient_clip_val=args.max_grad_norm,
-        checkpoint_callback=checkpoint_callback,
-        progress_bar_refresh_rate=1,  # progress bar is slow to update otherwise
-    )
-
-    if args.fp16:
-        train_params["use_amp"] = args.fp16
-        train_params["amp_level"] = args.fp16_opt_level
-
-    if args.n_gpu > 1:
-        train_params["distributed_backend"] = "ddp"
-
-    trainer = pl.Trainer(**train_params)
-
-    if args.do_train:
-        trainer.fit(model)
-
-    return trainer
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
     parser = BartSystem.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
+
+    # If output_dir not provided, a folder will be generated in pwd
+    if args.output_dir is None:
+        args.output_dir = os.path.join("./results", f"{args.task}_{args.model_type}_{time.strftime('%Y%m%d_%H%M%S')}",)
+        os.makedirs(args.output_dir)
+
     model = BartSystem(args)
     trainer = generic_train(model, args)
 
+    # Optionally, predict on dev set and write to output_dir
     if args.do_predict:
-        # See https://github.com/huggingface/transformers/issues/3159
-        # pl use this format to create a checkpoint:
-        # https://github.com/PyTorchLightning/pytorch-lightning/blob/master\
-        # /pytorch_lightning/callbacks/model_checkpoint.py#L169
-        checkpoints = list(sorted(glob.glob(args.output_dir + "/checkpointepoch=*.ckpt", recursive=True)))
+        checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
         BartSystem.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)

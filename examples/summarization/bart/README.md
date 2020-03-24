@@ -16,15 +16,25 @@ the default batch size, 8, fits in 16GB GPU memory, but may need to be adjusted 
 
 
 ### Training
-Clone the repository and preprocess the data:
+
+
+Install newest PyTorch Lightning.
 ```commandline
-git clone https://github.com/artmatsak/cnn-dailymail
-cd cnn-dailymail && python make_datafiles.py ../cnn/stories/ ../dailymail/stories/
+pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
 ```
+
+After downloading the CNN and Daily Mail datasets to this same directory, preprocess the datset using the script: `preprocess.sh`
 
 Run the training command:
 ```commandline
-python run_bart_sum.py --data_dir=/path/to/cnn-dailymail/cnn_dm --output_dir=./results --do_train --train_batch_size=2
+# Add parent directory to python path to access transformer_base.py 
+export PYTHONPATH="../../../":"${PYTHONPATH}"
+
+python run_bart_sum.py \
+--data_dir=./cnn-dailymail/cnn_dm \
+--output_dir=./results \
+--do_train \
+--train_batch_size=4
 ```
 
 ### Where is the code?
