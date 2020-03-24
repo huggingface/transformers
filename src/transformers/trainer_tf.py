@@ -37,7 +37,7 @@ class TFTrainer(ABC):
         self.learning_rate = kwargs.pop("learning_rate", None)
         self.adam_epsilon = kwargs.pop("adam_epsilon", 1e-08)
         self.loss_name = kwargs.pop("loss_name", None)
-        self.batch_size = kwargs.pop("batch_size", None)
+        self.train_batch_size = kwargs.pop("train_batch_size", None)
         self.eval_batch_size = kwargs.pop("eval_batch_size", None)
         self.distributed = kwargs.pop("distributed", None)
         self.epochs = kwargs.pop("epochs", None)
@@ -51,7 +51,7 @@ class TFTrainer(ABC):
 
         if self.distributed:
             self.strategy = tf.distribute.MirroredStrategy()
-            self.batch_size *= self.strategy.num_replicas_in_sync
+            self.train_batch_size *= self.strategy.num_replicas_in_sync
             self.eval_batch_size *= self.strategy.num_replicas_in_sync
         else:
             if len(tf.config.list_physical_devices('GPU')) >= 1:
@@ -192,8 +192,8 @@ class TFTrainer(ABC):
             logger.info("Create cache file %s", cached_test_features_file)
             self._save_cache("test", cached_test_features_file)
 
-        self.train_steps = math.ceil(self.processor.num_examples("train") / self.batch_size)
-        self.datasets["train"] = self.datasets["train"].shuffle(128).batch(self.batch_size).repeat(-1)
+        self.train_steps = math.ceil(self.processor.num_examples("train") / self.train_batch_size)
+        self.datasets["train"] = self.datasets["train"].shuffle(128).batch(self.train_batch_size).repeat(-1)
         self.datasets["train"] = self.strategy.experimental_distribute_dataset(self.datasets["train"])
         self.validation_steps = math.ceil(self.processor.num_examples("validation") / self.eval_batch_size)
         self.datasets["validation"] = self.datasets["validation"].batch(self.eval_batch_size)
@@ -455,7 +455,7 @@ class TFTrainerForSequenceClassification(TFTrainer):
             with tf.GradientTape() as tape:
                 logits = self.model(features, training=True)
                 per_example_loss = self.loss(labels, logits[0])
-                loss = tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.batch_size)
+                loss = tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.train_batch_size)
 
             gradients = tape.gradient(loss, self.model.trainable_variables)
 
