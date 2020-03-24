@@ -14,19 +14,19 @@ used the official SQuAD2.0 dev set for model selection.
 ## Results
 ```json
 {
-    "exact": 75.32082922013821,
-    "f1": 78.66699523704254,
-    "total": 6078,
-    "HasAns_exact": 74.84536082474227,
-    "HasAns_f1": 81.83436324767868,
-    "HasAns_total": 2910,
-    "NoAns_exact": 75.75757575757575,
-    "NoAns_f1": 75.75757575757575,
-    "NoAns_total": 3168,
-    "best_exact": 75.32082922013821,
-    "best_exact_thresh": 0.0,
-    "best_f1": 78.66699523704266,
-    "best_f1_thresh": 0.0
+  "exact": 75.32082922013821,
+  "f1": 78.66699523704254,
+  "total": 6078,
+  "HasAns_exact": 74.84536082474227,
+  "HasAns_f1": 81.83436324767868,
+  "HasAns_total": 2910,
+  "NoAns_exact": 75.75757575757575,
+  "NoAns_f1": 75.75757575757575,
+  "NoAns_total": 3168,
+  "best_exact": 75.32082922013821,
+  "best_exact_thresh": 0.0,
+  "best_f1": 78.66699523704266,
+  "best_f1_thresh": 0.0
 }
 ```
 
@@ -59,11 +59,11 @@ used the official SQuAD2.0 dev set for model selection.
 ## Environment Setup
 ```json
 {
-    "transformers": "2.5.1",
-    "pytorch": "1.4.0=py3.6_cuda10.1.243_cudnn7.6.3_0",
-    "python": "3.6.5=hc3d631a_2",
-    "os": "Linux 4.15.0-1060-aws #62-Ubuntu SMP Tue Feb 11 21:23:22 UTC 2020 x86_64 x86_64 x86_64 GNU/Linux",
-    "gpu": "Tesla V100-SXM2-16GB"
+  "transformers": "2.5.1",
+  "pytorch": "1.4.0=py3.6_cuda10.1.243_cudnn7.6.3_0",
+  "python": "3.6.5=hc3d631a_2",
+  "os": "Linux 4.15.0-1060-aws #62-Ubuntu SMP Tue Feb 11 21:23:22 UTC 2020 x86_64 x86_64 x86_64 GNU/Linux",
+  "gpu": "Tesla V100-SXM2-16GB"
 }
 ```
 
