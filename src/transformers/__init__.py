@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "2.5.1"
+__version__ = "2.6.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -158,6 +158,12 @@ if is_torch_available():
         AutoModelWithLMHead,
         AutoModelForTokenClassification,
         ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        MODEL_MAPPING,
+        MODEL_FOR_PRETRAINING_MAPPING,
+        MODEL_WITH_LM_HEAD_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     )
 
     from .modeling_bert import (
@@ -317,6 +323,12 @@ if is_tf_available():
         TFAutoModelWithLMHead,
         TFAutoModelForTokenClassification,
         TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_MODEL_MAPPING,
+        TF_MODEL_FOR_PRETRAINING_MAPPING,
+        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     )
 
     from .modeling_tf_bert import (
