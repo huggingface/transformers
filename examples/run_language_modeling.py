@@ -710,7 +710,7 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = AutoModelWithLMHead(config=config)
+        model = AutoModelWithLMHead.from_config(config)
 
     model.to(args.device)
 
