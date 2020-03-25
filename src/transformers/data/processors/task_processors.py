@@ -25,44 +25,10 @@ class DataProcessor(ABC):
         self.files["train"] = config.pop("train_file", None)
         self.files["validation"] = config.pop("dev_file", None)
         self.files["test"] = config.pop("test_file", None)
+        self.ds = None
+        self.info = None
 
-        # assert len(config) == 0, "unrecognized params passed: %s" % ",".join(config.keys())
-
-    @abstractmethod
-    def num_examples(self, mode):
-        pass
-
-    @abstractmethod
-    def create_examples(self):
-        pass
-
-    @abstractmethod
-    def get_example_from_tensor_dict(self, tensor_dict, id):
-        pass
-
-    @abstractmethod
-    def convert_examples_to_features(self, mode, tokenizer, max_len, return_dataset="tf"):
-        pass
-
-
-class DataProcessorForSequenceClassification(DataProcessor):
-    def __init__(self, **config):
-        self.guid = config.pop("guid", None)
-        self.text_a = config.pop("text_a", None)
-        self.text_b = config.pop("text_b", None)
-        self.label = config.pop("label", None)
-        DataProcessor.__init__(self, **config)
-        self.dataset_name = config.pop("dataset_name", None)
-
-        if self.dataset_name.split("/")[0] in tfds.list_builders():
-            self.ds, self.info = tfds.load(self.dataset_name, with_info=True)
-        else:
-            self.ds, self.info = tfds.load("sequence_classification",
-                                           builder_kwargs={
-                                               "train_file": self.files["train"],
-                                               "dev_file": self.files["validation"],
-                                               "test_file": self.files["test"],
-                                               "dataset_name": self.dataset_name}, with_info=True)
+        assert len(config) == 0, "unrecognized params passed: %s" % ",".join(config.keys())
 
     def num_examples(self, mode):
         return self.info.splits[mode].num_examples
@@ -78,6 +44,34 @@ class DataProcessorForSequenceClassification(DataProcessor):
                 example = self.get_example_from_tensor_dict(entry, ex_index)
 
                 self.examples[mode].append(example)
+
+    @abstractmethod
+    def get_example_from_tensor_dict(self, tensor_dict, id):
+        pass
+
+    @abstractmethod
+    def convert_examples_to_features(self, mode, tokenizer, max_len, return_dataset="tf"):
+        pass
+
+
+class DataProcessorForSequenceClassification(DataProcessor):
+    def __init__(self, **config):
+        self.guid = config.pop("guid", "guid")
+        self.text_a = config.pop("text_a", "text_a")
+        self.text_b = config.pop("text_b", "text_b")
+        self.label = config.pop("label", "label")
+        self.dataset_name = config.pop("dataset_name", None)
+        super().__init__(**config)
+
+        if self.dataset_name.split("/")[0] in tfds.list_builders():
+            self.ds, self.info = tfds.load(self.dataset_name, with_info=True)
+        else:
+            self.ds, self.info = tfds.load("sequence_classification",
+                                           builder_kwargs={
+                                               "train_file": self.files["train"],
+                                               "dev_file": self.files["validation"],
+                                               "test_file": self.files["test"],
+                                               "dataset_name": self.dataset_name}, with_info=True)
 
     def get_labels(self):
         """Gets the list of labels for this data set."""
@@ -155,15 +149,15 @@ class DataProcessorForSequenceClassification(DataProcessor):
             tensor_dict: Keys and values should match the corresponding Glue
                 tensorflow_dataset examples.
         """
-        if self.guid is None:
-            guid = id
-        else:
+        if self.guid in list(self.info.features.keys()):
             guid = tensor_dict[self.guid].numpy()
-
-        if self.text_b is None:
-            text_b = None
         else:
+            guid = id
+
+        if self.text_b in list(self.info.features.keys()):
             text_b = tensor_dict[self.text_b].numpy().decode("utf-8")
+        else:
+            text_b = None
 
         return InputExample(
             guid,

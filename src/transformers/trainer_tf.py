@@ -59,7 +59,7 @@ class TFTrainer(ABC):
             else:
                 self.strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
 
-        # assert len(kwargs) == 0, "unrecognized params passed: %s" % ",".join(kwargs.keys())
+        assert len(kwargs) == 0, "unrecognized params passed: %s" % ",".join(kwargs.keys())
 
     def setup_training(self, checkpoint_path="checkpoints", log_path="logs", data_cache_dir="cache", model_cache_dir=None):
         """
@@ -360,6 +360,8 @@ class TFTrainerForSequenceClassification(TFTrainer):
     def __init__(self, **config):
         model_config = config.pop("model_config", None)
         data_processor_config = config.pop("data_processor_config", None)
+
+        assert len(config) == 0, "unrecognized params passed: %s" % ",".join(config.keys())
 
         if model_config is None or data_processor_config is None:
             raise ValueError("the model_config and data_processor_config properties should not be empty from the configuration")
