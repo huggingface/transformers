@@ -242,7 +242,7 @@ class BartHeadTests(unittest.TestCase):
         self.assertEqual(logits.shape, expected_shape)
         self.assertIsInstance(loss.item(), float)
 
-    def test_lm_uneven_forward(self):
+    def test_mbart_forward(self):
         config = BartConfig(
             vocab_size=self.vocab_size,
             d_model=24,
@@ -253,6 +253,7 @@ class BartHeadTests(unittest.TestCase):
             encoder_ffn_dim=32,
             decoder_ffn_dim=32,
             max_position_embeddings=48,
+            add_final_layer_norm=True,
         )
         lm_model = BartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)

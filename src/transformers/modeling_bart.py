@@ -257,6 +257,10 @@ class BartEncoder(nn.Module):
         self.embed_positions = LearnedPositionalEmbedding(config.max_position_embeddings, embed_dim, self.padding_idx,)
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim)
+        if config.add_final_layer_norm:  # mbart
+            self.layer_norm = LayerNorm(config.d_model)
+        else:
+            self.layer_norm = None
 
     def forward(
         self, input_ids, attention_mask=None,
@@ -304,6 +308,8 @@ class BartEncoder(nn.Module):
             if self.output_attentions:
                 all_attentions.append(attn)
 
+        if self.layer_norm:
+            x = self.layer_norm(x)
         if self.output_hidden_states:
             encoder_states.append(x)
 
@@ -400,6 +406,10 @@ class BartDecoder(nn.Module):
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
         self.layernorm_embedding = LayerNorm(config.d_model)
+        if config.add_final_layer_norm:  # mbart
+            self.layer_norm = LayerNorm(config.d_model)
+        else:
+            self.layer_norm = None
 
     def forward(
         self,
@@ -467,6 +477,9 @@ class BartDecoder(nn.Module):
 
             if self.output_past:
                 next_decoder_cache.append(layer_past.copy())
+
+            if self.layer_norm and (i == len(self.layers)):
+                x = self.layer_norm(x)
             if self.output_hidden_states:
                 all_hidden_states += (x,)
             if self.output_attentions:

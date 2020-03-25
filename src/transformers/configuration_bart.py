@@ -61,6 +61,7 @@ class BartConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        add_final_layer_norm=False,
         **common_kwargs
     ):
         r"""
@@ -91,6 +92,10 @@ class BartConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
+
+        # This is a combo of fairseq's encoder_normalize_before and decoder_normalize_before
+        self.add_final_layer_norm = add_final_layer_norm
+        # It is True for mbart and false otherwise
 
         # 3 Types of Dropout
         self.attention_dropout = attention_dropout
