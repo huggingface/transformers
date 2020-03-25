@@ -39,7 +39,6 @@ from .file_utils import is_tf_available, is_torch_available
 from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
-from .tokenization_t5 import T5_PREFIX_PATTERNS
 from .tokenization_utils import PreTrainedTokenizer
 
 
@@ -337,6 +336,7 @@ class Pipeline(_ScikitCompat):
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
+        task_id: str = '',
         args_parser: ArgumentHandler = None,
         device: int = -1,
         binary_output: bool = False,
@@ -349,6 +349,7 @@ class Pipeline(_ScikitCompat):
         self.tokenizer = tokenizer
         self.modelcard = modelcard
         self.framework = framework
+        self.task_id = task_id
         self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else "cuda:{}".format(device))
         self.binary_output = binary_output
         self._args_parser = args_parser or DefaultArgumentHandler()
@@ -356,6 +357,11 @@ class Pipeline(_ScikitCompat):
         # Special handling
         if self.framework == "pt" and self.device.type == "cuda":
             self.model = self.model.to(self.device)
+
+        # Update config with task specific parameters
+        task_specific_params = self.model.config.task_specifc_params
+        if task_specific_params is not None and task_id in task_specific_params:
+            self.model.config.update(task_specific_params.get(task_id))
 
     def save_pretrained(self, save_directory):
         """
@@ -1156,19 +1162,11 @@ class SummarizationPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
-    task = "summarization"
-
     def __call__(
         self,
         *documents,
         return_tensors=False,
         return_text=True,
-        max_length=140,
-        min_length=20,
-        do_sample=False,
-        early_stopping=True,
-        num_beams=4,
-        length_penalty=2.0,
         clean_up_tokenization_spaces=False,
         **generate_kwargs
     ):
@@ -1206,28 +1204,29 @@ class SummarizationPipeline(Pipeline):
 
         """
         assert return_tensors or return_text, "You must specify return_tensors=True or return_text=True"
-        is_t5 = "T5ForConditionalGeneration" in self.model.__class__.__name__
-        is_bart = "BartForConditionalGeneration" in self.model.__class__.__name__
+        assert len(documents) > 0, "Please provide a document to summarize"
 
-        if self.framework == "tf" and is_bart:
+        if self.framework == "tf" and "BartForConditionalGeneration" in self.model.__class__.__name__:
             raise NotImplementedError(
                 "Tensorflow is not yet supported for Bart. Please consider using T5, e.g. `t5-base`"
             )
-
-        if is_t5:
-            assert len(documents) > 0, "Please provide a document to summarize"
-            if isinstance(documents[0], str):
-                documents = (T5_PREFIX_PATTERNS["summarization"] + documents[0],)
-            elif isinstance(documents[0], list):
-                documents = ([T5_PREFIX_PATTERNS["summarization"] + document for document in documents[0]],)
 
         if isinstance(documents[0], list):
             assert (
                 self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
 
+            documents = ([self.model.config.prefix + document for document in documents[0]],)
+            pad_to_max_length = True
+
+        elif isinstance(documents[0], str):
+            documents = (self.model.config.prefix + documents[0],)
+            pad_to_max_length = False
+        else:
+            raise ValueError(" `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(documents[0]))
+
         with self.device_placement():
-            inputs = self._parse_and_tokenize(*documents, pad_to_max_length=True)
+            inputs = self._parse_and_tokenize(*documents, pad_to_max_length=pad_to_max_length)
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
@@ -1235,37 +1234,23 @@ class SummarizationPipeline(Pipeline):
             elif self.framework == "tf":
                 input_length = tf.shape(inputs["input_ids"])[-1]
 
-            if is_bart:
-                decoder_start_token_id = self.tokenizer.eos_token_id
-            elif is_t5:
-                decoder_start_token_id = self.tokenizer.pad_token_id
-            else:
-                raise ValueError("`decoder_start_token_id` has to be defined")
-
-            if input_length < min_length // 2:
+            if input_length < self.model.config.min_length // 2:
                 logger.warning(
-                    "Your min_length is set to {}, but you input_length is only {}. You might consider decreasing min_length, e.g. summarizer('...', min_length=...)".format(
-                        min_length, input_length
+                    "Your min_length is set to {}, but you input_length is only {}. You might consider decreasing min_length in config and insert config manually".format(
+                        self.model.config.min_length, input_length
                     )
                 )
 
-            if input_length < max_length:
+            if input_length < self.model.config.max_length:
                 logger.warning(
-                    "Your max_length is set to {}, but you input_length is only {}. You might consider decreasing max_length, e.g. summarizer('...',max_length=...)".format(
-                        max_length, input_length
+                    "Your max_length is set to {}, but you input_length is only {}. You might consider decreasing max_length in config and insert config manually".format(
+                        self.model.config.max_length, input_length
                     )
                 )
 
             summaries = self.model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
-                max_length=max_length,
-                min_length=min_length,
-                decoder_start_token_id=decoder_start_token_id,
-                do_sample=do_sample,
-                early_stopping=early_stopping,
-                num_beams=num_beams,
-                length_penalty=length_penalty,
                 **generate_kwargs,
             )
 
@@ -1354,7 +1339,7 @@ SUPPORTED_TASKS = {
 
 
 def pipeline(
-    task: str,
+    task_id: str,
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
@@ -1431,12 +1416,12 @@ def pipeline(
         pipeline('ner', model=model_url, config=config_url, tokenizer='bert-base-cased')
     """
     # Retrieve the task
-    if task not in SUPPORTED_TASKS:
-        raise KeyError("Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys())))
+    if task_id not in SUPPORTED_TASKS:
+        raise KeyError("Unknown task {}, available tasks are {}".format(task_id, list(SUPPORTED_TASKS.keys())))
 
     framework = framework or get_framework(model)
 
-    targeted_task = SUPPORTED_TASKS[task]
+    targeted_task = SUPPORTED_TASKS[task_id]
     task, model_class = targeted_task["impl"], targeted_task[framework]
 
     # Use default model/config/tokenizer for the task if no model is provided
@@ -1498,4 +1483,4 @@ def pipeline(
             )
         model = model_class.from_pretrained(model, config=config, **model_kwargs)
 
-    return task(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, **kwargs)
+    return task(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task_id=task_id, **kwargs)
