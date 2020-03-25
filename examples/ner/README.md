@@ -221,13 +221,21 @@ On the test dataset the following results could be achieved:
 Evaluation on development dataset outputs the following for our example:
 
 ```
-TODO
+03/25/2020 11:41:21 - INFO - __main__ -   ***** Eval results  *****
+03/25/2020 11:41:21 - INFO - __main__ -     f1 = 0.9222542163718633
+03/25/2020 11:41:21 - INFO - __main__ -     loss = 0.04647757345699046
+03/25/2020 11:41:21 - INFO - __main__ -     precision = 0.9279801324503312
+03/25/2020 11:41:21 - INFO - __main__ -     recall = 0.9165985282093213
 ```
 
 On the test dataset the following results could be achieved:
 
 ```
-TODO
+03/25/2020 11:42:28 - INFO - __main__ -   ***** Eval results  *****
+03/25/2020 11:42:28 - INFO - __main__ -     f1 = 0.9099820681410639
+03/25/2020 11:42:28 - INFO - __main__ -     loss = 0.07058404185008013
+03/25/2020 11:42:28 - INFO - __main__ -     precision = 0.8976415094339623
+03/25/2020 11:42:28 - INFO - __main__ -     recall = 0.9226666666666666
 ```
 
 ### Run the Tensorflow 2 version
