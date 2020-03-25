@@ -15,7 +15,7 @@ python evaluate_cnn.py <path_to_test.source> cnn_test_summaries.txt
 the default batch size, 8, fits in 16GB GPU memory, but may need to be adjusted to fit your system.
 
 ### Where is the code?
-The core model is in `src/transformers/modeling_bart.py`. This directory only contains examples.
+The core model is in `src/transformers/modeling_tf_t5.py`. This directory only contains examples.
 
 ### (WIP) Rouge Scores
 

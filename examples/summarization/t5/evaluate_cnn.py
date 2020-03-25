@@ -12,8 +12,9 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def generate_summaries(lns, out_file, batch_size=8):
+def generate_summaries(lns, out_file, batch_size):
     fout = Path(out_file).open("w")
+
     model = TFT5ForConditionalGeneration.from_pretrained("t5-large")
     tokenizer = T5Tokenizer.from_pretrained("t5-large")
 
@@ -21,6 +22,8 @@ def generate_summaries(lns, out_file, batch_size=8):
     min_length = 55
 
     for batch in tqdm(list(chunks(lns, batch_size))):
+        batch = ['summarize:' + text for text in batch]
+
         dct = tokenizer.batch_encode_plus(batch, max_length=1024, return_tensors="tf", pad_to_max_length=True)
         summaries = model.generate(
             input_ids=dct["input_ids"],
@@ -31,8 +34,10 @@ def generate_summaries(lns, out_file, batch_size=8):
             min_length=min_length,
             no_repeat_ngram_size=3,
             early_stopping=True,
+            bos_token_id=tokenizer.pad_token_id,
         )
         dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summaries]
+
         for hypothesis in dec:
             fout.write(hypothesis + "\n")
             fout.flush()
@@ -51,7 +56,7 @@ def _run_generate():
     )
     args = parser.parse_args()
     lns = [" " + x.rstrip() for x in open(args.source_path).readlines()]
-    generate_summaries(lns, args.output_path, batch_size=args.bs, device=args.device)
+    generate_summaries(lns, args.output_path, args.bs)
 
 
 if __name__ == "__main__":
