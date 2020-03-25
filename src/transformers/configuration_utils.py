@@ -92,7 +92,7 @@ class PretrainedConfig(object):
         self.label2id = dict((key, int(value)) for key, value in self.label2id.items())
 
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
-        self.prefix = kwargs.pop("prefix", "")
+        self.prefix = kwargs.pop("prefix", None)
         self.bos_token_id = kwargs.pop("bos_token_id", None)
         self.pad_token_id = kwargs.pop("pad_token_id", None)
         self.eos_token_id = kwargs.pop("eos_token_id", None)
