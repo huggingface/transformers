@@ -234,4 +234,48 @@ TODO
 
 #### Evaluation - bert-base-finnish-cased-v1
 
+Evaluation on development dataset outputs the following for our example:
+
+```
+           precision    recall  f1-score   support
+
+      PRO     0.7571    0.7477    0.7524      1847
+      LOC     0.9326    0.9412    0.9369       544
+      ORG     0.9624    0.9676    0.9650       185
+      PER     0.8547    0.8497    0.8522       173
+    EVENT     0.9551    0.9515    0.9533       268
+     DATE     0.0000    0.0000    0.0000         2
+
+micro avg     0.8249    0.8195    0.8222      3019
+macro avg     0.8240    0.8195    0.8217      3019
+```
+
+On the test dataset the following results could be achieved:
+
+```
+           precision    recall  f1-score   support
+
+      LOC     0.9270    0.9526    0.9396      1879
+    EVENT     0.9463    0.9648    0.9554       511
+      PRO     0.7427    0.7403    0.7415      6203
+      ORG     0.8733    0.9680    0.9182       406
+      PER     0.8235    0.8220    0.8228      1073
+     DATE     0.8889    0.8889    0.8889        18
+
+micro avg     0.8026    0.8093    0.8060     10090
+macro avg     0.8014    0.8093    0.8052     10090
+```
+
 #### Evaluation - bert-base-finnish-uncased-v1
+
+Evaluation on development dataset outputs the following for our example:
+
+```
+TODO
+```
+
+On the test dataset the following results could be achieved:
+
+```
+TODO
+```
