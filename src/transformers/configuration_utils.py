@@ -78,9 +78,6 @@ class PretrainedConfig(object):
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
-        self.bos_token_id = kwargs.pop("bos_token_id", None)
-        self.pad_token_id = kwargs.pop("pad_token_id", None)
-        self.eos_token_id = kwargs.pop("eos_token_id", None)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
@@ -93,6 +90,16 @@ class PretrainedConfig(object):
         self.id2label = dict((int(key), value) for key, value in self.id2label.items())
         self.label2id = kwargs.pop("label2id", dict(zip(self.id2label.values(), self.id2label.keys())))
         self.label2id = dict((key, int(value)) for key, value in self.label2id.items())
+
+        # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
+        self.prefix = kwargs.pop("prefix", None)
+        self.bos_token_id = kwargs.pop("bos_token_id", None)
+        self.pad_token_id = kwargs.pop("pad_token_id", None)
+        self.eos_token_id = kwargs.pop("eos_token_id", None)
+        self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
+
+        # task specific arguments
+        self.task_specific_params = kwargs.pop("task_specific_params", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
