@@ -73,6 +73,12 @@ class DataProcessorForSequenceClassification(DataProcessor):
                                                "test_file": self.files["test"],
                                                "dataset_name": self.dataset_name}, with_info=True)
 
+        if self.text_a not in list(self.info.features.keys()):
+            raise ValueError("The feature name " + self.text_a + " doesn't exists in " + list(self.info.features.keys()))
+
+        if self.label not in list(self.info.features.keys()):
+            raise ValueError("The feature name " + self.label + " doesn't exists in " + list(self.info.features.keys()))
+
     def get_labels(self):
         """Gets the list of labels for this data set."""
         return self.info.features[self.label].names
