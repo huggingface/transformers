@@ -1,24 +1,25 @@
 # download finer dataset
-# wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday.2014.train.csv
-# wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday.2014.dev.csv
-# wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday.2015.test.csv
+wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday.2014.train.csv
+wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday.2014.dev.csv
+wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday.2015.test.csv
 
 # directory for cache/intermediate results
-export MODEL_INPUT_DIR=$DATA_DIR/transformers_ner_finer_tf
+export MODEL_INPUT_DIR=$DATA_DIR/transformers_ner_finer_uncased_tf
 # directory for output model
-export OUTPUT_DIR=$MODEL_DIR/finer-model-tf
+export OUTPUT_DIR=$MODEL_DIR/finer-uncased-model-tf
 
 export MAX_LENGTH=128
-export BERT_MODEL=bert-base-finnish-cased-v1
+export BERT_MODEL=bert-base-finnish-uncased-v1
 
 # first preprocessing
-# python preprocess_fi.py digitoday.2014.train.csv train.txt.tmp
-# python preprocess_fi.py digitoday.2014.dev.csv dev.txt.tmp
-# python preprocess_fi.py digitoday.2015.test.csv test.txt.tmp
-export FINER_DIR=$DATA_DIR/NER-datasets/finer/data
-python preprocess_fi.py $FINER_DIR/digitoday.2014.train.csv train.txt.tmp
-python preprocess_fi.py $FINER_DIR/digitoday.2014.dev.csv dev.txt.tmp
-python preprocess_fi.py $FINER_DIR/digitoday.2015.test.csv test.txt.tmp
+python preprocess_fi.py digitoday.2014.train.csv train.txt.tmp
+python preprocess_fi.py digitoday.2014.dev.csv dev.txt.tmp
+python preprocess_fi.py digitoday.2015.test.csv test.txt.tmp
+
+# # for testing purpose, take very small input files
+# mv train.txt.tmp train.txt.tmp.bk && head -1000 train.txt.tmp.bk > train.txt.tmp
+# mv dev.txt.tmp dev.txt.tmp.bk && head -200 dev.txt.tmp.bk > dev.txt.tmp
+# mv test.txt.tmp test.txt.tmp.bk && head -200 test.txt.tmp.bk > test.txt.tmp
 
 # split according to BERT tokenizer
 python preprocess.py train.txt.tmp $BERT_MODEL $MAX_LENGTH > $MODEL_INPUT_DIR/train.txt
@@ -35,6 +36,7 @@ python3 run_tf_ner.py --data_dir $MODEL_INPUT_DIR \
 --model_type bert \
 --labels $MODEL_INPUT_DIR/labels.txt \
 --model_name_or_path $BERT_MODEL \
+--do_lower_case \
 --output_dir $OUTPUT_DIR \
 --max_seq_length $MAX_LENGTH \
 --num_train_epochs $NUM_EPOCHS \
