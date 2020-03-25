@@ -77,7 +77,7 @@ class TFTrainer(ABC):
           data_dir (optional): the directoty path where the data are. This parameter becomes mandatory if
             the parameters training_data and validation_data are not given.
         """
-        self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name_or_path, cache_dir=model_cache_dir, use_fast=False)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.pretrained_model_name_or_path, cache_dir=model_cache_dir, use_fast=True)
 
         self._preprocess_data(data_cache_dir)
         self._config_trainer(model_cache_dir)
