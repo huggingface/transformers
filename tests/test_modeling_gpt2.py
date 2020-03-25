@@ -396,5 +396,5 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             2635,
         ]  # The president of the United States, and the president of the United Kingdom, have been in the White
 
-        output_ids = model.generate(input_ids)
+        output_ids = model.generate(input_ids, do_sample=False)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
