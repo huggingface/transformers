@@ -425,7 +425,7 @@ class Pipeline(_ScikitCompat):
         """
         args = ["input_ids", "attention_mask"]
 
-        if not isinstance(self.model.config, (DistilBertConfig, XLMConfig, RobertaConfig, BartConfig, T5Config)):
+        if not isinstance(self.model.config, (DistilBertConfig, XLMConfig, RobertaConfig, BartConfig)):
             args += ["token_type_ids"]
 
         # PR #1548 (CLI) There is an issue with attention_mask
