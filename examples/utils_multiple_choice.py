@@ -291,6 +291,60 @@ class ArcProcessor(DataProcessor):
         return examples
 
 
+class CosmosProcessor(DataProcessor):
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {} train".format(data_dir))
+        return self._create_examples(self._read_json(os.path.join(data_dir, "train.jsonl")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {} valid".format(data_dir))
+        return self._create_examples(self._read_json(os.path.join(data_dir, "valid.jsonl")), "valid")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {} test".format(data_dir))
+        return self._create_examples(self._read_json(os.path.join(data_dir, "test.jsonl")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["0", "1", "2", "3"]
+
+    def _read_json(self, input_file):
+        with open(input_file, "r", encoding="utf-8") as fin:
+            lines = fin.readlines()
+            return lines
+
+    def _create_examples(self, lines, type):
+
+        examples = []
+
+        for line in tqdm.tqdm(lines, desc="read cosmos data"):
+            example = json.loads(line.strip("\n"))
+
+            example_id = example["id"]
+            question = example["question"]
+            context = example["context"]
+            answer0 = example["answer0"]
+            answer1 = example["answer1"]
+            answer2 = example["answer2"]
+            answer3 = example["answer3"]
+            correct_label = example["label"]
+
+            examples.append(
+                    InputExample(
+                        example_id=example_id,
+                        question=question,
+                        contexts=[context, context, context, context],
+                        endings=[answer0, answer1, answer2, answer3],
+                        label=correct_label,
+                    )
+                )
+
+        return examples
+
+
 def convert_examples_to_features(
     examples: List[InputExample],
     label_list: List[str],
@@ -356,7 +410,7 @@ def convert_examples_to_features(
 
         if ex_index < 2:
             logger.info("*** Example ***")
-            logger.info("race_id: {}".format(example.example_id))
+            logger.info("example_id: {}".format(example.example_id))
             for choice_idx, (input_ids, attention_mask, token_type_ids) in enumerate(choices_features):
                 logger.info("choice: {}".format(choice_idx))
                 logger.info("input_ids: {}".format(" ".join(map(str, input_ids))))
@@ -369,7 +423,7 @@ def convert_examples_to_features(
     return features
 
 
-processors = {"race": RaceProcessor, "swag": SwagProcessor, "arc": ArcProcessor}
+processors = {"race": RaceProcessor, "swag": SwagProcessor, "arc": ArcProcessor, "cosmos": CosmosProcessor}
 
 
-MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4}
+MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4, "cosmos", 4}
