@@ -1,5 +1,8 @@
-# path to finer dataset
-export FINER_DIR=$DATA_DIR/NER-datasets/finer/data
+# download finer dataset
+# wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday.2014.train.csv
+# wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday.2014.dev.csv
+# wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday.2015.test.csv
+
 # directory for cache/intermediate results
 export MODEL_INPUT_DIR=$DATA_DIR/transformers_ner_finer
 # directory for output model
@@ -9,6 +12,10 @@ export MAX_LENGTH=128
 export BERT_MODEL=bert-base-finnish-cased-v1
 
 # first preprocessing
+# python preprocess_fi.py digitoday.2014.train.csv train.txt.tmp
+# python preprocess_fi.py digitoday.2014.dev.csv dev.txt.tmp
+# python preprocess_fi.py digitoday.2015.test.csv test.txt.tmp
+export FINER_DIR=$DATA_DIR/NER-datasets/finer/data
 python preprocess_fi.py $FINER_DIR/digitoday.2014.train.csv train.txt.tmp
 python preprocess_fi.py $FINER_DIR/digitoday.2014.dev.csv dev.txt.tmp
 python preprocess_fi.py $FINER_DIR/digitoday.2015.test.csv test.txt.tmp
