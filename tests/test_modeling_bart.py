@@ -39,7 +39,7 @@ if is_torch_available():
         _prepare_bart_decoder_inputs,
         LARGE_NEGATIVE,
     )
-    from transformers.tokenization_bart import BartTokenizer
+    from transformers.tokenization_bart import BartTokenizer, MBartTokenizer
 
 
 @require_torch
@@ -241,6 +241,10 @@ class BartHeadTests(unittest.TestCase):
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
         self.assertIsInstance(loss.item(), float)
+
+    def test_mbart_tokenizer(self):
+        tok = MBartTokenizer.from_pretrained("mbart-large-cc25")
+        dct = tok.batch_encode_plus(["This test data is meant to awe and inspire."])
 
     def test_mbart_forward(self):
         config = BartConfig(

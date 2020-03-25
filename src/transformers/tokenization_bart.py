@@ -14,12 +14,19 @@
 # limitations under the License.
 
 from .tokenization_roberta import RobertaTokenizer
+from .tokenization_t5 import T5Tokenizer
+
+
+def _s3_url(suffix):
+    return "https://s3.amazonaws.com/models.huggingface.co/bert/{}".format(suffix)
 
 
 # vocab and merges same as roberta
-vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json"
-merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
+vocab_url = _s3_url("roberta-large-vocab.json")
+merges_url = _s3_url("roberta-large-merges.txt")
 _all_bart_models = ["bart-large", "bart-large-mnli", "bart-large-cnn"]
+
+VOCAB_FILES_NAMES = {"vocab_file": "sentence.bpe.model"}
 
 
 class BartTokenizer(RobertaTokenizer):
@@ -29,3 +36,20 @@ class BartTokenizer(RobertaTokenizer):
         "vocab_file": {m: vocab_url for m in _all_bart_models},
         "merges_file": {m: merges_url for m in _all_bart_models},
     }
+
+
+_all_mbart_models = ["mbart-large-en-ro", "mbart-large-cc25"]
+
+
+class MBartTokenizer(T5Tokenizer):
+    vocab_files_names = VOCAB_FILES_NAMES
+    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
+    pretrained_vocab_files_map = {
+        "vocab_file": {
+            "mbart-large-en-ro": _s3_url("facebook/mbart-large-en-ro/sentence.bpe.model"),
+            "mbart-large-cc25": _s3_url("facebook/mbart-large-cc25/sentence.bpe.model"),
+        }
+    }
+
+    def __init__(self, vocab_file, **kwargs):
+        super().__init__(vocab_file, extra_ids=0, additional_special_tokens=[], **kwargs)
