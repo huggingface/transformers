@@ -197,7 +197,9 @@ def make_collate(tokenizer, block_size, lazy=False):
         # Filter empty strings. LazyLineByLineTextDataset will return empty string if there is an error on a line.
         examples = [ex for ex in examples if ex]
         examples = tokenizer.batch_encode_plus(examples, max_len=block_size)
-        examples = [torch.tensor(ex) for ex in examples["input_ids"]]
+        # Seems that the above tokenisation statement doesn't correctly truncate leading to sequence-too-long errors in
+        # training.
+        examples = [torch.tensor(ex[:block_size]) for ex in examples["input_ids"]]
         if tokenizer._pad_token is None:
             return pad_sequence(examples, batch_first=True)
         return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
