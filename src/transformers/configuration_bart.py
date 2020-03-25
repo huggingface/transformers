@@ -64,6 +64,7 @@ class BartConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         add_final_layer_norm=False,
+        scale_embedding=False,
         **common_kwargs
     ):
         r"""
@@ -94,6 +95,7 @@ class BartConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
+        self.scale_embedding = scale_embedding
 
         # This is a combo of fairseq's encoder_normalize_before and decoder_normalize_before
         self.add_final_layer_norm = add_final_layer_norm
