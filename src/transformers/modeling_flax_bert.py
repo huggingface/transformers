@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 import flax.nn as nn
 import numpy as np
@@ -142,11 +143,16 @@ class FXBertModel:
         # inputs_shape = [(1, len(input_ids))] * 3
         # _ = model_def.init_by_shape(self.key, inputs_shape)
         bert = Model(model_def, self.state)
-        return bert(
-            jnp.array(input_ids, dtype='i4'),
-            jnp.array(token_type_ids, dtype='i4'),
-            jnp.array(attention_mask, dtype='i4')
-        )
+
+        @jax.jit
+        def predict(input_ids, token_type_ids, attention_mask):
+            return bert(
+                jnp.array(input_ids, dtype='i4'),
+                jnp.array(token_type_ids, dtype='i4'),
+                jnp.array(attention_mask, dtype='i4')
+            )
+
+        return predict(input_ids, token_type_ids, attention_mask)
 
     def from_pretrained(self, state):
         self.state = from_state_dict(BertModel, state)
