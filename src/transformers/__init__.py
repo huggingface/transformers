@@ -130,7 +130,7 @@ from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
-from .tokenization_t5 import T5Tokenizer
+from .tokenization_t5 import T5Tokenizer, T5_PREFIX_PATTERNS
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
 
 # Tokenizers
