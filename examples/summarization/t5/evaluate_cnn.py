@@ -54,7 +54,7 @@ def _run_generate():
         "--bs", type=int, default=8, required=False, help="batch size: how many to summarize at a time",
     )
     args = parser.parse_args()
-    lns = [" " + x.rstrip() for x in open(args.source_path).readlines()]
+    lns = [x.rstrip() for x in open(args.source_path).readlines()]
     generate_summaries(lns, args.output_path, args.bs)
 
 
