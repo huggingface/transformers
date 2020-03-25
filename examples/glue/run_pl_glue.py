@@ -192,5 +192,5 @@ if __name__ == "__main__":
     # Optionally, predict on dev set and write to output_dir
     if args.do_predict:
         checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
-        model = GLUETransformer.load_from_checkpoint(checkpoints[-1])
+        model = model.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)
