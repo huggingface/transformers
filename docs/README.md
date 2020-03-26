@@ -47,6 +47,8 @@ Once you have setup `sphinx`, you can build the documentation by running the fol
 make html
 ```
 
+A folder called ``_build/html`` should have been created. You can now open the file ``_build/html/index.html`` in your browser. 
+
 ---
 **NOTE**
 
