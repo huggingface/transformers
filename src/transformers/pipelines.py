@@ -336,7 +336,7 @@ class Pipeline(_ScikitCompat):
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
-        task_id: str = '',
+        task: str = "",
         args_parser: ArgumentHandler = None,
         device: int = -1,
         binary_output: bool = False,
@@ -349,7 +349,6 @@ class Pipeline(_ScikitCompat):
         self.tokenizer = tokenizer
         self.modelcard = modelcard
         self.framework = framework
-        self.task_id = task_id
         self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else "cuda:{}".format(device))
         self.binary_output = binary_output
         self._args_parser = args_parser or DefaultArgumentHandler()
@@ -359,9 +358,9 @@ class Pipeline(_ScikitCompat):
             self.model = self.model.to(self.device)
 
         # Update config with task specific parameters
-        task_specific_params = self.model.config.task_specifc_params
-        if task_specific_params is not None and task_id in task_specific_params:
-            self.model.config.update(task_specific_params.get(task_id))
+        task_specific_params = self.model.config.task_specific_params
+        if task_specific_params is not None and task in task_specific_params:
+            self.model.config.update(task_specific_params.get(task))
 
     def save_pretrained(self, save_directory):
         """
@@ -531,6 +530,7 @@ class FeatureExtractionPipeline(Pipeline):
         framework: Optional[str] = None,
         args_parser: ArgumentHandler = None,
         device: int = -1,
+        task: str = "",
     ):
         super().__init__(
             model=model,
@@ -540,6 +540,7 @@ class FeatureExtractionPipeline(Pipeline):
             args_parser=args_parser,
             device=device,
             binary_output=True,
+            task=task,
         )
 
     def __call__(self, *args, **kwargs):
@@ -636,6 +637,7 @@ class FillMaskPipeline(Pipeline):
         args_parser: ArgumentHandler = None,
         device: int = -1,
         topk=5,
+        task: str = "",
     ):
         super().__init__(
             model=model,
@@ -645,6 +647,7 @@ class FillMaskPipeline(Pipeline):
             args_parser=args_parser,
             device=device,
             binary_output=True,
+            task=task,
         )
 
         self.topk = topk
@@ -736,6 +739,7 @@ class NerPipeline(Pipeline):
         device: int = -1,
         binary_output: bool = False,
         ignore_labels=["O"],
+        task: str = "",
     ):
         super().__init__(
             model=model,
@@ -745,6 +749,7 @@ class NerPipeline(Pipeline):
             args_parser=args_parser,
             device=device,
             binary_output=binary_output,
+            task=task,
         )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
@@ -907,6 +912,7 @@ class QuestionAnsweringPipeline(Pipeline):
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         device: int = -1,
+        task: str = "",
         **kwargs
     ):
         super().__init__(
@@ -916,6 +922,7 @@ class QuestionAnsweringPipeline(Pipeline):
             framework=framework,
             args_parser=QuestionAnsweringArgumentHandler(),
             device=device,
+            task=task,
             **kwargs,
         )
 
@@ -1163,12 +1170,7 @@ class SummarizationPipeline(Pipeline):
     """
 
     def __call__(
-        self,
-        *documents,
-        return_tensors=False,
-        return_text=True,
-        clean_up_tokenization_spaces=False,
-        **generate_kwargs
+        self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
         r"""
         Args:
@@ -1211,19 +1213,25 @@ class SummarizationPipeline(Pipeline):
                 "Tensorflow is not yet supported for Bart. Please consider using T5, e.g. `t5-base`"
             )
 
+        prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
+
         if isinstance(documents[0], list):
             assert (
                 self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
 
-            documents = ([self.model.config.prefix + document for document in documents[0]],)
+            documents = ([prefix + document for document in documents[0]],)
             pad_to_max_length = True
 
         elif isinstance(documents[0], str):
-            documents = (self.model.config.prefix + documents[0],)
+            documents = (prefix + documents[0],)
             pad_to_max_length = False
         else:
-            raise ValueError(" `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(documents[0]))
+            raise ValueError(
+                " `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(
+                    documents[0]
+                )
+            )
 
         with self.device_placement():
             inputs = self._parse_and_tokenize(*documents, pad_to_max_length=pad_to_max_length)
@@ -1249,9 +1257,7 @@ class SummarizationPipeline(Pipeline):
                 )
 
             summaries = self.model.generate(
-                inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                **generate_kwargs,
+                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
             )
 
             results = []
@@ -1339,7 +1345,7 @@ SUPPORTED_TASKS = {
 
 
 def pipeline(
-    task_id: str,
+    task: str,
     model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
@@ -1416,13 +1422,13 @@ def pipeline(
         pipeline('ner', model=model_url, config=config_url, tokenizer='bert-base-cased')
     """
     # Retrieve the task
-    if task_id not in SUPPORTED_TASKS:
-        raise KeyError("Unknown task {}, available tasks are {}".format(task_id, list(SUPPORTED_TASKS.keys())))
+    if task not in SUPPORTED_TASKS:
+        raise KeyError("Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys())))
 
     framework = framework or get_framework(model)
 
-    targeted_task = SUPPORTED_TASKS[task_id]
-    task, model_class = targeted_task["impl"], targeted_task[framework]
+    targeted_task = SUPPORTED_TASKS[task]
+    task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
@@ -1483,4 +1489,4 @@ def pipeline(
             )
         model = model_class.from_pretrained(model, config=config, **model_kwargs)
 
-    return task(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task_id=task_id, **kwargs)
+    return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs)
