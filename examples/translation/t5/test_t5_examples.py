@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from .evaluate_wmt import _run_generate
+from .evaluate_wmt import run_generate
 
 
 text = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
@@ -24,5 +24,5 @@ class TestT5Examples(unittest.TestCase):
             f.write("\n".join(text))
         testargs = ["evaluate_cnn.py", str(tmp), "output.txt", str(tmp), "score.txt"]
         with patch.object(sys, "argv", testargs):
-            _run_generate()
+            run_generate()
             self.assertTrue(Path("output.txt").exists())
