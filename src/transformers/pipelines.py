@@ -1271,7 +1271,7 @@ class TranslationPipeline(Pipeline):
     Translates from one language to another.
 
     Usage::
-        en_fr_translator = pipeline("translation", from_lng="English", to_lng="French")
+        en_fr_translator = pipeline("translation_en_to_fr")
         en_fr_translator("How old are you?")
 
     Supported Models: "t5-small", "t5-base", "t5-large", "t5-3b", "t5-11b"
