@@ -1,3 +1,5 @@
+***This script evaluates the [T5 Model](https://arxiv.org/pdf/1910.10683.pdf) ``t5-base`` on the English to German WMT dataset. Please note that the results in the paper were attained using a ``t5-base`` model fine-tuned on translation, so that results will be slightly worse here***
+
 ### Intro
 
 This example shows how T5 (here the official [paper](https://arxiv.org/abs/1910.10683)) can be
