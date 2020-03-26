@@ -2055,9 +2055,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             encoding = self._tokenizer.encode_batch(text, add_special_tokens=False)
             encoding = Encoding.merge(encoding, True)
 
-            # Insert special tokens where needed and asked to do so
-            if add_special_tokens:
-                encoding = self._tokenizer.post_process(encoding, add_special_tokens=True)
+            # Post process and if asked to do so, insert special tokens where needed
+            encoding = self._tokenizer.post_process(encoding, add_special_tokens=add_special_tokens)
 
             batched_output = BatchEncoding(
                 self._convert_encoding(
