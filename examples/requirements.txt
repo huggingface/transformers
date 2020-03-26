@@ -3,3 +3,5 @@ tensorboard
 scikit-learn
 seqeval
 psutil
+rouge-score
+tensorflow_datasets
