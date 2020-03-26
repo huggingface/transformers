@@ -4,11 +4,11 @@ from pathlib import Path
 import tensorflow_datasets as tfds
 
 
-def main(source_path, reference_path, data_dir):
+def main(input_path, reference_path, data_dir):
     cnn_ds = tfds.load("cnn_dailymail", split="test", shuffle_files=False, data_dir=data_dir)
     cnn_ds_iter = tfds.as_numpy(cnn_ds)
 
-    test_articles_file = Path(source_path).open("w")
+    test_articles_file = Path(input_path).open("w")
     test_summaries_file = Path(reference_path).open("w")
 
     for example in cnn_ds_iter:
@@ -20,7 +20,7 @@ def main(source_path, reference_path, data_dir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("source_path", type=str, help="where to save the source data")
+    parser.add_argument("input_path", type=str, help="where to save the articles input data")
     parser.add_argument(
         "reference_path", type=str, help="where to save the reference summaries",
     )
@@ -28,4 +28,4 @@ if __name__ == "__main__":
         "--data_dir", type=str, default="~/tensorflow_datasets", help="where to save the tensorflow datasets.",
     )
     args = parser.parse_args()
-    main(args.source_path, args.reference_path, args.data_dir)
+    main(args.input_path, args.reference_path, args.data_dir)
