@@ -1231,7 +1231,7 @@ class SummarizationPipeline(Pipeline):
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
-                input_length = inputs["input_ids"].shape[-1].numpy()
+                input_length = inputs["input_ids"].shape[-1]
             elif self.framework == "tf":
                 input_length = tf.shape(inputs["input_ids"])[-1].numpy()
 
@@ -1344,7 +1344,7 @@ class TranslationPipeline(Pipeline):
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
-                input_length = inputs["input_ids"].shape[-1].numpy()
+                input_length = inputs["input_ids"].shape[-1]
 
             elif self.framework == "tf":
                 input_length = tf.shape(inputs["input_ids"])[-1].numpy()
