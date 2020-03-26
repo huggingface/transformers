@@ -15,8 +15,8 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 
-class TestTFT5Examples(unittest.TestCase):
-    def test_tf_t5_cli(self):
+class TestT5Examples(unittest.TestCase):
+    def test_t5_cli(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
         tmp = Path(tempfile.gettempdir()) / "utest_generations.hypo"

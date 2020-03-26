@@ -4,7 +4,7 @@ from pathlib import Path
 from rouge_score import rouge_scorer, scoring
 from tqdm import tqdm
 
-from transformers import T5Tokenizer, TFT5ForConditionalGeneration
+from transformers import T5Tokenizer, T5ForConditionalGeneration
 
 
 def chunks(lst, n):
@@ -16,7 +16,7 @@ def chunks(lst, n):
 def generate_summaries(lns, out_file, batch_size):
     fout = Path(out_file).open("w")
 
-    model = TFT5ForConditionalGeneration.from_pretrained("t5-large")
+    model = T5ForConditionalGeneration.from_pretrained("t5-large")
     tokenizer = T5Tokenizer.from_pretrained("t5-large")
 
     # update config with summarization specific params
@@ -69,9 +69,9 @@ def _run_generate():
         "--bs", type=int, default=8, required=False, help="batch size: how many to summarize at a time",
     )
     args = parser.parse_args()
-    source_lns = [x.rstrip() for x in open(args.source_path).readlines()]
-
-    generate_summaries(source_lns, args.output_path, args.bs)
+#    source_lns = [x.rstrip() for x in open(args.source_path).readlines()]
+#
+#    generate_summaries(source_lns, args.output_path, args.bs)
 
     output_lns = [x.rstrip() for x in open(args.output_path).readlines()]
     reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()]
