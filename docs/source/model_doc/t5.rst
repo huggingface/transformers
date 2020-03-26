@@ -1,0 +1,57 @@
+T5
+----------------------------------------------------
+**DISCLAIMER:** This model is still a work in progress, if you see something strange,
+file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title>`
+
+Paper
+~~~~~
+The T5 model was presented in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer <https://arxiv.org/pdf/1910.10683.pdf>`_ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu in 
+Here the abstract: 
+
+Transfer learning, where a model is first pre-trained on a data-rich task before being fine-tuned on a downstream task, has emerged as a powerful technique in natural language processing (NLP). The effectiveness of transfer learning has given rise to a diversity of approaches, methodology, and practice. 
+In this paper, we explore the landscape of transfer learning techniques for NLP by introducing a unified framework that converts every language problem into a text-to-text format. 
+Our systematic study compares pre-training objectives, architectures, unlabeled datasets, transfer approaches, and other factors on dozens of language understanding tasks. 
+By combining the insights from our exploration with scale and our new "Colossal Clean Crawled Corpus", we achieve state-of-the-art results on many benchmarks covering summarization, question answering, text classification, and more. 
+To facilitate future work on transfer learning for NLP, we release our dataset, pre-trained models, and code.
+
+The Authors' code can be found `here <https://github.com/google-research/text-to-text-transfer-transformer>`_
+
+
+Implementation Notes
+~~~~~~~~~~~~~~~~~~~~
+- Bart doesn't use :obj:`token_type_ids` for sequence classification. Use BartTokenizer.encode to get the proper splitting.
+- The forward pass of ``BartModel`` will create decoder inputs (using the helper function ``transformers.modeling_bart._prepare_bart_decoder_inputs``)  if they are not passed. This is different than some other modeling APIs.
+- Model predictions are intended to be identical to the original implementation. This only works, however, if the string you pass to ``fairseq.encode`` starts with a space.
+- ``BartForConditionalGeneration.generate`` should be used for conditional generation tasks like summarization, see the example in that docstrings
+- Models that load the ``"bart-large-cnn"`` weights will not have a ``mask_token_id``, or be able to perform mask filling tasks.
+
+
+
+BartModel
+~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BartModel
+    :members: forward
+
+.. autofunction:: transformers.modeling_bart._prepare_bart_decoder_inputs
+
+
+BartForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BartForConditionalGeneration
+    :members: generate, forward
+
+
+BartForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BartForSequenceClassification
+    :members: forward
+
+BartConfig
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BartConfig
+    :members:
+
