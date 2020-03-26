@@ -380,3 +380,14 @@ class PretrainedConfig(object):
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string())
+
+    def update(self, config_dict: Dict):
+        """
+        Updates attributes of this class
+        with attributes from `config_dict`.
+
+        Args:
+            :obj:`Dict[str, any]`: Dictionary of attributes that shall be updated for this class.
+        """
+        for key, value in config_dict.items():
+            setattr(self, key, value)
