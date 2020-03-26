@@ -65,7 +65,7 @@ class NERTransformer(BaseTransformer):
                     sep_token_extra=bool(args.model_type in ["roberta"]),
                     pad_on_left=bool(args.model_type in ["xlnet"]),
                     pad_token=self.tokenizer.pad_token_id,
-                    pad_token_segment_id=tokenizer.pad_token_type_id,
+                    pad_token_segment_id=self.tokenizer.pad_token_type_id,
                     pad_token_label_id=self.pad_token_label_id,
                 )
                 logger.info("Saving features into cached file %s", cached_features_file)
