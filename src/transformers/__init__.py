@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "2.5.1"
+__version__ = "2.6.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -32,7 +32,7 @@ from .benchmark_utils import (
     stop_memory_tracing,
 )
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
+from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
 from .configuration_bart import BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
@@ -116,10 +116,11 @@ from .pipelines import (
     SummarizationPipeline,
     TextClassificationPipeline,
     TokenClassificationPipeline,
+    TranslationPipeline,
     pipeline,
 )
 from .tokenization_albert import AlbertTokenizer
-from .tokenization_auto import AutoTokenizer
+from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
@@ -158,6 +159,12 @@ if is_torch_available():
         AutoModelWithLMHead,
         AutoModelForTokenClassification,
         ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        MODEL_MAPPING,
+        MODEL_FOR_PRETRAINING_MAPPING,
+        MODEL_WITH_LM_HEAD_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     )
 
     from .modeling_bert import (
@@ -215,6 +222,7 @@ if is_torch_available():
         XLMModel,
         XLMWithLMHeadModel,
         XLMForSequenceClassification,
+        XLMForTokenClassification,
         XLMForQuestionAnswering,
         XLMForQuestionAnsweringSimple,
         XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -317,6 +325,12 @@ if is_tf_available():
         TFAutoModelWithLMHead,
         TFAutoModelForTokenClassification,
         TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_MODEL_MAPPING,
+        TF_MODEL_FOR_PRETRAINING_MAPPING,
+        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     )
 
     from .modeling_tf_bert import (

@@ -457,6 +457,7 @@ class T5PreTrainedModel(PreTrainedModel):
     pretrained_model_archive_map = T5_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
+    encoder_outputs_batch_dim_idx = 0  # outputs shaped (bs, ...)
 
     @property
     def dummy_inputs(self):

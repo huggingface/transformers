@@ -78,6 +78,15 @@ TF_FILL_MASK_FINETUNED_MODELS = [
     (("distilroberta-base", {"use_fast": False}), "distilroberta-base", None),
 ]
 
+SUMMARIZATION_FINETUNED_MODELS = {("bart-large-cnn", "bart-large-cnn"), ("t5-small", "t5-small")}
+TF_SUMMARIZATION_FINETUNED_MODELS = {("t5-small", "t5-small")}
+
+TRANSLATION_FINETUNED_MODELS = {
+    ("t5-small", "t5-small", "translation_en_to_de"),
+    ("t5-small", "t5-small", "translation_en_to_ro"),
+}
+TF_TRANSLATION_FINETUNED_MODELS = {("t5-small", "t5-small", "translation_en_to_fr")}
+
 
 class MonoColumnInputTestCase(unittest.TestCase):
     def _test_mono_column_pipeline(
@@ -252,10 +261,44 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
-        nlp = pipeline(task="summarization")
-        self._test_mono_column_pipeline(
-            nlp, valid_inputs, invalid_inputs, mandatory_keys,
-        )
+        for model, tokenizer in SUMMARIZATION_FINETUNED_MODELS:
+            nlp = pipeline(task="summarization", model=model, tokenizer=tokenizer)
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, invalid_inputs, mandatory_keys,
+            )
+
+    @require_tf
+    def test_tf_summarization(self):
+        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        invalid_inputs = [4, "<mask>"]
+        mandatory_keys = ["summary_text"]
+        for model, tokenizer in TF_SUMMARIZATION_FINETUNED_MODELS:
+            nlp = pipeline(task="summarization", model=model, tokenizer=tokenizer, framework="tf")
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, invalid_inputs, mandatory_keys,
+            )
+
+    @require_torch
+    def test_translation(self):
+        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        invalid_inputs = [4, "<mask>"]
+        mandatory_keys = ["translation_text"]
+        for model, tokenizer, task in TRANSLATION_FINETUNED_MODELS:
+            nlp = pipeline(task=task, model=model, tokenizer=tokenizer)
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, invalid_inputs, mandatory_keys,
+            )
+
+    @require_tf
+    def test_tf_translation(self):
+        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        invalid_inputs = [4, "<mask>"]
+        mandatory_keys = ["translation_text"]
+        for model, tokenizer, task in TF_TRANSLATION_FINETUNED_MODELS:
+            nlp = pipeline(task=task, model=model, tokenizer=tokenizer, framework="tf")
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, invalid_inputs, mandatory_keys,
+            )
 
 
 class MultiColumnInputTestCase(unittest.TestCase):

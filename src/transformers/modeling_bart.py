@@ -113,6 +113,7 @@ class PretrainedBartModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
     pretrained_model_archive_map = BART_PRETRAINED_MODEL_ARCHIVE_MAP
+    encoder_outputs_batch_dim_idx = 1  # outputs shaped (seq_len, bs, ...)
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -128,8 +129,8 @@ class PretrainedBartModel(PreTrainedModel):
     @property
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id
-        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]])
-        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(self.config, input_ids,)
+        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]], device=self.device)
+        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(self.config, input_ids)
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": input_ids.ne(pad_token),
@@ -216,7 +217,9 @@ class EncoderLayer(nn.Module):
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
         residual = x
-        x, attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask,)
+        x, attn_weights = self.self_attn(
+            query=x, key=x, key_padding_mask=encoder_padding_mask, need_weights=self.output_attentions
+        )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
@@ -315,6 +318,7 @@ class DecoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
+        self.output_attentions = config.output_attentions
         self.self_attn = SelfAttention(
             embed_dim=self.embed_dim, num_heads=config.decoder_attention_heads, dropout=config.attention_dropout,
         )
@@ -342,14 +346,16 @@ class DecoderLayer(nn.Module):
         if layer_state is None:
             layer_state = {}
         # next line mutates layer state
-        x, self_attn_weights = self.self_attn(query=x, key=x, layer_state=layer_state, attn_mask=attention_mask,)
+        x, self_attn_weights = self.self_attn(
+            query=x, key=x, layer_state=layer_state, attn_mask=attention_mask, need_weights=self.output_attentions
+        )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
         x = self.self_attn_layer_norm(x)
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
 
-        x, encoder_attn_weights = self.encoder_attn(
+        x, _ = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
@@ -526,6 +532,7 @@ class SelfAttention(nn.Module):
         key_padding_mask: Optional[Tensor] = None,
         layer_state: Optional[Dict[str, Optional[Tensor]]] = None,
         attn_mask: Optional[Tensor] = None,
+        need_weights=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
         static_kv = self.encoder_decoder_attention  # type: bool
@@ -597,7 +604,10 @@ class SelfAttention(nn.Module):
         assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn_output = self.out_proj(attn_output)
-        attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+        if need_weights:
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+        else:
+            attn_weights = None
         return attn_output, attn_weights
 
     def _use_saved_state(self, k, v, saved_state, key_padding_mask, static_kv, bsz):
@@ -804,13 +814,8 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
-        # if base_model is None:
         base_model = BartModel(config)
         self.model = base_model
-        self.lm_head = _make_linear_from_emb(self.model.shared)
-
-    def tie_weights(self):
-        pass  # hack to prevent changing lm_head.out_features. The input and output embeddings are still the same.
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def forward(
@@ -875,7 +880,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             decoder_cached_states=decoder_cached_states,
             generation_mode=generation_mode,
         )
-        lm_logits = self.lm_head(outputs[0])
+        lm_logits = F.linear(outputs[0], self.model.shared.weight)
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
         if lm_labels is not None:
             loss_fct = nn.CrossEntropyLoss()
@@ -893,7 +898,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
             encoder_outputs, decoder_cached_states = past, None
         else:
             encoder_outputs, decoder_cached_states = past
-
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
@@ -932,7 +936,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         return self.model.encoder
 
     def get_output_embeddings(self):
-        return self.lm_head
+        return _make_linear_from_emb(self.model.shared)  # make it on the fly
 
 
 @add_start_docstrings(
