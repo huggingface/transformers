@@ -3,3 +3,4 @@ tensorboard
 scikit-learn
 seqeval
 psutil
+sacrebleu
