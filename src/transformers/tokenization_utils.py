@@ -1926,12 +1926,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[List[str], List[Tuple[str, str]]] = None,
+        batch_text_or_text_pairs: Union[List[str], List[Tuple[str, str]], List[List[str]], List[Tuple[List[str], List[str]]]] = None,
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
+        is_pretokenized: bool = False,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1971,21 +1972,67 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                     "batch_text_or_text_pairs has to be a list (got {})".format(type(batch_text_or_text_pairs))
                 )
 
-            # Avoid thread overhead if only one example.
-            if len(batch_text_or_text_pairs) == 1:
-                if isinstance(batch_text_or_text_pairs[0], (tuple, list)):
-                    encodings = self._tokenizer.encode(
-                        *batch_text_or_text_pairs[0], add_special_tokens=add_special_tokens
-                    )
-                else:
-                    encodings = self._tokenizer.encode(
-                        batch_text_or_text_pairs[0], add_special_tokens=add_special_tokens
-                    )
-                encodings = [encodings]
+            # Check for the pretokenized path
+            if is_pretokenized:
+                encodings = []
+
+                # Iterate over each sample (we don't know yet if they are pairs or simple input
+                for i, sample in enumerate(batch_text_or_text_pairs):
+
+                    if not isinstance(sample, (list, tuple)):
+                        raise TypeError(
+                            "batch_encode_plus(..., is_pretokenized=True) requires batch_text_or_text_pairs "
+                            "to be either List[List[str]] or List[Tuple[List[str], List[str]]] but sample at "
+                            "index {} is of type {}".format(i, type(sample))
+                        )
+
+                    # Convert to tuple for convenience
+                    if isinstance(sample, list):
+                        sample = (sample, )
+
+                    encodings_text = Encoding.merge(self._tokenizer.encode_batch(sample[0], False), True)
+
+                    # Check if we have pairs
+                    if len(sample) == 2:
+                        encodings_pair = Encoding.merge(
+                            self._tokenizer.encode_batch([("", s) for s in sample[1]], False),
+                            True
+                        )
+
+                    # No pair, default to None
+                    elif len(sample) == 1:
+                        encodings_pair = None
+
+                    # Something else is invalid
+                    else:
+                        raise ValueError(
+                            "batch_encode_plus(..., is_pretokenized=True) requires batch_text_or_text_pairs "
+                            "to be either List[List[str]] or List[Tuple[List[str], List[str]]] but sample at "
+                            "index {} has too much dimensions (required 1 or 2, got: {}, type {})"
+                                .format(i, len(sample), type(sample))
+                        )
+
+                    # Post-process
+                    encoding = self._tokenizer.post_process(encodings_text, encodings_pair, add_special_tokens)
+                    encodings += [encoding]
+
+            # Classical path with strings input
             else:
-                encodings = self._tokenizer.encode_batch(
-                    batch_text_or_text_pairs, add_special_tokens=add_special_tokens
-                )
+                # Avoid thread overhead if only one example.
+                if len(batch_text_or_text_pairs) == 1:
+                    if isinstance(batch_text_or_text_pairs[0], (tuple, list)):
+                        encodings = self._tokenizer.encode(
+                            *batch_text_or_text_pairs[0], add_special_tokens=add_special_tokens
+                        )
+                    else:
+                        encodings = self._tokenizer.encode(
+                            batch_text_or_text_pairs[0], add_special_tokens=add_special_tokens
+                        )
+                    encodings = [encodings]
+                else:
+                    encodings = self._tokenizer.encode_batch(
+                        batch_text_or_text_pairs, add_special_tokens=add_special_tokens
+                    )
 
         # Convert encoding to dict
         tokens = [
@@ -2065,7 +2112,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                     )
 
                 # Post process and if asked to do so, insert special tokens where needed
-                encoding = self._tokenizer.post_process(encoding, encoding_pair, add_special_tokens=add_special_tokens)
+                encoding = self._tokenizer.post_process(encoding, encoding_pair, add_special_tokens)
 
                 batched_output = BatchEncoding(
                     self._convert_encoding(
