@@ -60,7 +60,6 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
     )
-    from .modeling_bart import BartForConditionalGeneration
 
 
 logger = logging.getLogger(__name__)
@@ -1112,11 +1111,13 @@ class SummarizationPipeline(Pipeline):
     Usage::
 
         summarizer = pipeline("summarization")
-        summarizer("Sam Shleifer writes the best docstring examples in the whole world.")
+        summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
+
+        summarizer = pipeline("summarization", model="t5-base", tokenizer="t5-base", framework="tf")
+        summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
 
     Supported Models:
-        The models that this pipeline can use are models that have been fine-tuned on a summarization task, which is
-        currently only ``BartForConditionalGeneration.from_pretrained('bart-large-cnn')``
+        The models that this pipeline can use are models that have been fine-tuned on a summarization task, which is currently, '`bart-large-cnn`', '`t5-small`', '`t5-base`', '`t5-large`', '`t5-3b`', '`t5-11b`'.
 
     Arguments:
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`, defaults to :obj:`None`):
@@ -1156,6 +1157,10 @@ class SummarizationPipeline(Pipeline):
         return_text=True,
         max_length=142,
         min_length=21,
+        do_sample=False,
+        early_stopping=True,
+        num_beams=4,
+        length_penalty=2.0,
         clean_up_tokenization_spaces=False,
         **generate_kwargs
     ):
@@ -1180,19 +1185,60 @@ class SummarizationPipeline(Pipeline):
 
         """
         assert return_tensors or return_text, "You must specify return_tensors=True or return_text=True"
-        if self.framework == "tf":
-            raise NotImplementedError("Tensorflow not supported")
+        is_t5 = "T5ForConditionalGeneration" in self.model.__class__.__name__
+        is_bart = "BartForConditionalGeneration" in self.model.__class__.__name__
+
+        if self.framework == "tf" and is_bart:
+            raise NotImplementedError(
+                "Tensorflow is not yet supported for Bart. Please consider using T5, e.g. `t5-base`"
+            )
+
+        if is_t5:
+            documents = tuple(["summarize: " + document for document in list(documents)])
+
         with self.device_placement():
             inputs = self._parse_and_tokenize(*documents)
-            inputs = self.ensure_tensor_on_device(**inputs)
+
+            if self.framework == "pt":
+                inputs = self.ensure_tensor_on_device(**inputs)
+                input_length = inputs["input_ids"].shape[-1]
+            elif self.framework == "tf":
+                input_length = tf.shape(inputs["input_ids"])[-1]
+
+            if input_length < min_length // 2:
+                logger.warning(
+                    "Your min_length is set to {}, but you input_length is only {}. You might consider decreasing min_length, e.g. summarizer('...', min_length=...)".format(
+                        min_length, input_length
+                    )
+                )
+
+            if input_length < max_length:
+                logger.warning(
+                    "Your max_length is set to {}, but you input_length is only {}. You might consider decreasing max_length, e.g. summarizer('...',max_length=...)".format(
+                        max_length, input_length
+                    )
+                )
+
+            if is_bart:
+                decoder_start_token_id = self.tokenizer.eos_token_id
+            elif is_t5:
+                decoder_start_token_id = self.tokenizer.pad_token_id
+            else:
+                decoder_start_token_id = None
+
             summaries = self.model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 max_length=max_length,
                 min_length=min_length,
-                do_sample=False,
+                decoder_start_token_id=decoder_start_token_id,
+                do_sample=do_sample,
+                early_stopping=early_stopping,
+                num_beams=num_beams,
+                length_penalty=length_penalty,
                 **generate_kwargs,
             )
+
             results = []
             for summary in summaries:
                 record = {}
@@ -1266,8 +1312,8 @@ SUPPORTED_TASKS = {
     },
     "summarization": {
         "impl": SummarizationPipeline,
-        "pt": BartForConditionalGeneration if is_torch_available() else None,
-        "tf": None,
+        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {
             "model": {"pt": "bart-large-cnn", "tf": None},
             "config": None,
