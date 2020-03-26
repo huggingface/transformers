@@ -5,6 +5,7 @@ from rouge_score import rouge_scorer, scoring
 from tqdm import tqdm
 
 from transformers import T5ForConditionalGeneration, T5Tokenizer
+import torch
 
 
 def chunks(lst, n):
@@ -13,10 +14,12 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def generate_summaries(lns, out_file, batch_size):
+def generate_summaries(lns, out_file, batch_size, device):
     fout = Path(out_file).open("w")
 
     model = T5ForConditionalGeneration.from_pretrained("t5-large")
+    model.to(device)
+
     tokenizer = T5Tokenizer.from_pretrained("t5-large")
 
     # update config with summarization specific params
@@ -28,7 +31,10 @@ def generate_summaries(lns, out_file, batch_size):
         batch = [model.config.prefix + text for text in batch]
 
         dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="pt", pad_to_max_length=True)
-        summaries = model.generate(input_ids=dct["input_ids"], attention_mask=dct["attention_mask"],)
+        input_ids = dct["input_ids"].to(device)
+        attention_mask = dct["attention_mask"].to(device)
+
+        summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask)
         dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summaries]
 
         for hypothesis in dec:
@@ -66,12 +72,18 @@ def run_generate():
         "score_path", type=str, help="where to save the rouge score",
     )
     parser.add_argument(
-        "--bs", type=int, default=8, required=False, help="batch size: how many to summarize at a time",
+        "--batch_size", type=int, default=8, required=False, help="batch size: how many to summarize at a time",
     )
+    parser.add_argument(
+        "--no_cuda", default=False, type=bool, help="Whether to force the execution on CPU.",
+    )
+
     args = parser.parse_args()
+    args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+
     source_lns = [x.rstrip() for x in open(args.input_path).readlines()]
 
-    generate_summaries(source_lns, args.output_path, args.bs)
+    generate_summaries(source_lns, args.output_path, args.batch_size, args.device)
 
     output_lns = [x.rstrip() for x in open(args.output_path).readlines()]
     reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()]
