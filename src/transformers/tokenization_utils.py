@@ -2033,6 +2033,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         pad_to_max_length: bool = False,
         stride: int = 0,
         truncation_strategy: str = "longest_first",
+        is_pretokenized: bool = False,
         return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -2043,35 +2044,46 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     ) -> BatchEncoding:
 
         # Check for pretokenized path (ie [token1, token2, ..., tokenN] -> [id1, id2, ..., idN]
-        if isinstance(text, list) and len(text) > 0:
+        if is_pretokenized:
+            if isinstance(text, list) and len(text) > 0:
 
-            # Encode through encode_batch with sequence of only one word which will be merged after hand
-            encoding = self._tokenizer.encode_batch(text, add_special_tokens=False)
-            encoding = Encoding.merge(encoding, True)
+                # Encode through encode_batch with sequence of only one word which will be merged after hand
+                encoding = self._tokenizer.encode_batch(text, add_special_tokens=False)
+                encoding = Encoding.merge(encoding, True)
 
-            # Let's do the same for pairs if provided
-            if isinstance(text_pair, list):
-                # We prepend empty string before each word so that encoding is aware content is a pair
-                encoding_pair = self._tokenizer.encode_batch([("", p) for p in text_pair], add_special_tokens=False)
-                encoding_pair = Encoding.merge(encoding_pair, True)
-            else:
-                encoding_pair = None
+                # Let's do the same for pairs if provided
+                if isinstance(text_pair, list):
+                    # We prepend empty string before each word so that encoding is aware content is a pair
+                    encoding_pair = self._tokenizer.encode_batch([("", p) for p in text_pair], add_special_tokens=False)
+                    encoding_pair = Encoding.merge(encoding_pair, True)
+                elif text_pair is None:
+                    encoding_pair = None
+                else:
+                    raise TypeError(
+                        "encode_plus(..., is_pretokenized=True) requires text and text_pair to be List[str] "
+                        "but got (text={}, text_pair={})".format(type(text), type(text_pair))
+                    )
 
-            # Post process and if asked to do so, insert special tokens where needed
-            encoding = self._tokenizer.post_process(encoding, encoding_pair, add_special_tokens=add_special_tokens)
+                # Post process and if asked to do so, insert special tokens where needed
+                encoding = self._tokenizer.post_process(encoding, encoding_pair, add_special_tokens=add_special_tokens)
 
-            batched_output = BatchEncoding(
-                self._convert_encoding(
+                batched_output = BatchEncoding(
+                    self._convert_encoding(
+                        encoding,
+                        return_tensors=return_tensors,
+                        return_token_type_ids=return_token_type_ids,
+                        return_attention_mask=return_attention_mask,
+                        return_overflowing_tokens=return_overflowing_tokens,
+                        return_special_tokens_mask=return_special_tokens_mask,
+                        return_offsets_mapping=return_offsets_mapping,
+                    ),
                     encoding,
-                    return_tensors=return_tensors,
-                    return_token_type_ids=return_token_type_ids,
-                    return_attention_mask=return_attention_mask,
-                    return_overflowing_tokens=return_overflowing_tokens,
-                    return_special_tokens_mask=return_special_tokens_mask,
-                    return_offsets_mapping=return_offsets_mapping,
-                ),
-                encoding,
-            )
+                )
+            else:
+                raise TypeError(
+                    "encode_plus(..., is_pretokenized=True) requires text to be List[str] "
+                    "but got (text={}, text_pair={})".format(type(text), type(text_pair))
+                )
         else:
             batched_input = [(text, text_pair)] if text_pair else [text]
             batched_output = self.batch_encode_plus(
