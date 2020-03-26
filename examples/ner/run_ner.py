@@ -31,6 +31,7 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from transformers import (
+    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     WEIGHTS_NAME,
     AdamW,
     AutoConfig,
@@ -38,7 +39,6 @@ from transformers import (
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
-from transformers.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
 
@@ -52,6 +52,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in MODEL_CONFIG_CLASSES), ())
 
 TOKENIZER_ARGS = ["do_lower_case", "strip_accents", "keep_accents", "use_fast"]
