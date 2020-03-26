@@ -1,24 +1,30 @@
 T5
 ----------------------------------------------------
 **DISCLAIMER:** This model is still a work in progress, if you see something strange,
-file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title>`
+file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title>`_
 
-Paper
+Overview
 ~~~~~
 The T5 model was presented in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer <https://arxiv.org/pdf/1910.10683.pdf>`_ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu in 
 Here the abstract: 
 
-Transfer learning, where a model is first pre-trained on a data-rich task before being fine-tuned on a downstream task, has emerged as a powerful technique in natural language processing (NLP). The effectiveness of transfer learning has given rise to a diversity of approaches, methodology, and practice. 
+*Transfer learning, where a model is first pre-trained on a data-rich task before being fine-tuned on a downstream task, has emerged as a powerful technique in natural language processing (NLP). The effectiveness of transfer learning has given rise to a diversity of approaches, methodology, and practice. 
 In this paper, we explore the landscape of transfer learning techniques for NLP by introducing a unified framework that converts every language problem into a text-to-text format. 
 Our systematic study compares pre-training objectives, architectures, unlabeled datasets, transfer approaches, and other factors on dozens of language understanding tasks. 
 By combining the insights from our exploration with scale and our new "Colossal Clean Crawled Corpus", we achieve state-of-the-art results on many benchmarks covering summarization, question answering, text classification, and more. 
-To facilitate future work on transfer learning for NLP, we release our dataset, pre-trained models, and code.
+To facilitate future work on transfer learning for NLP, we release our dataset, pre-trained models, and code.*
 
-The Authors' code can be found `here <https://github.com/google-research/text-to-text-transfer-transformer>`_
+The Authors' code can be found `here <https://github.com/google-research/text-to-text-transfer-transformer>`_ .
 
-Tips:
+Tips
+~~~~~~~~~~~~~~~~~~~~
+- T5 is an encoder-decoder model pre-trained on a multi-task mixture of unsupervised 
+  and supervised tasks and which each task is cast as a sequence to sequence task. 
+  Therefore T5 works well on a variety of tasks out-of-the-box by prepending a different prefix to the input corresponding to each task, e.g.: for translation: *translate English to German: ..., summarize: ...*.
+  For more information about the which prefix to use, it is easiest to look into Appendix D of the `paper <https://arxiv.org/pdf/1910.10683.pdf>`_ .
+- For sequence to sequence generation, it is recommended to use ``T5ForConditionalGeneration.generate()``. The method takes care of feeding the encoded input via cross-attention layers to the decoder and auto-regressively generating the decoder output.
+- T5 uses relative scalar embeddings. Encoder input padding can be done on the left and on the right.
 
-READ PAPER!!!
 
 T5Config
 ~~~~~~~~~~~~~~~~~~~~~
