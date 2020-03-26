@@ -1022,12 +1022,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 ]
 
             if kwargs["version_2_with_negative"]:
-                answers.append({
-                    "score": min_null_score,
-                    "start": 0,
-                    "end": 0,
-                    "answer": "",
-                })
+                answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
 
             answers = sorted(answers, key=lambda x: x["score"], reverse=True)[: kwargs["topk"]]
             all_answers += answers
