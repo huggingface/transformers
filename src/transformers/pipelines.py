@@ -129,7 +129,9 @@ class PipelineDataFormat:
 
     SUPPORTED_FORMATS = ["json", "csv", "pipe"]
 
-    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False):
+    def __init__(
+        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+    ):
         self.output_path = output_path
         self.input_path = input_path
         self.column = column.split(",") if column is not None else [""]
@@ -175,7 +177,7 @@ class PipelineDataFormat:
 
     @staticmethod
     def from_str(
-        format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False
+        format: str, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
     ):
         if format == "json":
             return JsonPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
@@ -188,7 +190,9 @@ class PipelineDataFormat:
 
 
 class CsvPipelineDataFormat(PipelineDataFormat):
-    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False):
+    def __init__(
+        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+    ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
     def __iter__(self):
@@ -209,7 +213,9 @@ class CsvPipelineDataFormat(PipelineDataFormat):
 
 
 class JsonPipelineDataFormat(PipelineDataFormat):
-    def __init__(self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False):
+    def __init__(
+        self, output_path: Optional[str], input_path: Optional[str], column: Optional[str], overwrite=False,
+    ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
         with open(input_path, "r") as f:
@@ -1119,7 +1125,11 @@ class QuestionAnsweringPipeline(Pipeline):
             chars_idx += len(word) + 1
 
         # Join text with spaces
-        return {"answer": " ".join(words), "start": max(0, char_start_idx), "end": min(len(text), char_end_idx)}
+        return {
+            "answer": " ".join(words),
+            "start": max(0, char_start_idx),
+            "end": min(len(text), char_end_idx),
+        }
 
 
 class SummarizationPipeline(Pipeline):
@@ -1132,10 +1142,7 @@ class SummarizationPipeline(Pipeline):
         summarizer = pipeline("summarization")
         summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
 
-<<<<<<< HEAD
         # use t5 in tf
-=======
->>>>>>> add t5 to pipelines
         summarizer = pipeline("summarization", model="t5-base", tokenizer="t5-base", framework="tf")
         summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
 
@@ -1229,14 +1236,14 @@ class SummarizationPipeline(Pipeline):
 
             if input_length < self.model.config.min_length // 2:
                 logger.warning(
-                    "Your min_length is set to {}, but you input_length is only {}. You might consider decreasing min_length, e.g. summarizer('...', min_length=...)".format(
+                    "Your min_length is set to {}, but you input_length is only {}. You might consider decreasing min_length manually, e.g. summarizer('...', min_length=10)".format(
                         self.model.config.min_length, input_length
                     )
                 )
 
             if input_length < self.model.config.max_length:
                 logger.warning(
-                    "Your max_length is set to {}, but you input_length is only {}. You might consider decreasing max_length, e.g. summarizer('...',max_length=...)".format(
+                    "Your max_length is set to {}, but you input_length is only {}. You might consider decreasing max_length manually, e.g. summarizer('...', max_length=50)".format(
                         self.model.config.max_length, input_length
                     )
                 )
@@ -1252,7 +1259,120 @@ class SummarizationPipeline(Pipeline):
                     record["summary_token_ids"] = summary
                 if return_text:
                     record["summary_text"] = self.tokenizer.decode(
-                        summary, skip_special_tokens=True, clean_up_tokenization_spaces=clean_up_tokenization_spaces
+                        summary, skip_special_tokens=True, clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                    )
+                results.append(record)
+            return results
+
+
+class TranslationPipeline(Pipeline):
+    """
+    Translates from one language to another.
+    Usage::
+        en_fr_translator = pipeline("translation", from_lng="English", to_lng="French")
+        en_fr_translator("How old are you?")
+    Supported Models: "t5-small", "t5-base", "t5-large", "t5-3b", "t5-11b"
+    Arguments:
+        model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`, defaults to :obj:`None`):
+            The model that will be used by the pipeline to make predictions. This can be :obj:`None`, a string
+            checkpoint identifier or an actual pre-trained model inheriting from
+            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
+            TensorFlow.
+            If :obj:`None`, the default of the pipeline will be loaded.
+        tokenizer (:obj:`str` or :obj:`~transformers.PreTrainedTokenizer`, `optional`, defaults to :obj:`None`):
+            The tokenizer that will be used by the pipeline to encode data for the model. This can be :obj:`None`,
+            a string checkpoint identifier or an actual pre-trained tokenizer inheriting from
+            :class:`~transformers.PreTrainedTokenizer`.
+            If :obj:`None`, the default of the pipeline will be loaded.
+        modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`, defaults to :obj:`None`):
+            Model card attributed to the model for this pipeline.
+        framework (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The framework to use, either "pt" for PyTorch or "tf" for TensorFlow. The specified framework must be
+            installed.
+            If no framework is specified, will default to the one currently installed. If no framework is specified
+            and both frameworks are installed, will default to PyTorch.
+        args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`, defaults to :obj:`None`):
+            Reference to the object in charge of parsing supplied pipeline parameters.
+        device (:obj:`int`, `optional`, defaults to :obj:`-1`):
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
+            on the associated CUDA device id.
+    """
+
+    def __call__(
+        self, *texts, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+    ):
+        r"""
+        Args:
+            *texts: (list of strings) articles to be summarized
+            return_text: (bool, default=True) whether to add a decoded "translation_text" to each result
+            return_tensors: (bool, default=False) whether to return the raw "translation_token_ids" to each result
+            max_length: (`optional`) int
+                The max length of the sequence to be generated. Does not include tokens in input_ids.
+            do_sample: (`optional`) bool
+                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
+            early_stopping: (`optional`) bool
+                if set to `True` beam search is stopped when at least `num_beams` sentences finished per batch. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
+            num_beams: (`optional`) int
+                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
+            length_penalty: (`optional`) float
+                Exponential penalty to the length. Default to 1.
+            **generate_kwargs: extra kwargs passed to `self.model.generate`_
+        Returns:
+            list of dicts with 'translation_text' and/or 'translation_token_ids' for each text_to_translate
+        .. _`self.model.generate`:
+            https://huggingface.co/transformers/model_doc/bart.html#transformers.BartForConditionalGeneration.generate
+        """
+        assert return_tensors or return_text, "You must specify return_tensors=True or return_text=True"
+
+        prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
+
+        if isinstance(texts[0], list):
+            assert (
+                self.tokenizer.pad_token_id is not None
+            ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
+            texts = ([prefix + text for text in texts[0]],)
+            pad_to_max_length = True
+
+        elif isinstance(texts[0], str):
+            texts = (prefix + texts[0],)
+            pad_to_max_length = False
+        else:
+            raise ValueError(
+                " `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(
+                    texts[0]
+                )
+            )
+
+        with self.device_placement():
+            inputs = self._parse_and_tokenize(*texts, pad_to_max_length=pad_to_max_length)
+
+            if self.framework == "pt":
+                inputs = self.ensure_tensor_on_device(**inputs)
+                input_length = inputs["input_ids"].shape[-1]
+
+            elif self.framework == "tf":
+                input_length = tf.shape(inputs["input_ids"])[-1]
+
+            if input_length > 0.9 * self.model.config.max_length:
+                logger.warning(
+                    "Your input_length: {} is bigger than 0.9 * max_length: {}. You might consider increasing your max_length manually, e.g. translator('...', max_length=400)".format(
+                        input_length, self.model.config.max_length
+                    )
+                )
+
+            translations = self.model.generate(
+                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
+            )
+            results = []
+            for translation in translations:
+                record = {}
+                if return_tensors:
+                    record["translation_token_ids"] = translation
+                if return_text:
+                    record["translation_text"] = self.tokenizer.decode(
+                        translation,
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
                 results.append(record)
             return results
@@ -1324,6 +1444,36 @@ SUPPORTED_TASKS = {
             "model": {"pt": "bart-large-cnn", "tf": None},
             "config": None,
             "tokenizer": ("bart-large-cnn", {"use_fast": False}),
+        },
+    },
+    "translation_en_to_fr": {
+        "impl": TranslationPipeline,
+        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "default": {
+            "model": {"pt": "t5-base", "tf": "t5-base"},
+            "config": None,
+            "tokenizer": ("t5-base", {"use_fast": False}),
+        },
+    },
+    "translation_en_to_de": {
+        "impl": TranslationPipeline,
+        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "default": {
+            "model": {"pt": "t5-base", "tf": "t5-base"},
+            "config": None,
+            "tokenizer": ("t5-base", {"use_fast": False}),
+        },
+    },
+    "translation_en_to_ro": {
+        "impl": TranslationPipeline,
+        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "default": {
+            "model": {"pt": "t5-base", "tf": "t5-base"},
+            "config": None,
+            "tokenizer": ("t5-base", {"use_fast": False}),
         },
     },
 }
@@ -1474,4 +1624,4 @@ def pipeline(
             )
         model = model_class.from_pretrained(model, config=config, **model_kwargs)
 
-    return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs)
+    return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs,)
