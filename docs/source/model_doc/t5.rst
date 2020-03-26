@@ -16,42 +16,62 @@ To facilitate future work on transfer learning for NLP, we release our dataset, 
 
 The Authors' code can be found `here <https://github.com/google-research/text-to-text-transfer-transformer>`_
 
+Tips:
 
-Implementation Notes
-~~~~~~~~~~~~~~~~~~~~
-- Bart doesn't use :obj:`token_type_ids` for sequence classification. Use BartTokenizer.encode to get the proper splitting.
-- The forward pass of ``BartModel`` will create decoder inputs (using the helper function ``transformers.modeling_bart._prepare_bart_decoder_inputs``)  if they are not passed. This is different than some other modeling APIs.
-- Model predictions are intended to be identical to the original implementation. This only works, however, if the string you pass to ``fairseq.encode`` starts with a space.
-- ``BartForConditionalGeneration.generate`` should be used for conditional generation tasks like summarization, see the example in that docstrings
-- Models that load the ``"bart-large-cnn"`` weights will not have a ``mask_token_id``, or be able to perform mask filling tasks.
+READ PAPER!!!
 
-
-
-BartModel
-~~~~~~~~~~~~~
-
-.. autoclass:: transformers.BartModel
-    :members: forward
-
-.. autofunction:: transformers.modeling_bart._prepare_bart_decoder_inputs
-
-
-BartForConditionalGeneration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.BartForConditionalGeneration
-    :members: generate, forward
-
-
-BartForSequenceClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.BartForSequenceClassification
-    :members: forward
-
-BartConfig
+T5Config
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BartConfig
+.. autoclass:: transformers.T5Config
     :members:
 
+
+T5Tokenizer
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.T5Tokenizer
+    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
+        create_token_type_ids_from_sequences, save_vocabulary
+
+
+T5Model
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.T5Model
+    :members:
+
+
+T5PretrainedModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.T5PretrainedModel
+    :members:
+
+
+T5ForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.T5ForConditionalGeneration
+    :members:
+
+
+TFBertModel
+~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFT5Model
+    :members:
+
+
+TFBertForPreTraining
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFT5PretrainedModel
+    :members:
+
+
+TFT5ForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFT5ForConditionalGeneration
+    :members:
