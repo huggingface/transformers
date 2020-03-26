@@ -2045,18 +2045,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         # Check for pretokenized path (ie [token1, token2, ..., tokenN] -> [id1, id2, ..., idN]
         if isinstance(text, list) and len(text) > 0:
 
-            if text_pair is not None:
-                raise NotImplementedError(
-                    "Pretokenized pair encoding is not supported yet. "
-                    "Please open an issue at https://github.com/huggingface/transformers/issues"
-                )
-
             # Encode through encode_batch with sequence of only one word which will be merged after hand
             encoding = self._tokenizer.encode_batch(text, add_special_tokens=False)
             encoding = Encoding.merge(encoding, True)
 
+            # Let's do the same for pairs if provided
+            if isinstance(text_pair, list):
+                # We prepend empty string before each word so that encoding is aware content is a pair
+                encoding_pair = self._tokenizer.encode_batch([("", p) for p in text_pair], add_special_tokens=False)
+                encoding_pair = Encoding.merge(encoding_pair, True)
+            else:
+                encoding_pair = None
+
             # Post process and if asked to do so, insert special tokens where needed
-            encoding = self._tokenizer.post_process(encoding, add_special_tokens=add_special_tokens)
+            encoding = self._tokenizer.post_process(encoding, encoding_pair, add_special_tokens=add_special_tokens)
 
             batched_output = BatchEncoding(
                 self._convert_encoding(
