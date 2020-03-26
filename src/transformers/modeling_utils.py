@@ -934,18 +934,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 device=next(self.parameters()).device,
             )
             cur_len = 1
-            batch_idx = self.encoder_outputs_batch_idx
+            batch_idx = self.encoder_outputs_batch_dim_idx
             assert (
                 batch_size == encoder_outputs[0].shape[batch_idx]
             ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[1]} "
-            expanded_index = (
+            expanded_idx = (
                 torch.arange(batch_size)
                 .view(-1, 1)
                 .repeat(1, num_beams * effective_batch_mult)
                 .view(-1)
                 .to(input_ids.device)
             )
-            encoder_outputs = (encoder_outputs[0].index_select(batch_idx, expanded_index), *encoder_outputs[1:])
+            encoder_outputs = (encoder_outputs[0].index_select(batch_idx, expanded_idx), *encoder_outputs[1:])
         else:
             encoder_outputs = None
             cur_len = input_ids.shape[-1]
