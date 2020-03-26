@@ -111,7 +111,7 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForSequenceClassification)
 
-    # @slow
+    @slow
     def test_question_answering_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
@@ -124,7 +124,7 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForQuestionAnswering)
 
-    # @slow
+    @slow
     def test_token_classification_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
         for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
