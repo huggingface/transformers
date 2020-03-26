@@ -2043,8 +2043,27 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     ) -> BatchEncoding:
 
         # Check for pretokenized path (ie [token1, token2, ..., tokenN] -> [id1, id2, ..., idN]
-        if isinstance(text, list) and text_pair is None:
-            encoding = self._tokenizer.encode_tokenized(text)
+        if isinstance(text, list) and len(text) > 0:
+
+            if text_pair is not None:
+                raise NotImplementedError(
+                    "Pretokenized pair encoding is not supported yet. "
+                    "Please open an issue at https://github.com/huggingface/transformers/issues"
+                )
+
+            # Warn about add_special_tokens = True which would lead to [CLS] token_0 [SEP], [CLS] token_1 [SEP], ...
+            if self._tokenizer:
+                logger.warning(
+                    "Providing pretokenized inputs with add_special_tokens=True set on the tokenizers "
+                    "will result in special_tokens being added in-between every word. "
+                    "In order to mimic normal behavior with special tokens over the whole input, please "
+                    "recreate the tokenizer with .from_pretrained(\"<tokenizer-identifier>\", add_special_tokens=False)"
+                )
+
+            # Encode through encode_batch with sequence of only one word which will be merged afterhand
+            encoding = self._tokenizer.encode_batch(text)
+            encoding = Encoding.merge(encoding, True)
+
             batched_output = BatchEncoding(
                 self._convert_encoding(
                     encoding,
@@ -2075,15 +2094,15 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 **kwargs,
             )
 
-            # Return tensor is None, then we can remove the leading batch axis
-            if not return_tensors:
-                batched_output = BatchEncoding(
-                    {
-                        key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
-                        for key, value in batched_output.items()
-                    },
-                    batched_output.encodings,
-                )
+        # Return tensor is None, then we can remove the leading batch axis
+        if not return_tensors:
+            batched_output = BatchEncoding(
+                {
+                    key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
+                    for key, value in batched_output.items()
+                },
+                batched_output.encodings,
+            )
 
         return batched_output
 
