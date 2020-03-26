@@ -1215,6 +1215,8 @@ class SummarizationPipeline(Pipeline):
                     documents[0]
                 )
             )
+            documents = ([self.model.config.prefix + document for document in documents[0]],)
+            pad_to_max_length = True
 
         with self.device_placement():
             inputs = self._parse_and_tokenize(*documents, pad_to_max_length=pad_to_max_length)
