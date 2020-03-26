@@ -1,11 +1,11 @@
 import argparse
 from pathlib import Path
 
+import torch
 from rouge_score import rouge_scorer, scoring
 from tqdm import tqdm
 
 from transformers import T5ForConditionalGeneration, T5Tokenizer
-import torch
 
 
 def chunks(lst, n):
@@ -14,8 +14,8 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def generate_summaries(lns, out_file, batch_size, device):
-    fout = Path(out_file).open("w")
+def generate_summaries(lns, output_file_path, batch_size, device):
+    output_file = Path(output_file_path).open("w")
 
     model = T5ForConditionalGeneration.from_pretrained("t5-large")
     model.to(device)
@@ -38,8 +38,8 @@ def generate_summaries(lns, out_file, batch_size, device):
         dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summaries]
 
         for hypothesis in dec:
-            fout.write(hypothesis + "\n")
-            fout.flush()
+            output_file.write(hypothesis + "\n")
+            output_file.flush()
 
 
 def calculate_rouge(output_lns, reference_lns, score_path):
