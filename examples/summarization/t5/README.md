@@ -1,4 +1,4 @@
-***This script evaluates the [T5 Model](https://arxiv.org/pdf/1910.10683.pdf) ``t5-large`` on the CNN/Daily Mail test dataset. Please note that the results in the paper were attained using a ``t5-large`` model fine-tuned on summarization, so that results will be slightly worse here***
+***This script evaluates the [T5 Model](https://arxiv.org/pdf/1910.10683.pdf) ``t5-large`` on the CNN/Daily Mail test dataset. Please note that the results in the paper were attained using a ``t5-large`` model fine-tuned on summarization, so that results will be worse here***
 
 ### Get the CNN Data
 First, you need to download the CNN data. It's about ~400 MB and can be downloaded by 
