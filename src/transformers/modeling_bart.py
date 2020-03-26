@@ -332,7 +332,11 @@ class DecoderLayer(nn.Module):
             layer_state = {}
         # next line mutates layer state
         x, self_attn_weights = self.self_attn(
-            query=x, key=x, layer_state=layer_state, key_padding_mask=decoder_padding_mask, attn_mask=causal_mask,
+            query=x,
+            key=x,
+            layer_state=layer_state,
+            key_padding_mask=decoder_padding_mask,
+            attn_mask=causal_mask,
             need_weights=self.output_attentions,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
