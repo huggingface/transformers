@@ -27,7 +27,7 @@ def generate_summaries(lns, out_file, batch_size):
     for batch in tqdm(list(chunks(lns, batch_size))):
         batch = [model.config.prefix + text for text in batch]
 
-        dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="tf", pad_to_max_length=True)
+        dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="pt", pad_to_max_length=True)
         summaries = model.generate(input_ids=dct["input_ids"], attention_mask=dct["attention_mask"],)
         dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summaries]
 
@@ -53,10 +53,10 @@ def calculate_rouge(output_lns, reference_lns, score_path):
     )
 
 
-def _run_generate():
+def run_generate():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "source_path", type=str, help="like cnn_dm/test_articles_input.txt",
+        "input_path", type=str, help="like cnn_dm/test_articles_input.txt",
     )
     parser.add_argument(
         "output_path", type=str, help="where to save summaries",
@@ -69,9 +69,9 @@ def _run_generate():
         "--bs", type=int, default=8, required=False, help="batch size: how many to summarize at a time",
     )
     args = parser.parse_args()
-    #    source_lns = [x.rstrip() for x in open(args.source_path).readlines()]
-    #
-    #    generate_summaries(source_lns, args.output_path, args.bs)
+    source_lns = [x.rstrip() for x in open(args.input_path).readlines()]
+
+    generate_summaries(source_lns, args.output_path, args.bs)
 
     output_lns = [x.rstrip() for x in open(args.output_path).readlines()]
     reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()]
@@ -80,4 +80,4 @@ def _run_generate():
 
 
 if __name__ == "__main__":
-    _run_generate()
+    run_generate()
