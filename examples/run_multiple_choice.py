@@ -293,6 +293,7 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
                 out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
 
         eval_loss = eval_loss / nb_eval_steps
+        preds_logits = preds
         preds = np.argmax(preds, axis=1)
         acc = simple_accuracy(preds, out_label_ids)
         result = {"eval_acc": acc, "eval_loss": eval_loss}
@@ -317,6 +318,9 @@ def evaluate(args, model, tokenizer, prefix="", test=False):
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
+            for i in range(len(out_label_ids)):
+                writer.write(str(i) + "\t" + str(out_label_ids[i]) + "\t" +
+                             str(preds[i]) + "\t" + str(preds_logits[i]) + "\n")
     return results
 
 
