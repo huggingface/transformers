@@ -21,7 +21,7 @@ I preprocessed the dataset and splitted it as train / dev (80/20)
 
 - [Fine-tune on NER script provided by Huggingface](https://github.com/huggingface/transformers/blob/master/examples/run_ner.py)
 
-- Labels covered:
+- **60** Labels covered:
 
 ```
 AO, AQ, CC, CS, DA, DD, DE, DI, DN, DP, DT, Faa, Fat, Fc, Fd, Fe, Fg, Fh, Fia, Fit, Fp, Fpa, Fpt, Fs, Ft, Fx, Fz, I, NC, NP, P0, PD, PI, PN, PP, PR, PT, PX, RG, RN, SP, VAI, VAM, VAN, VAP, VAS, VMG, VMI, VMM, VMN, VMP, VMS, VSG, VSI, VSM, VSN, VSP, VSS, Y and Z
@@ -73,6 +73,8 @@ nlp_pos(text)
  '''
 ```
 ![model in action](https://media.giphy.com/media/jVC9m1cNrdIWuAAtjy/giphy.gif)
+
+16 POS tags version also available [here](https://huggingface.co/mrm8488/bert-spanish-cased-finetuned-pos-16-tags)
 
 
 > Created by [Manuel Romero/@mrm8488](https://twitter.com/mrm8488)
