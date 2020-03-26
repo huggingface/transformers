@@ -138,10 +138,6 @@ class PretrainedBartModel(PreTrainedModel):
         }
         return dummy_inputs
 
-    @property
-    def device(self):
-        return next(self.parameters()).device
-
 
 def _make_linear_from_emb(emb):
     vocab_size, emb_size = emb.weight.shape
