@@ -157,7 +157,7 @@ def convert_bertabs_checkpoints(path_to_checkpoints, dump_path):
     # directory structure. We save the state_dict instead.
     logging.info("saving the model's state dictionary")
     torch.save(
-        new_model.state_dict(), "bertabs-finetuned-cnndm-extractive-abstractive-summarization-pytorch_model.bin"
+        new_model.state_dict(), "./bertabs-finetuned-cnndm-extractive-abstractive-summarization/pytorch_model.bin"
     )
 
 
