@@ -436,8 +436,8 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, batch_s
             # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
             pad_on_left=bool(args["model_type"] in ["xlnet"]),
             # pad on the left for xlnet
-            pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-            pad_token_segment_id=4 if args["model_type"] in ["xlnet"] else 0,
+            pad_token=tokenizer.pad_token_id,
+            pad_token_segment_id=tokenizer.pad_token_type_id,
             pad_token_label_id=pad_token_label_id,
         )
         logging.info("Saving features into cached file %s", cached_features_file)
