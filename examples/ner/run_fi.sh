@@ -12,6 +12,7 @@ export MAX_LENGTH=128
 export BERT_MODEL=bert-base-finnish-uncased-v1
 
 # first preprocessing
+wget https://gist.githubusercontent.com/bmichele/22ef82b0bfbae1265d7a425cb271e68e/raw/41d651f227d4c71f9820d5f4b6696cbf0a077367/preprocess_fi.py
 python preprocess_fi.py digitoday.2014.train.csv train.txt.tmp
 python preprocess_fi.py digitoday.2014.dev.csv dev.txt.tmp
 python preprocess_fi.py digitoday.2015.test.csv test.txt.tmp
@@ -22,6 +23,7 @@ python preprocess_fi.py digitoday.2015.test.csv test.txt.tmp
 # mv test.txt.tmp test.txt.tmp.bk && head -200 test.txt.tmp.bk > test.txt.tmp
 
 # split according to BERT tokenizer
+wget https://raw.githubusercontent.com/stefan-it/fine-tuned-berts-seq/master/scripts/preprocess.py
 python preprocess.py train.txt.tmp $BERT_MODEL $MAX_LENGTH > $MODEL_INPUT_DIR/train.txt
 python preprocess.py dev.txt.tmp $BERT_MODEL $MAX_LENGTH > $MODEL_INPUT_DIR/dev.txt
 python preprocess.py test.txt.tmp $BERT_MODEL $MAX_LENGTH > $MODEL_INPUT_DIR/test.txt
