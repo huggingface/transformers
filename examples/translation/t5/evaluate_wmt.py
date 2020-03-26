@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 
+import torch
 from sacrebleu import corpus_bleu
 from tqdm import tqdm
 
@@ -13,10 +14,12 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def generate_translations(lns, out_file, batch_size):
-    fout = Path(out_file).open("w")
+def generate_translations(lns, output_file_path, batch_size, device):
+    output_file = Path(output_file_path).open("w")
 
     model = T5ForConditionalGeneration.from_pretrained("t5-base")
+    model.to(device)
+
     tokenizer = T5Tokenizer.from_pretrained("t5-base")
 
     # update config with summarization specific params
@@ -29,12 +32,15 @@ def generate_translations(lns, out_file, batch_size):
 
         dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="pt", pad_to_max_length=True)
 
-        translations = model.generate(input_ids=dct["input_ids"], attention_mask=dct["attention_mask"],)
+        input_ids = dct["input_ids"].to(device)
+        attention_mask = dct["attention_mask"].to(device)
+
+        translations = model.generate(input_ids=input_ids, attention_mask=attention_mask)
         dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in translations]
 
         for hypothesis in dec:
-            fout.write(hypothesis + "\n")
-            fout.flush()
+            output_file.write(hypothesis + "\n")
+            output_file.flush()
 
 
 def calculate_bleu_score(output_lns, refs_lns, score_path):
@@ -44,10 +50,10 @@ def calculate_bleu_score(output_lns, refs_lns, score_path):
     score_file.write(result)
 
 
-def _run_generate():
+def run_generate():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "source_path", type=str, help="like wmt/newstest2013.en",
+        "input_path", type=str, help="like wmt/newstest2013.en",
     )
     parser.add_argument(
         "output_path", type=str, help="where to save translation",
@@ -59,14 +65,20 @@ def _run_generate():
         "score_path", type=str, help="where to save the bleu score",
     )
     parser.add_argument(
-        "--bs", type=int, default=16, required=False, help="batch size: how many to summarize at a time",
+        "--batch_size", type=int, default=16, required=False, help="batch size: how many to summarize at a time",
     )
+    parser.add_argument(
+        "--no_cuda", default=False, type=bool, help="Whether to force the execution on CPU.",
+    )
+
     args = parser.parse_args()
+    args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+
     dash_pattern = (" ##AT##-##AT## ", "-")
 
-    input_lns = [x.strip().replace(dash_pattern[0], dash_pattern[1]) for x in open(args.source_path).readlines()]
+    input_lns = [x.strip().replace(dash_pattern[0], dash_pattern[1]) for x in open(args.input_path).readlines()]
 
-    generate_translations(input_lns, args.output_path, args.bs)
+    generate_translations(input_lns, args.output_path, args.batch_size, args.device)
 
     output_lns = [x.strip() for x in open(args.output_path).readlines()]
     refs_lns = [x.strip().replace(dash_pattern[0], dash_pattern[1]) for x in open(args.reference_path).readlines()]
@@ -75,4 +87,4 @@ def _run_generate():
 
 
 if __name__ == "__main__":
-    _run_generate()
+    run_generate()
