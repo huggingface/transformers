@@ -1227,20 +1227,22 @@ class SummarizationPipeline(Pipeline):
 
             if input_length < self.model.config.min_length // 2:
                 logger.warning(
-                    "Your min_length is set to {}, but you input_length is only {}. You might consider decreasing min_length in config and insert config manually".format(
+                    "Your min_length is set to {}, but you input_length is only {}. You might consider decreasing min_length, e.g. summarizer('...', min_length=...)".format(
                         self.model.config.min_length, input_length
                     )
                 )
 
             if input_length < self.model.config.max_length:
                 logger.warning(
-                    "Your max_length is set to {}, but you input_length is only {}. You might consider decreasing max_length in config and insert config manually".format(
+                    "Your max_length is set to {}, but you input_length is only {}. You might consider decreasing max_length, e.g. summarizer('...',max_length=...)".format(
                         self.model.config.max_length, input_length
                     )
                 )
 
             summaries = self.model.generate(
-                inputs["input_ids"], attention_mask=inputs["attention_mask"], **generate_kwargs,
+                inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                **generate_kwargs,
             )
 
             results = []
