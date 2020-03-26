@@ -114,6 +114,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_head_masking = False
     test_resize_embeddings = True  # This requires inputs_dict['input_ids']
+    test_missing_keys = False  # because BartForConditionalGeneration and BartModel now have identical state_dict
 
     def setUp(self):
         self.model_tester = ModelTester(self)

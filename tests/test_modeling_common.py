@@ -58,6 +58,7 @@ class ModelTesterMixin:
     test_pruning = True
     test_resize_embeddings = True
     test_head_masking = True
+    test_missing_keys = True
     is_encoder_decoder = False
 
     def test_save_load(self):
@@ -527,6 +528,8 @@ class ModelTesterMixin:
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
 
     def test_correct_missing_keys(self):
+        if not self.test_missing_keys:
+            return
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
