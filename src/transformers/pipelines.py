@@ -1133,7 +1133,10 @@ class SummarizationPipeline(Pipeline):
         summarizer = pipeline("summarization")
         summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
 
+<<<<<<< HEAD
         # use t5 in tf
+=======
+>>>>>>> add t5 to pipelines
         summarizer = pipeline("summarization", model="t5-base", tokenizer="t5-base", framework="tf")
         summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
 
