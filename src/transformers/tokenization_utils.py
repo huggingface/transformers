@@ -2051,18 +2051,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                     "Please open an issue at https://github.com/huggingface/transformers/issues"
                 )
 
-            # Warn about add_special_tokens = True which would lead to [CLS] token_0 [SEP], [CLS] token_1 [SEP], ...
-            if self._tokenizer:
-                logger.warning(
-                    "Providing pretokenized inputs with add_special_tokens=True set on the tokenizers "
-                    "will result in special_tokens being added in-between every word. "
-                    "In order to mimic normal behavior with special tokens over the whole input, please "
-                    "recreate the tokenizer with .from_pretrained(\"<tokenizer-identifier>\", add_special_tokens=False)"
-                )
-
-            # Encode through encode_batch with sequence of only one word which will be merged afterhand
-            encoding = self._tokenizer.encode_batch(text)
+            # Encode through encode_batch with sequence of only one word which will be merged after hand
+            encoding = self._tokenizer.encode_batch(text, add_special_tokens=False)
             encoding = Encoding.merge(encoding, True)
+
+            # Insert special tokens where needed and asked to do so
+            if add_special_tokens:
+                encoding = self._tokenizer.post_process(encoding, add_special_tokens=True)
 
             batched_output = BatchEncoding(
                 self._convert_encoding(
