@@ -4,9 +4,9 @@ wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday
 wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday.2015.test.csv
 
 # directory for cache/intermediate results
-export MODEL_INPUT_DIR=$DATA_DIR/transformers_ner_finer_uncased_tf
+export MODEL_INPUT_DIR=finer-uncased-cached-tf
 # directory for output model
-export OUTPUT_DIR=$MODEL_DIR/finer-uncased-model-tf
+export OUTPUT_DIR=finer-uncased-model-tf
 
 export MAX_LENGTH=128
 export BERT_MODEL=bert-base-finnish-uncased-v1
