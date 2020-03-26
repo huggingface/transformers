@@ -32,13 +32,54 @@ Preprocessing steps can reproduce from here, [Malaya/pretrained-model/preprocess
 You can use this model by installing `torch` or `tensorflow` and Huggingface library `transformers`. And you can use it directly by initializing it like this:  
 
 ```python
-from transformers import XLNetTokenizer, BertModel
+from transformers import AlbertTokenizer, BertModel
 
 model = BertModel.from_pretrained('huseinzol05/bert-base-bahasa-cased')
-tokenizer = XLNetTokenizer.from_pretrained('huseinzol05/bert-base-bahasa-cased')
+tokenizer = AlbertTokenizer.from_pretrained(
+    'huseinzol05/bert-base-bahasa-cased',
+    unk_token = '[UNK]',
+    pad_token = '[PAD]',
+    do_lower_case = False,
+)
 ```
 
-We use [google/sentencepiece](https://github.com/google/sentencepiece) to train the tokenizer, so to use it, need to load from `XLNetTokenizer`.
+We use [google/sentencepiece](https://github.com/google/sentencepiece) to train the tokenizer, so to use it, need to load from `AlbertTokenizer`.
+
+## Example using AutoModelWithLMHead
+
+```python
+from transformers import AlbertTokenizer, AutoModelWithLMHead, pipeline
+
+model = AutoModelWithLMHead.from_pretrained('huseinzol05/bert-base-bahasa-cased')
+tokenizer = AlbertTokenizer.from_pretrained(
+    'huseinzol05/bert-base-bahasa-cased',
+    unk_token = '[UNK]',
+    pad_token = '[PAD]',
+    do_lower_case = False,
+)
+fill_mask = pipeline('fill-mask', model = model, tokenizer = tokenizer)
+print(fill_mask('makan ayam dengan [MASK]'))
+```
+
+Output is,
+
+```text
+[{'sequence': '[CLS] makan ayam dengan rendang[SEP]',
+  'score': 0.10812027007341385,
+  'token': 2446},
+ {'sequence': '[CLS] makan ayam dengan kicap[SEP]',
+  'score': 0.07653367519378662,
+  'token': 12928},
+ {'sequence': '[CLS] makan ayam dengan nasi[SEP]',
+  'score': 0.06839974224567413,
+  'token': 450},
+ {'sequence': '[CLS] makan ayam dengan ayam[SEP]',
+  'score': 0.059544261544942856,
+  'token': 638},
+ {'sequence': '[CLS] makan ayam dengan sayur[SEP]',
+  'score': 0.05294966697692871,
+  'token': 1639}]
+```
 
 ## Results
 

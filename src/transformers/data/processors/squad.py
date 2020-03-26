@@ -139,6 +139,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
             pad_to_max_length=True,
             stride=max_seq_length - doc_stride - len(truncated_query) - sequence_pair_added_tokens,
             truncation_strategy="only_second" if tokenizer.padding_side == "right" else "only_first",
+            return_token_type_ids=True,
         )
 
         paragraph_len = min(

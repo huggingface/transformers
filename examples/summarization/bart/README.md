@@ -14,6 +14,19 @@ python evaluate_cnn.py <path_to_test.source> cnn_test_summaries.txt
 ```
 the default batch size, 8, fits in 16GB GPU memory, but may need to be adjusted to fit your system.
 
+
+### Training
+
+
+
+After downloading the CNN and Daily Mail datasets, preprocess the dataset:
+```commandline
+git clone https://github.com/artmatsak/cnn-dailymail
+cd cnn-dailymail && python make_datafiles.py ../cnn/stories/ ../dailymail/stories/
+```
+
+Run the training script: `run_train.sh`
+
 ### Where is the code?
 The core model is in `src/transformers/modeling_bart.py`. This directory only contains examples.
 

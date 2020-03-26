@@ -809,7 +809,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
-        decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else bos_token_id
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
+        )
 
         if input_ids is not None:
             batch_size = input_ids.shape[0]  # overriden by the input batch_size
@@ -831,9 +833,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert pad_token_id is None or (
             isinstance(pad_token_id, int) and (pad_token_id >= 0)
         ), "`pad_token_id` should be a positive integer."
-        assert (
-            decoder_start_token_id is not None or self.config.is_encoder_decoder is False
-        ), "`decoder_start_token_id` has to be defined if model is encoder-decoder model"
         assert (eos_token_id is None) or (
             isinstance(eos_token_id, int) and (eos_token_id >= 0)
         ), "`eos_token_id` should be a positive integer."
@@ -912,7 +911,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
         if self.config.is_encoder_decoder:
-            assert bos_token_id is not None, "Encoder Decoder Models need to have a bos_token_id"
+            if decoder_start_token_id is None:
+                decoder_start_token_id = bos_token_id
+
+            assert (
+                decoder_start_token_id is not None
+            ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
             assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
             assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
 

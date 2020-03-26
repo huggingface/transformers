@@ -38,7 +38,6 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from transformers import (
-    CONFIG_MAPPING,
     MODEL_WITH_LM_HEAD_MAPPING,
     WEIGHTS_NAME,
     AdamW,
@@ -679,7 +678,12 @@ def main():
     elif args.model_name_or_path:
         config = AutoConfig.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     else:
-        config = CONFIG_MAPPING[args.model_type]()
+        # When we release a pip version exposing CONFIG_MAPPING,
+        # we can do `config = CONFIG_MAPPING[args.model_type]()`.
+        raise ValueError(
+            "You are instantiating a new config instance from scratch. This is not supported, but you can do it from another script, save it,"
+            "and load it from here, using --config_name"
+        )
 
     if args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, cache_dir=args.cache_dir)
@@ -687,8 +691,8 @@ def main():
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     else:
         raise ValueError(
-            "You are instantiating a new {} tokenizer. This is not supported, but you can do it from another script, save it,"
-            "and load it from here, using --tokenizer_name".format(AutoTokenizer.__name__)
+            "You are instantiating a new tokenizer from scratch. This is not supported, but you can do it from another script, save it,"
+            "and load it from here, using --tokenizer_name"
         )
 
     if args.block_size <= 0:
@@ -706,7 +710,7 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = AutoModelWithLMHead(config=config)
+        model = AutoModelWithLMHead.from_config(config)
 
     model.to(args.device)
 
