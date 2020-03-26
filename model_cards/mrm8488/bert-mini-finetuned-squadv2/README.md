@@ -43,7 +43,9 @@ The script for fine tuning can be found [here](https://github.com/huggingface/tr
 | Model                                                                                     | EM        | F1 score  | SIZE (MB) |
 | ----------------------------------------------------------------------------------------- | --------- | --------- | --------- |
 | [bert-tiny-finetuned-squadv2](https://huggingface.co/mrm8488/bert-tiny-finetuned-squadv2) | 48.60     | 49.73     | **16.74** |
-| [bert-mini-finetuned-squadv2](https://huggingface.co/mrm8488/bert-mini-finetuned-squadv2) | **56.31** | **59.65** | 42.63     |
+| [bert-tiny-5-finetuned-squadv2](https://huggingface.co/mrm8488/bert-tiny-5-finetuned-squadv2) | 57.12     | 60.86     | 24.34 |
+| [bert-mini-finetuned-squadv2](https://huggingface.co/mrm8488/bert-mini-finetuned-squadv2) | 56.31 | 59.65 | 42.63     |
+| [bert-mini-5-finetuned-squadv2](https://huggingface.co/mrm8488/bert-mini-5-finetuned-squadv2) | **63.51** | **66.78** | 66.76 |
 
 ## Model in action
 

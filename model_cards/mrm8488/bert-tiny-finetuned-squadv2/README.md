@@ -38,6 +38,12 @@ The script for fine tuning can be found [here](https://github.com/huggingface/tr
 | **EM** | **48.60** |
 | **F1** | **49.73** |
 
+
+| Model                                                                                     | EM        | F1 score  | SIZE (MB) |
+| ----------------------------------------------------------------------------------------- | --------- | --------- | --------- |
+| [bert-tiny-finetuned-squadv2](https://huggingface.co/mrm8488/bert-tiny-finetuned-squadv2) | 48.60     | 49.73     | **16.74** |
+| [bert-tiny-5-finetuned-squadv2](https://huggingface.co/mrm8488/bert-tiny-5-finetuned-squadv2) | **57.12** | **60.86** | 24.34  
+
 ## Model in action
 
 Fast usage with **pipelines**:
