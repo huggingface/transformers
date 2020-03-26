@@ -211,7 +211,7 @@ python preprocess_fi.py digitoday.2015.test.csv test.txt.tmp
 ```
 
 Afterwards, we can set the max sequence length and tokenize the data using the script implemented by @stefan-it.
-As stated above, the script removes "control character" tokens like `'\x96', '\u200e', '\x95', '\xad' or '\x80'` (to avoid misalighed ` `) and splits longer sentences into smaller ones (see germEval section for more details).
+As stated above, the script removes "control character" tokens like `'\x96', '\u200e', '\x95', '\xad' or '\x80'` (to avoid misaligned `InputExample`s) and splits longer sentences into smaller ones (see germEval section for more details).
 
 ```bash
 wget "https://raw.githubusercontent.com/stefan-it/fine-tuned-berts-seq/master/scripts/preprocess.py"
@@ -337,6 +337,7 @@ python3 run_tf_ner.py --data_dir ./ \
 ```
 
 Again, add flags `--fp16` if your GPU supports half-precision training and `--do_lower_case` if you use uncased pre-trained models.
+For convenience, all the steps illustrated above are implemented in the script `run_fi_tf.sh` in this folder.
 
 #### Evaluation - bert-base-finnish-cased-v1
 
