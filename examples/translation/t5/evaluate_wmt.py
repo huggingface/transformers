@@ -29,10 +29,7 @@ def generate_translations(lns, out_file, batch_size):
 
         dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="pt", pad_to_max_length=True)
 
-        translations = model.generate(
-            input_ids=dct["input_ids"],
-            attention_mask=dct["attention_mask"],
-        )
+        translations = model.generate(input_ids=dct["input_ids"], attention_mask=dct["attention_mask"],)
         dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in translations]
 
         for hypothesis in dec:
