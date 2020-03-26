@@ -230,7 +230,7 @@ class EncoderLayer(nn.Module):
         x = self.final_layer_norm(x)
         return x, attn_weights
 
-
+import math
 class BartEncoder(nn.Module):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
@@ -249,6 +249,7 @@ class BartEncoder(nn.Module):
         self.output_hidden_states = config.output_hidden_states
 
         embed_dim = embed_tokens.embedding_dim
+        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.
         self.padding_idx = embed_tokens.padding_idx
         self.max_source_positions = config.max_position_embeddings
 
@@ -285,7 +286,7 @@ class BartEncoder(nn.Module):
             assert attention_mask.dim() == 2
             attention_mask = attention_mask.eq(0)
 
-        inputs_embeds = self.embed_tokens(input_ids)
+        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
         x = self.layernorm_embedding(x)
@@ -398,6 +399,7 @@ class BartDecoder(nn.Module):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = embed_tokens.padding_idx
         self.max_target_positions = config.max_position_embeddings
+        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.
         self.embed_tokens = embed_tokens
         self.embed_positions = LearnedPositionalEmbedding(
             config.max_position_embeddings, config.d_model, self.padding_idx,
@@ -452,7 +454,7 @@ class BartDecoder(nn.Module):
             positions = positions[:, -1:]  # happens after we embed them
             assert input_ids.ne(self.padding_idx).any()
 
-        x = self.embed_tokens(input_ids)
+        x = self.embed_tokens(input_ids) * self.embed_scale
         x += positions
 
         x = self.layernorm_embedding(x)
