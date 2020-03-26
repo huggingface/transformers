@@ -1307,7 +1307,7 @@ class TranslationPipeline(Pipeline):
     ):
         r"""
         Args:
-            *texts: (list of strings) articles to be summarized
+            *texts: (list of strings) texts to be translated
             return_text: (bool, default=True) whether to add a decoded "translation_text" to each result
             return_tensors: (bool, default=False) whether to return the raw "translation_token_ids" to each result
 
