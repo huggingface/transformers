@@ -116,6 +116,7 @@ from .pipelines import (
     SummarizationPipeline,
     TextClassificationPipeline,
     TokenClassificationPipeline,
+    TranslationPipeline,
     pipeline,
 )
 from .tokenization_albert import AlbertTokenizer
