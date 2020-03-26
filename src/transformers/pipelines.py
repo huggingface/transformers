@@ -1230,9 +1230,9 @@ class SummarizationPipeline(Pipeline):
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
-                input_length = inputs["input_ids"].shape[-1]
+                input_length = inputs["input_ids"].shape[-1].numpy()
             elif self.framework == "tf":
-                input_length = tf.shape(inputs["input_ids"])[-1]
+                input_length = tf.shape(inputs["input_ids"])[-1].numpy()
 
             if input_length < self.model.config.min_length // 2:
                 logger.warning(
@@ -1268,10 +1268,13 @@ class SummarizationPipeline(Pipeline):
 class TranslationPipeline(Pipeline):
     """
     Translates from one language to another.
+
     Usage::
         en_fr_translator = pipeline("translation", from_lng="English", to_lng="French")
         en_fr_translator("How old are you?")
+
     Supported Models: "t5-small", "t5-base", "t5-large", "t5-3b", "t5-11b"
+
     Arguments:
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`, defaults to :obj:`None`):
             The model that will be used by the pipeline to make predictions. This can be :obj:`None`, a string
@@ -1306,17 +1309,9 @@ class TranslationPipeline(Pipeline):
             *texts: (list of strings) articles to be summarized
             return_text: (bool, default=True) whether to add a decoded "translation_text" to each result
             return_tensors: (bool, default=False) whether to return the raw "translation_token_ids" to each result
-            max_length: (`optional`) int
-                The max length of the sequence to be generated. Does not include tokens in input_ids.
-            do_sample: (`optional`) bool
-                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
-            early_stopping: (`optional`) bool
-                if set to `True` beam search is stopped when at least `num_beams` sentences finished per batch. Defaults to `False` as defined in `configuration_utils.PretrainedConfig`.
-            num_beams: (`optional`) int
-                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 1.
-            length_penalty: (`optional`) float
-                Exponential penalty to the length. Default to 1.
+
             **generate_kwargs: extra kwargs passed to `self.model.generate`_
+
         Returns:
             list of dicts with 'translation_text' and/or 'translation_token_ids' for each text_to_translate
         .. _`self.model.generate`:
@@ -1348,10 +1343,10 @@ class TranslationPipeline(Pipeline):
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
-                input_length = inputs["input_ids"].shape[-1]
+                input_length = inputs["input_ids"].shape[-1].numpy()
 
             elif self.framework == "tf":
-                input_length = tf.shape(inputs["input_ids"])[-1]
+                input_length = tf.shape(inputs["input_ids"])[-1].numpy()
 
             if input_length > 0.9 * self.model.config.max_length:
                 logger.warning(
