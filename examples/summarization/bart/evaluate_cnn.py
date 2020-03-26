@@ -16,17 +16,6 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def trim_batch(
-    input_ids, pad_token_id, attention_mask=None,
-):
-    """Remove columns that are populated exclusively by pad_token_id"""
-    keep_column_mask = input_ids.ne(pad_token_id).any(dim=0)
-    if attention_mask is None:
-        return input_ids[:, keep_column_mask]
-    else:
-        return (input_ids[:, keep_column_mask], attention_mask[:, keep_column_mask])
-
-
 def generate_summaries(lns, out_file, batch_size=8, device=DEFAULT_DEVICE):
     fout = Path(out_file).open("w")
     model = BartForConditionalGeneration.from_pretrained("bart-large-cnn", output_past=True,).to(device)
@@ -37,12 +26,9 @@ def generate_summaries(lns, out_file, batch_size=8, device=DEFAULT_DEVICE):
 
     for batch in tqdm(list(chunks(lns, batch_size))):
         dct = tokenizer.batch_encode_plus(batch, max_length=1024, return_tensors="pt", pad_to_max_length=True)
-        input_ids, attention_mask = trim_batch(
-            dct["input_ids"].to(device), model.config.pad_token_id, attention_mask=dct["attention_mask"].to(device)
-        )
         summaries = model.generate(
-            input_ids=input_ids,
-            attention_mask=input_ids,
+            input_ids=dct["input_ids"].to(device),
+            attention_mask=dct["attention_mask"].to(device),
             num_beams=4,
             length_penalty=2.0,
             max_length=max_length + 2,  # +2 from original because we start at step=1 and stop before max_length
