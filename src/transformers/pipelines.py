@@ -29,6 +29,7 @@ import numpy as np
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
 from .configuration_bart import BartConfig
+from .configuration_bart import T5Config
 from .configuration_distilbert import DistilBertConfig
 from .configuration_roberta import RobertaConfig
 from .configuration_utils import PretrainedConfig
@@ -431,7 +432,7 @@ class Pipeline(_ScikitCompat):
         """
         args = ["input_ids", "attention_mask"]
 
-        if not isinstance(self.model.config, (DistilBertConfig, XLMConfig, RobertaConfig, BartConfig)):
+        if not isinstance(self.model.config, (DistilBertConfig, XLMConfig, RobertaConfig, BartConfig, T5Config)):
             args += ["token_type_ids"]
 
         # PR #1548 (CLI) There is an issue with attention_mask

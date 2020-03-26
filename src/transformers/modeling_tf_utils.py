@@ -1004,7 +1004,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 is_token_logit_eos_token = tf.convert_to_tensor(
                     [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
                 )
-
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [num_batch_hypotheses, vocab_size])
 
                 scores = set_tensor_by_indices_to_value(scores, eos_token_indices_mask, -float("inf"))
