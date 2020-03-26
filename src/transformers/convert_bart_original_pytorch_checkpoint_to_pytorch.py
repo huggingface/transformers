@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 SAMPLE_TEXT = " Hello world! cécé herlolip"
 
-rename_keys = [
+mnli_rename_keys = [
     ("model.classification_heads.mnli.dense.weight", "classification_head.dense.weight"),
     ("model.classification_heads.mnli.dense.bias", "classification_head.dense.bias"),
     ("model.classification_heads.mnli.out_proj.weight", "classification_head.out_proj.weight"),
@@ -62,7 +62,6 @@ def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
 
-
 def load_xsum_checkpoint(checkpoint_path):
     """Checkpoint path should end in model.pt"""
     sd = torch.load(checkpoint_path, map_location="cpu")
@@ -71,7 +70,7 @@ def load_xsum_checkpoint(checkpoint_path):
     return hub_interface
 
 
-def load_checkpoint(checkpoint_path, **config_kwargs):
+def convert_checkpoint_from_disk(checkpoint_path, **config_kwargs):
     state_dict = torch.load(checkpoint_path, map_location='cpu')['model']
     remove_ignore_keys_(state_dict)
     vocab_size = state_dict['encoder.embed_tokens.weight'].shape[0]
@@ -79,9 +78,10 @@ def load_checkpoint(checkpoint_path, **config_kwargs):
     mbart_config = BartConfig(vocab_size=vocab_size, **config_kwargs)
     model = BartForConditionalGeneration(mbart_config)
     model.model.load_state_dict(state_dict)
-
     if hasattr(model, "lm_head"):
         model.lm_head = _make_linear_from_emb(model.model.shared)
+    return model
+
 
 
 @torch.no_grad()
@@ -93,8 +93,8 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path, hf_checkp
         bart = torch.hub.load("pytorch/fairseq", checkpoint_path).eval()
     else:
         bart = load_xsum_checkpoint(checkpoint_path)
-
     bart.model.upgrade_state_dict(bart.model.state_dict())
+
     if hf_checkpoint_name is None:
         hf_checkpoint_name = checkpoint_path.replace(".", "-")
     config = BartConfig.from_pretrained(hf_checkpoint_name)
@@ -106,7 +106,7 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path, hf_checkp
         state_dict = bart.state_dict()
         remove_ignore_keys_(state_dict)
         state_dict["model.shared.weight"] = state_dict["model.decoder.embed_tokens.weight"]
-        for src, dest in rename_keys:
+        for src, dest in mnli_rename_keys:
             rename_key(state_dict, src, dest)
         model = BartForSequenceClassification(config).eval()
         model.load_state_dict(state_dict)
