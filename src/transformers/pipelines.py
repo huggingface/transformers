@@ -29,9 +29,9 @@ import numpy as np
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
 from .configuration_bart import BartConfig
-from .configuration_t5 import T5Config
 from .configuration_distilbert import DistilBertConfig
 from .configuration_roberta import RobertaConfig
+from .configuration_t5 import T5Config
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLMConfig
 from .data import SquadExample, squad_convert_examples_to_features
