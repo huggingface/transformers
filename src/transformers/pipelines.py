@@ -1178,23 +1178,6 @@ class SummarizationPipeline(Pipeline):
             return_text: (bool, default=True) whether to add a decoded "summary_text" to each result
             return_tensors: (bool, default=False) whether to return the raw "summary_token_ids" to each result
 
-            max_length: (`optional`) int
-                The max length of the sequence to be generated.  Between `min_length` and infinity. Default to 140.
-            min_len: (`optional`) int
-                The min length of the sequence to be generated.  Between 0 and infinity. Default to 20.
-
-            do_sample: (`optional`) bool
-                If set to `False` greedy decoding is used. Otherwise sampling is used. Defaults to `False`.
-
-            early_stopping: (`optional`) bool
-                if set to `True` beam search is stopped when at least `num_beams` sentences finished per batch. Defaults to `True`.
-
-            num_beams: (`optional`) int
-                Number of beams for beam search. Must be between 1 and infinity. 1 means no beam search. Default to 4.
-
-            length_penalty: (`optional`) float
-                Exponential penalty to the length. Default to 2.0.
-
             clean_up_tokenization_spaces: (`optional`) bool whether to include extra spaces in the output
             **generate_kwargs: extra kwargs passed to `self.model.generate`_
 
