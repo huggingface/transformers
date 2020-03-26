@@ -103,7 +103,10 @@ class BartSystem(BaseTransformer):
 
     def train_dataloader(self):
         train_dataset = SummarizationDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, type_path="train", block_size=self.hparams.max_seq_length
+            self.tokenizer,
+            data_dir=self.hparams.data_dir,
+            type_path="train",
+            max_source_length=self.hparams.max_seq_length,
         )
         dataloader = DataLoader(train_dataset, batch_size=self.hparams.train_batch_size)
         t_total = (
@@ -119,13 +122,19 @@ class BartSystem(BaseTransformer):
 
     def val_dataloader(self):
         val_dataset = SummarizationDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, type_path="val", block_size=self.hparams.max_seq_length
+            self.tokenizer,
+            data_dir=self.hparams.data_dir,
+            type_path="val",
+            max_source_length=self.hparams.max_seq_length,
         )
         return DataLoader(val_dataset, batch_size=self.hparams.eval_batch_size)
 
     def test_dataloader(self):
         test_dataset = SummarizationDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, type_path="test", block_size=self.hparams.max_seq_length
+            self.tokenizer,
+            data_dir=self.hparams.data_dir,
+            type_path="test",
+            max_source_length=self.hparams.max_seq_length,
         )
         return DataLoader(test_dataset, batch_size=self.hparams.eval_batch_size)
 

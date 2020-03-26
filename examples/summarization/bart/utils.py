@@ -16,11 +16,16 @@ def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return
 
 class SummarizationDataset(Dataset):
     def __init__(
-        self, tokenizer, data_dir="./cnn-dailymail/cnn_dm/", type_path="train", block_size=1024, max_target_length=56
+        self,
+        tokenizer,
+        data_dir="./cnn-dailymail/cnn_dm/",
+        type_path="train",
+        max_source_length=1024,
+        max_target_length=56,
     ):
         super().__init__()
         self.tokenizer = tokenizer
-        self.source = encode_file(tokenizer, os.path.join(data_dir, type_path + ".source"), block_size)
+        self.source = encode_file(tokenizer, os.path.join(data_dir, type_path + ".source"), max_source_length)
         self.target = encode_file(tokenizer, os.path.join(data_dir, type_path + ".target"), max_target_length)
 
     def __len__(self):
