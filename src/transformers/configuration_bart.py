@@ -65,7 +65,6 @@ class BartConfig(PretrainedConfig):
         eos_token_id=2,
         add_final_layer_norm=False,
         scale_embedding=False,
-
         **common_kwargs
     ):
         r"""

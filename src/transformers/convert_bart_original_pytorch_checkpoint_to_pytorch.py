@@ -52,15 +52,23 @@ mnli_rename_keys = [
     ("model.classification_heads.mnli.out_proj.bias", "classification_head.out_proj.bias"),
 ]
 
+
 def remove_ignore_keys_(state_dict):
-    ignore_keys = ["encoder.version", "decoder.version", "model.encoder.version", "model.decoder.version",
-                   "_float_tensor"]
+    ignore_keys = [
+        "encoder.version",
+        "decoder.version",
+        "model.encoder.version",
+        "model.decoder.version",
+        "_float_tensor",
+    ]
     for k in ignore_keys:
         state_dict.pop(k, None)
+
 
 def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
+
 
 def load_xsum_checkpoint(checkpoint_path):
     """Checkpoint path should end in model.pt"""
@@ -71,9 +79,9 @@ def load_xsum_checkpoint(checkpoint_path):
 
 
 def convert_checkpoint_from_disk(checkpoint_path, **config_kwargs):
-    state_dict = torch.load(checkpoint_path, map_location='cpu')['model']
+    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     remove_ignore_keys_(state_dict)
-    vocab_size = state_dict['encoder.embed_tokens.weight'].shape[0]
+    vocab_size = state_dict["encoder.embed_tokens.weight"].shape[0]
     state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
     mbart_config = BartConfig(vocab_size=vocab_size, **config_kwargs)
     model = BartForConditionalGeneration(mbart_config)
@@ -81,7 +89,6 @@ def convert_checkpoint_from_disk(checkpoint_path, **config_kwargs):
     if hasattr(model, "lm_head"):
         model.lm_head = _make_linear_from_emb(model.model.shared)
     return model
-
 
 
 @torch.no_grad()
@@ -133,9 +140,6 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path, hf_checkp
     assert (fairseq_output == new_model_outputs).all().item()
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
-
-
-
 
 
 if __name__ == "__main__":

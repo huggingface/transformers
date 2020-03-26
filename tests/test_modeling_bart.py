@@ -32,6 +32,8 @@ if is_torch_available():
         BartForConditionalGeneration,
         BartForSequenceClassification,
         BartConfig,
+        BartTokenizer,
+        MBartTokenizer,
     )
     from transformers.modeling_bart import (
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -39,7 +41,6 @@ if is_torch_available():
         _prepare_bart_decoder_inputs,
         LARGE_NEGATIVE,
     )
-    from transformers.tokenization_bart import BartTokenizer, MBartTokenizer
 
 
 @require_torch
@@ -414,6 +415,27 @@ class BartModelIntegrationTests(unittest.TestCase):
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+
+    @slow
+    def test_mbart_en_ro(self):
+        checkpoint_name = "mbart-large-en-ro"
+        tokenizer = MBartTokenizer.from_pretrained(checkpoint_name)
+        model = BartForConditionalGeneration.from_pretrained(checkpoint_name)
+        example_english_phrase = " How are you doing today?"
+        expected_translation_romanian = "Cum te descurci astăzi?"
+
+        dct = tokenizer.batch_encode_plus([example_english_phrase], return_tensors="pt",)
+
+        translated_tokens = model.generate(
+            input_ids=dct["input_ids"].to(torch_device),
+            attention_mask=dct["attention_mask"].to(torch_device),
+            # Implicity testing that config has correct generation kwargs
+        )
+        decoded = [
+            tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+            for g in translated_tokens
+        ]
+        self.assertEqual(expected_translation_romanian, decoded[0])
 
     @slow
     def test_mnli_inference(self):
