@@ -460,8 +460,8 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
 
     def assert_embeded_special_tokens(self, tokenizer_r, tokenizer_p):
         sentence = "A, <mask> AllenNLP sentence."
-        tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True, return_attention_mask=True)
-        tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_attention_mask=True)
+        tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
+        tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
 
         # Rust correctly handles the space before the mask while python doesnt
         self.assertSequenceEqual(tokens_r["input_ids"], [0, 83, 6, 1437, 50264, 3823, 487, 21992, 3645, 4, 2])
