@@ -25,7 +25,7 @@ class TestT5Examples(unittest.TestCase):
         with tmp_source.open("w") as f:
             f.write("\n".join(text))
 
-        tmp_target = Path(tempfile.gettempdir()) / "utest_generations.hypo"
+        tmp_target = Path(tempfile.gettempdir()) / "utest_generations.target"
         with tmp_target.open("w") as f:
             f.write("\n".join(text))
 
