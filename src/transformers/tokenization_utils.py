@@ -1894,7 +1894,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             return self.unk_token_id
         return id
 
-    def _convert_id_to_token(self, index: int):
+    def _convert_id_to_token(self, index: int) -> str:
         return self._tokenizer.id_to_token(int(index))
 
     def convert_tokens_to_string(self, tokens: List[int], skip_special_tokens: bool = False) -> str:
