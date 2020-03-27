@@ -22,13 +22,12 @@ class BartSystem(BaseTransformer):
         super(BartSystem, self).__init__(hparams, num_labels=None, mode=self.mode)
 
     def forward(
-        self, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attention_mask=None, lm_labels=None
+        self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None
     ):
         return self.model(
             input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
             lm_labels=lm_labels,
         )
 
@@ -38,7 +37,7 @@ class BartSystem(BaseTransformer):
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == self.tokenizer.pad_token_id] = -100
         outputs = self(
-            input_ids=batch["source_ids"],
+            batch["source_ids"],
             attention_mask=batch["source_mask"],
             decoder_input_ids=y_ids,
             lm_labels=lm_labels,

@@ -244,6 +244,7 @@ class BartHeadTests(unittest.TestCase):
         config, input_ids, batch_size = self._get_config_and_data(output_past=False)
         lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
         lm_model = BartForConditionalGeneration(config)
+        import ipdb; ipdb.set_trace()
         lm_model.to(torch_device)
         loss, logits, enc_features = lm_model(input_ids=input_ids, lm_labels=lm_labels)
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
