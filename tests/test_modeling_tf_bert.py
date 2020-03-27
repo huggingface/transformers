@@ -277,6 +277,58 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_config_trainable(self):
+        config, *_ = self.model_tester.prepare_config_and_inputs()
+        model = TFBertModel(config=config)
+        self.assertTrue(model.bert.embeddings.trainable)
+        self.assertTrue(model.bert.pooler.trainable)
+        for layer in model.bert.encoder.layer:
+            self.assertTrue(layer.trainable)
+
+        config.train_embeddings = False
+        model = TFBertModel(config=config)
+        self.assertFalse(model.bert.embeddings.trainable)
+        self.assertTrue(model.bert.pooler.trainable)
+        for layer in model.bert.encoder.layer:
+            self.assertTrue(layer.trainable)
+
+        config.train_pooler = False
+        model = TFBertModel(config=config)
+        self.assertFalse(model.bert.embeddings.trainable)
+        self.assertFalse(model.bert.pooler.trainable)
+        for layer in model.bert.encoder.layer:
+            self.assertTrue(layer.trainable)
+
+        config.train_layers = 3
+        model = TFBertModel(config=config)
+        self.assertFalse(model.bert.embeddings.trainable)
+        self.assertFalse(model.bert.pooler.trainable)
+        for layer in model.bert.encoder.layer[:-3]:
+            self.assertFalse(layer.trainable)
+        for layer in model.bert.encoder.layer[-3:]:
+            self.assertTrue(layer.trainable)
+
+        config.train_layers = range(2, 4)
+        model = TFBertModel(config=config)
+        self.assertFalse(model.bert.embeddings.trainable)
+        self.assertFalse(model.bert.pooler.trainable)
+        for layer in model.bert.encoder.layer[:2]:
+            self.assertFalse(layer.trainable)
+        for layer in model.bert.encoder.layer[2:4]:
+            self.assertTrue(layer.trainable)
+        for layer in model.bert.encoder.layer[4:]:
+            self.assertFalse(layer.trainable)
+
+        config.train_layers = [1, 3]
+        model = TFBertModel(config=config)
+        self.assertFalse(model.bert.embeddings.trainable)
+        self.assertFalse(model.bert.pooler.trainable)
+        for layer_num in list(range(config.num_hidden_layers)):
+            if layer_num in (1, 3):
+                self.assertTrue(model.bert.encoder.layer[layer_num].trainable)
+            else:
+                self.assertFalse(model.bert.encoder.layer[layer_num].trainable)
+
     def test_bert_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_model(*config_and_inputs)
