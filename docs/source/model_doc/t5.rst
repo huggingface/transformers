@@ -48,13 +48,6 @@ T5Model
     :members:
 
 
-T5PretrainedModel
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.T5PretrainedModel
-    :members:
-
-
 T5ForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -66,13 +59,6 @@ TFBertModel
 ~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFT5Model
-    :members:
-
-
-TFBertForPreTraining
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.TFT5PretrainedModel
     :members:
 
 
