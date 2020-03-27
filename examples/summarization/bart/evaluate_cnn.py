@@ -52,7 +52,7 @@ def _run_generate():
         "output_path", type=str, help="where to save summaries",
     )
     parser.add_argument(
-        "model_name", type=str, default='bart-large-cnn', help="like bart-large-cnn",
+        "model_name", type=str, default="bart-large-cnn", help="like bart-large-cnn",
     )
     parser.add_argument(
         "--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.",
