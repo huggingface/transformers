@@ -744,10 +744,9 @@ T5_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
-    T5_START_DOCSTRING
+    T5_START_DOCSTRING,
 )
 class T5Model(T5PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -839,7 +838,6 @@ class T5Model(T5PreTrainedModel):
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
 class T5ForConditionalGeneration(T5PreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
         self.model_dim = config.d_model
