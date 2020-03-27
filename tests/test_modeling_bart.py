@@ -17,7 +17,8 @@
 import tempfile
 import unittest
 
-from transformers import is_torch_available  # dont add here, add under is_torch_available
+from transformers import is_torch_available
+# other transformers imports should be below is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -186,7 +187,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_tiny_model(self):
         tok = BartTokenizer.from_pretrained("bart-large")  # same tokenizer
-        tiny = AutoModel.from_pretrained("bart-tiny-random")  # same vocab size
+        tiny = AutoModel.from_pretrained("sshleifer/bart-tiny-random")  # same vocab size
         inputs_dict = tok.batch_encode_plus(["Hello my friends"], return_tensors="pt")
         with torch.no_grad():
             tiny(**inputs_dict)
