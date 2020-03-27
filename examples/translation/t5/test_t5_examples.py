@@ -31,7 +31,7 @@ class TestT5Examples(unittest.TestCase):
 
         tmp_target = Path(tempfile.gettempdir()) / "utest_generations_t5_trans.target"
         with tmp_target.open("w") as f:
-            f.write("\n".join(text))
+            f.write("\n".join(translation))
 
         testargs = ["evaluate_wmt.py", str(tmp_source), output_file_name, str(tmp_target), score_file_name]
 
