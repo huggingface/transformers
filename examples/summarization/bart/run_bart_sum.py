@@ -159,7 +159,7 @@ class BartSystem(BaseTransformer):
         return parser
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
     parser = BartSystem.add_model_specific_args(parser, os.getcwd())
@@ -178,3 +178,7 @@ if __name__ == "__main__":
         checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
         BartSystem.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)
+
+
+if __name__ == "__main__":
+    main()

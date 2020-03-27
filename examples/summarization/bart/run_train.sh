@@ -20,4 +20,4 @@ python run_bart_sum.py \
 --train_batch_size=4 \
 --eval_batch_size=4 \
 --output_dir=$OUTPUT_DIR \
---do_train
+--do_train  $@

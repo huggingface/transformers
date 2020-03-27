@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from .evaluate_cnn import _run_generate
-from .run_bart_sum import
+from .run_bart_sum import main as run_training
 
 
 output_file_name = "output_bart_sum.txt"
@@ -39,8 +39,8 @@ class TestBartExamples(unittest.TestCase):
         tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
         with tmp.open("w") as f:
             f.write("\n".join(articles))
-        testargs = ["evaluate_cnn.py", str(tmp), output_file_name]
+        testargs = ["run_bart_sum.py", str(tmp), "--output-file", output_file_name]
         with patch.object(sys, "argv", testargs):
-            _run_generate()
+            run_training()
             self.assertTrue(Path(output_file_name).exists())
             os.remove(Path(output_file_name))
