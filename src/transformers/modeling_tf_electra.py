@@ -1,11 +1,8 @@
 import logging
 import os
 
-import torch
-import torch.nn as nn
 
 from transformers import ElectraConfig
-from transformers.activations import get_activation
 
 from .modeling_bert import BertEmbeddings, BertEncoder, BertLayerNorm, BertPreTrainedModel
 
@@ -62,16 +59,16 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
             # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
             # which are not required for using pretrained model
             if any(
-                n
-                in [
-                    "adam_v",
-                    "adam_m",
-                    "AdamWeightDecayOptimizer",
-                    "AdamWeightDecayOptimizer_1",
-                    "global_step",
-                    "temperature",
-                ]
-                for n in name
+                    n
+                    in [
+                        "adam_v",
+                        "adam_m",
+                        "AdamWeightDecayOptimizer",
+                        "AdamWeightDecayOptimizer_1",
+                        "global_step",
+                        "temperature",
+                    ]
+                    for n in name
             ):
                 logger.info("Skipping {}".format(original_name))
                 continue
@@ -282,13 +279,13 @@ class ElectraModel(ElectraPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
     ):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -340,14 +337,14 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         return self.generator_lm_head
 
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        masked_lm_labels=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            masked_lm_labels=None,
     ):
 
         generator_hidden_states = self.generator(
@@ -383,14 +380,14 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         self.init_weights()
 
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
     ):
 
         discriminator_hidden_states = self.discriminator(
@@ -432,14 +429,14 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         self.init_weights()
 
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
     ):
 
         discriminator_hidden_states = self.discriminator(
