@@ -55,7 +55,7 @@ T5ForConditionalGeneration
     :members:
 
 
-TFBertModel
+TFT5Model
 ~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFT5Model
