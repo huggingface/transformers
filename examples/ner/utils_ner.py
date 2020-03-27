@@ -112,12 +112,15 @@ def convert_examples_to_features(
         label_ids = []
         for word, label in zip(example.words, example.labels):
             word_tokens = tokenizer.tokenize(word)
-            tokens.extend(word_tokens)
-            # Use the real label id for the first token of the word, and padding ids for the remaining tokens
-            label_ids.extend([label_map[label]] + [pad_token_label_id] * (len(word_tokens) - 1))
+
+            # bert-base-multilingual-cased sometimes output "nothing ([]) when calling tokenize with just a space.
+            if len(word_tokens) > 0:
+                tokens.extend(word_tokens)
+                # Use the real label id for the first token of the word, and padding ids for the remaining tokens
+                label_ids.extend([label_map[label]] + [pad_token_label_id] * (len(word_tokens) - 1))
 
         # Account for [CLS] and [SEP] with "- 2" and with "- 3" for RoBERTa.
-        special_tokens_count = 3 if sep_token_extra else 2
+        special_tokens_count = tokenizer.num_added_tokens()
         if len(tokens) > max_seq_length - special_tokens_count:
             tokens = tokens[: (max_seq_length - special_tokens_count)]
             label_ids = label_ids[: (max_seq_length - special_tokens_count)]
