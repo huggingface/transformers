@@ -44,7 +44,7 @@ def generate_translations(lns, output_file_path, batch_size, device):
 
 
 def calculate_bleu_score(output_lns, refs_lns, score_path):
-    bleu = corpus_bleu(output_lns, [refs_lns], force=True)
+    bleu = corpus_bleu(output_lns, [refs_lns])
     result = "BLEU score: {}".format(bleu.score)
     score_file = Path(score_path).open("w")
     score_file.write(result)
