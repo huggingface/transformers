@@ -684,7 +684,6 @@ T5_INPUTS_DOCSTRING = r"""
     T5_START_DOCSTRING,
 )
 class TFT5Model(TFT5PreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
@@ -775,7 +774,6 @@ class TFT5Model(TFT5PreTrainedModel):
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
 class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
-
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model_dim = config.d_model
