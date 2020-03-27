@@ -724,7 +724,7 @@ T5_INPUTS_DOCSTRING = r"""
             `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`) is a sequence of hidden-states at the output of the last layer of the encoder.
             Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
-            Provide for sequence to sequence training. T5 uses the pad_token_id as the starting token for decoder_input_ids generation
+            Provide for sequence to sequence training. T5 uses the pad_token_id as the starting token for decoder_input_ids generation.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
@@ -789,30 +789,30 @@ class T5Model(T5PreTrainedModel):
         head_mask=None,
     ):
         r"""
-        Return:
-            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5`) and inputs:
-            last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
-                Sequence of hidden-states at the output of the last layer of the model.
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+    Return:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
-                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-                heads.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
-        Examples::
+    Examples::
 
             from transformers import T5Tokenizer, T5Model
 
             tokenizer = T5Tokenizer.from_pretrained('t5-small')
             model = T5Model.from_pretrained('t5-small')
             input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-            outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+            outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
             last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
@@ -886,43 +886,40 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     ):
         r"""
         lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.vocab_size - 1]`.
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+                Labels for computing the sequence classification/regression loss.
+                Indices should be in :obj:`[0, ..., config.vocab_size - 1]`.
+                If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
-        Returns:
-            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs:
-            loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`lm_label` is provided):
-                Classification loss (cross entropy)
-            prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
-                Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`lm_label` is provided):
+            Classification loss (cross entropy).
+        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
-                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
-                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention.
 
-                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+    Examples::
 
-        Examples::
+        from transformers import T5Tokenizer, T5ForConditionalGeneration
 
-            from transformers import T5Tokenizer, T5ForConditionalGeneration
+        tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, lm_labels=input_ids)
+        loss, prediction_scores = outputs[:2]
 
-            tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            model = T5ForConditionalGeneration.from_pretrained('t5-small')
-            input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-            outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, lm_labels=input_ids)
-            loss, prediction_scores = outputs[:2]
-
-
-            tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            model = T5ForConditionalGeneration.from_pretrained('t5-small')
-
-            input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-            outputs = model.generate(input_ids)
+        tokenizer = T5Tokenizer.from_pretrained('t5-small')
+        model = T5ForConditionalGeneration.from_pretrained('t5-small')
+        input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
+        outputs = model.generate(input_ids)
         """
 
         # Encode if needed (training, first prediction pass)
