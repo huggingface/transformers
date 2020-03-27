@@ -22,7 +22,7 @@ class TestBartExamples(unittest.TestCase):
         tmp = Path(tempfile.gettempdir()) / "utest_generations.hypo"
         with tmp.open("w") as f:
             f.write("\n".join(articles))
-        testargs = ["evaluate_cnn.py", str(tmp), "output.txt"]
+        testargs = ["evaluate_cnn.py", str(tmp), "output.txt", 'bart-tiny-random']
         with patch.object(sys, "argv", testargs):
             _run_generate()
             self.assertTrue(Path("output.txt").exists())

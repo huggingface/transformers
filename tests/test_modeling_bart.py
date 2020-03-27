@@ -184,8 +184,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_tiny_model(self):
-        tiny = AutoModel.from_pretrained("bart-tiny-random")
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        tok = BartTokenizer.from_pretrained('bart-large')  # same tokenizer
+        tiny = AutoModel.from_pretrained("bart-tiny-random")  # same vocab size
+        inputs_dict = tok.batch_encode_plus(['Hello my friends'], return_tensors='pt')
         with torch.no_grad():
             tiny(**inputs_dict)
 

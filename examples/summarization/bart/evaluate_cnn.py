@@ -16,9 +16,9 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def generate_summaries(lns, out_file, batch_size=8, device=DEFAULT_DEVICE):
+def generate_summaries(lns, out_file, model_name, batch_size=8, device=DEFAULT_DEVICE):
     fout = Path(out_file).open("w")
-    model = BartForConditionalGeneration.from_pretrained("bart-large-cnn", output_past=True,).to(device)
+    model = BartForConditionalGeneration.from_pretrained(model_name, output_past=True,).to(device)
     tokenizer = BartTokenizer.from_pretrained("bart-large")
 
     max_length = 140
@@ -52,6 +52,9 @@ def _run_generate():
         "output_path", type=str, help="where to save summaries",
     )
     parser.add_argument(
+        "model_name", type=str, default='bart-large-cnn', help="like bart-large-cnn",
+    )
+    parser.add_argument(
         "--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.",
     )
     parser.add_argument(
@@ -59,7 +62,7 @@ def _run_generate():
     )
     args = parser.parse_args()
     lns = [" " + x.rstrip() for x in open(args.source_path).readlines()]
-    generate_summaries(lns, args.output_path, batch_size=args.bs, device=args.device)
+    generate_summaries(lns, args.output_path, args.model_name, batch_size=args.bs, device=args.device)
 
 
 if __name__ == "__main__":
