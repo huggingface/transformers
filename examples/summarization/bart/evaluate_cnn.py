@@ -16,7 +16,9 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def generate_summaries(examples: list, out_file: str, model_name: str, batch_size=8, device=DEFAULT_DEVICE):
+def generate_summaries(
+    examples: list, out_file: str, model_name: str, batch_size: int = 8, device: str = DEFAULT_DEVICE
+):
     fout = Path(out_file).open("w")
     model = BartForConditionalGeneration.from_pretrained(model_name, output_past=True,).to(device)
     tokenizer = BartTokenizer.from_pretrained("bart-large")
