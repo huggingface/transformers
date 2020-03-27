@@ -195,8 +195,7 @@ class MrpcProcessor(DataProcessor):
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
 
     def get_labels(self):
         """See base class."""
@@ -212,7 +211,7 @@ class MrpcProcessor(DataProcessor):
             text_a = line[3]
             text_b = line[4]
 
-            if 'test' in set_type:
+            if "test" in set_type:
                 label = None
             else:
                 label = line[0]
@@ -242,9 +241,7 @@ class MnliProcessor(DataProcessor):
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "test_matched.tsv")),
-            "test_matched")
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "test_matched.tsv")), "test_matched")
 
     def get_labels(self):
         """See base class."""
@@ -260,7 +257,7 @@ class MnliProcessor(DataProcessor):
             text_a = line[8]
             text_b = line[9]
 
-            if 'test' in set_type:
+            if "test" in set_type:
                 label = None
             else:
                 label = line[-1]
@@ -277,9 +274,7 @@ class MnliMismatchedProcessor(MnliProcessor):
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "test_mismatched.tsv")),
-            "test_mismatched")
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "test_mismatched.tsv")), "test_mismatched")
 
 
 class ColaProcessor(DataProcessor):
@@ -304,8 +299,7 @@ class ColaProcessor(DataProcessor):
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
 
     def get_labels(self):
         """See base class."""
@@ -315,12 +309,12 @@ class ColaProcessor(DataProcessor):
         """Creates examples for the training and dev sets."""
         examples = []
         # just the test file has a header row.
-        if set_type == 'test':
+        if set_type == "test":
             lines = lines[1:]
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
 
-            if 'test' in set_type:
+            if "test" in set_type:
                 text_a = line[1]
                 label = None
             else:
@@ -352,8 +346,7 @@ class Sst2Processor(DataProcessor):
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        return self._create_examples(
-            self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
 
     def get_labels(self):
         """See base class."""
@@ -366,7 +359,7 @@ class Sst2Processor(DataProcessor):
             if i == 0:
                 continue
             guid = "%s-%s" % (set_type, i)
-            if 'test' in set_type:
+            if "test" in set_type:
                 text_a = line[1]
                 label = None
             else:
@@ -413,7 +406,7 @@ class StsbProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[7]
             text_b = line[8]
-            if 'test' in set_type:
+            if "test" in set_type:
                 label = None
             else:
                 label = line[-1]
@@ -457,7 +450,7 @@ class QqpProcessor(DataProcessor):
                 continue
             guid = "%s-%s" % (set_type, line[0])
             try:
-                if 'test' in set_type:
+                if "test" in set_type:
                     text_a = line[1]
                     text_b = line[2]
                     label = None
@@ -508,7 +501,7 @@ class QnliProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[1]
             text_b = line[2]
-            if 'test' in set_type:
+            if "test" in set_type:
                 label = None
             else:
                 label = line[-1]
@@ -553,7 +546,7 @@ class RteProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[1]
             text_b = line[2]
-            if 'test' in set_type:
+            if "test" in set_type:
                 label = None
             else:
                 label = line[-1]
@@ -598,7 +591,7 @@ class WnliProcessor(DataProcessor):
             guid = "%s-%s" % (set_type, line[0])
             text_a = line[1]
             text_b = line[2]
-            if 'test' in set_type:
+            if "test" in set_type:
                 label = None
             else:
                 label = line[-1]

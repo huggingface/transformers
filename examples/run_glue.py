@@ -89,9 +89,7 @@ def train(args, train_dataset, model, tokenizer):
         warmup_steps = args.warmup_steps
     else:
         warmup_steps = t_total * args.warmup_fraction
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps=warmup_steps, num_training_steps=t_total
-    )
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=t_total)
 
     # Check if saved optimizer or scheduler states exist
     if os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt")) and os.path.isfile(
@@ -260,7 +258,7 @@ def evaluate(args, model, tokenizer, prefix=""):
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, set_type='dev')
+        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, set_type="dev")
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
@@ -329,7 +327,7 @@ def test(args, model, tokenizer, prefix=""):
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, set_type='test')
+        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, set_type="test")
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
@@ -371,15 +369,15 @@ def test(args, model, tokenizer, prefix=""):
         processor = processors[eval_task]()
         if args.output_mode == "classification":
             preds = np.argmax(preds, axis=1)
-            df_preds = pd.DataFrame({'prediction': preds})
+            df_preds = pd.DataFrame({"prediction": preds})
             label_map = processor.get_labels()
             df_preds.prediction = df_preds.prediction.apply(lambda x: label_map[x])
         elif args.output_mode == "regression":
             preds = np.squeeze(preds)
-            df_preds = pd.DataFrame({'prediction': preds})
+            df_preds = pd.DataFrame({"prediction": preds})
 
         output_test_file = os.path.join(eval_output_dir, prefix, "test_predictions.tsv")
-        df_preds.to_csv(output_test_file, sep='\t', index=True, index_label='index')
+        df_preds.to_csv(output_test_file, sep="\t", index=True, index_label="index")
 
     return results
 
@@ -400,33 +398,27 @@ def get_optimizer(args, model):
             no_lr_decay_params.append(p)
 
     optimizer_grouped_parameters = [
-        {
-            'params': no_decay_params,
-            'weight_decay': 0.0,
-            'lr': args.learning_rate
-        },
-        {
-            'params': no_lr_decay_params,
-            'weight_decay': args.weight_decay,
-            'lr': args.learning_rate
-        }
+        {"params": no_decay_params, "weight_decay": 0.0, "lr": args.learning_rate},
+        {"params": no_lr_decay_params, "weight_decay": args.weight_decay, "lr": args.learning_rate},
     ]
 
     if args.layerwise_lr_decay:
         n_layers = len(layer_params)
         for layer_n, params in layer_params.items():
-            optimizer_grouped_parameters.append({
-                'params': params,
-                'weight_decay': args.weight_decay,
-                'lr': args.learning_rate * (args.layerwise_lr_decay ** (n_layers - layer_n - 1))
-            })
+            optimizer_grouped_parameters.append(
+                {
+                    "params": params,
+                    "weight_decay": args.weight_decay,
+                    "lr": args.learning_rate * (args.layerwise_lr_decay ** (n_layers - layer_n - 1)),
+                }
+            )
 
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     return optimizer
 
 
-def load_and_cache_examples(args, task, tokenizer, set_type='train'):
-    if args.local_rank not in [-1, 0] and set_type != 'train':
+def load_and_cache_examples(args, task, tokenizer, set_type="train"):
+    if args.local_rank not in [-1, 0] and set_type != "train":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     processor = processors[task]()
@@ -450,11 +442,11 @@ def load_and_cache_examples(args, task, tokenizer, set_type='train'):
         if task in ["mnli", "mnli-mm"] and args.model_type in ["roberta", "xlmroberta"]:
             # HACK(label indices are swapped in RoBERTa pretrained model)
             label_list[1], label_list[2] = label_list[2], label_list[1]
-        if set_type == 'train':
+        if set_type == "train":
             examples = processor.get_train_examples(args.data_dir)
-        elif set_type == 'dev':
+        elif set_type == "dev":
             examples = processor.get_dev_examples(args.data_dir)
-        elif set_type == 'test':
+        elif set_type == "test":
             examples = processor.get_test_examples(args.data_dir)
 
         features = convert_examples_to_features(
@@ -471,7 +463,7 @@ def load_and_cache_examples(args, task, tokenizer, set_type='train'):
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
-    if args.local_rank == 0 and not set_type == 'train':
+    if args.local_rank == 0 and not set_type == "train":
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Convert to Tensors and build dataset
@@ -479,7 +471,7 @@ def load_and_cache_examples(args, task, tokenizer, set_type='train'):
     all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
     all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
 
-    if set_type == 'test':
+    if set_type == "test":
         dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids)
     else:
         if output_mode == "classification":
@@ -509,11 +501,7 @@ def main():
         help="Model type selected in the list: " + ", ".join(MODEL_TYPES),
     )
     parser.add_argument(
-        "--tokenizer_type",
-        default=None,
-        type=str,
-        required=False,
-        help="Tokenizer type if different than model_type."
+        "--tokenizer_type", default=None, type=str, required=False, help="Tokenizer type if different than model_type."
     )
     parser.add_argument(
         "--model_name_or_path",
@@ -583,7 +571,9 @@ def main():
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument("--layerwise_lr_decay", default=None, type=float, help="Decay learning rate from layer to layer.")
+    parser.add_argument(
+        "--layerwise_lr_decay", default=None, type=float, help="Decay learning rate from layer to layer."
+    )
     parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
@@ -597,7 +587,12 @@ def main():
         help="If > 0: set total number of training steps to perform. Override num_train_epochs.",
     )
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
-    parser.add_argument("--warmup_fraction", default=0, type=float, help='Fraction of total steps to use as warmup steps. --warmup_steps takes priority.')
+    parser.add_argument(
+        "--warmup_fraction",
+        default=0,
+        type=float,
+        help="Fraction of total steps to use as warmup steps. --warmup_steps takes priority.",
+    )
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
     parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
@@ -724,7 +719,7 @@ def main():
 
     # Training
     if args.do_train:
-        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, set_type='train')
+        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, set_type="train")
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
