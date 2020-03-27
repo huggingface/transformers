@@ -231,7 +231,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
     def save_pretrained(self, save_directory):
         """ Save a model and its configuration file to a directory, so that it
-            can be re-loaded using the `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
+            can be re-loaded using the :func:`~transformers.PreTrainedModel.from_pretrained` class method.
         """
         assert os.path.isdir(
             save_directory
@@ -541,7 +541,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
                 Defaults to `None`.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
+                `What are attention masks? <../glossary.html#attention-mask>`__
 
             decoder_start_token_id=None: (`optional`) int
                 If an encoder-decoder model starts decoding with a different token than BOS.
