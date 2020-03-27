@@ -24,7 +24,7 @@ from collections import UserDict, defaultdict
 from contextlib import contextmanager
 from typing import List, Optional, Sequence, Tuple, Union
 
-from tokenizers import Encoding
+from tokenizers import Encoding, AddedToken
 from tokenizers.decoders import Decoder
 from tokenizers.implementations import BaseTokenizer
 
@@ -1900,7 +1900,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens: List[int], skip_special_tokens: bool = False) -> str:
         return self._tokenizer.decode(tokens, skip_special_tokens)
 
-    def add_tokens(self, new_tokens: List[Union[str, Tuple[str, bool]]]) -> int:
+    def add_tokens(self, new_tokens: List[Union[str, AddedToken]]) -> int:
         if isinstance(new_tokens, str):
             new_tokens = [new_tokens]
         return self._tokenizer.add_tokens(new_tokens)
