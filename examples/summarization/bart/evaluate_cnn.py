@@ -16,7 +16,7 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def generate_summaries(lns, out_file, model_name, batch_size=8, device=DEFAULT_DEVICE):
+def generate_summaries(examples: list, out_file: str, model_name: str, batch_size=8, device=DEFAULT_DEVICE):
     fout = Path(out_file).open("w")
     model = BartForConditionalGeneration.from_pretrained(model_name, output_past=True,).to(device)
     tokenizer = BartTokenizer.from_pretrained("bart-large")
@@ -24,7 +24,7 @@ def generate_summaries(lns, out_file, model_name, batch_size=8, device=DEFAULT_D
     max_length = 140
     min_length = 55
 
-    for batch in tqdm(list(chunks(lns, batch_size))):
+    for batch in tqdm(list(chunks(examples, batch_size))):
         dct = tokenizer.batch_encode_plus(batch, max_length=1024, return_tensors="pt", pad_to_max_length=True)
         summaries = model.generate(
             input_ids=dct["input_ids"].to(device),
@@ -61,8 +61,8 @@ def _run_generate():
         "--bs", type=int, default=8, required=False, help="batch size: how many to summarize at a time",
     )
     args = parser.parse_args()
-    lns = [" " + x.rstrip() for x in open(args.source_path).readlines()]
-    generate_summaries(lns, args.output_path, args.model_name, batch_size=args.bs, device=args.device)
+    examples = [" " + x.rstrip() for x in open(args.source_path).readlines()]
+    generate_summaries(examples, args.output_path, args.model_name, batch_size=args.bs, device=args.device)
 
 
 if __name__ == "__main__":

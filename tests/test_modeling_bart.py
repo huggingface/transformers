@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
-# other transformers imports should be below is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
