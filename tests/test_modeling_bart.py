@@ -17,7 +17,7 @@
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import AutoModel, is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -182,6 +182,12 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("Passing inputs_embeds not implemented for Bart.")
     def test_inputs_embeds(self):
         pass
+
+    def test_tiny_model(self):
+        tiny = AutoModel.from_pretrained("bart-tiny-random")
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        with torch.no_grad():
+            tiny(**inputs_dict)
 
 
 @require_torch
