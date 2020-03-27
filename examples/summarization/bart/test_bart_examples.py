@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from .evaluate_cnn import _run_generate
 
+
 output_file_name = "output_bart_sum.txt"
 
 articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]

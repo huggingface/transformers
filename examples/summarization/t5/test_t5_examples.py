@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from .evaluate_cnn import run_generate
 
+
 output_file_name = "output_t5_sum.txt"
 score_file_name = "score_t5_sum.txt"
 
