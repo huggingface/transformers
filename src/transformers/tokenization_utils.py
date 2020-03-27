@@ -794,9 +794,11 @@ class PreTrainedTokenizer(object):
             tokenized_text = []
             text_list = [text]
             for tok in tok_list:
+                if tok not in text:
+                    continue
                 tokenized_text = []
                 for sub_text in text_list:
-                    if sub_text not in self.unique_added_tokens_encoder:
+                    if tok in sub_text:
                         tokenized_text += split_on_token(tok, sub_text)
                     else:
                         tokenized_text += [sub_text]
