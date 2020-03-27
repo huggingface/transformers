@@ -413,11 +413,3 @@ On the test dataset the following results could be achieved:
 micro avg     0.9124    0.9310    0.9216     10091
 macro avg     0.9124    0.9310    0.9215     10091
 ```
-
-# TODOs
-
-Before PR in huggingface:
-
- * remove `preprocess.py`
- * move `preprocess_fi.py` and add step to download it (?)
-
