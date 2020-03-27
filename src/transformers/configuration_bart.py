@@ -39,9 +39,8 @@ class BartConfig(PretrainedConfig):
     def __init__(
         self,
         activation_dropout=0.0,
+        activation_function="gelu",
         vocab_size=50265,
-        pad_token_id=1,
-        eos_token_id=2,
         d_model=1024,
         encoder_ffn_dim=4096,
         encoder_layers=12,
@@ -58,7 +57,10 @@ class BartConfig(PretrainedConfig):
         classifier_dropout=0.0,
         output_past=False,
         num_labels=3,
+        is_encoder_decoder=True,
+        pad_token_id=1,
         bos_token_id=0,
+        eos_token_id=2,
         **common_kwargs
     ):
         r"""
@@ -72,11 +74,12 @@ class BartConfig(PretrainedConfig):
             output_past=output_past,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
             **common_kwargs,
         )
         self.vocab_size = vocab_size
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
-        self.eos_token_id = eos_token_id
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = self.num_hidden_layers = encoder_layers
         self.encoder_attention_heads = encoder_attention_heads
@@ -87,6 +90,7 @@ class BartConfig(PretrainedConfig):
         self.decoder_attention_heads = decoder_attention_heads
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
+        self.activation_function = activation_function
 
         # 3 Types of Dropout
         self.attention_dropout = attention_dropout

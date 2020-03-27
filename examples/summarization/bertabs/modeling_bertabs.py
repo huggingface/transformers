@@ -34,7 +34,7 @@ from transformers import BertConfig, BertModel, PreTrainedModel
 MAX_SIZE = 5000
 
 BERTABS_FINETUNED_MODEL_MAP = {
-    "bertabs-finetuned-cnndm": "https://s3.amazonaws.com/models.huggingface.co/bert/remi/bertabs-finetuned-cnndm-extractive-abstractive-summarization-pytorch_model.bin",
+    "bertabs-finetuned-cnndm": "https://s3.amazonaws.com/models.huggingface.co/bert/remi/bertabs-finetuned-cnndm-extractive-abstractive-summarization/pytorch_model.bin",
 }
 
 
@@ -844,7 +844,7 @@ class Translator(object):
             dec_out, dec_states = self.model.decoder(decoder_input, src_features, dec_states, step=step)
 
             # Generator forward.
-            log_probs = self.generator.forward(dec_out.transpose(0, 1).squeeze(0))
+            log_probs = self.generator(dec_out.transpose(0, 1).squeeze(0))
             vocab_size = log_probs.size(-1)
 
             if step < min_length:

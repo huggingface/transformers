@@ -103,7 +103,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
                 d_inner=self.d_inner,
                 div_val=self.div_val,
                 n_layer=self.num_hidden_layers,
-                eos_token_ids=self.eos_token_id,
+                eos_token_id=self.eos_token_id,
             )
 
             return (config, input_ids_1, input_ids_2, lm_labels)
@@ -129,10 +129,10 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
 
         def check_transfo_xl_model_output(self, result):
             self.parent.assertListEqual(
-                list(result["hidden_states_1"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["hidden_states_1"].size()), [self.batch_size, self.seq_length, self.hidden_size],
             )
             self.parent.assertListEqual(
-                list(result["hidden_states_2"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["hidden_states_2"].size()), [self.batch_size, self.seq_length, self.hidden_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -166,7 +166,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
         def check_transfo_xl_lm_head_output(self, result):
             self.parent.assertListEqual(list(result["loss_1"].size()), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(
-                list(result["lm_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["lm_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -175,7 +175,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss_2"].size()), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(
-                list(result["lm_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["lm_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_2"]),
@@ -218,7 +218,7 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_transfo_xl_wt103(self):
         model = TransfoXLLMHeadModel.from_pretrained("transfo-xl-wt103")
-        input_ids = torch.Tensor(
+        input_ids = torch.tensor(
             [
                 [
                     33,
@@ -363,8 +363,10 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
                     24,
                     0,
                 ]
-            ]
-        ).long()
+            ],
+            dtype=torch.long,
+            device=torch_device,
+        )
         #  In 1991 , the remains of Russian Tsar Nicholas II and his family
         #  ( except for Alexei and Maria ) are discovered .
         #  The voice of Nicholas's young son , Tsarevich Alexei Nikolaevich , narrates the
@@ -374,6 +376,7 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
         #  father initially slaps him for making such an accusation , Rasputin watches as the
         #  man is chased outside and beaten . Twenty years later , Rasputin sees a vision of
         #  the Virgin Mary , prompting him to become a priest . Rasputin quickly becomes famous ,
+
         #  with people , even a bishop , begging for his blessing . <eod> </s> <eos>
 
         expected_output_ids = [
@@ -518,20 +521,10 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
             24,
             24,
             0,
-            29546,
-            40,
-            1092,
-            18,
-            8,
-            5854,
-            7,
-            1143,
-            2,
-            7,
+            33,
             1,
-            159,
-            99,
-            16,
+            1857,
+            2,
             1,
             1009,
             4,
@@ -545,14 +538,23 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
             28,
             1110,
             3,
-            57,
-            629,
-            38,
-            3493,
-            47,
-            1094,
-            7,
-            1297,
+            13,
+            1041,
+            4,
+            24,
+            603,
+            490,
+            2,
+            71477,
+            20098,
+            104447,
+            2,
+            20961,
+            1,
+            2604,
+            4,
+            1,
+            329,
             3,
             0,
         ]
@@ -566,10 +568,9 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
         #  is chased outside and beaten. Twenty years later, Rasputin sees a vision
         #  of the Virgin Mary, prompting him to become a priest.
         #  Rasputin quickly becomes famous, with people, even a bishop, begging for
-        #  his blessing. Rasputin first appears as a priest in 1996, in the same year
-        #  that the remains of Russian Tsar Nicholas II and his family were discovered. H
+        #  his blessing. <unk> <unk> <eos> In the 1990s, the remains of Russian Tsar
+        # Nicholas II and his family were discovered. The voice of <unk> young son,
+        # Tsarevich Alexei Nikolaevich, narrates the remainder of the story.<eos>
 
-        torch.manual_seed(0)
-
-        output_ids = model.generate(input_ids, max_length=200)
+        output_ids = model.generate(input_ids, max_length=200, do_sample=False)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

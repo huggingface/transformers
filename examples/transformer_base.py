@@ -7,43 +7,34 @@ import pytorch_lightning as pl
 import torch
 
 from transformers import (
+    ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
     AdamW,
-    BertConfig,
-    BertForTokenClassification,
-    BertTokenizer,
-    CamembertConfig,
-    CamembertForTokenClassification,
-    CamembertTokenizer,
-    DistilBertConfig,
-    DistilBertForTokenClassification,
-    DistilBertTokenizer,
-    RobertaConfig,
-    RobertaForTokenClassification,
-    RobertaTokenizer,
-    XLMRobertaConfig,
-    XLMRobertaForTokenClassification,
-    XLMRobertaTokenizer,
+    AutoConfig,
+    AutoModel,
+    AutoModelForPreTraining,
+    AutoModelForQuestionAnswering,
+    AutoModelForSequenceClassification,
+    AutoModelForTokenClassification,
+    AutoModelWithLMHead,
+    AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
+from transformers.modeling_auto import MODEL_MAPPING
 
 
 logger = logging.getLogger(__name__)
 
 
-ALL_MODELS = sum(
-    (
-        tuple(conf.pretrained_config_archive_map.keys())
-        for conf in (BertConfig, RobertaConfig, DistilBertConfig, CamembertConfig, XLMRobertaConfig)
-    ),
-    (),
-)
+ALL_MODELS = tuple(ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
+MODEL_CLASSES = tuple(m.model_type for m in MODEL_MAPPING)
 
-MODEL_CLASSES = {
-    "bert": (BertConfig, BertForTokenClassification, BertTokenizer),
-    "roberta": (RobertaConfig, RobertaForTokenClassification, RobertaTokenizer),
-    "distilbert": (DistilBertConfig, DistilBertForTokenClassification, DistilBertTokenizer),
-    "camembert": (CamembertConfig, CamembertForTokenClassification, CamembertTokenizer),
-    "xlmroberta": (XLMRobertaConfig, XLMRobertaForTokenClassification, XLMRobertaTokenizer),
+MODEL_MODES = {
+    "base": AutoModel,
+    "sequence-classification": AutoModelForSequenceClassification,
+    "question-answering": AutoModelForQuestionAnswering,
+    "pretraining": AutoModelForPreTraining,
+    "token-classification": AutoModelForTokenClassification,
+    "language-modeling": AutoModelWithLMHead,
 }
 
 
@@ -56,25 +47,23 @@ def set_seed(args):
 
 
 class BaseTransformer(pl.LightningModule):
-    def __init__(self, hparams, num_labels=None):
+    def __init__(self, hparams, num_labels=None, mode="base"):
         "Initialize a model."
 
         super(BaseTransformer, self).__init__()
         self.hparams = hparams
         self.hparams.model_type = self.hparams.model_type.lower()
-
-        config_class, model_class, tokenizer_class = MODEL_CLASSES[self.hparams.model_type]
-        config = config_class.from_pretrained(
+        config = AutoConfig.from_pretrained(
             self.hparams.config_name if self.hparams.config_name else self.hparams.model_name_or_path,
-            num_labels=num_labels,
+            **({"num_labels": num_labels} if num_labels is not None else {}),
             cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
         )
-        tokenizer = tokenizer_class.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             self.hparams.tokenizer_name if self.hparams.tokenizer_name else self.hparams.model_name_or_path,
             do_lower_case=self.hparams.do_lower_case,
             cache_dir=self.hparams.cache_dir if self.hparams.cache_dir else None,
         )
-        model = model_class.from_pretrained(
+        model = MODEL_MODES[mode].from_pretrained(
             self.hparams.model_name_or_path,
             from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
             config=config,
@@ -144,6 +133,16 @@ class BaseTransformer(pl.LightningModule):
     def test_dataloader(self):
         return self.load_dataset("test", self.hparams.eval_batch_size)
 
+    def _feature_file(self, mode):
+        return os.path.join(
+            self.hparams.data_dir,
+            "cached_{}_{}_{}".format(
+                mode,
+                list(filter(None, self.hparams.model_name_or_path.split("/"))).pop(),
+                str(self.hparams.max_seq_length),
+            ),
+        )
+
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         parser.add_argument(
@@ -151,7 +150,7 @@ class BaseTransformer(pl.LightningModule):
             default=None,
             type=str,
             required=True,
-            help="Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
+            help="Model type selected in the list: " + ", ".join(MODEL_CLASSES),
         )
         parser.add_argument(
             "--model_name_or_path",
@@ -188,6 +187,31 @@ class BaseTransformer(pl.LightningModule):
 
         parser.add_argument("--train_batch_size", default=32, type=int)
         parser.add_argument("--eval_batch_size", default=32, type=int)
+
+
+class LoggingCallback(pl.Callback):
+    def on_validation_end(self, trainer, pl_module):
+        logger.info("***** Validation results *****")
+        if pl_module.is_logger():
+            metrics = trainer.callback_metrics
+            # Log results
+            for key in sorted(metrics):
+                if key not in ["log", "progress_bar"]:
+                    logger.info("{} = {}\n".format(key, str(metrics[key])))
+
+    def on_test_end(self, trainer, pl_module):
+        logger.info("***** Test results *****")
+
+        if pl_module.is_logger():
+            metrics = trainer.callback_metrics
+
+            # Log and save results to file
+            output_test_results_file = os.path.join(pl_module.hparams.output_dir, "test_results.txt")
+            with open(output_test_results_file, "w") as writer:
+                for key in sorted(metrics):
+                    if key not in ["log", "progress_bar"]:
+                        logger.info("{} = {}\n".format(key, str(metrics[key])))
+                        writer.write("{} = {}\n".format(key, str(metrics[key])))
 
 
 def add_generic_args(parser, root_dir):
@@ -257,6 +281,7 @@ def generic_train(model, args):
         early_stop_callback=False,
         gradient_clip_val=args.max_grad_norm,
         checkpoint_callback=checkpoint_callback,
+        callbacks=[LoggingCallback()],
     )
 
     if args.fp16:

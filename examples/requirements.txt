@@ -3,3 +3,7 @@ tensorboard
 scikit-learn
 seqeval
 pandas
+psutil
+sacrebleu
+rouge-score
+tensorflow_datasets
