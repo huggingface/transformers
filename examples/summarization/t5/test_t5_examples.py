@@ -22,7 +22,7 @@ class TestT5Examples(unittest.TestCase):
         tmp = Path(tempfile.gettempdir()) / "utest_generations.hypo"
         with tmp.open("w") as f:
             f.write("\n".join(articles))
-        testargs = ["evaluate_cnn.py", str(tmp), "output.txt", str(tmp), "score.txt"]
+        testargs = ["evaluate_cnn.py", "t5-small", str(tmp), "output.txt", str(tmp), "score.txt"]
         with patch.object(sys, "argv", testargs):
             run_generate()
             self.assertTrue(Path("output.txt").exists())
