@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 import tempfile
 import unittest
@@ -10,6 +11,9 @@ from .evaluate_wmt import run_generate
 
 text = ["When Liana Barrientos was 23 years old, she got married in Westchester County."]
 translation = ["Als Liana Barrientos 23 Jahre alt war, heiratete sie in Westchester County."]
+
+output_file_name = "output_t5_trans.txt"
+score_file_name = "score_t5_trans.txt"
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -29,9 +33,11 @@ class TestT5Examples(unittest.TestCase):
         with tmp_target.open("w") as f:
             f.write("\n".join(text))
 
-        testargs = ["evaluate_wmt.py", str(tmp_source), "output_t5_trans.txt", str(tmp_target), "score_t5_trans.txt"]
+        testargs = ["evaluate_wmt.py", str(tmp_source), output_file_name, str(tmp_target), score_file_name]
 
         with patch.object(sys, "argv", testargs):
             run_generate()
-            self.assertTrue(Path("output_t5_trans.txt").exists())
-            self.assertTrue(Path("score_t5_trans.txt").exists())
+            self.assertTrue(Path(output_file_name).exists())
+            self.assertTrue(Path(score_file_name).exists())
+            os.remove(Path(output_file_name))
+            os.remove(Path(score_file_name))
