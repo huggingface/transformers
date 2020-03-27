@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from .evaluate_cnn import _run_generate
+from .run_bart_sum import
 
 
 output_file_name = "output_bart_sum.txt"
@@ -19,7 +20,20 @@ logger = logging.getLogger()
 
 
 class TestBartExamples(unittest.TestCase):
+
     def test_bart_cnn_cli(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+        tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
+        with tmp.open("w") as f:
+            f.write("\n".join(articles))
+        testargs = ["evaluate_cnn.py", str(tmp), output_file_name]
+        with patch.object(sys, "argv", testargs):
+            _run_generate()
+            self.assertTrue(Path(output_file_name).exists())
+            os.remove(Path(output_file_name))
+
+    def test_bart_run_sum_cli(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
         tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
