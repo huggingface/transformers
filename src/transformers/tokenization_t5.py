@@ -82,13 +82,13 @@ class T5Tokenizer(PreTrainedTokenizer):
                 token instead.
             pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
                 The token used for padding, for example when batching sequences of different lengths.
-            extra_ids (:obj:`List[str]`, `optional`, defaults to :obj:`None`):
+            extra_ids (:obj:`List[str]`, `optional`, defaults to :obj:`100`):
                 Add a number of extra ids added to the end of the vocabulary for use as sentinels.
                 These tokens are accessible as `<extra_id_{%d}>` where `{%d}` is a number between 0 and extra_ids-1.
                 Extra tokens are indexed from the end of the vocabulary up to beginnning (<extra_id_0> is the last token in the vocabulary)
                 (like in T5 preprocessing
                 see: https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117)
-            additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<eop>", "<eod>"]`):
+            additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`None`):
                 Additional special tokens used by the tokenizer.
     """
 

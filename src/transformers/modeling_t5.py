@@ -791,7 +791,7 @@ class T5Model(T5PreTrainedModel):
     ):
         r"""
         Return:
-            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5`) and inputs:
             last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
                 Sequence of hidden-states at the output of the last layer of the model.
             hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
@@ -885,13 +885,13 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         head_mask=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for computing the sequence classification/regression loss.
             Indices should be in :obj:`[0, ..., config.vocab_size - 1]`.
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
-            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BartConfig`) and inputs:
+            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs:
             loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`lm_label` is provided):
                 Classification loss (cross entropy)
             prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
@@ -914,7 +914,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             input_ids = tokenizer.encode("Hello, my dog is cute", return_tensor="pt")  # Batch size 1
             outputs = model(input_ids=input_ids, lm_labels=input_ids)
             loss, prediction_scores = outputs[:2]
-
         """
 
         # Encode if needed (training, first prediction pass)
