@@ -138,26 +138,26 @@ class BatchEncoding(UserDict):
     def items(self):
         return self.data.items()
 
-    def char_to_token(self, sample: int, char: int) -> Tuple[int, int]:
+    def char_to_token_offsets(self, sample: int, char: int) -> Tuple[int, int]:
+        if not self._encodings:
+            raise ValueError("char_to_token_offsets() is not available when using Python based tokenizers")
+        return self[sample].char_to_token_offsets(char)
+
+    def char_to_token(self, sample: int, pos: int) -> Optional[Tuple[int, int]]:
         if not self._encodings:
             raise ValueError("char_to_token() is not available when using Python based tokenizers")
-        return self[sample].char_to_token(char)
+        return self[sample].char_to_token(pos)
 
-    def char_to_word(self, sample: int, char: int) -> Tuple[int, int]:
+    def char_to_word_offsets(self, sample: int, char: int) -> Tuple[int, int]:
         if not self._encodings:
-            raise ValueError("char_to_word() is not available when using Python based tokenizers")
-        return self[sample].char_to_word(char)
+            raise ValueError("char_to_word_offsets() is not available when using Python based tokenizers")
+        return self[sample].char_to_word_offsets(char)
 
-    def word_boundaries(self, sample: int, pos: int) -> Optional[Tuple[int, int]]:
-        if not self._encodings:
-            raise ValueError("word_boundaries() is not available when using Python based tokenizers")
-        return self[sample].word_boundaries(pos)
-
-    def token_to_word(self, sample: int, index: int) -> Optional[Tuple[int, int]]:
+    def token_to_word_offsets(self, sample: int, index: int) -> Optional[Tuple[int, int]]:
         """ Find the offsets of the word that contains the token at the given index """
         if not self._encodings:
-            raise ValueError("token_to_word() is not available when using Python based tokenizers")
-        return self[sample].word_boundaries(index)
+            raise ValueError("token_to_word_offsets() is not available when using Python based tokenizers")
+        return self[sample].token_to_word_offsets(index)
 
 
 class SpecialTokensMixin:
