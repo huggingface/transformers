@@ -94,6 +94,8 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
     """
 
     def __init__(self, config, **kwargs):
+        if "trainable" not in kwargs:
+            kwargs["trainable"] = config.train_embeddings
         super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
@@ -404,6 +406,8 @@ class TFBertEncoder(tf.keras.layers.Layer):
 
 class TFBertPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
+        if "trainable" not in kwargs:
+            kwargs["trainable"] = config.train_pooler
         super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(
             config.hidden_size,
@@ -490,9 +494,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
 
-        self.embeddings = TFBertEmbeddings(config, name="embeddings", trainable=config.train_embeddings)
+        self.embeddings = TFBertEmbeddings(config, name="embeddings")
         self.encoder = TFBertEncoder(config, name="encoder")
-        self.pooler = TFBertPooler(config, name="pooler", trainable=config.train_pooler)
+        self.pooler = TFBertPooler(config, name="pooler")
 
     def get_input_embeddings(self):
         return self.embeddings
