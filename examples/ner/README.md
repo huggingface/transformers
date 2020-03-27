@@ -203,8 +203,9 @@ wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday
 wget https://raw.githubusercontent.com/mpsilfve/finer-data/master/data/digitoday.2015.test.csv
 ```
 
-The original data format has three (tab-separated) columns, in a pre-processing step only the two relevant columns (token and outer span NER annotation) are extracted. This can be done by running the script `preprocess_fi.py` present in this folder. The script performs also a clean-up of the output dataset, removing unlabeled tokens such as `<HEADLINE>` and `<INGRESS>` that are present in the raw data files.
+The original data format has three (tab-separated) columns, in a pre-processing step only the two relevant columns (token and outer span NER annotation) are extracted. This can be done by running the script `preprocess_fi.py` implemented [here](https://gist.githubusercontent.com/bmichele/22ef82b0bfbae1265d7a425cb271e68e/raw/41d651f227d4c71f9820d5f4b6696cbf0a077367/preprocess_fi.py). The script also clean-up the output dataset, removing unlabeled tokens such as `<HEADLINE>` and `<INGRESS>` that are present in the raw data files.
 ```bash
+wget https://gist.githubusercontent.com/bmichele/22ef82b0bfbae1265d7a425cb271e68e/raw/41d651f227d4c71f9820d5f4b6696cbf0a077367/preprocess_fi.py
 python preprocess_fi.py digitoday.2014.train.csv train.txt.tmp
 python preprocess_fi.py digitoday.2014.dev.csv dev.txt.tmp
 python preprocess_fi.py digitoday.2015.test.csv test.txt.tmp
