@@ -164,7 +164,7 @@ export TASK_NAME=MRPC
 
 python run_glue.py \
   --model_type bert \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path bert-base-uncased \
   --task_name $TASK_NAME \
   --do_train \
   --do_eval \
@@ -205,7 +205,7 @@ export GLUE_DIR=/path/to/glue
 
 python run_glue.py \
   --model_type bert \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path bert-base-uncased \
   --task_name MRPC \
   --do_train \
   --do_eval \
@@ -232,7 +232,7 @@ export GLUE_DIR=/path/to/glue
 
 python run_glue.py \
   --model_type bert \
-  --model_name_or_path bert-base-cased \
+  --model_name_or_path bert-base-uncased \
   --task_name MRPC \
   --do_train \
   --do_eval \
@@ -257,7 +257,7 @@ export GLUE_DIR=/path/to/glue
 python -m torch.distributed.launch \
     --nproc_per_node 8 run_glue.py \
     --model_type bert \
-    --model_name_or_path bert-base-cased \
+    --model_name_or_path bert-base-uncased \
     --task_name MRPC \
     --do_train \
     --do_eval \
@@ -291,7 +291,7 @@ export GLUE_DIR=/path/to/glue
 python -m torch.distributed.launch \
     --nproc_per_node 8 run_glue.py \
     --model_type bert \
-    --model_name_or_path bert-base-cased \
+    --model_name_or_path bert-base-uncased \
     --task_name mnli \
     --do_train \
     --do_eval \
