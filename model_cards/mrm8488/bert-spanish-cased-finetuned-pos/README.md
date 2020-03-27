@@ -5,7 +5,7 @@ thumbnail: https://i.imgur.com/jgBdimh.png
 
 # Spanish BERT (BETO) + POS
 
-This model is a fine-tuned on [NER-C](https://www.kaggle.com/nltkdata/conll-corpora) Of the Spanish BERT cased [(BETO)](https://github.com/dccuchile/beto) for **POS** (Part of Speech tagging) downstream task.
+This model is a fine-tuned on Spanish [CONLL CORPORA](https://www.kaggle.com/nltkdata/conll-corpora) version of the Spanish BERT cased [(BETO)](https://github.com/dccuchile/beto) for **POS** (Part of Speech tagging) downstream task.
 
 ## Details of the downstream task (POS) - Dataset
 

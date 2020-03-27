@@ -116,6 +116,7 @@ from .pipelines import (
     SummarizationPipeline,
     TextClassificationPipeline,
     TokenClassificationPipeline,
+    TranslationPipeline,
     pipeline,
 )
 from .tokenization_albert import AlbertTokenizer
@@ -221,6 +222,7 @@ if is_torch_available():
         XLMModel,
         XLMWithLMHeadModel,
         XLMForSequenceClassification,
+        XLMForTokenClassification,
         XLMForQuestionAnswering,
         XLMForQuestionAnsweringSimple,
         XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
