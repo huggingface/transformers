@@ -93,7 +93,7 @@ class BertConfig(PretrainedConfig):
                 Whether or not to make embeddings trainable in fine-tuning
             train_pooler (:obj:`bool`, optional, defaults to True):
                 Whether or not to make pooler trainable in fine-tuning
-            train_layers (:obj:`int` or :obj:`slice`, optional, defaults to `None` meaning all hidden layers):
+            train_layers (:obj:`int` or :obj:`list` or :obj:`range`, optional, defaults to `None` = all hidden layers):
                 Which encoder layers to make trainable in fine-tuning; if :obj:`int` then the top N layers are trainable
 
         Example::
