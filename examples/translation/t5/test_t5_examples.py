@@ -21,17 +21,17 @@ class TestT5Examples(unittest.TestCase):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
-        tmp_source = Path(tempfile.gettempdir()) / "utest_generations.hypo"
+        tmp_source = Path(tempfile.gettempdir()) / "utest_generations_t5_trans.hypo"
         with tmp_source.open("w") as f:
             f.write("\n".join(text))
 
-        tmp_target = Path(tempfile.gettempdir()) / "utest_generations.target"
+        tmp_target = Path(tempfile.gettempdir()) / "utest_generations_t5_trans.target"
         with tmp_target.open("w") as f:
             f.write("\n".join(text))
 
-        testargs = ["evaluate_wmt.py", str(tmp_source), "output.txt", str(tmp_target), "score.txt"]
+        testargs = ["evaluate_wmt.py", str(tmp_source), "output_t5_trans.txt", str(tmp_target), "score_t5_trans.txt"]
 
         with patch.object(sys, "argv", testargs):
             run_generate()
-            self.assertTrue(Path("output.txt").exists())
-            self.assertTrue(Path("score.txt").exists())
+            self.assertTrue(Path("output_t5_trans.txt").exists())
+            self.assertTrue(Path("score_t5_trans.txt").exists())

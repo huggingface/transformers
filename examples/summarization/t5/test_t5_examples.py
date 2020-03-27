@@ -19,11 +19,11 @@ class TestT5Examples(unittest.TestCase):
     def test_t5_cli(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
-        tmp = Path(tempfile.gettempdir()) / "utest_generations.hypo"
+        tmp = Path(tempfile.gettempdir()) / "utest_generations_t5_sum.hypo"
         with tmp.open("w") as f:
             f.write("\n".join(articles))
-        testargs = ["evaluate_cnn.py", "t5-small", str(tmp), "output.txt", str(tmp), "score.txt"]
+        testargs = ["evaluate_cnn.py", "t5-small", str(tmp), "output_t5_sum.txt", str(tmp), "score_t5_sum.txt"]
         with patch.object(sys, "argv", testargs):
             run_generate()
-            self.assertTrue(Path("output.txt").exists())
-            self.assertTrue(Path("score.txt").exists())
+            self.assertTrue(Path("output_t5_sum.txt").exists())
+            self.assertTrue(Path("score_t5_sum.txt").exists())

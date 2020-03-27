@@ -19,10 +19,10 @@ class TestBartExamples(unittest.TestCase):
     def test_bart_cnn_cli(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
-        tmp = Path(tempfile.gettempdir()) / "utest_generations.hypo"
+        tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
         with tmp.open("w") as f:
             f.write("\n".join(articles))
-        testargs = ["evaluate_cnn.py", str(tmp), "output.txt"]
+        testargs = ["evaluate_cnn.py", str(tmp), "output_bart_sum.txt"]
         with patch.object(sys, "argv", testargs):
             _run_generate()
-            self.assertTrue(Path("output.txt").exists())
+            self.assertTrue(Path("output_bart_sum.txt").exists())
