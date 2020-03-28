@@ -19,29 +19,20 @@ class BartSystem(BaseTransformer):
     mode = "language-modeling"
 
     def __init__(self, hparams):
-        super(BartSystem, self).__init__(hparams, num_labels=None, mode=self.mode)
+        super().__init__(hparams, num_labels=None, mode=self.mode)
 
-    def forward(
-        self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None
-    ):
+    def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
         return self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            lm_labels=lm_labels,
+            input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,
         )
 
     def _step(self, batch):
-        y = batch["target_ids"]
+        pad_token_id = self.tokenizer.pad_token_id
+        source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
-        lm_labels[y[:, 1:] == self.tokenizer.pad_token_id] = -100
-        outputs = self(
-            batch["source_ids"],
-            attention_mask=batch["source_mask"],
-            decoder_input_ids=y_ids,
-            lm_labels=lm_labels,
-        )
+        lm_labels[y[:, 1:] == pad_token_id] = -100
+        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,)
 
         loss = outputs[0]
 
