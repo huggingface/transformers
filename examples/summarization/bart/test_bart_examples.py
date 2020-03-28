@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from .evaluate_cnn import _run_generate
+from .evaluate_cnn import _run_generate, DEFAULT_DEVICE
 from .run_bart_sum import main as run_training
 
 
@@ -33,14 +33,7 @@ class TestBartExamples(unittest.TestCase):
             self.assertTrue(Path(output_file_name).exists())
             os.remove(Path(output_file_name))
 
+    @unittest.skipUnless(DEFAULT_DEVICE=='cuda', 'requires GPU')
     def test_bart_run_sum_cli(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-        tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
-        with tmp.open("w") as f:
-            f.write("\n".join(articles))
-        testargs = ["run_bart_sum.py", str(tmp), "--output-file", output_file_name]
-        with patch.object(sys, "argv", testargs):
-            run_training()
-            self.assertTrue(Path(output_file_name).exists())
-            os.remove(Path(output_file_name))
+        cmd = './run_train_tiny.sh'
+        os.system(cmd)
