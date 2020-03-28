@@ -830,7 +830,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         decoder_cached_states=None,
-        lm_labels=None,
+        masked_lm_labels=None,
         generation_mode=False,
         **unused
     ):
@@ -886,10 +886,10 @@ class BartForConditionalGeneration(PretrainedBartModel):
         )
         lm_logits = F.linear(outputs[0], self.model.shared.weight)
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
-        if lm_labels is not None:
+        if masked_lm_labels is not None:
             loss_fct = nn.CrossEntropyLoss()
             # TODO(SS): do we need to ignore pad tokens in lm_labels?
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), lm_labels.view(-1))
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
             outputs = (masked_lm_loss,) + outputs
 
         return outputs

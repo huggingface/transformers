@@ -29,7 +29,7 @@ class BartSystem(BaseTransformer):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            lm_labels=lm_labels,
+            masked_lm_labels=lm_labels,
         )
 
     def _step(self, batch):
