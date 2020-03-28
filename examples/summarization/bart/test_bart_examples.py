@@ -31,7 +31,24 @@ class TestBartExamples(unittest.TestCase):
             self.assertTrue(Path(output_file_name).exists())
             os.remove(Path(output_file_name))
 
-    @unittest.skipUnless(DEFAULT_DEVICE == "cuda", "requires GPU")
+
     def test_bart_run_sum_cli(self):
-        cmd = "./run_train_tiny.sh"
+        #script = 'examples/summarization/bart/run_train_tiny.sh'
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+        tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
+        #with tmp.open("w") as f:
+            #f.write("\n".join(articles))
+        
+        testargs = ["evaluate_cnn.py", str(tmp), output_file_name]
+        with patch.object(sys, "argv", testargs):
+            _run_generate()
+            self.assertTrue(Path(output_file_name).exists())
+            os.remove(Path(output_file_name))
+
+
+
+        self.assertTrue(os.path.exists(script))
+        n_gpu = 0 if DEFAULT_DEVICE == 'cpu' else 1
+        cmd = f"{script} {n_gpu}"
         os.system(cmd)

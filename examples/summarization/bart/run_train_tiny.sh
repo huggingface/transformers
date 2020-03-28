@@ -13,7 +13,8 @@ mkdir -p $OUTPUT_DIR
 
 # Add parent directory to python path to access transformer_base.py
 export PYTHONPATH="../../":"${PYTHONPATH}"
-
+NGPU = $1
+shift
 python run_bart_sum.py \
 --data_dir=cnn_tiny/ \
 --model_type=bart \
@@ -23,6 +24,7 @@ python run_bart_sum.py \
 --eval_batch_size=2 \
 --output_dir=$OUTPUT_DIR \
 --num_train_epochs=1  \
+--n_gpu=$NGPU \
 --do_train $@
 
 rm -rf cnn_tiny
