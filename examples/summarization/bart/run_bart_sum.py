@@ -19,6 +19,7 @@ class BartSystem(BaseTransformer):
     mode = "language-modeling"
 
     def __init__(self, hparams):
+        hparams.tokenizer_name = 'bart-large'
         super(BartSystem, self).__init__(hparams, num_labels=None, mode=self.mode)
 
     def forward(
