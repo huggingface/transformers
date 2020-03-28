@@ -246,7 +246,7 @@ class FXBertModel:
 
         bert = nn.Model(model_def, self.state)
 
-        # @jax.jit
+        @jax.jit
         def predict(input_ids, token_type_ids, attention_mask):
             return bert(
                 jnp.array(input_ids, dtype='i4'),
