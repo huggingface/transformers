@@ -7,8 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from .evaluate_cnn import _run_generate, DEFAULT_DEVICE
-from .run_bart_sum import main as run_training
-
 
 output_file_name = "output_bart_sum.txt"
 
