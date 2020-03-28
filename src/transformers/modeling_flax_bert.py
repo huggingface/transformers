@@ -193,7 +193,8 @@ class BertEncoder(nn.Module):
 class BertPooler(nn.Module):
 
     def apply(self, hidden_state):
-        out = nn.Dense(hidden_state, hidden_state.shape[-1], name="dense")
+        first_token = hidden_state[:, 0]
+        out = nn.Dense(first_token, hidden_state.shape[-1], name="dense")
         return jax.lax.tanh(out)
 
 
@@ -219,7 +220,8 @@ class BertModel(nn.Module):
             name="encoder"
         )
 
-        return BertPooler(encoder, name="pooler")
+        pooled = BertPooler(encoder, name="pooler")
+        return encoder, pooled
 
 
 class FXBertModel:
@@ -246,7 +248,7 @@ class FXBertModel:
 
         bert = nn.Model(model_def, self.state)
 
-        @jax.jit
+        # @jax.jit
         def predict(input_ids, token_type_ids, attention_mask):
             return bert(
                 jnp.array(input_ids, dtype='i4'),
