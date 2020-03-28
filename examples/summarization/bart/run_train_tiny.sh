@@ -1,5 +1,5 @@
 # Install newest ptl.
-#pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
+pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
 wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_tiny.tgz
 tar -xzvf cnn_tiny.tgz
 
@@ -24,3 +24,6 @@ python run_bart_sum.py \
 --output_dir=$OUTPUT_DIR \
 --num_train_epochs=1  \
 --do_train $@
+
+rm -rf cnn_tiny
+rm -rf $OUTPUT_DIR

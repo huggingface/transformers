@@ -19,17 +19,12 @@ class BartSystem(BaseTransformer):
     mode = "language-modeling"
 
     def __init__(self, hparams):
-        hparams.tokenizer_name = 'bart-large'
+        hparams.tokenizer_name = "bart-large"
         super(BartSystem, self).__init__(hparams, num_labels=None, mode=self.mode)
 
-    def forward(
-        self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None
-    ):
+    def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
         return self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            lm_labels=lm_labels,
+            input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,
         )
 
     def _step(self, batch):
@@ -38,10 +33,7 @@ class BartSystem(BaseTransformer):
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == self.tokenizer.pad_token_id] = -100
         outputs = self(
-            batch["source_ids"],
-            attention_mask=batch["source_mask"],
-            decoder_input_ids=y_ids,
-            lm_labels=lm_labels,
+            batch["source_ids"], attention_mask=batch["source_mask"], decoder_input_ids=y_ids, lm_labels=lm_labels,
         )
 
         loss = outputs[0]

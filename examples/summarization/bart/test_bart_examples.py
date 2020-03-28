@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from .evaluate_cnn import _run_generate, DEFAULT_DEVICE
+from .evaluate_cnn import DEFAULT_DEVICE, _run_generate
+
 
 output_file_name = "output_bart_sum.txt"
 
@@ -18,7 +19,6 @@ logger = logging.getLogger()
 
 
 class TestBartExamples(unittest.TestCase):
-
     def test_bart_cnn_cli(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -31,7 +31,7 @@ class TestBartExamples(unittest.TestCase):
             self.assertTrue(Path(output_file_name).exists())
             os.remove(Path(output_file_name))
 
-    @unittest.skipUnless(DEFAULT_DEVICE=='cuda', 'requires GPU')
+    @unittest.skipUnless(DEFAULT_DEVICE == "cuda", "requires GPU")
     def test_bart_run_sum_cli(self):
-        cmd = './run_train_tiny.sh'
+        cmd = "./run_train_tiny.sh"
         os.system(cmd)
