@@ -190,6 +190,13 @@ class BertEncoder(nn.Module):
         return encodings
 
 
+class BertPooler(nn.Module):
+
+    def apply(self, hidden_state):
+        out = nn.Dense(hidden_state, hidden_state.shape[-1], name="dense")
+        return jax.lax.tanh(out)
+
+
 class BertModel(nn.Module):
 
     def apply(self, input_ids, token_type_ids, attention_mask,
@@ -212,8 +219,7 @@ class BertModel(nn.Module):
             name="encoder"
         )
 
-        # TODO: Pooling
-        return encoder
+        return BertPooler(encoder, name="pooler")
 
 
 class FXBertModel:
@@ -275,13 +281,16 @@ if __name__ == '__main__':
 
         # SelfAttention.out
         state = {k: v.T if v.shape == (3072, 768) or v.shape == (768, 3072) else v for k, v in state.items()}
-        state = {k: v.reshape((12, 64, 768)).transpose((2, 0, 1)) if v.shape == (768, 768) and "out" not in k else v for k, v in state.items()}
+        state = {k: v.reshape((12, 64, 768)).transpose((2, 0, 1)) if v.shape == (768, 768) and "out" not in k and "pooler" not in k else v for k, v in state.items()}
 
         # Bias
-        state = {k: v.reshape((12, -1)) if v.shape == (768, ) and ("bias" in k) and ("out" not in k) else v for k, v in state.items()}
+        state = {k: v.reshape((12, -1)) if v.shape == (768, ) and ("bias" in k) and ("out" not in k) and ("pooler" not in k) else v for k, v in state.items()}
 
         # Self Attention output projection
         state = {k: v.reshape((768, 12, 64)).transpose(1, 2, 0) if "out.kernel" in k else v for k, v in state.items()}
+
+        # Pooler
+        state = {k: v.T if "pooler.dense.kernel" in k else v for k, v in state.items()}
         state = unflatten_dict({tuple(k.split('.')[1:]): v for k, v in state.items()})
         model.from_pretrained(state)
 
@@ -291,7 +300,6 @@ if __name__ == '__main__':
 
     # Forward
     model_pt.eval()
-    pt_emb = model_pt.embeddings(pt_input['input_ids'])
-    pt_enc = model_pt.encoder(pt_emb, pt_input['attention_mask'], [None] * 12)
+    pt_enc = model_pt(pt_input['input_ids'], pt_input['attention_mask'])
     flax_enc = model(**flax_input)
     input()
