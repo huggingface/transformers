@@ -699,22 +699,12 @@ T5_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
-            To match pre-training, T5 input sequence should be formatted with [CLS] and [SEP] tokens as follows:
-
-            (a) For sequence pairs:
-
-                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
-
-            (b) For single sequences:
-
-                ``tokens:         [CLS] the dog is hairy . [SEP]``
-
             T5 is a model with relative position embeddings so you should be able to pad the inputs on
-            the right or the left.
-
             Indices can be obtained using :class:`transformers.T5Tokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+            To know more on how to prepare input_ids for pre-training take a look at
+            `T5 Training <./t5.html#training>`_ .
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -725,6 +715,8 @@ T5_INPUTS_DOCSTRING = r"""
             Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for sequence to sequence training. T5 uses the pad_token_id as the starting token for decoder_input_ids generation.
+            To know more on how to prepare decoder_input_ids for pre-training take a look at
+            `T5 Training <./t5.html#training>`_ .
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
