@@ -104,7 +104,8 @@ class Attention(nn.Module):
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
         assert n_state % config.n_head == 0
-        self.register_buffer("bias", torch.tril(torch.ones((n_ctx, n_ctx), dtype=torch.bool)))
+        self.register_buffer("bias", torch.tril(torch.ones((n_ctx, n_ctx), dtype=torch.uint8)).view(1, 1, n_ctx, n_ctx))
+        self.register_buffer("masked_bias", torch.tensor(-1e4))
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
@@ -142,8 +143,8 @@ class Attention(nn.Module):
         if self.scale:
             w = w / math.sqrt(v.size(-1))
         nd, ns = w.size(-2), w.size(-1)
-        mask = self.bias[None, None, ns - nd : ns, :ns]
-        w = torch.where(mask, w, torch.tensor(-1e4))
+        mask = self.bias[None, None, ns - nd: ns, :ns]
+        w = torch.where(mask, w, self.masked_bias)
 
         if attention_mask is not None:
             # Apply the attention mask
