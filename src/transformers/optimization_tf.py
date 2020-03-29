@@ -240,7 +240,8 @@ class GradientAccumulator(object):
 
             return (
                 gradient.device_map.select_for_current_replica(gradient.values, replica_context)
-                for gradient in self._gradients if gradient is not None
+                for gradient in self._gradients
+                if gradient is not None
             )
         else:
             return self._gradients

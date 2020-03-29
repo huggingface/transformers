@@ -157,7 +157,9 @@ def train(
     writer = tf.summary.create_file_writer("/tmp/mylogs")
 
     with strategy.scope():
-        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
+        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
         optimizer = create_optimizer(args["learning_rate"], num_train_steps, args["warmup_steps"])
 
         if args["fp16"]:
