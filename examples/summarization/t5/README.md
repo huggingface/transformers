@@ -5,8 +5,7 @@ First, you need to download the CNN data. It's about ~400 MB and can be download
 running 
 
 ```bash
-wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm.tgz
-tar -xzvf cnn_dm.tgz
+python download_cnn_daily_mail.py cnn_articles_input_data.txt cnn_articles_reference_summaries.txt
 ```
 
 You should confirm that each file has 11490 lines:

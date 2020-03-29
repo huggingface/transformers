@@ -19,20 +19,30 @@ class BartSystem(BaseTransformer):
     mode = "language-modeling"
 
     def __init__(self, hparams):
-        super().__init__(hparams, num_labels=None, mode=self.mode)
+        super(BartSystem, self).__init__(hparams, num_labels=None, mode=self.mode)
 
-    def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
+    def forward(
+        self, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attention_mask=None, lm_labels=None
+    ):
         return self.model(
-            input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            lm_labels=lm_labels,
         )
 
     def _step(self, batch):
-        pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
+        y = batch["target_ids"]
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
-        lm_labels[y[:, 1:] == pad_token_id] = -100
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,)
+        lm_labels[y[:, 1:] == self.tokenizer.pad_token_id] = -100
+        outputs = self(
+            input_ids=batch["source_ids"],
+            attention_mask=batch["source_mask"],
+            decoder_input_ids=y_ids,
+            lm_labels=lm_labels,
+        )
 
         loss = outputs[0]
 
@@ -93,7 +103,7 @@ class BartSystem(BaseTransformer):
 
     def train_dataloader(self):
         train_dataset = SummarizationDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, type_path="train", max_length=self.hparams.max_seq_length,
+            self.tokenizer, data_dir=self.hparams.data_dir, type_path="train", block_size=self.hparams.max_seq_length
         )
         dataloader = DataLoader(train_dataset, batch_size=self.hparams.train_batch_size)
         t_total = (
@@ -109,13 +119,13 @@ class BartSystem(BaseTransformer):
 
     def val_dataloader(self):
         val_dataset = SummarizationDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, type_path="val", max_length=self.hparams.max_seq_length,
+            self.tokenizer, data_dir=self.hparams.data_dir, type_path="val", block_size=self.hparams.max_seq_length
         )
         return DataLoader(val_dataset, batch_size=self.hparams.eval_batch_size)
 
     def test_dataloader(self):
         test_dataset = SummarizationDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, type_path="test", max_length=self.hparams.max_seq_length,
+            self.tokenizer, data_dir=self.hparams.data_dir, type_path="test", block_size=self.hparams.max_seq_length
         )
         return DataLoader(test_dataset, batch_size=self.hparams.eval_batch_size)
 
