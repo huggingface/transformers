@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from .evaluate_cnn import run_generate
 
+
 articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
 
 logging.basicConfig(level=logging.DEBUG)
