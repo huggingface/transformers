@@ -1,5 +1,6 @@
 ---
 language: italian
+license: mit
 ---
 
 # 🤗 + 📚 dbmdz BERT models
