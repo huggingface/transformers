@@ -211,7 +211,7 @@ class BertModel(nn.Module):
         return encoder, pooled
 
 
-class FXBertModel:
+class FlaxBertModel:
     """
     BERT implementation using JAX/Flax as backend
     """
@@ -253,7 +253,7 @@ class FXBertModel:
 if __name__ == '__main__':
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
     model_pt = PTBertModel.from_pretrained('bert-base-cased')
-    model = FXBertModel(model_pt.config)
+    model = FlaxBertModel(model_pt.config)
     model_pt.eval()
 
     with open("/data/Downloads/bert-base-cased-pytorch_model.bin", 'rb') as model_f:
@@ -290,5 +290,8 @@ if __name__ == '__main__':
     # Forward
     model_pt.eval()
     pt_enc = model_pt(pt_input['input_ids'], pt_input['attention_mask'])
+    flax_enc = model(**flax_input)
+
+    flax_input = tokenizer.encode_plus("My name is Morgan and this sentence is longer")
     flax_enc = model(**flax_input)
     input()
