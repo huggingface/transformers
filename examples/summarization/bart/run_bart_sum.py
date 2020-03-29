@@ -119,8 +119,6 @@ class BartSystem(BaseTransformer):
 
     def val_dataloader(self) -> DataLoader:
         return self.get_dataloader('val', batch_size=self.hparams.eval_batch_size)
-        val_dataset = SummarizationDataset(self.tokenizer, type_path="val", **self.dataset_kwargs)
-        return DataLoader(val_dataset, batch_size=self.hparams.eval_batch_size)
 
     def test_dataloader(self) -> DataLoader:
         return self.get_dataloader('test', batch_size=self.hparams.eval_batch_size)
