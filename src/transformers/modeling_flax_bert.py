@@ -1,13 +1,14 @@
+import os
+
 import jax
 import jax.numpy as jnp
 import flax.nn as nn
 import numpy as np
 import torch
 
-from dataclasses import dataclass
-from typing import Tuple, Callable
+from typing import Callable
 
-from flax.serialization import from_state_dict
+from flax.serialization import from_state_dict, to_bytes, to_state_dict
 from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
 
@@ -216,13 +217,12 @@ class FlaxBertModel:
     BERT implementation using JAX/Flax as backend
     """
 
-    def __init__(self, config: BertConfig, **kwargs):
+    def __init__(self, config: BertConfig, state: dict, **kwargs):
         self.config = config
         self.key = PRNGKey(0)
-        self.state = None
+        self.state = state
 
-    def __call__(self, input_ids, token_type_ids, attention_mask):
-        model_def = BertModel.partial(
+        self._model_def = BertModel.partial(
             vocab_size=self.config.vocab_size,
             hidden_size=self.config.hidden_size,
             type_vocab_size=self.config.type_vocab_size,
@@ -233,11 +233,13 @@ class FlaxBertModel:
             intermediate_size=self.config.intermediate_size
         )
 
-        bert = nn.Model(model_def, self.state)
+        self._bert = nn.Model(self._model_def, self.state)
+
+    def __call__(self, input_ids, token_type_ids, attention_mask):
 
         @jax.jit
         def predict(input_ids, token_type_ids, attention_mask):
-            return bert(
+            return self._bert(
                 jnp.array(input_ids, dtype='i4'),
                 jnp.array(token_type_ids, dtype='i4'),
                 jnp.array(attention_mask, dtype='i4')
@@ -245,15 +247,25 @@ class FlaxBertModel:
 
         return predict(input_ids, token_type_ids, attention_mask)
 
-    def from_pretrained(self, state):
-        self.state = from_state_dict(BertModel, state)
-        return self.state
+    @staticmethod
+    def from_pretrained(config: BertConfig, state: dict):
+        state = from_state_dict(BertModel, state)
+        return FlaxBertModel(config, state)
+
+    def save_pretrained(self, folder):
+        folder_abs = os.path.abspath(folder)
+
+        if not os.path.exists(folder_abs):
+            os.mkdir(folder_abs)
+
+        with open(os.path.join(folder_abs, 'model.flax'), 'wb') as f:
+            model_bytes = to_bytes(self._bert)
+            f.write(model_bytes)
 
 
 if __name__ == '__main__':
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
     model_pt = PTBertModel.from_pretrained('bert-base-cased')
-    model = FlaxBertModel(model_pt.config)
     model_pt.eval()
 
     with open("/data/Downloads/bert-base-cased-pytorch_model.bin", 'rb') as model_f:
@@ -281,7 +293,7 @@ if __name__ == '__main__':
         # Pooler
         state = {k: v.T if "pooler.dense.kernel" in k else v for k, v in state.items()}
         state = unflatten_dict({tuple(k.split('.')[1:]): v for k, v in state.items()})
-        model.from_pretrained(state)
+        model = FlaxBertModel.from_pretrained(model_pt.config, state)
 
     # Inputs
     flax_input = tokenizer.encode_plus("My name is Morgan")
@@ -292,6 +304,5 @@ if __name__ == '__main__':
     pt_enc = model_pt(pt_input['input_ids'], pt_input['attention_mask'])
     flax_enc = model(**flax_input)
 
-    flax_input = tokenizer.encode_plus("My name is Morgan and this sentence is longer")
-    flax_enc = model(**flax_input)
+    model.save_pretrained('bert-base-cased')
     input()
