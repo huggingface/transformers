@@ -28,7 +28,7 @@ class BartSystem(BaseTransformer):
 
     def _step(self, batch):
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
+        source_ids, source_mask, y = batch['source_ids'], batch['source_mask'], batch['target_ids']
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
@@ -102,10 +102,15 @@ class BartSystem(BaseTransformer):
             max_source_length=self.hparams.max_source_length,
             max_target_length=self.hparams.max_source_length,
         )
+    
+    def get_dataloader(self, type_path: str, batch_size: int) -> DataLoader:
+        dataset = SummarizationDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)
+        dataloader = DataLoader(dataset, batch_size=batch_size,
+                                collate_fn=dataset.collate_fn)
+        return dataloader
 
-    def train_dataloader(self):
-        train_dataset = SummarizationDataset(self.tokenizer, type_path="train", **self.dataset_kwargs)
-        dataloader = DataLoader(train_dataset, batch_size=self.hparams.train_batch_size)
+    def train_dataloader(self) -> DataLoader:
+        dataloader = self.get_dataloader('train', batch_size=self.hparams.train_batch_size)
         t_total = (
             (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.n_gpu)))
             // self.hparams.gradient_accumulation_steps
@@ -117,13 +122,11 @@ class BartSystem(BaseTransformer):
         self.lr_scheduler = scheduler
         return dataloader
 
-    def val_dataloader(self):
-        val_dataset = SummarizationDataset(self.tokenizer, type_path="val", **self.dataset_kwargs)
-        return DataLoader(val_dataset, batch_size=self.hparams.eval_batch_size)
+    def val_dataloader(self) -> DataLoader:
+        return self.get_dataloader('val', batch_size=self.hparams.eval_batch_size)
 
-    def test_dataloader(self):
-        test_dataset = SummarizationDataset(self.tokenizer, type_path="test", **self.dataset_kwargs)
-        return DataLoader(test_dataset, batch_size=self.hparams.eval_batch_size)
+    def test_dataloader(self) -> DataLoader:
+        return self.get_dataloader('test', batch_size=self.hparams.eval_batch_size)
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
