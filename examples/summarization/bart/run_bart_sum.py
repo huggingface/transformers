@@ -28,7 +28,7 @@ class BartSystem(BaseTransformer):
 
     def _step(self, batch):
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
+        source_ids, source_mask, y = batch['source_ids'], batch['source_mask'], batch['target_ids']
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
@@ -98,7 +98,8 @@ class BartSystem(BaseTransformer):
             max_source_length=self.hparams.max_source_length,
             max_target_length=self.hparams.max_source_length,
         )
-    def get_dataloader(self, type_path, batch_size) -> DataLoader:
+    
+    def get_dataloader(self, type_path: str, batch_size: int) -> DataLoader:
         dataset = SummarizationDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)
         dataloader = DataLoader(dataset, batch_size=batch_size,
                                 collate_fn=dataset.collate_fn)
