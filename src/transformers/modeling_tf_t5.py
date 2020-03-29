@@ -640,7 +640,7 @@ T5_INPUTS_DOCSTRING = r"""
             T5 is a model with relative position embeddings so you should be able to pad the inputs on
             the right or the left.
             Indices can be obtained using :class:`transformers.T5Tokenizer`.
-            To know more on how to prepare input_ids for pre-training take a look at
+            To know more on how to prepare `input_ids` for pre-training take a look at
             `T5 Training <./t5.html#training>`_ .
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
@@ -662,7 +662,7 @@ T5_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-            To know more on how to prepare decoder_input_ids for pre-training take a look at
+            To know more on how to prepare `decoder_input_ids` for pre-training take a look at
             `T5 Training <./t5.html#training>`_ .
         head_mask: (:obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.
