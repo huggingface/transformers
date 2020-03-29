@@ -91,10 +91,16 @@ class BartSystem(BaseTransformer):
 
         return self.test_end(outputs)
 
-    def train_dataloader(self):
-        train_dataset = SummarizationDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, type_path="train", max_length=self.hparams.max_seq_length,
+    @property
+    def dataset_kwargs(self):
+        return dict(
+            data_dir=self.hparams.data_dir,
+            max_source_length=self.hparams.max_source_length,
+            max_target_length=self.hparams.max_source_length,
         )
+
+    def train_dataloader(self):
+        train_dataset = SummarizationDataset(self.tokenizer, type_path="train", **self.dataset_kwargs)
         dataloader = DataLoader(train_dataset, batch_size=self.hparams.train_batch_size)
         t_total = (
             (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.n_gpu)))
@@ -108,15 +114,11 @@ class BartSystem(BaseTransformer):
         return dataloader
 
     def val_dataloader(self):
-        val_dataset = SummarizationDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, type_path="val", max_length=self.hparams.max_seq_length,
-        )
+        val_dataset = SummarizationDataset(self.tokenizer, type_path="val", **self.dataset_kwargs)
         return DataLoader(val_dataset, batch_size=self.hparams.eval_batch_size)
 
     def test_dataloader(self):
-        test_dataset = SummarizationDataset(
-            self.tokenizer, data_dir=self.hparams.data_dir, type_path="test", max_length=self.hparams.max_seq_length,
-        )
+        test_dataset = SummarizationDataset(self.tokenizer, type_path="test", **self.dataset_kwargs)
         return DataLoader(test_dataset, batch_size=self.hparams.eval_batch_size)
 
     @staticmethod
@@ -124,8 +126,15 @@ class BartSystem(BaseTransformer):
         BaseTransformer.add_model_specific_args(parser, root_dir)
         # Add BART specific options
         parser.add_argument(
-            "--max_seq_length",
+            "--max_source_length",
             default=1024,
+            type=int,
+            help="The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded.",
+        )
+        parser.add_argument(
+            "--max_target_length",
+            default=56,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
@@ -148,7 +157,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # If output_dir not provided, a folder will be generated in pwd
-    if args.output_dir is None:
+    if not args.output_dir:
         args.output_dir = os.path.join("./results", f"{args.task}_{args.model_type}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
 
