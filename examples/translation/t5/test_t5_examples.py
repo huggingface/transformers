@@ -35,7 +35,14 @@ class TestT5Examples(unittest.TestCase):
         output_file_name = Path(tempfile.gettempdir()) / "utest_output_trans.hypo"
         score_file_name = Path(tempfile.gettempdir()) / "utest_score.hypo"
 
-        testargs = ["evaluate_wmt.py", str(tmp_source), str(output_file_name), str(tmp_target), str(score_file_name)]
+        testargs = [
+            "evaluate_wmt.py",
+            "t5-small",
+            str(tmp_source),
+            str(output_file_name),
+            str(tmp_target),
+            str(score_file_name),
+        ]
 
         with patch.object(sys, "argv", testargs):
             run_generate()
