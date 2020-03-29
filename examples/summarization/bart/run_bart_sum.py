@@ -97,7 +97,7 @@ class BartSystem(BaseTransformer):
         return dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
-            max_target_length=self.hparams.max_source_length,
+            max_target_length=self.hparams.max_target_length,
         )
 
     def get_dataloader(self, type_path: str, batch_size: int) -> DataLoader:
