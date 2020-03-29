@@ -768,6 +768,29 @@ class T5Model(T5PreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    def _shift_right(self, input_ids):
+        pad_token_id = self.model.config.pad_token_id
+        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined"
+        sequence_length = input_ids.shape[-1]
+
+        # shift inputs to the right
+        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids[..., 0] = pad_token_id
+
+        # num of non pad_tokens corresponds to idx of first pad token id
+        # input_ids can only be padded from the right
+        sequence_end_idxs = input_ids.ne(pad_token_id).long().sum(dim=1)
+
+        for batch_idx, sequence_end_idx in enumerate(sequence_end_idxs):
+            # continue if sequence ends at sequence length
+            if sequence_end_idx == sequence_length:
+                continue
+            # override sequence end token with pad token
+            shifted_input_ids[batch_idx, sequence_end_idx] = pad_token_id
+
+        return pad_token_id
+
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
             heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
@@ -930,6 +953,10 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             )
 
         hidden_states = encoder_outputs[0]
+
+        if lm_labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
+            # get decoder inputs from shifting lm labels to the right
+            decoder_input_ids = self._shift_right(lm_labels)
 
         # Decode
         decoder_outputs = self.decoder(
