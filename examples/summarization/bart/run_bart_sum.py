@@ -54,9 +54,13 @@ class BartSystem(BaseTransformer):
         return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
 
     def test_step(self, batch, batch_idx):
+        # NOTE: this generation will not use the cache.
+        pad_token_id = self.tokenizer.pad_token_id
+        source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
+        # NOTE: these kwargs get more speed and lower quality summaries than those in evaluate_cnn.py.
         generated_ids = self.model.generate(
-            batch["source_ids"],
-            attention_mask=batch["source_mask"],
+            source_ids,
+            source_mask,
             num_beams=1,
             max_length=80,
             repetition_penalty=2.5,
@@ -69,7 +73,7 @@ class BartSystem(BaseTransformer):
         ]
         target = [
             self.tokenizer.decode(t, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-            for t in batch["target_ids"]
+            for t in y
         ]
         loss = self._step(batch)
 
