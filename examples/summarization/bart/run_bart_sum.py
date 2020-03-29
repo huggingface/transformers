@@ -22,7 +22,12 @@ class BartSystem(BaseTransformer):
         super(BartSystem, self).__init__(hparams, num_labels=None, mode=self.mode)
 
     def forward(
-        self, input_ids, attention_mask=None, decoder_input_ids=None, decoder_attention_mask=None, masked_lm_labels=None
+        self,
+        input_ids,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        masked_lm_labels=None,
     ):
         return self.model(
             input_ids,
