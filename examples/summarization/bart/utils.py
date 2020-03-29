@@ -1,5 +1,6 @@
 import os
 
+import torch
 from torch.utils.data import Dataset
 
 from transformers.tokenization_utils import trim_batch
@@ -16,10 +17,6 @@ def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return
     return examples
 
 
-
-
-
-import torch
 class SummarizationDataset(Dataset):
     def __init__(
         self,
@@ -50,10 +47,10 @@ class SummarizationDataset(Dataset):
         return source_ids, source_mask, y
 
     def collate_fn(self, batch):
+        input_ids = torch.stack([x["source_ids"] for x in batch])
+        masks = torch.stack([x["source_mask"] for x in batch])
+        target_ids = torch.stack([x["target_ids"] for x in batch])
         pad_token_id = self.tokenizer.pad_token_id
-        input_ids = torch.cat([x['source_ids'] for x in batch])
-        masks = torch.cat([x['source_mask'] for x in batch])
-        target_ids = torch.cat([x['source_ids'] for x in batch])
-        y = trim_batch(batch["target_ids"], pad_token_id)
-        source_ids, source_mask = trim_batch(batch["source_ids"], pad_token_id, attention_mask=batch["source_mask"])
-        return source_ids, source_mask, y
+        y = trim_batch(target_ids, pad_token_id)
+        source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
+        return {"source_ids": source_ids, "source_mask": source_mask, "target_ids": y}
