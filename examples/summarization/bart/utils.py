@@ -16,6 +16,10 @@ def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return
     return examples
 
 
+
+
+
+import torch
 class SummarizationDataset(Dataset):
     def __init__(
         self,
@@ -41,6 +45,15 @@ class SummarizationDataset(Dataset):
 
     @staticmethod
     def trim_seq2seq_batch(batch, pad_token_id):
+        y = trim_batch(batch["target_ids"], pad_token_id)
+        source_ids, source_mask = trim_batch(batch["source_ids"], pad_token_id, attention_mask=batch["source_mask"])
+        return source_ids, source_mask, y
+
+    def collate_fn(self, batch):
+        pad_token_id = self.tokenizer.pad_token_id
+        input_ids = torch.cat([x['source_ids'] for x in batch])
+        masks = torch.cat([x['source_mask'] for x in batch])
+        target_ids = torch.cat([x['source_ids'] for x in batch])
         y = trim_batch(batch["target_ids"], pad_token_id)
         source_ids, source_mask = trim_batch(batch["source_ids"], pad_token_id, attention_mask=batch["source_mask"])
         return source_ids, source_mask, y
