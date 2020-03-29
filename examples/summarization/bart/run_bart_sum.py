@@ -19,7 +19,7 @@ class BartSystem(BaseTransformer):
     mode = "language-modeling"
 
     def __init__(self, hparams):
-        super().__init__(hparams, num_labels=None, mode=self.mode)
+        super().__init__(hparams, num_labels=None, mode=self.mode, output_past=False)
 
     def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
         return self.model(
