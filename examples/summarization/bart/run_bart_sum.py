@@ -7,8 +7,8 @@ import time
 import torch
 from torch.utils.data import DataLoader
 
-from transformer_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
-from utils import SummarizationDataset
+from ...transformer_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
+from .utils import SummarizationDataset
 
 
 logger = logging.getLogger(__name__)
@@ -151,18 +151,19 @@ class BartSystem(BaseTransformer):
         )
         return parser
 
-
+from durbango import pickle_save
 def main():
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
     parser = BartSystem.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
+
     # If output_dir not provided, a folder will be generated in pwd
     if args.output_dir is None:
         args.output_dir = os.path.join("./results", f"{args.task}_{args.model_type}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
-
+    pickle_save(args, 'args.pkl')
     model = BartSystem(args)
     trainer = generic_train(model, args)
 
