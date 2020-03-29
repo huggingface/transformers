@@ -11,8 +11,7 @@ from flax.serialization import from_state_dict
 from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
 
-from transformers import BertModel as PTBertModel, BertTokenizerFast
-
+from transformers import BertModel as PTBertModel, BertTokenizerFast, BertConfig
 
 ACT2FN = {
     "gelu": nn.gelu,
@@ -36,18 +35,6 @@ def gelu(x):
     <https://arxiv.org/abs/1606.08415>`_, section 2.
     """
     return x * 0.5 * (1. + jax.lax.erf(x / jnp.sqrt(2.)))
-
-
-@dataclass
-class BertConfig:
-    max_length: int
-    vocab_size: int
-    hidden_size: int
-    num_layers: int
-    num_heads: int
-    head_size: int
-    intermediate_size: int
-    initializer_range: Tuple[int, int] = (-1, 1)
 
 
 class BertLayerNorm(nn.Module):
@@ -238,17 +225,17 @@ class FXBertModel:
         model_def = BertModel.partial(
             vocab_size=self.config.vocab_size,
             hidden_size=self.config.hidden_size,
-            type_vocab_size=2,
-            max_length=self.config.max_length,
-            num_encoder_layers=self.config.num_layers,
-            num_heads=self.config.num_heads,
-            head_size=self.config.head_size,
+            type_vocab_size=self.config.type_vocab_size,
+            max_length=self.config.max_position_embeddings,
+            num_encoder_layers=self.config.num_hidden_layers,
+            num_heads=self.config.num_attention_heads,
+            head_size=self.config.hidden_size,
             intermediate_size=self.config.intermediate_size
         )
 
         bert = nn.Model(model_def, self.state)
 
-        # @jax.jit
+        @jax.jit
         def predict(input_ids, token_type_ids, attention_mask):
             return bert(
                 jnp.array(input_ids, dtype='i4'),
@@ -265,8 +252,8 @@ class FXBertModel:
 
 if __name__ == '__main__':
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
-    model = FXBertModel(BertConfig(512, 28996, 768, 12, 12, 768, 3072))
-    model_pt = PTBertModel.from_pretrained('bert-base-cased', output_attentions=True)
+    model_pt = PTBertModel.from_pretrained('bert-base-cased')
+    model = FXBertModel(model_pt.config)
     model_pt.eval()
 
     with open("/data/Downloads/bert-base-cased-pytorch_model.bin", 'rb') as model_f:
