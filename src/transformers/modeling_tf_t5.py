@@ -640,7 +640,7 @@ T5_INPUTS_DOCSTRING = r"""
             T5 is a model with relative position embeddings so you should be able to pad the inputs on
             the right or the left.
             Indices can be obtained using :class:`transformers.T5Tokenizer`.
-            To know more on how to prepare `input_ids` for pre-training take a look at
+            To know more on how to prepare :obj:`input_ids` for pre-training take a look at
             `T5 Training <./t5.html#training>`_ .
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
@@ -648,7 +648,7 @@ T5_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        encoder_outputs (tuple(:obj:`tuple(tf.FloatTensor)`, `optional`, defaults to :obj:`None`):
+        encoder_outputs (:obj:`tuple(tuple(tf.FloatTensor)`, `optional`, defaults to :obj:`None`):
             Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`)
             `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`) is a sequence of hidden-states at the output of the last layer of the encoder.
             Used in the cross-attention of the decoder.
@@ -662,7 +662,7 @@ T5_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-            To know more on how to prepare `decoder_input_ids` for pre-training take a look at
+            To know more on how to prepare :obj:`decoder_input_ids` for pre-training take a look at
             `T5 Training <./t5.html#training>`_ .
         head_mask: (:obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
             Mask to nullify selected heads of the self-attention modules.
