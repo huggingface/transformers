@@ -29,6 +29,7 @@ if is_torch_available():
     from transformers import (
         AutoModel,
         AutoModelForSequenceClassification,
+        AutoTokenizer,
         BartModel,
         BartForConditionalGeneration,
         BartForSequenceClassification,
@@ -185,9 +186,11 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     def test_tiny_model(self):
-        tok = BartTokenizer.from_pretrained("bart-large")  # same tokenizer
-        tiny = AutoModel.from_pretrained("sshleifer/bart-tiny-random")  # same vocab size
+        model_name = "sshleifer/bart-tiny-random"
+        tiny = AutoModel.from_pretrained(model_name)  # same vocab size
+        tok = AutoTokenizer.from_pretrained(model_name)  # same tokenizer
         inputs_dict = tok.batch_encode_plus(["Hello my friends"], return_tensors="pt")
+
         with torch.no_grad():
             tiny(**inputs_dict)
 
