@@ -30,9 +30,9 @@ T5 can be trained / fine-tuned on two types of objectives:
 
 ::
 
-  input_ids = tokenizer.encode('The <extra_id_1> walks in <extra_id_2> park')
-  decoder_input_ids = tokenizer.encode('<pad> <extra_id_1> cute dog <extra_id_2> the <extra_id_3>')
-  lm_labels = tokenizer.encode('<extra_id_1> cute dog <extra_id_2> the <extra_id_3> </s>')
+  input_ids = tokenizer.encode('The <extra_id_1> walks in <extra_id_2> park', return_tensors='pt')
+  decoder_input_ids = tokenizer.encode('<pad> <extra_id_1> cute dog <extra_id_2> the <extra_id_3>', return_tensors='pt')
+  lm_labels = tokenizer.encode('<extra_id_1> cute dog <extra_id_2> the <extra_id_3> </s>', return_tensors='pt')
   model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels)
 
 - Supervised training
@@ -42,9 +42,9 @@ T5 can be trained / fine-tuned on two types of objectives:
   
 ::
 
-  input_ids = tokenizer.encode('The house is wonderful. </s>')
-  decoder_input_ids = tokenizer.encode('<pad> Das Haus ist wunderbar. ')
-  lm_labels = tokenizer.encode('Das Haus ist wunderbar. </s>')
+  input_ids = tokenizer.encode('The house is wonderful. </s>', return_tensors='pt')
+  decoder_input_ids = tokenizer.encode('<pad> Das Haus ist wunderbar.', return_tensors='pt')
+  lm_labels = tokenizer.encode('Das Haus ist wunderbar. </s>', return_tensors='pt')
   model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels)
 
 Tips
