@@ -1,8 +1,8 @@
 import argparse
 from pathlib import Path
 
-from rouge_score import rouge_scorer, scoring
 import torch
+from rouge_score import rouge_scorer, scoring
 from tqdm import tqdm
 
 from transformers import T5ForConditionalGeneration, T5Tokenizer

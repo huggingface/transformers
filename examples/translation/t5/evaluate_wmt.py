@@ -1,8 +1,8 @@
 import argparse
 from pathlib import Path
 
-from sacrebleu import corpus_bleu
 import torch
+from sacrebleu import corpus_bleu
 from tqdm import tqdm
 
 from transformers import T5ForConditionalGeneration, T5Tokenizer
