@@ -106,6 +106,12 @@ def truncate_and_pad(
 
 
 class BatchEncoding(UserDict):
+    """
+    Data structure derived from Dictionary holding all the required information to forward through
+    a model.
+
+    In addition, this structure expose utility methods to map from word/char space to token space.
+    """
     def __init__(self, data: dict, encoding: Optional[Union[Encoding, Sequence[Encoding]]] = None):
         super().__init__(data)
 
@@ -127,6 +133,10 @@ class BatchEncoding(UserDict):
 
     @property
     def encodings(self) -> Optional[List[Encoding]]:
+        """
+        Return the list all encoding from the tokenization process
+        :return: List[Encoding] or None if input was tokenized through Python tokenizer
+        """
         return self._encodings
 
     def keys(self):
@@ -138,26 +148,53 @@ class BatchEncoding(UserDict):
     def items(self):
         return self.data.items()
 
-    def char_to_token_offsets(self, sample: int, char: int) -> Tuple[int, int]:
+    def char_to_token_offsets(self, sentence: int, char: int) -> Tuple[int, int]:
+        """
+        Find the Offsets of the token containing the character at the specified position
+        :param sentence: Index of the sentence relative to the batch provided to the tokenizer.
+        :param char: Char index to get the relative token offsets
+        :return: (token start, token end)
+        """
+
         if not self._encodings:
             raise ValueError("char_to_token_offsets() is not available when using Python based tokenizers")
-        return self[sample].char_to_token_offsets(char)
+        return self[sentence].char_to_token_offsets(char)
 
-    def char_to_token(self, sample: int, pos: int) -> Optional[Tuple[int, int]]:
+    def char_to_token(self, sentence: int, char: int) -> int:
+        """
+        Return the index of the token at position of the given char.
+        :param sentence: Index of the sentence relative to the batch provided to the tokenizer.
+        :param char: Char index to get the relative token offsets
+        :return: int referring to the position of the token in the returned set of tokens for the sentence
+        """
+
         if not self._encodings:
             raise ValueError("char_to_token() is not available when using Python based tokenizers")
-        return self[sample].char_to_token(pos)
+        return self[sentence].char_to_token(char)
 
-    def char_to_word_offsets(self, sample: int, char: int) -> Tuple[int, int]:
+    def char_to_word_offsets(self, sentence: int, char: int) -> Tuple[int, int]:
+        """
+        Find the Offsets of the word containing the character at the specified position
+        :param sentence: Index of the sentence relative to the batch provided to the tokenizer.
+        :param char: Char index to get the relative token offsets
+        :return: tuple(word start, word end) representing the first and last characters of the word
+        """
+
         if not self._encodings:
             raise ValueError("char_to_word_offsets() is not available when using Python based tokenizers")
-        return self[sample].char_to_word_offsets(char)
+        return self[sentence].char_to_word_offsets(char)
 
-    def token_to_word_offsets(self, sample: int, index: int) -> Optional[Tuple[int, int]]:
-        """ Find the offsets of the word that contains the token at the given index """
+    def token_to_word_offsets(self, sentence: int, index: int) -> Optional[Tuple[int, int]]:
+        """
+        Find the Offsets of the word containing the token at the given index
+        :param sentence: Index of the sentence relative to the batch provided to the tokenizer.
+        :param index: Index of the token to map to the original word offsets
+        :return: tuple(word start, word end) or None
+        """
+
         if not self._encodings:
             raise ValueError("token_to_word_offsets() is not available when using Python based tokenizers")
-        return self[sample].token_to_word_offsets(index)
+        return self[sentence].token_to_word_offsets(index)
 
 
 class SpecialTokensMixin:
