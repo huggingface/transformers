@@ -147,8 +147,6 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 self.parent.assertEqual(decoder_input_ids_slice[0].item(), self.decoder_start_token_id)
                 if i < decoder_input_ids_slice.shape[-1]:
                     if i < decoder_input_ids.shape[-1] - 1:
-                        # pad token id set at seq end
-                        self.parent.assertEqual(decoder_input_ids_slice[i + 1].item(), self.pad_token_id)
                         # items before diagonal
                         self.parent.assertListEqual(
                             decoder_input_ids_slice[1 : i + 1].tolist(), lm_labels_slice[:i].tolist()

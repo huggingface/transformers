@@ -505,36 +505,23 @@ class T5PreTrainedModel(PreTrainedModel):
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
-        sequence_length = input_ids.shape[-1]
 
         assert (
             decoder_start_token_id is not None
         ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
 
         # shift inputs to the right
         shifted_input_ids = input_ids.new_zeros(input_ids.shape)
         shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
         shifted_input_ids[..., 0] = decoder_start_token_id
 
+        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
         # replace possible -100 values in lm_labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
         assert torch.all(
             shifted_input_ids >= 0
-        ).item(), "`shifted_input_ids` should only contain positive values. Verify that `lm_labels` has only positive values and -100"
-
-        # num of non pad_tokens corresponds to idx of first pad token id
-        # input_ids can only be padded from the right
-        sequence_end_idxs = input_ids.ne(decoder_start_token_id).long().sum(dim=-1)
-        assert len(sequence_end_idxs.shape) == 1, "`sequence_end_idxs` should be 1-dim and `input_ids` should be 2-dim"
-
-        for batch_idx, sequence_end_idx in enumerate(sequence_end_idxs.tolist()):
-            # continue if sequence ends at sequence length
-            if sequence_end_idx == sequence_length:
-                continue
-            # override sequence end token with pad token
-            shifted_input_ids[batch_idx, sequence_end_idx] = pad_token_id
+        ).item(), "Verify that `lm_labels` has only positive values and -100"
 
         return shifted_input_ids
 
