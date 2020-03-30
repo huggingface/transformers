@@ -520,6 +520,10 @@ class T5PreTrainedModel(PreTrainedModel):
         # replace possible -100 values in lm_labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
+        assert torch.all(
+            shifted_input_ids >= 0
+        ).item(), "`shifted_input_ids` should only contain positive values. Verify that `lm_labels` has only positive values and -100"
+
         # num of non pad_tokens corresponds to idx of first pad token id
         # input_ids can only be padded from the right
         sequence_end_idxs = input_ids.ne(decoder_start_token_id).long().sum(dim=-1)
