@@ -43,6 +43,13 @@ ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 
+# Define type aliases
+TextInput = str
+TextPairInput = Tuple[str, str]
+PreTokenizedInput = List[str]
+PreTokenizedInputPair = Tuple[List[str], List[str]]
+
+
 @contextmanager
 def truncate_and_pad(
     tokenizer: BaseTokenizer,
@@ -881,7 +888,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         return added_tokens
 
-    def tokenize(self, text, **kwargs):
+    def tokenize(self, text: TextInput, **kwargs):
         """ Converts a string in a sequence of tokens (string), using the tokenizer.
             Split in words for word-based vocabulary or sub-words for sub-word-based
             vocabularies (BPE/SentencePieces/WordPieces).
@@ -990,8 +997,8 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
     def encode(
         self,
-        text: str,
-        text_pair: Optional[str] = None,
+        text: TextInput,
+        text_pair: Optional[TextInput] = None,
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         stride: int = 0,
@@ -1061,8 +1068,8 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
     def encode_plus(
         self,
-        text: str,
-        text_pair: Optional[str] = None,
+        text: TextInput,
+        text_pair: Optional[TextInput] = None,
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         stride: int = 0,
@@ -1212,7 +1219,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[str, List[str]],
+        batch_text_or_text_pairs: Union[List[TextInput], List[TextPairInput], List[PreTokenizedInput], List[PreTokenizedInputPair]],
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         stride: int = 0,
@@ -1964,12 +1971,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         return self.tokenizer.num_special_tokens_to_add(pair)
 
-    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = True) -> List[str]:
+    def tokenize(self, text: TextInput, pair: Optional[TextInput] = None, add_special_tokens: bool = True) -> List[str]:
         return self.tokenizer.encode(text, pair, add_special_tokens).tokens
 
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[List[str], List[Tuple[str, str]], List[List[str]], List[Tuple[List[str], List[str]]]] = None,
+        batch_text_or_text_pairs: Union[List[TextInput], List[TextPairInput], List[PreTokenizedInput], List[PreTokenizedInputPair]] = None,
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         stride: int = 0,
@@ -2116,8 +2123,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     def encode_plus(
         self,
-        text: Union[str, List[str]],
-        text_pair: Optional[str] = None,
+        text: Union[TextInput, PreTokenizedInput],
+        text_pair: Optional[Union[TextInput, PreTokenizedInput]] = None,
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         pad_to_max_length: bool = False,
