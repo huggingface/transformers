@@ -29,14 +29,14 @@ class EncoderDecoderModel(PreTrainedModel):
     r"""
         :class:`~transformers.EncoderDecoder` is a generic model class that will be
         instantiated as a transformer architecture with one of the base model
-        classes of the library as encoder and (optionally) another one as
+        classes of the library as encoder and another one as
         decoder when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
-        class method.
+        class method for the encoder and `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
     """
 
     def __init__(self, encoder, decoder):
         assert encoder is not None, "The encoder has to be defined"
-        assert decoder is not None, "The encoder has to be defined"
+        assert decoder is not None, "The decoder has to be defined"
 
         config = self._init_config(encoder.config, decoder.config)
         super().__init__(config)
@@ -48,17 +48,11 @@ class EncoderDecoderModel(PreTrainedModel):
         self.decoder = decoder
 
     def _init_config(self, encoder_config, decoder_config):
-        # TODO: think about how to handle the config
-        # TODO: correct the function here
-        # Seq-2-Seq should have at least same word embeddings for encoder and decoder
-        # so all special tokens should be the same
-        assert encoder_config.pad_token_id == decoder_config.pad_token_id
-        assert encoder_config.bos_token_id == decoder_config.bos_token_id
-        assert encoder_config.eos_token_id == decoder_config.eos_token_id
-        assert encoder_config.vocab_size == decoder_config.vocab_size
-
+        # decoder config is used as default config (important for generation)
+        # TODO: check with thom
         config = decoder_config
         config.is_encoder_decoder = True
+
         return config
 
     def get_encoder(self):
@@ -149,7 +143,7 @@ class EncoderDecoderModel(PreTrainedModel):
         # Load and initialize the encoder and decoder
         # The distinction between encoder and decoder at the model level is made
         # by the value of the flag `is_decoder` that we need to set correctly.
-        encoder = kwargs_encoder.pop("model", None)
+        encoder = kwargs_encoder.pop("encoder_model", None)
         if encoder is None:
             assert (
                 pretrained_model_name_or_path is not None
@@ -162,9 +156,6 @@ class EncoderDecoderModel(PreTrainedModel):
             assert (
                 decoder_pretrained_model_name_or_path is not None
             ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
-
-            # TODO: Maybe make two classes 1) AutoModel 2) AutoModelWithLMHead
-
             decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
         decoder.config.is_decoder = True
 
