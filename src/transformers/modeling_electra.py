@@ -59,7 +59,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, generator_or_d
                 name = name.replace("generator/", "electra/")
 
             name = name.replace("dense_1", "dense_prediction")
-            name = name.replace("generator_predictions/output_bias", "bias")
+            name = name.replace("generator_predictions/output_bias", "generator_lm_head/bias")
 
             name = name.split("/")
             # print(original_name, name)
@@ -304,9 +304,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         self.electra = ElectraModel(config)
         self.generator_predictions = ElectraGeneratorPredictions(config)
 
-        self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-        self.generator_lm_head.bias = self.bias
+        self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size)
         self.init_weights()
 
     def get_output_embeddings(self):
