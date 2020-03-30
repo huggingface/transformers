@@ -23,7 +23,7 @@ ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 
-def load_tf_weights_in_electra(model, config, tf_checkpoint_path, generator_or_discriminator="discriminator"):
+def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_or_generator="discriminator"):
     """ Load tf checkpoints in a pytorch model.
     """
     try:
@@ -54,7 +54,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, generator_or_d
             if isinstance(model, ElectraForMaskedLM):
                 name = name.replace("electra/embeddings/", "generator/embeddings/")
 
-            if generator_or_discriminator == "generator":
+            if discriminator_or_generator == "generator":
                 name = name.replace("electra/", "discriminator/")
                 name = name.replace("generator/", "electra/")
 
