@@ -1068,6 +1068,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
+        is_pretokenized: bool = False,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1115,6 +1116,8 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 - 'left': pads on the left of the sequences
                 - 'right': pads on the right of the sequences
                 Defaults to False: no padding.
+            is_pretokenized (:obj:`bool`, defaults to :obj:`False`):
+                Set to True to indicate the input is already tokenized
             return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
                 Can be set to 'tf' or 'pt' to return respectively TensorFlow :obj:`tf.constant`
                 or PyTorch :obj:`torch.Tensor` instead of a list of python integers.
@@ -1215,6 +1218,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
+        is_pretokenized: bool = False,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_masks: Optional[bool] = None,
@@ -1259,6 +1263,8 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 - 'left': pads on the left of the sequences
                 - 'right': pads on the right of the sequences
                 Defaults to False: no padding.
+            is_pretokenized (:obj:`bool`, defaults to :obj:`False`):
+                Set to True to indicate the input is already tokenized
             return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
                 Can be set to 'tf' or 'pt' to return respectively TensorFlow :obj:`tf.constant`
                 or PyTorch :obj:`torch.Tensor` instead of a list of python integers.
