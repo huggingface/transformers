@@ -459,7 +459,7 @@ class Pipeline(_ScikitCompat):
         )
 
         # Filter out features not available on specific models
-        inputs = self.inputs_for_model(inputs)
+        # inputs = self.inputs_for_model(inputs)
 
         return inputs
 
@@ -1396,7 +1396,7 @@ SUPPORTED_TASKS = {
                 "tf": "distilbert-base-uncased-finetuned-sst-2-english",
             },
             "config": "distilbert-base-uncased-finetuned-sst-2-english",
-            "tokenizer": "distilbert-base-uncased",
+            "tokenizer": "distilbert-base-cased",
         },
     },
     "ner": {
