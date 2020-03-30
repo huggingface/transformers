@@ -233,7 +233,6 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
     else:
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
-
     model = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
     model.resize_token_embeddings(len(tokenizer))
 
