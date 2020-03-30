@@ -829,7 +829,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
         input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
         outputs = model(input_ids, input_ids=input_ids, lm_labels=input_ids)
-        prediction_scores = outputs[:1]  # TODO: TFT5 still needs to implement
+        prediction_scores = outputs[:1]
 
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
@@ -872,7 +872,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             head_mask=head_mask,
         )
 
-        # TODO (thom / patrick): add lm_labels for loss function
         sequence_output = decoder_outputs[0] * (self.model_dim ** -0.5)
         embed_tokens = self.get_output_embeddings()
         lm_logits = embed_tokens(sequence_output, mode="linear")
