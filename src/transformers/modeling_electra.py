@@ -23,7 +23,7 @@ ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 
-def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
+def load_tf_weights_in_electra(model, config, tf_checkpoint_path, generator_or_discriminator="discriminator"):
     """ Load tf checkpoints in a pytorch model.
     """
     try:
@@ -53,21 +53,21 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
         try:
             if isinstance(model, ElectraForMaskedLM):
                 name = name.replace("electra/embeddings/", "generator/embeddings/")
-            name = name.replace("electra", "discriminator")
+
+            if generator_or_discriminator == "generator":
+                name = name.replace("electra/", "discriminator/")
+                name = name.replace("generator/", "electra/")
+
             name = name.replace("dense_1", "dense_prediction")
             name = name.replace("generator_predictions/output_bias", "bias")
 
             name = name.split("/")
-            print(original_name, name)
+            # print(original_name, name)
             # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
             # which are not required for using pretrained model
             if any(
                 n
                 in [
-                    "adam_v",
-                    "adam_m",
-                    "AdamWeightDecayOptimizer",
-                    "AdamWeightDecayOptimizer_1",
                     "global_step",
                     "temperature",
                 ]
@@ -103,10 +103,10 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path):
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
-            logger.info("Initialize PyTorch weight {}".format(name))
+            print("Initialize PyTorch weight {}".format(name), original_name)
             pointer.data = torch.from_numpy(array)
-        except AttributeError:
-            logging.info("Skipping {}".format(original_name))
+        except AttributeError as e:
+            print("Skipping {}".format(original_name), name, e)
             continue
     return model
 
@@ -233,7 +233,6 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
 class ElectraModel(ElectraPreTrainedModel):
 
     config_class = ElectraConfig
-    base_model_prefix = "discriminator"
 
     def __init__(self, config):
         super().__init__(config)
@@ -299,12 +298,10 @@ class ElectraModel(ElectraPreTrainedModel):
 
 class ElectraForMaskedLM(ElectraPreTrainedModel):
 
-    base_model_prefix = "generator"
-
     def __init__(self, config):
         super().__init__(config)
 
-        self.generator = ElectraModel(config)
+        self.electra = ElectraModel(config)
         self.generator_predictions = ElectraGeneratorPredictions(config)
 
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size, bias=False)
@@ -326,7 +323,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         masked_lm_labels=None,
     ):
 
-        generator_hidden_states = self.generator(
+        generator_hidden_states = self.electra(
             input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
         )
         generator_sequence_output = generator_hidden_states[0]
@@ -349,12 +346,10 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
 
 class ElectraForPreTraining(ElectraPreTrainedModel):
 
-    base_model_prefix = "discriminator"
-
     def __init__(self, config):
         super().__init__(config)
 
-        self.discriminator = ElectraModel(config)
+        self.electra = ElectraModel(config)
         self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
         self.init_weights()
 
@@ -369,7 +364,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         labels=None,
     ):
 
-        discriminator_hidden_states = self.discriminator(
+        discriminator_hidden_states = self.electra(
             input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
@@ -397,12 +392,10 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 
 class ElectraForTokenClassification(ElectraPreTrainedModel):
 
-    base_model_prefix = "discriminator"
-
     def __init__(self, config):
         super().__init__(config)
 
-        self.discriminator = ElectraModel(config)
+        self.electra = ElectraModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.init_weights()
@@ -418,7 +411,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         labels=None,
     ):
 
-        discriminator_hidden_states = self.discriminator(
+        discriminator_hidden_states = self.electra(
             input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
