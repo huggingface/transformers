@@ -769,18 +769,23 @@ class T5Model(T5PreTrainedModel):
         self.decoder.set_input_embeddings(new_embeddings)
 
     def _shift_right(self, input_ids):
-        pad_token_id = self.model.config.pad_token_id
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined"
+        decoder_start_token_id = self.config.decoder_start_token_id
+        pad_token_id = self.config.pad_token_id
         sequence_length = input_ids.shape[-1]
+
+        assert (
+            decoder_start_token_id is not None
+        ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
+        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
 
         # shift inputs to the right
         shifted_input_ids = input_ids.new_zeros(input_ids.shape)
         shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-        shifted_input_ids[..., 0] = pad_token_id
+        shifted_input_ids[..., 0] = decoder_start_token_id
 
         # num of non pad_tokens corresponds to idx of first pad token id
         # input_ids can only be padded from the right
-        sequence_end_idxs = input_ids.ne(pad_token_id).long().sum(dim=1)
+        sequence_end_idxs = input_ids.ne(decoder_start_token_id).long().sum(dim=1)
 
         for batch_idx, sequence_end_idx in enumerate(sequence_end_idxs):
             # continue if sequence ends at sequence length
@@ -789,7 +794,7 @@ class T5Model(T5PreTrainedModel):
             # override sequence end token with pad token
             shifted_input_ids[batch_idx, sequence_end_idx] = pad_token_id
 
-        return pad_token_id
+        return shifted_input_ids
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.

@@ -468,7 +468,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             length_penalty=1.0,
             no_repeat_ngram_size=3,
             early_stopping=True,
-            decoder_start_token_id=model.config.eos_token_ids[0],
+            decoder_start_token_id=model.config.eos_token_id,
         )
 
         decoded = [
