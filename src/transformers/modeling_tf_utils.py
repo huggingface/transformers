@@ -523,8 +523,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             pad_token_id: (`optional`) int
                 Pad token. Defaults to pad_token_id as defined in the models config.
 
-            eos_token_ids: (`optional`) int or list of int
-                End of sequence token or list of tokens to stop the generation. Default to 0.
+            eos_token_id: (`optional`) int
+                EOS token. Defaults to eos_token_id as defined in the models config.
 
             length_penalty: (`optional`) float
                 Exponential penalty to the length. Default to 1.
