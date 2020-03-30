@@ -480,7 +480,7 @@ class Pipeline(_ScikitCompat):
         with self.device_placement():
             if self.framework == "tf":
                 # TODO trace model
-                predictions = self.model(inputs, training=False)[0]
+                predictions = self.model(inputs.data, training=False)[0]
             else:
                 with torch.no_grad():
                     inputs = self.ensure_tensor_on_device(**inputs)
@@ -778,7 +778,7 @@ class NerPipeline(Pipeline):
 
                 # Forward
                 if self.framework == "tf":
-                    entities = self.model(tokens)[0][0].numpy()
+                    entities = self.model(tokens.data)[0][0].numpy()
                     input_ids = tokens["input_ids"].numpy()[0]
                 else:
                     with torch.no_grad():
