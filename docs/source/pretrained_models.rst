@@ -275,7 +275,6 @@ For a list that includes community-uploaded models, refer to `https://huggingfac
 |                   |                                                            | | FlauBERT large architecture                                                                                                         |
 |                   |                                                            | (see `details <https://github.com/getalp/Flaubert>`__)                                                                                |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-+-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | Bart              | ``bart-large``                                             | | 12-layer, 1024-hidden, 16-heads, 406M parameters                                                                                    |
 |                   |                                                            | (see `details <https://github.com/pytorch/fairseq/tree/master/examples/bart>`_)                                                       |
 |                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
@@ -285,6 +284,3 @@ For a list that includes community-uploaded models, refer to `https://huggingfac
 |                   | ``bart-large-cnn``                                         | | 12-layer, 1024-hidden, 16-heads, 406M parameters       (same as base)                                                               |
 |                   |                                                            | | bart-large base architecture finetuned on cnn summarization task                                                                    |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-
-
-.. <https://huggingface.co/transformers/examples.html>`__

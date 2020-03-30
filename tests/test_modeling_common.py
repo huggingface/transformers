@@ -58,6 +58,7 @@ class ModelTesterMixin:
     test_pruning = True
     test_resize_embeddings = True
     test_head_masking = True
+    test_missing_keys = True
     is_encoder_decoder = False
 
     def test_save_load(self):
@@ -147,7 +148,7 @@ class ModelTesterMixin:
                     4  # decoder_features_or_logits, decoder_attentions, encoder_features, encoder_attentions
                 )
                 decoder_attention_idx = 1
-                if "lm_labels" in inputs_dict or "decoder_lm_labels" in inputs_dict:  # loss will come first
+                if "lm_labels" in inputs_dict:  # loss will come first
                     correct_outlen += 1  # compute loss
                     decoder_attention_idx += 1
                 self.assertEqual(out_len, correct_outlen)
@@ -527,6 +528,8 @@ class ModelTesterMixin:
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
 
     def test_correct_missing_keys(self):
+        if not self.test_missing_keys:
+            return
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -601,9 +604,9 @@ class ModelTesterMixin:
             input_ids = inputs_dict["input_ids"]
             del inputs_dict["input_ids"]
         else:
-            encoder_input_ids = inputs_dict["encoder_input_ids"]
+            encoder_input_ids = inputs_dict["input_ids"]
             decoder_input_ids = inputs_dict.get("decoder_input_ids", encoder_input_ids)
-            del inputs_dict["encoder_input_ids"]
+            del inputs_dict["input_ids"]
             inputs_dict.pop("decoder_input_ids", None)
 
         for model_class in self.all_model_classes:
@@ -615,7 +618,7 @@ class ModelTesterMixin:
             if not self.is_encoder_decoder:
                 inputs_dict["inputs_embeds"] = wte(input_ids)
             else:
-                inputs_dict["encoder_inputs_embeds"] = wte(encoder_input_ids)
+                inputs_dict["inputs_embeds"] = wte(encoder_input_ids)
                 inputs_dict["decoder_inputs_embeds"] = wte(decoder_input_ids)
 
             with torch.no_grad():
@@ -624,9 +627,10 @@ class ModelTesterMixin:
     def test_lm_head_model_random_generate(self):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict.get(
-            "input_ids", None
-        )  # TODO (PVP): ugly workaround to make code work for t5 for the moment - has to changed when t5 is fixed.
+        input_ids = inputs_dict.get("input_ids")
+
+        if self.is_encoder_decoder:
+            config.output_past = True  # needed for Bart TODO: might have to update for other encoder-decoder models
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
@@ -635,16 +639,16 @@ class ModelTesterMixin:
 
             if config.bos_token_id is None:
                 with self.assertRaises(AssertionError):
-                    model.generate(max_length=5)
+                    model.generate(do_sample=True, max_length=5)
                 # batch_size = 1
-                self._check_generated_tokens(model.generate(input_ids))
+                self._check_generated_tokens(model.generate(input_ids, do_sample=True))
                 # batch_size = 1, num_beams > 1
-                self._check_generated_tokens(model.generate(input_ids, num_beams=3))
+                self._check_generated_tokens(model.generate(input_ids, do_sample=True, num_beams=3))
             else:
                 # batch_size = 1
-                self._check_generated_tokens(model.generate(max_length=5))
+                self._check_generated_tokens(model.generate(do_sample=True, max_length=5))
                 # batch_size = 1, num_beams > 1
-                self._check_generated_tokens(model.generate(max_length=5, num_beams=3))
+                self._check_generated_tokens(model.generate(do_sample=True, max_length=5, num_beams=3))
 
             with self.assertRaises(AssertionError):
                 # generating multiple sequences when greedy no beam generation
@@ -656,12 +660,14 @@ class ModelTesterMixin:
                 model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 
             # batch_size > 1, sample
-            self._check_generated_tokens(model.generate(input_ids, num_return_sequences=3))
+            self._check_generated_tokens(model.generate(input_ids, do_sample=True, num_return_sequences=3))
             # batch_size > 1, greedy
             self._check_generated_tokens(model.generate(input_ids, do_sample=False))
 
             # batch_size > 1, num_beams > 1, sample
-            self._check_generated_tokens(model.generate(input_ids, num_beams=3, num_return_sequences=3,))
+            self._check_generated_tokens(
+                model.generate(input_ids, do_sample=True, num_beams=3, num_return_sequences=3,)
+            )
             # batch_size > 1, num_beams > 1, greedy
             self._check_generated_tokens(
                 model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3)

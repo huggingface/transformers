@@ -67,8 +67,17 @@ class HfApiEndpointsTest(HfApiCommonTest):
             cls._api.delete_obj(token=cls._token, filename=FILE_KEY)
 
     def test_whoami(self):
-        user = self._api.whoami(token=self._token)
+        user, orgs = self._api.whoami(token=self._token)
         self.assertEqual(user, USER)
+        self.assertIsInstance(orgs, list)
+
+    def test_presign_invalid_org(self):
+        with self.assertRaises(HTTPError):
+            _ = self._api.presign(token=self._token, filename="fake_org.txt", organization="fake")
+
+    def test_presign_valid_org(self):
+        urls = self._api.presign(token=self._token, filename="valid_org.txt", organization="valid_org")
+        self.assertIsInstance(urls, PresignedUrl)
 
     def test_presign(self):
         for FILE_KEY, FILE_PATH in FILES:

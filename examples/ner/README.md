@@ -112,6 +112,13 @@ Here is a small comparison between BERT (large, cased), RoBERTa (large, cased) a
 | `roberta-large`                  | 95.96 | 91.87
 | `distilbert-base-uncased` | 94.34 | 90.32
 
+#### Run PyTorch version using PyTorch-Lightning
+
+Run `bash run_pl.sh` from the `ner` directory. This would also install `pytorch-lightning` and the `examples/requirements.txt`. It is a shell pipeline which would automatically download, pre-process the data and run the models in `germeval-model` directory. Logs are saved in `lightning_logs` directory.
+
+Pass `--n_gpu` flag to change the number of GPUs. Default uses 1. At the end, the expected results are: `TEST RESULTS {'val_loss': tensor(0.0707), 'precision': 0.852427800698191, 'recall': 0.869537067011978, 'f1': 0.8608974358974358}`
+
+
 ### Run the Tensorflow 2 version
 
 To start training, just run:
