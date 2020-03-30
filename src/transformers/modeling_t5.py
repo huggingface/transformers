@@ -517,6 +517,9 @@ class T5PreTrainedModel(PreTrainedModel):
         shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
         shifted_input_ids[..., 0] = decoder_start_token_id
 
+        # replace possible -100 values in lm_labels by `pad_token_id`
+        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
         # num of non pad_tokens corresponds to idx of first pad token id
         # input_ids can only be padded from the right
         sequence_end_idxs = input_ids.ne(decoder_start_token_id).long().sum(dim=-1)
