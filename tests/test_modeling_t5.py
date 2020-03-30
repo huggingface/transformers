@@ -197,6 +197,10 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_shift_right(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
+
     def test_t5_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_model(*config_and_inputs)
