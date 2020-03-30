@@ -25,7 +25,8 @@ class TestBartExamples(unittest.TestCase):
         tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
         with tmp.open("w") as f:
             f.write("\n".join(articles))
-        testargs = ["evaluate_cnn.py", str(tmp), output_file_name]
+
+        testargs = ["evaluate_cnn.py", str(tmp), output_file_name, "sshleifer/bart-tiny-random"]
         with patch.object(sys, "argv", testargs):
             _run_generate()
             self.assertTrue(Path(output_file_name).exists())
