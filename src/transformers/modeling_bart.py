@@ -805,6 +805,8 @@ class BartModel(PretrainedBartModel):
 
     def set_input_embeddings(self, value):
         self.shared = value
+        self.encoder.embed_tokens = self.shared
+        self.decoder.embed_tokens = self.shared
 
     def get_output_embeddings(self):
         return _make_linear_from_emb(self.shared)  # make it on the fly
