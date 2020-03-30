@@ -94,18 +94,18 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             return
 
         tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer(add_special_tokens=False, add_prefix_space=True)
+        rust_tokenizer = self.get_rust_tokenizer(add_prefix_space=True)
 
         sequence = "lower newer"
 
         # Testing tokenization
         tokens = tokenizer.tokenize(sequence, add_prefix_space=True)
-        rust_tokens = rust_tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence, add_prefix_space=True)
         self.assertListEqual(tokens, rust_tokens)
 
         # Testing conversion to ids without special tokens
         ids = tokenizer.encode(sequence, add_special_tokens=False, add_prefix_space=True)
-        rust_ids = rust_tokenizer.encode(sequence)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
         self.assertListEqual(ids, rust_ids)
 
         # Testing conversion to ids with special tokens
