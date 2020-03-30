@@ -519,9 +519,10 @@ class T5PreTrainedModel(PreTrainedModel):
 
         # num of non pad_tokens corresponds to idx of first pad token id
         # input_ids can only be padded from the right
-        sequence_end_idxs = input_ids.ne(decoder_start_token_id).long().sum(dim=1)
+        sequence_end_idxs = input_ids.ne(decoder_start_token_id).long().sum(dim=-1)
+        assert len(sequence_end_idxs.shape) == 1, "`sequence_end_idxs` should be 1-dim and `input_ids` should be 2-dim"
 
-        for batch_idx, sequence_end_idx in enumerate(sequence_end_idxs):
+        for batch_idx, sequence_end_idx in enumerate(sequence_end_idxs.tolist()):
             # continue if sequence ends at sequence length
             if sequence_end_idx == sequence_length:
                 continue
