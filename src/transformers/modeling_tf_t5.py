@@ -799,11 +799,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
     def call(self, decoder_input_ids, **kwargs):
         r"""
-        lm_labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.vocab_size - 1]`.
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
         loss (:obj:`tf.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`lm_label` is provided):
@@ -828,8 +823,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
         input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        outputs = model(input_ids, input_ids=input_ids, lm_labels=input_ids)
-        prediction_scores = outputs[:1]
+        outputs = model(input_ids, input_ids=input_ids)
+        prediction_scores = outputs[0]
 
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = TFT5ForConditionalGeneration.from_pretrained('t5-small')

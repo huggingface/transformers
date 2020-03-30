@@ -900,8 +900,10 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         r"""
         lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
                 Labels for computing the sequence classification/regression loss.
-                Indices should be in :obj:`[0, ..., config.vocab_size - 1]`.
+                Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
                 If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+                All labels set to ``-100`` are ignored (masked), the loss is only
+                computed for labels in ``[0, ..., config.vocab_size]``
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
