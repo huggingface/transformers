@@ -122,30 +122,6 @@ class ElectraEmbeddings(BertEmbeddings):
         # any TensorFlow checkpoint file
         self.LayerNorm = BertLayerNorm(config.embedding_size, eps=config.layer_norm_eps)
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
-        if input_ids is not None:
-            input_shape = input_ids.size()
-        else:
-            input_shape = inputs_embeds.size()[:-1]
-
-        seq_length = input_shape[1]
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-        if position_ids is None:
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).expand(input_shape)
-        if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
-        position_embeddings = self.position_embeddings(position_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
-
-        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-        embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings)
-        return embeddings
-
 
 class ElectraDiscriminatorPredictions(nn.Module):
     def __init__(self, config):
@@ -181,7 +157,7 @@ class ElectraGeneratorPredictions(nn.Module):
 class ElectraPreTrainedModel(BertPreTrainedModel):
 
     config_class = ElectraConfig
-    # pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    pretrained_model_archive_map = ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_electra
     base_model_prefix = "electra"
 
@@ -221,13 +197,13 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
 
         return extended_attention_mask
 
-    def get_head_mask(self, head_mask, config=None):
+    def get_head_mask(self, head_mask):
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        num_hidden_layers = self.config.num_hidden_layers if config is None else config.num_hidden_layers
+        num_hidden_layers = self.config.num_hidden_layers
         if head_mask is not None:
             if head_mask.dim() == 1:
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)

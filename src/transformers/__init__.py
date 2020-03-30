@@ -474,6 +474,15 @@ if is_tf_available():
         TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
+    from .modeling_tf_electra import (
+        TFElectraPreTrainedModel,
+        TFElectraModel,
+        TFElectraForPreTraining,
+        TFElectraForMaskedLM,
+        TFElectraForTokenClassification,
+        TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
+    )
+
     # Optimization
     from .optimization_tf import WarmUp, create_optimizer, AdamWeightDecay, GradientAccumulator
 
