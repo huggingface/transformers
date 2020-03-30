@@ -27,7 +27,9 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 if is_torch_available():
     import torch
     from transformers import (
+        AutoModel,
         AutoModelForSequenceClassification,
+        AutoTokenizer,
         BartModel,
         BartForConditionalGeneration,
         BartForSequenceClassification,
@@ -182,6 +184,15 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("Passing inputs_embeds not implemented for Bart.")
     def test_inputs_embeds(self):
         pass
+
+    def test_tiny_model(self):
+        model_name = "sshleifer/bart-tiny-random"
+        tiny = AutoModel.from_pretrained(model_name)  # same vocab size
+        tok = AutoTokenizer.from_pretrained(model_name)  # same tokenizer
+        inputs_dict = tok.batch_encode_plus(["Hello my friends"], return_tensors="pt")
+
+        with torch.no_grad():
+            tiny(**inputs_dict)
 
 
 @require_torch
