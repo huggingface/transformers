@@ -519,9 +519,7 @@ class T5PreTrainedModel(PreTrainedModel):
         # replace possible -100 values in lm_labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
-        assert torch.all(
-            shifted_input_ids >= 0
-        ).item(), "Verify that `lm_labels` has only positive values and -100"
+        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `lm_labels` has only positive values and -100"
 
         return shifted_input_ids
 
