@@ -2001,7 +2001,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
         if batch_text_or_text_pairs is None:
             raise ValueError(
-                "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
+                "None is not a valid input. "
+                "Should be a list/tuple of strings, "
+                "a list/tuple of integers, "
+                "A list of list of strings or tuple of strings."
             )
 
         # Needed if we have to return a tensor
