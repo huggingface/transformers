@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import tempfile
 import unittest
+
+import timeout_decorator
 
 from transformers import is_torch_available
 
@@ -240,6 +241,7 @@ class BartHeadTests(unittest.TestCase):
         loss = outputs[0]
         self.assertIsInstance(loss.item(), float)
 
+    @timeout_decorator.timeout(1)
     def test_lm_forward(self):
         config, input_ids, batch_size = self._get_config_and_data(output_past=False)
         lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
