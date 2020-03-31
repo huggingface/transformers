@@ -49,6 +49,21 @@ DEFAULT_ARGS = {
 }
 
 
+def _dump_articles(path: Path, articles: list):
+    with path.open("w") as f:
+        f.write("\n".join(articles))
+
+
+def make_test_data_dir():
+    tmp_dir = Path(tempfile.gettempdir())
+    articles = [" Sam ate lunch today", "Sams lunch ingredients"]
+    summaries = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
+    for split in ["train", "val", "test"]:
+        _dump_articles((tmp_dir / f"{split}.source"), articles)
+        _dump_articles((tmp_dir / f"{split}.target"), summaries)
+    return tmp_dir
+
+
 class TestBartExamples(unittest.TestCase):
     def test_bart_cnn_cli(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -64,28 +79,13 @@ class TestBartExamples(unittest.TestCase):
             os.remove(Path(output_file_name))
 
     def test_bart_run_sum_cli(self):
-        # script = 'examples/summarization/bart/run_train_tiny.sh'
-
-        args = """
-        --data_dir=cnn_tiny/ \
-        --model_type=bart \
-        --model_name_or_path=sshleifer/bart-tiny-random \
-        --learning_rate=3e-5 \
-        --train_batch_size=2 \
-        --eval_batch_size=2 \
-        --output_dir=$OUTPUT_DIR \
-        --num_train_epochs=1  \
-        --n_gpu={n_gpu} \
-        --do_train
-        """.split()
         n_gpu = 0
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
-        CNN_TINY_PATH = "/Users/shleifer/Dropbox/cnn_tiny/"
         args_d: dict = DEFAULT_ARGS.copy()
 
         args_d.update(
-            data_dir=CNN_TINY_PATH,
+            data_dir=make_test_data_dir(),
             model_type="bart",
             train_batch_size=2,
             eval_batch_size=2,
