@@ -1971,7 +1971,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         return self.tokenizer.num_special_tokens_to_add(pair)
 
-    def tokenize(self, text: TextInput, pair: Optional[TextInput] = None, add_special_tokens: bool = True) -> List[str]:
+    def tokenize(self, text: TextInput, pair: Optional[TextInput] = None, add_special_tokens: bool = False) -> List[str]:
         return self.tokenizer.encode(text, pair, add_special_tokens).tokens
 
     def batch_encode_plus(
