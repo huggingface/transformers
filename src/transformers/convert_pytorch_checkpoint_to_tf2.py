@@ -114,7 +114,7 @@ if is_torch_available():
         T5ForConditionalGeneration,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
         ElectraForPreTraining,
-        ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
+        ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 else:
     (
@@ -153,7 +153,7 @@ else:
         T5ForConditionalGeneration,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
         ElectraForPreTraining,
-        ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
+        ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     ) = (
         None,
         None,
@@ -190,7 +190,7 @@ else:
         None,
         None,
         None,
-        None
+        None,
     )
 
 
@@ -335,8 +335,8 @@ MODEL_CLASSES = {
         TFElectraForPreTraining,
         ElectraForPreTraining,
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
-        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP
-    )
+        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
 }
 
 
