@@ -1914,7 +1914,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             if return_special_tokens_mask:
                 encoding_dict["special_tokens_mask"].append(e.special_tokens_mask)
             if return_offsets_mapping:
-                encoding_dict["offset_mapping"] = [o for o in e.offsets]
+                encoding_dict["offset_mapping"].append(e.offsets)
 
         # Prepare inputs as tensors if asked
         if return_tensors == "tf" and is_tf_available():
