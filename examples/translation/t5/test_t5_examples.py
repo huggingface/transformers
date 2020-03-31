@@ -1,5 +1,4 @@
 import logging
-import os
 import sys
 import tempfile
 import unittest
@@ -33,11 +32,12 @@ class TestT5Examples(unittest.TestCase):
         with tmp_target.open("w") as f:
             f.write("\n".join(translation))
 
-        testargs = ["evaluate_wmt.py", str(tmp_source), output_file_name, str(tmp_target), score_file_name]
+        output_file_name = Path(tempfile.gettempdir()) / "utest_output_trans.hypo"
+        score_file_name = Path(tempfile.gettempdir()) / "utest_score.hypo"
+
+        testargs = ["evaluate_wmt.py", str(tmp_source), str(output_file_name), str(tmp_target), str(score_file_name)]
 
         with patch.object(sys, "argv", testargs):
             run_generate()
             self.assertTrue(Path(output_file_name).exists())
             self.assertTrue(Path(score_file_name).exists())
-            os.remove(Path(output_file_name))
-            os.remove(Path(score_file_name))
