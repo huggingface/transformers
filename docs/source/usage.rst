@@ -590,4 +590,138 @@ following array should be the output:
 
 ::
 
-    [('[CLS]', 'O'), ('Hu', 'I-ORG'), ('##gging', 'I-ORG'), ('Face', 'I-ORG'), ('Inc', 'I-ORG'), ('.', 'O'), ('is', 'O'), ('a', 'O'), ('company', 'O'), ('based', 'O'), ('in', 'O'), ('New', 'I-LOC'), ('York', 'I-LOC'), ('City', 'I-LOC'), ('.', 'O'), ('Its', 'O'), ('headquarters', 'O'), ('are', 'O'), ('in', 'O'), ('D', 'I-LOC'), ('##UM', 'I-LOC'), ('##BO', 'I-LOC'), (',', 'O'), ('therefore', 'O'), ('very', 'O'), ('##c', 'O'), ('##lose', 'O'), ('to', 'O'), ('the', 'O'), ('Manhattan', 'I-LOC'), ('Bridge', 'I-LOC'), ('.', 'O'), ('[SEP]', 'O')]
+    [('[CLS]', 'O'), ('Hu', 'I-ORG'), ('##gging', 'I-ORG'), ('Face', 'I-ORG'), ('Inc', 'I-ORG'), ('.', 'O'), ('is', 'O'), ('a', 'O'), ('company', 'O'), ('based', 'O'), ('in', 'O'), ('New', 'I-LOC'), ('York', 'I-LOC'), ('City', 'I-LOC'), ('.', 'O'), ('Its', 'O'), ('headquarters', 'O'), ('are', 'O'), ('in', 'O'), ('D', 'I-LOC'), ('##UM', 'I-LOC'), ('##BO', 'I-LOC'), (',', 'O'), ('therefore', 'O'), ('very', 'O'), ('##c', 'O'), ('##lose', 'O'), ('to', 'O'), ('the', 'O'), ('Manhattan', 'I-LOC'), ('Bridge', 'I-LOC'), ('.', 'O'), ('[SEP]', 'O')]   
+Summarization
+----------------------------------------------------
+
+Summarization is the task of summarizing a text / an article into a shorter text.
+
+An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was created for the task of summarization.
+If you would like to fine-tune a model on a summarization task, you may leverage the ``examples/summarization/bart/run_train.sh`` (leveraging pytorch-lightning) script.
+
+Here is an example using the pipelines do to summarization. 
+It leverages a Bart model that was fine-tuned on the CNN / Daily Mail data set.
+
+::
+
+    from transformers import pipeline
+
+    summarizer = pipeline("summarization")
+
+    ARTICLE = """ New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. 
+    A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband. 
+    Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other. 
+    In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage. 
+    Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the 
+    2010 marriage license application, according to court documents. 
+    Prosecutors said the marriages were part of an immigration scam. 
+    On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further. 
+    After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective 
+    Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002. 
+    All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say. 
+    Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages. 
+    Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted. 
+    The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s 
+    Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali. 
+    Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force. 
+    If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.
+    """
+    
+    print(summarizer(ARTICLE, max_length=130, min_length=30))
+
+Because the summarization pipeline depends on the ``PretrainedModel.generate()`` method, we can override the default arguments 
+of ``PretrainedModel.generate()`` directly in the pipeline as is shown for ``max_length`` and ``min_length`` above.
+This outputs the following summary:
+
+::
+
+  Liana Barrientos has been married 10 times, sometimes within two weeks of each other. Prosecutors say the marriages were part of an immigration scam. She pleaded not guilty at State Supreme Court in the Bronx on Friday.
+  
+Here is an example doing summarization using a model and a tokenizer. The process is the following:
+
+- Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder model, such as ``Bart`` or ``T5``.
+- Define the article that should be summarizaed.
+- Leverage the ``PretrainedModel.generate()`` method.
+- Add the T5 specific prefix "summarize: ".
+
+Here Google`s T5 model is used that was only pre-trained on a multi-task mixed data set (including CNN / Daily Mail), but nevertheless yields very good results.
+::
+
+    ## PYTORCH CODE
+    from transformers import AutoModelWithLMHead, AutoTokenizer
+
+    model = AutoModelWithLMHead.from_pretrained("t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+
+    # T5 uses a max_length of 512 so we cut the article to 512 tokens.
+    inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="pt", max_length=512)
+    outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
+    print(outputs)
+    
+    ## TENSORFLOW CODE
+    from transformers import TFAutoModelWithLMHead, AutoTokenizer
+
+    model = TFAutoModelWithLMHead.from_pretrained("t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+
+    # T5 uses a max_length of 512 so we cut the article to 512 tokens.
+    inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="tf", max_length=512)
+    outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
+    print(outputs)  
+Translation
+----------------------------------------------------
+
+Translation is the task of translating a text from one language to another.
+
+An example of a translation dataset is the WMT English to German dataset, which has English sentences as the input data 
+and German sentences as the target data.
+
+Here is an example using the pipelines do to translation. 
+It leverages a T5 model that was only pre-trained on a multi-task mixture dataset (including WMT), but yields impressive 
+translation results nevertheless.
+
+::
+
+    from transformers import pipeline
+
+    translator = pipeline("translation_en_to_de")
+    print(translator("Hugging Face is a technology company based in New York and Paris", max_length=40))
+
+Because the translation pipeline depends on the ``PretrainedModel.generate()`` method, we can override the default arguments 
+of ``PretrainedModel.generate()`` directly in the pipeline as is shown for ``max_length`` above.
+This outputs the following translation into German:
+
+::
+
+  Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
+  
+Here is an example doing translation using a model and a tokenizer. The process is the following:
+
+- Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder model, such as ``Bart`` or ``T5``.
+- Define the article that should be summarizaed.
+- Leverage the ``PretrainedModel.generate()`` method.
+- Add the T5 specific prefix "translate English to German: "
+
+::
+
+    ## PYTORCH CODE
+    from transformers import AutoModelWithLMHead, AutoTokenizer
+
+    model = AutoModelWithLMHead.from_pretrained("t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+
+    inputs = tokenizer.encode("translate English to German: Hugging Face is a technology company based in New York and Paris", return_tensors="pt")
+    outputs = model.generate(inputs, max_length=40, num_beams=4, early_stopping=True)
+
+    print(outputs)
+    
+    ## TENSORFLOW CODE
+    from transformers import TFAutoModelWithLMHead, AutoTokenizer
+
+    model = TFAutoModelWithLMHead.from_pretrained("t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+
+    inputs = tokenizer.encode("translate English to German: Hugging Face is a technology company based in New York and Paris", return_tensors="tf")
+    outputs = model.generate(inputs, max_length=40, num_beams=4, early_stopping=True)
+
+    print(outputs)
