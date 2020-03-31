@@ -467,7 +467,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         top_k=None,
         top_p=None,
         repetition_penalty=None,
-        bad_words_tokens=None,
+        bad_words_ids=None,
         bos_token_id=None,
         pad_token_id=None,
         eos_token_id=None,
@@ -533,8 +533,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             no_repeat_ngram_size: (`optional`) int
                 If set to int > 0, all ngrams of size `no_repeat_ngram_size` can only occur once.
 
-            bad_words_tokens: (`optional`) list of lists of int
-                `bad_words_tokens` contains tokens that are not allowed to be generated. In order to get the tokens of the words that should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
+            bad_words_ids: (`optional`) list of lists of int
+                `bad_words_ids` contains tokens that are not allowed to be generated. In order to get the tokens of the words that should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
 
             num_return_sequences: (`optional`) int
                 The number of independently computed returned sequences for each element in the batch. Default to 1.
@@ -589,9 +589,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             tokenizer = AutoTokenizer.from_pretrained('gpt2')   # Initialize tokenizer
             model = TFAutoModelWithLMHead.from_pretrained('gpt2')    # Download model and configuration from S3 and cache.
             input_context = 'My cute dog'  # "Legal" is one of the control codes for ctrl
-            bad_words = [tokenizer.encode(bard_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
+            bad_words_ids = [tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ['idiot', 'stupid', 'shut up']]
             input_ids = tokenizer.encode(input_context, return_tensors='tf')  # encode input context
-            outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_tokens=bad_words_tokens)  # generate sequences without allowing bad_words to be generated
+            outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)  # generate sequences without allowing bad_words to be generated
         """
 
         # We cannot generate if the model does not have a LM head
@@ -617,7 +617,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
         )
-        bad_words_tokens = bad_words_tokens if bad_words_tokens is not None else self.config.bad_words_tokens
+        bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
@@ -653,8 +653,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             isinstance(num_return_sequences, int) and num_return_sequences > 0
         ), "`num_return_sequences` should be a strictely positive integer."
         assert (
-            bad_words_tokens is None or isinstance(bad_words_tokens, list) and isinstance(bad_words_tokens[0], list)
-        ), "`bad_words_tokens` is either `None` or a list of lists of tokens that should not be generated"
+            bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
+        ), "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
 
         if input_ids is None:
             assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
@@ -756,7 +756,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
-                bad_words_tokens=bad_words_tokens,
+                bad_words_ids=bad_words_ids,
                 bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -781,7 +781,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 top_p=top_p,
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
-                bad_words_tokens=bad_words_tokens,
+                bad_words_ids=bad_words_ids,
                 bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
@@ -806,7 +806,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         top_p,
         repetition_penalty,
         no_repeat_ngram_size,
-        bad_words_tokens,
+        bad_words_ids,
         bos_token_id,
         pad_token_id,
         eos_token_id,
@@ -857,9 +857,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     next_token_logits, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
                 )
 
-            if bad_words_tokens is not None:
+            if bad_words_ids is not None:
                 # calculate a list of banned tokens according to bad words
-                banned_tokens = calc_banned_bad_words_tokens(input_ids, bad_words_tokens)
+                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
 
                 banned_tokens_indices_mask = []
                 for banned_tokens_slice in banned_tokens:
@@ -967,7 +967,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         top_p,
         repetition_penalty,
         no_repeat_ngram_size,
-        bad_words_tokens,
+        bad_words_ids,
         bos_token_id,
         pad_token_id,
         decoder_start_token_id,
@@ -1058,9 +1058,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
                 )
 
-            if bad_words_tokens is not None:
+            if bad_words_ids is not None:
                 # calculate a list of banned tokens according to bad words
-                banned_tokens = calc_banned_bad_words_tokens(input_ids, bad_words_tokens)
+                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
 
                 banned_tokens_indices_mask = []
                 for banned_tokens_slice in banned_tokens:
@@ -1314,7 +1314,7 @@ def calc_banned_ngram_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cu
     return banned_tokens
 
 
-def calc_banned_bad_words_tokens(prev_input_ids, bad_words_tokens):
+def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
     banned_tokens = []
 
     def _tokens_match(prev_tokens, tokens):
@@ -1334,9 +1334,9 @@ def calc_banned_bad_words_tokens(prev_input_ids, bad_words_tokens):
     for prev_input_ids_slice in prev_input_ids:
         banned_tokens_slice = []
 
-        for banned_token_seq in bad_words_tokens:
+        for banned_token_seq in bad_words_ids:
             assert len(banned_token_seq) > 0, "Banned words token sequences {} cannot have an empty list".format(
-                bad_words_tokens
+                bad_words_ids
             )
 
             if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
