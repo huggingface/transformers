@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import shutil
 
 from .evaluate_cnn import _run_generate
 from .run_bart_sum import main
@@ -95,9 +96,3 @@ class TestBartExamples(unittest.TestCase):
         args = argparse.Namespace(**args_d)
         os.makedirs(args.output_dir, exist_ok=False)
         main(args)
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        import shutil
-
-        shutil.rmtree("dringus")
