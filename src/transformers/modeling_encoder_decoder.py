@@ -242,8 +242,10 @@ class EncoderDecoderModel(PreTrainedModel):
     ):
         """
         Params:
-            encoder_input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
+            input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
                 Indices of encoder input sequence tokens in the vocabulary.
+            attention_mask: ``torch.IntTensor`` of shape ``(batch_size, sequence_length)``
+                Mask for input ids
             decoder_input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
                 Indices of decoder input sequence tokens in the vocabulary.
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
@@ -266,7 +268,7 @@ class EncoderDecoderModel(PreTrainedModel):
             kwargs_decoder['encoder_hidden_states'] = hidden_states
             kwargs_decoder['encoder_attention_mask'] = attention_mask
 
-        # Allow for generation based on encoder-generated embeddings
+        # Allow for generation based on encoder-generated embeddings if nothing else is provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             decoder_inputs_embeds = hidden_states
 
