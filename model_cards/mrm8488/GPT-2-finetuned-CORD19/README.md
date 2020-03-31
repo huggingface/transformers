@@ -5,7 +5,7 @@ thumbnail:
 
 # GPT-2 + CORD19 dataset : 🦠 ✍ ⚕
 
-**GPT-2** fine-tuned on **biorxiv_medrxiv** and **comm_use_subset files** from [CORD-19](https://www.kaggle.com/allen-institute-for-ai/CORD-19-research-challenge) dataset.
+**GPT-2** fine-tuned on **biorxiv_medrxiv**, **comm_use_subset** and **custom_license** files from [CORD-19](https://www.kaggle.com/allen-institute-for-ai/CORD-19-research-challenge) dataset.
 
 
 ## Datasets details
@@ -14,6 +14,7 @@ thumbnail:
 | ---------------------- | ----- |
 | biorxiv_medrxiv        | 885  |
 | comm_use_subset         | 9K   |
+| custom_license         | 20.6K   |
 
 ## Model training
 
