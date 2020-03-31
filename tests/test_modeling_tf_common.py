@@ -163,7 +163,8 @@ class TFModelTesterMixin:
                 (name, torch.from_numpy(key.numpy()).to(torch.long)) for name, key in inputs_dict.items()
             )
             # need to rename encoder-decoder "inputs" for PyTorch
-            pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
+                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
 
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
@@ -205,7 +206,8 @@ class TFModelTesterMixin:
                 (name, torch.from_numpy(key.numpy()).to(torch.long)) for name, key in inputs_dict.items()
             )
             # need to rename encoder-decoder "inputs" for PyTorch
-            pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
+                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
 
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
