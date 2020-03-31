@@ -20,6 +20,7 @@ import os
 
 from .modeling_auto import AutoModel, AutoModelWithLMHead
 from .modeling_utils import PreTrainedModel
+from .configuration_auto import AutoConfig
 
 
 logger = logging.getLogger(__name__)
@@ -160,11 +161,13 @@ class EncoderDecoderModel(PreTrainedModel):
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
+            decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
+            decoder_config.is_decoder = True
+            kwargs_decoder["config"] = decoder_config
             assert (
                 decoder_pretrained_model_name_or_path is not None
             ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
             decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
-        decoder.config.is_decoder = True
 
         model = cls(encoder, decoder)
 
