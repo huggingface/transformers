@@ -4,9 +4,10 @@ import os
 import torch
 import torch.nn as nn
 
-from transformers import ElectraConfig
+from transformers import ElectraConfig, add_start_docstrings
 from transformers.activations import get_activation
 
+from .file_utils import add_start_docstrings_to_callable
 from .modeling_bert import BertEmbeddings, BertEncoder, BertLayerNorm, BertPreTrainedModel
 
 
@@ -65,7 +66,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
             # print(original_name, name)
             # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
             # which are not required for using pretrained model
-            if any(n in ["global_step", "temperature",] for n in name):
+            if any(n in ["global_step", "temperature"] for n in name):
                 logger.info("Skipping {}".format(original_name))
                 continue
             pointer = model
@@ -105,6 +106,8 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
 
 
 class ElectraEmbeddings(BertEmbeddings):
+    """Construct the embeddings from word, position and token_type embeddings."""
+
     def __init__(self, config):
         super().__init__(config)
         self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=0)
@@ -117,6 +120,8 @@ class ElectraEmbeddings(BertEmbeddings):
 
 
 class ElectraDiscriminatorPredictions(nn.Module):
+    """Prediction module for the discriminator, made up of two dense layers."""
+
     def __init__(self, config):
         super().__init__()
 
@@ -133,6 +138,8 @@ class ElectraDiscriminatorPredictions(nn.Module):
 
 
 class ElectraGeneratorPredictions(nn.Module):
+    """Prediction module for the generator, made up of two dense layers."""
+
     def __init__(self, config):
         super().__init__()
 
@@ -148,6 +155,9 @@ class ElectraGeneratorPredictions(nn.Module):
 
 
 class ElectraPreTrainedModel(BertPreTrainedModel):
+    """ An abstract class to handle weights initialization and
+        a simple interface for downloading and loading pretrained models.
+    """
 
     config_class = ElectraConfig
     pretrained_model_archive_map = ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
@@ -213,16 +223,72 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
 
         return head_mask
 
-    @staticmethod
-    def _gather_positions(sequence, positions):
-        batch_size, sequence_length, dimension = sequence.shape
-        position_shift = (sequence_length * torch.arange(batch_size)).unsqueeze(-1)
-        flat_positions = torch.reshape(positions + position_shift, [-1]).long()
-        flat_sequence = torch.reshape(sequence, [batch_size * sequence_length, dimension])
-        gathered = flat_sequence.index_select(0, flat_positions)
-        return torch.reshape(gathered, [batch_size, -1, dimension])
+
+ELECTRA_START_DOCSTRING = r"""
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.
+
+    Parameters:
+        config (:class:`~transformers.ElectraConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+"""
+
+ELECTRA_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`transformers.ElectraTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+            corresponds to a `sentence B` token
+
+            `What are token type IDs? <../glossary.html#token-type-ids>`_
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+
+            `What are position IDs? <../glossary.html#position-ids>`_
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+            Mask to nullify selected heads of the self-attention modules.
+            Mask values selected in ``[0, 1]``:
+            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+            if the model is configured as a decoder.
+        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
+            is used in the cross-attention if the model is configured as a decoder.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+"""
 
 
+@add_start_docstrings(
+    "The bare Electra Model transformer outputting raw hidden-states without any specific head on top. Identical to "
+    "the BERT model except that it uses an additional linear layer between the embedding layer and the encoder if the "
+    "hidden size and embedding size are different."
+    ""
+    "Both the generator and discriminator checkpoints may be loaded into that model.",
+    ELECTRA_START_DOCSTRING,
+)
 class ElectraModel(ElectraPreTrainedModel):
 
     config_class = ElectraConfig
@@ -249,6 +315,7 @@ class ElectraModel(ElectraPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -289,51 +356,15 @@ class ElectraModel(ElectraPreTrainedModel):
         return hidden_states
 
 
-class ElectraForMaskedLM(ElectraPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
+@add_start_docstrings(
+    """
+Electra model with a binary classification head on top as used during pre-training for identifying generated
+tokens.
 
-        self.electra = ElectraModel(config)
-        self.generator_predictions = ElectraGeneratorPredictions(config)
-
-        self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size)
-        self.init_weights()
-
-    def get_output_embeddings(self):
-        return self.generator_lm_head
-
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        masked_lm_labels=None,
-    ):
-
-        generator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
-        )
-        generator_sequence_output = generator_hidden_states[0]
-
-        prediction_scores = self.generator_predictions(generator_sequence_output)
-        prediction_scores = self.generator_lm_head(prediction_scores)
-
-        output = (prediction_scores,)
-
-        # Masked language modeling softmax layer
-        if masked_lm_labels is not None:
-            loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
-            loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
-            output = (loss,) + output
-
-        output += generator_hidden_states[1:]
-
-        return output  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
-
-
+Even though both the discriminator and generator may be loaded into that model, the discriminator is
+the only model of the two to have the correct classification head to be used for that model.""",
+    ELECTRA_START_DOCSTRING,
+)
 class ElectraForPreTraining(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -352,6 +383,46 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         inputs_embeds=None,
         labels=None,
     ):
+        r"""
+            labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+                Labels for computing the ELECTRA loss. Input should be a sequence of tokens (see :obj:`input_ids` docstring)
+                Indices should be in ``[0, 1]``.
+                ``0`` indicates the token is an original token,
+                ``1`` indicates the token was replaced.
+
+        Returns:
+            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
+            loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+                Total loss of the ELECTRA objective.
+            scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`)
+                Prediction scores of the head (scores for each token before SoftMax).
+            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+                heads.
+
+
+        Examples::
+
+            from transformers import ElectraTokenizer, ElectraForPreTraining
+            import torch
+
+            tokenizer = ElectraTokenizer.from_pretrained('electra-small-discriminator')
+            model = ElectraForPreTraining.from_pretrained('electra-small-discriminator')
+
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            outputs = model(input_ids)
+
+            prediction_scores, seq_relationship_scores = outputs[:2]
+
+        """
 
         discriminator_hidden_states = self.electra(
             input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
@@ -379,6 +450,106 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         return output  # (loss), scores, (hidden_states), (attentions)
 
 
+@add_start_docstrings(
+    """
+Electra model with a language modeling head on top.
+
+Even though both the discriminator and generator may be loaded into that model, the generator is
+the only model of the two to have been trained for the masked language modeling task.""",
+    ELECTRA_START_DOCSTRING,
+)
+class ElectraForMaskedLM(ElectraPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.electra = ElectraModel(config)
+        self.generator_predictions = ElectraGeneratorPredictions(config)
+
+        self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size)
+        self.init_weights()
+
+    def get_output_embeddings(self):
+        return self.generator_lm_head
+
+    @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        masked_lm_labels=None,
+    ):
+        r"""
+        masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the masked language modeling loss.
+            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``
+
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
+        masked_lm_loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+            Masked language modeling loss.
+        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+        Examples::
+
+            from transformers import ElectraTokenizer, ElectraForMaskedLM
+            import torch
+
+            tokenizer = ElectraTokenizer.from_pretrained('electra-small-generator')
+            model = ElectraForMaskedLM.from_pretrained('electra-small-generator')
+
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            outputs = model(input_ids, masked_lm_labels=input_ids)
+
+            loss, prediction_scores = outputs[:2]
+
+        """
+
+        generator_hidden_states = self.electra(
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
+        )
+        generator_sequence_output = generator_hidden_states[0]
+
+        prediction_scores = self.generator_predictions(generator_sequence_output)
+        prediction_scores = self.generator_lm_head(prediction_scores)
+
+        output = (prediction_scores,)
+
+        # Masked language modeling softmax layer
+        if masked_lm_labels is not None:
+            loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
+            loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            output = (loss,) + output
+
+        output += generator_hidden_states[1:]
+
+        return output  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
+    """
+Electra model with a token classification head on top.
+
+Both the discriminator and generator may be loaded into that model.""",
+    ELECTRA_START_DOCSTRING,
+)
 class ElectraForTokenClassification(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -388,6 +559,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.init_weights()
 
+    @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -398,6 +570,44 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         inputs_embeds=None,
         labels=None,
     ):
+        r"""
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the token classification loss.
+                Indices should be in ``[0, ..., config.num_labels - 1]``.
+
+        Returns:
+            :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
+            loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided) :
+                Classification loss.
+            scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
+                Classification scores (before SoftMax).
+            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+                of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+                Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+                Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+                :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+                Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+                heads.
+
+        Examples::
+
+            from transformers import ElectraTokenizer, ElectraForTokenClassification
+            import torch
+
+            tokenizer = ElectraTokenizer.from_pretrained('electra-small-discriminator')
+            model = ElectraForTokenClassification.from_pretrained('electra-small-discriminator')
+
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
+            outputs = model(input_ids, labels=labels)
+
+            loss, scores = outputs[:2]
+
+        """
 
         discriminator_hidden_states = self.electra(
             input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds

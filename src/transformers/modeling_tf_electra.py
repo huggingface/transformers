@@ -1,12 +1,11 @@
 import logging
-import os
 
 import tensorflow as tf
 
 from transformers import ElectraConfig
 
-from .modeling_tf_bert import ACT2FN, TFBertEmbeddings, TFBertEncoder, TFBertPreTrainedModel
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
+from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
+from .modeling_tf_utils import get_initializer, shape_list
 
 
 logger = logging.getLogger(__name__)
