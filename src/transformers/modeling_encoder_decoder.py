@@ -194,6 +194,7 @@ class EncoderDecoderModel(PreTrainedModel):
         sub_directories = [
             directory for directory in os.listdir(save_directory)
             if os.path.isdir(os.path.join(save_directory, directory))
+            and not directory.startswith("checkpoint-")
         ]
 
         if len(sub_directories) > 0:
