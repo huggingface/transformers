@@ -451,13 +451,9 @@ class TFModelTesterMixin:
             self._check_generated_ids(model.generate(input_ids, do_sample=False))
 
             # batch_size > 1, num_beams > 1, sample
-            self._check_generated_ids(
-                model.generate(input_ids, do_sample=True, num_beams=3, num_return_sequences=3,)
-            )
+            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=3, num_return_sequences=3,))
             # batch_size > 1, num_beams > 1, greedy
-            self._check_generated_ids(
-                model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3)
-            )
+            self._check_generated_ids(model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3))
 
             # check bad words tokens language generation
             bad_words_ids = [
