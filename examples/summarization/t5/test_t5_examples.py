@@ -1,5 +1,4 @@
 import logging
-import os
 import sys
 import tempfile
 import unittest
@@ -26,10 +25,13 @@ class TestT5Examples(unittest.TestCase):
         tmp = Path(tempfile.gettempdir()) / "utest_generations_t5_sum.hypo"
         with tmp.open("w") as f:
             f.write("\n".join(articles))
-        testargs = ["evaluate_cnn.py", "t5-small", str(tmp), output_file_name, str(tmp), score_file_name]
+
+        output_file_name = Path(tempfile.gettempdir()) / "utest_output_t5_sum.hypo"
+        score_file_name = Path(tempfile.gettempdir()) / "utest_score_t5_sum.hypo"
+
+        testargs = ["evaluate_cnn.py", "t5-small", str(tmp), str(output_file_name), str(tmp), str(score_file_name)]
+
         with patch.object(sys, "argv", testargs):
             run_generate()
             self.assertTrue(Path(output_file_name).exists())
             self.assertTrue(Path(score_file_name).exists())
-            os.remove(Path(output_file_name))
-            os.remove(Path(score_file_name))
