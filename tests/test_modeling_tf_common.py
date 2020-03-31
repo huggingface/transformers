@@ -162,6 +162,9 @@ class TFModelTesterMixin:
             pt_inputs_dict = dict(
                 (name, torch.from_numpy(key.numpy()).to(torch.long)) for name, key in inputs_dict.items()
             )
+            # need to rename encoder-decoder "inputs" for PyTorch
+            pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
             tfo = tf_model(inputs_dict, training=False)
@@ -201,6 +204,9 @@ class TFModelTesterMixin:
             pt_inputs_dict = dict(
                 (name, torch.from_numpy(key.numpy()).to(torch.long)) for name, key in inputs_dict.items()
             )
+            # need to rename encoder-decoder "inputs" for PyTorch
+            pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
             tfo = tf_model(inputs_dict)
@@ -223,7 +229,7 @@ class TFModelTesterMixin:
         if self.is_encoder_decoder:
             input_ids = {
                 "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
-                "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
+                "inputs": tf.keras.Input(batch_shape=(2, 2000), name="inputs", dtype="int32"),
             }
         else:
             input_ids = tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32")
@@ -259,7 +265,7 @@ class TFModelTesterMixin:
             outputs_dict = model(inputs_dict)
 
             inputs_keywords = copy.deepcopy(inputs_dict)
-            input_ids = inputs_keywords.pop("input_ids" if not self.is_encoder_decoder else "decoder_input_ids", None,)
+            input_ids = inputs_keywords.pop("input_ids" if not self.is_encoder_decoder else "inputs", None,)
             outputs_keywords = model(input_ids, **inputs_keywords)
 
             output_dict = outputs_dict[0].numpy()
@@ -395,9 +401,9 @@ class TFModelTesterMixin:
             input_ids = inputs_dict["input_ids"]
             del inputs_dict["input_ids"]
         else:
-            encoder_input_ids = inputs_dict["input_ids"]
+            encoder_input_ids = inputs_dict["inputs"]
             decoder_input_ids = inputs_dict["decoder_input_ids"]
-            del inputs_dict["input_ids"]
+            del inputs_dict["inputs"]
             del inputs_dict["decoder_input_ids"]
 
         for model_class in self.all_model_classes:
@@ -415,7 +421,7 @@ class TFModelTesterMixin:
     def test_lm_head_model_random_generate(self):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
+        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
 
         if self.is_encoder_decoder:
             config.output_past = True  # needed for Bart TODO: might have to update for other encoder-decoder models

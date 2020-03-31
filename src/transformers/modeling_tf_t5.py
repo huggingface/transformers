@@ -586,8 +586,8 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         input_ids = tf.constant(DUMMY_INPUTS)
         input_mask = tf.constant(DUMMY_MASK)
         dummy_inputs = {
+            "inputs": input_ids,
             "decoder_input_ids": input_ids,
-            "input_ids": input_ids,
             "decoder_attention_mask": input_mask,
         }
         return dummy_inputs
@@ -631,11 +631,9 @@ T5_START_DOCSTRING = r"""    The T5 model was proposed in
 
 T5_INPUTS_DOCSTRING = r"""
     Args:
-        decoder_input_ids are usually used as a `dict` (see T5 description above for more information) containing all the following.
-        decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
-            Provide for sequence to sequence training. T5 uses the pad_token_id as the starting token for decoder_input_ids generation.
+        inputs are usually used as a `dict` (see T5 description above for more information) containing all the following.
 
-        input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+        inputs (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
             T5 is a model with relative position embeddings so you should be able to pad the inputs on
             the right or the left.
@@ -644,6 +642,8 @@ T5_INPUTS_DOCSTRING = r"""
             `T5 Training <./t5.html#training>`_ .
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+        decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
+            Provide for sequence to sequence training. T5 uses the pad_token_id as the starting token for decoder_input_ids generation.
         attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -700,7 +700,7 @@ class TFT5Model(TFT5PreTrainedModel):
         return self.shared
 
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
-    def call(self, decoder_input_ids, **kwargs):
+    def call(self, inputs, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
@@ -730,13 +730,13 @@ class TFT5Model(TFT5PreTrainedModel):
 
         """
 
-        if isinstance(decoder_input_ids, dict):
-            kwargs.update(decoder_input_ids)
+        if isinstance(inputs, dict):
+            kwargs.update(inputs)
         else:
-            kwargs["decoder_input_ids"] = decoder_input_ids
+            kwargs["inputs"] = inputs
 
         # retrieve arguments
-        input_ids = kwargs.get("input_ids", None)
+        input_ids = kwargs.get("inputs", None)
         decoder_input_ids = kwargs.get("decoder_input_ids", None)
         attention_mask = kwargs.get("attention_mask", None)
         encoder_outputs = kwargs.get("encoder_outputs", None)
@@ -797,7 +797,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         return self.encoder
 
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
-    def call(self, decoder_input_ids, **kwargs):
+    def call(self, inputs, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
@@ -833,13 +833,13 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
 
         """
 
-        if isinstance(decoder_input_ids, dict):
-            kwargs.update(decoder_input_ids)
+        if isinstance(inputs, dict):
+            kwargs.update(inputs)
         else:
-            kwargs["decoder_input_ids"] = decoder_input_ids
+            kwargs["inputs"] = inputs
 
         # retrieve arguments
-        input_ids = kwargs.get("input_ids", None)
+        input_ids = kwargs.get("inputs", None)
         decoder_input_ids = kwargs.get("decoder_input_ids", None)
         attention_mask = kwargs.get("attention_mask", None)
         encoder_outputs = kwargs.get("encoder_outputs", None)
@@ -884,7 +884,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             encoder_outputs = (past,)
 
         return {
-            "inputs": input_ids,
+            "inputs": None,  # inputs don't have to be defined, but still need to be passed to make Keras.layer.__call__ happy
+            "decoder_input_ids": input_ids,  # input_ids are the decoder_input_ids
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
         }
