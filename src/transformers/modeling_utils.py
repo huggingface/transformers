@@ -721,13 +721,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 Padding token. Default to specicic model pad_token_id or None if it does not exist.
 
             bos_token_id: (`optional`) int
-                BOS token. Defaults to bos_token_id as defined in the models config.
+                BOS token. Defaults to `bos_token_id` as defined in the models config.
 
-            pad_token_id: (`optional`) int
-                Pad token. Defaults to pad_token_id as defined in the models config.
-
-            eos_token_ids: (`optional`) int or list of int
-                End of sequence token or list of tokens to stop the generation. Default to eos_token_ids as defined in the models config.
+            eos_token_id: (`optional`) int
+                EOS token. Defaults to `eos_token_id` as defined in the models config.
 
             length_penalty: (`optional`) float
                 Exponential penalty to the length. Default to 1.
