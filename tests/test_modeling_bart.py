@@ -16,9 +16,7 @@
 import tempfile
 import unittest
 
-import timeout_decorator
-
-from transformers import is_torch_available
+from transformers import is_torch_available, timeout_decorator
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
