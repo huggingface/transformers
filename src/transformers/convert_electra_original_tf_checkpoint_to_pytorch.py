@@ -20,7 +20,7 @@ import logging
 
 import torch
 
-from transformers import ElectraConfig, ElectraForMaskedLM, ElectraForTokenClassification, load_tf_weights_in_electra
+from transformers import ElectraConfig, ElectraForMaskedLM, ElectraForPreTraining, load_tf_weights_in_electra
 
 
 logging.basicConfig(level=logging.INFO)
@@ -32,7 +32,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_du
     print("Building PyTorch model from configuration: {}".format(str(config)))
 
     if discriminator_or_generator == "discriminator":
-        model = ElectraForTokenClassification(config)
+        model = ElectraForPreTraining(config)
     elif discriminator_or_generator == "generator":
         model = ElectraForMaskedLM(config)
     else:
