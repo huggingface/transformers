@@ -45,7 +45,7 @@ DEFAULT_ARGS = {
     "num_train_epochs": 1,
     "train_batch_size": 2,
     "eval_batch_size": 2,
-    "max_seq_length": 1024,
+    "max_seq_length": 12,
 }
 
 
