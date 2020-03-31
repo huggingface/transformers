@@ -49,13 +49,15 @@ class ElectraConfig(PretrainedConfig):
             vocab_size (:obj:`int`, optional, defaults to 30522):
                 Vocabulary size of the ELECTRA model. Defines the different tokens that
                 can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.ElectraModel`.
-            hidden_size (:obj:`int`, optional, defaults to 768):
+            embedding_size (:obj:`int`, optional, defaults to 128):
+                Dimensionality of the encoder layers and the pooler layer.
+            hidden_size (:obj:`int`, optional, defaults to 256):
                 Dimensionality of the encoder layers and the pooler layer.
             num_hidden_layers (:obj:`int`, optional, defaults to 12):
                 Number of hidden layers in the Transformer encoder.
-            num_attention_heads (:obj:`int`, optional, defaults to 12):
+            num_attention_heads (:obj:`int`, optional, defaults to 4):
                 Number of attention heads for each attention layer in the Transformer encoder.
-            intermediate_size (:obj:`int`, optional, defaults to 3072):
+            intermediate_size (:obj:`int`, optional, defaults to 1024):
                 Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
             hidden_act (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
                 The non-linear activation function (function or string) in the encoder and pooler.

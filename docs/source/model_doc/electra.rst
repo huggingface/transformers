@@ -1,13 +1,14 @@
 ELECTRA
 ----------------------------------------------------
 
-The DistilBERT model was proposed in the paper.
+The ELECTRA model was proposed in the paper.
 `ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators <https://openreview.net/pdf?id=r1xMH1BtvB>`__.
 ELECTRA is a new pre-training approach which trains two transformer models: the generator and the discriminator. The
 generator's role is to replace tokens in a sequence, and is therefore trained as a masked language model. The discriminator,
 which is the model we're interested in, tries to identify which tokens were replaced by the generator in the sequence.
 
 The abstract from the paper is the following:
+
 *Masked language modeling (MLM) pre-training methods such as BERT corrupt
 the input by replacing some tokens with [MASK] and then train a model to
 reconstruct the original tokens. While they produce good results when transferred

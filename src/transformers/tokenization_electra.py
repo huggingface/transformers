@@ -52,7 +52,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 class ElectraTokenizer(BertTokenizer):
     r"""
     Constructs an Electra tokenizer.
-    :class:`~transformers.ElectraTokenizer` is identical to :class:`~transformers.ElectraTokenizer` and runs end-to-end
+    :class:`~transformers.ElectraTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
     tokenization: punctuation splitting + wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
@@ -66,6 +66,14 @@ class ElectraTokenizer(BertTokenizer):
 
 
 class ElectraTokenizerFast(BertTokenizerFast):
+    r"""
+    Constructs an Electra Fast tokenizer.
+    :class:`~transformers.ElectraTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
+    tokenization: punctuation splitting + wordpiece.
+
+    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
+    parameters.
+    """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
