@@ -207,8 +207,6 @@ class EncoderDecoderModel(PreTrainedModel):
                 # Remove the subdirectory itself
                 os.rmdir(os.path.join(save_directory, directory_to_remove))
 
-            assert len(os.listdir(save_directory)) == 0  # sanity check
-
         # Create the "encoder" directory inside the output directory and save the encoder into it
         if not os.path.exists(os.path.join(save_directory, "encoder")):
             os.mkdir(os.path.join(save_directory, "encoder"))
