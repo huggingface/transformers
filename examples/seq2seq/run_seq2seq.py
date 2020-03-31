@@ -34,6 +34,7 @@ from transformers import (
     EncoderDecoderModel,
     get_linear_schedule_with_warmup,
 )
+from pytorch_lamb import Lamb
 from utils_seq2seq import convert_examples_to_features, read_examples_from_file
 
 
@@ -82,7 +83,13 @@ def train(args, train_dataset, model, tokenizer, pad_token_label_id):
         },
         {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    if args.optimizer.lower()=="adamw":
+        optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    elif args.optimizer.lower()=="lamb":
+        optimizer = Lamb(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    else:
+        raise Exception("Invalid optimizer specified")
+  
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
     )
