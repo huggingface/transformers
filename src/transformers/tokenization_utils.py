@@ -24,7 +24,7 @@ from collections import UserDict, defaultdict
 from contextlib import contextmanager
 from typing import List, Optional, Sequence, Tuple, Union
 
-from tokenizers import Encoding, AddedToken
+from tokenizers import AddedToken, Encoding
 from tokenizers.decoders import Decoder
 from tokenizers.implementations import BaseTokenizer
 
@@ -119,6 +119,7 @@ class BatchEncoding(UserDict):
 
     In addition, this structure expose utility methods to map from word/char space to token space.
     """
+
     def __init__(self, data: dict, encoding: Optional[Union[Encoding, Sequence[Encoding]]] = None):
         super().__init__(data)
 
@@ -1219,7 +1220,9 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[List[TextInput], List[TextPairInput], List[PreTokenizedInput], List[PreTokenizedInputPair]],
+        batch_text_or_text_pairs: Union[
+            List[TextInput], List[TextPairInput], List[PreTokenizedInput], List[PreTokenizedInputPair]
+        ],
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         stride: int = 0,
@@ -1971,12 +1974,16 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         return self.tokenizer.num_special_tokens_to_add(pair)
 
-    def tokenize(self, text: TextInput, pair: Optional[TextInput] = None, add_special_tokens: bool = False) -> List[str]:
+    def tokenize(
+        self, text: TextInput, pair: Optional[TextInput] = None, add_special_tokens: bool = False
+    ) -> List[str]:
         return self.tokenizer.encode(text, pair, add_special_tokens).tokens
 
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[List[TextInput], List[TextPairInput], List[PreTokenizedInput], List[PreTokenizedInputPair]] = None,
+        batch_text_or_text_pairs: Union[
+            List[TextInput], List[TextPairInput], List[PreTokenizedInput], List[PreTokenizedInputPair]
+        ] = None,
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         stride: int = 0,
@@ -2038,15 +2045,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
                     # Convert to tuple for convenience
                     if isinstance(sample, list):
-                        sample = (sample, )
+                        sample = (sample,)
 
                     encodings_text = Encoding.merge(self._tokenizer.encode_batch(sample[0], False), True)
 
                     # Check if we have pairs
                     if len(sample) == 2:
                         encodings_pair = Encoding.merge(
-                            self._tokenizer.encode_batch([("", s) for s in sample[1]], False),
-                            True
+                            self._tokenizer.encode_batch([("", s) for s in sample[1]], False), True
                         )
 
                     # No pair, default to None
@@ -2058,8 +2064,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                         raise ValueError(
                             "batch_encode_plus(..., is_pretokenized=True) requires batch_text_or_text_pairs "
                             "to be either List[List[str]] or List[Tuple[List[str], List[str]]] but sample at "
-                            "index {} has too much dimensions (required 1 or 2, got: {}, type {})"
-                                .format(i, len(sample), type(sample))
+                            "index {} has too much dimensions (required 1 or 2, got: {}, type {})".format(
+                                i, len(sample), type(sample)
+                            )
                         )
 
                     # Post-process
@@ -2151,7 +2158,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 # Let's do the same for pairs if provided
                 if isinstance(text_pair, list):
                     # We prepend empty string before each word so that encoding is aware content is a pair
-                    encoding_pair = self._tokenizer.encode_batch([("", p) for p in text_pair], add_special_tokens=False)
+                    encoding_pair = self._tokenizer.encode_batch(
+                        [("", p) for p in text_pair], add_special_tokens=False
+                    )
                     encoding_pair = Encoding.merge(encoding_pair, True)
                 elif text_pair is None:
                     encoding_pair = None

@@ -21,6 +21,7 @@ import os
 from functools import lru_cache
 
 import regex as re
+
 from tokenizers import ByteLevelBPETokenizer
 
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast

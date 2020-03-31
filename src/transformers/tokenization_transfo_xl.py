@@ -27,6 +27,7 @@ from collections import Counter, OrderedDict
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
+
 from tokenizers import Encoding, Tokenizer
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import WordLevel
