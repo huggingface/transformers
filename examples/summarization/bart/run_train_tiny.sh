@@ -1,5 +1,4 @@
 # Install newest ptl.
-pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
 wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_tiny.tgz
 tar -xzvf cnn_tiny.tgz
 
@@ -12,9 +11,8 @@ export OUTPUT_DIR=${CURRENT_DIR}/${OUTPUT_DIR_NAME}
 mkdir -p $OUTPUT_DIR
 
 # Add parent directory to python path to access transformer_base.py
-export PYTHONPATH="../../":"${PYTHONPATH}"
-NGPU = $1
-shift
+#export PYTHONPATH="../../":"${PYTHONPATH}"
+NGPU = 0
 python run_bart_sum.py \
 --data_dir=cnn_tiny/ \
 --model_type=bart \
@@ -24,8 +22,11 @@ python run_bart_sum.py \
 --eval_batch_size=2 \
 --output_dir=$OUTPUT_DIR \
 --num_train_epochs=1  \
---n_gpu=$NGPU \
+--n_gpu=0 \
 --do_train $@
 
 rm -rf cnn_tiny
 rm -rf $OUTPUT_DIR
+
+
+

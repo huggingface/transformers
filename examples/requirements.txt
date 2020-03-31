@@ -6,3 +6,4 @@ psutil
 sacrebleu
 rouge-score
 tensorflow_datasets
+git+http://github.com/PyTorchLightning/pytorch-lightning/@master
