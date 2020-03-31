@@ -179,6 +179,7 @@ class LSHSelfAttention(nn.Module):
 #                use_python_loop=False, use_reference_code=False
 #                ):
 
+        self.hidden_states_input_size = config['input_size']
         self.num_attention_heads = config['num_attention_heads']
         self.hidden_size = config['hidden_size'] * self.num_attention_heads
 
@@ -191,9 +192,9 @@ class LSHSelfAttention(nn.Module):
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query_key = nn.Linear(self.hidden_size, self.all_head_size)
-        self.value = nn.Linear(self.hidden_size, self.all_head_size)
-        self.dense = nn.Linear(self.hidden_size, self.hidden_size)
+        self.query_key = nn.Linear(self.hidden_states_input_size, self.all_head_size)
+        self.value = nn.Linear(self.hidden_states_input_size, self.all_head_size)
+        self.dense = nn.Linear(self.all_head_size, self.hidden_size)
 
         # add Dropout
         self.python_seed = config['seed']
@@ -210,6 +211,10 @@ class LSHSelfAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
     ):
+
+        import ipdb
+        ipdb.set_trace()
+
         mixed_query_key_vectors = self.query_key(hidden_states)
         mixed_value_vectors = self.value(hidden_states)
 

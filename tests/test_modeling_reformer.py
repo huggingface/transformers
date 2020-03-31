@@ -1,5 +1,4 @@
-# coding=utf-8
-# Copyright 2020 Huggingface
+# coding=utf-8 # Copyright 2020 Huggingface
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,9 +20,10 @@ import numpy as np
 from trax import math as trax_math
 from trax.shapes import ShapeDtype as trax_ShapeDtype
 import jax
-#from trax.layers.research.efficient_attention_v2 import LSHSelfAttention as TraxLSHSelfAttention
-from trax.layers.research.efficient_attention_v2 import LSHSelfAttention
-#from transformers import LSHSelfAttention
+from trax.layers.research.efficient_attention_v2 import (
+    LSHSelfAttention as TraxLSHSelfAttention,
+)
+from transformers import LSHSelfAttention
 
 
 from transformers import is_torch_available  # noqa: F401
@@ -79,13 +79,14 @@ class TraxUtils(object):
         use_reference_code=True,
         attention_dropout=0.0,
         mode="train",
-        seed=0
+        seed=0,
+        **kwargs
     ):
 
         with trax_math.use_backend("jax"):
             if shape is None:
                 shape = self._shape
-            layer = LSHSelfAttention(
+            layer = TraxLSHSelfAttention(
                 n_heads=num_attention_heads,
                 d_qk=hidden_size,
                 d_v=hidden_size,
@@ -98,7 +99,7 @@ class TraxUtils(object):
                 use_reference_code=use_reference_code,
                 attention_dropout=attention_dropout,
                 mode=mode,
-                hash_seed=seed
+                hash_seed=seed,
             )
 
         return layer
@@ -128,31 +129,45 @@ class TraxUtils(object):
                 input_data, weights=weights, state=state, rng=random_number_generator
             )
 
-        return output
+        return output, weights, state
 
 
 @require_torch
 class ReformerIntegrationTests(unittest.TestCase):
+
+    hidden_size = 32
+    seq_len = 7
+
     def _get_random_input(self, shape):
         return np.random.rand(*shape)
 
     def _get_trax_utils(self, shape):
         return TraxUtils(shape)
 
-    def _create_config(self, num_attention_heads=6, hidden_size=17, num_hashes=2, num_buckets=4, query_key_chunk_len=5, num_chunks_before=1, num_chunks_after=0, seed=0):
+    def _create_config(
+        self,
+        input_size=8,
+        num_attention_heads=5,
+        num_hashes=2,
+        num_buckets=4,
+        num_chunks_before=1,
+        num_chunks_after=0,
+        seed=0,
+    ):
         return {
-                'num_attention_heads': num_attention_heads,
-                'hidden_size': hidden_size,
-                'num_hashes': num_hashes,
-                'num_buckets': num_buckets,
-                'query_key_chunk_len': query_key_chunk_len,
-                'num_chunks_before': num_chunks_before,
-                'num_chunks_after': num_chunks_after,
-                'seed': seed
+            "input_size": self.hidden_size,
+            "num_attention_heads": num_attention_heads,
+            "hidden_size": self.hidden_size,
+            "num_hashes": num_hashes,
+            "num_buckets": num_buckets,
+            "query_key_chunk_len": self.seq_len,
+            "num_chunks_before": num_chunks_before,
+            "num_chunks_after": num_chunks_after,
+            "seed": seed,
         }
 
     def test_lsh_hashing(self):
-        shape = (3, 32, 8)
+        shape = (3, self.seq_len, self.hidden_size)  # Batch x SeqLen x ModelDim
 
         config_dict = self._create_config()
 
@@ -161,14 +176,13 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_utils = self._get_trax_utils(shape)
 
         trax_layer = trax_utils.get_layer(**config_dict)
-        lsh_trax_output, weights, state = trax_utils.forward_layer(np_input, layer=trax_layer)  # noqa: F841
+        lsh_trax_output, weights, state = trax_utils.forward_layer(
+            np_input, layer=trax_layer
+        )  # noqa: F841
 
-        import ipdb
-        ipdb.set_trace()
+        torch_input = torch.tensor(np_input, dtype=torch.float)
 
-#        hf_layer = LSHSelfAttention(config_dict)
-
-        import ipdb
-        ipdb.set_trace()
+        hf_layer = LSHSelfAttention(config_dict)
+        lsh_hf_output = hf_layer(torch_input)
 
         pass
