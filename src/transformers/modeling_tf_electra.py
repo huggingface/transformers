@@ -1,11 +1,11 @@
 import logging
 import os
 
+import tensorflow as tf
 
 from transformers import ElectraConfig
 
-from .modeling_tf_bert import TFBertEmbeddings, TFBertEncoder, TFBertPreTrainedModel, ACT2FN
-import tensorflow as tf
+from .modeling_tf_bert import ACT2FN, TFBertEmbeddings, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 
 
@@ -20,7 +20,6 @@ TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "google/electra-base-discriminator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-base-discriminator/pytorch_model.bin",
     "google/electra-large-discriminator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-large-discriminator/pytorch_model.bin",
 }
-
 
 
 class TFElectraEmbeddings(tf.keras.layers.Layer):
@@ -206,7 +205,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         self.config = config
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
@@ -219,14 +218,14 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         raise NotImplementedError
 
     def call(
-            self,
-            inputs,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            training=False,
+        self,
+        inputs,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        training=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -274,10 +273,13 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         return hidden_states
 
 
-class TFElectraModel(TFBertPreTrainedModel):
+class TFElectraModel(TFElectraPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.electra = TFElectraMainLayer(config, name="electra")
+
+    def get_input_embeddings(self):
+        return self.electra.embeddings
 
     def call(self, inputs, **kwargs):
         outputs = self.electra(inputs, **kwargs)
@@ -301,7 +303,6 @@ class TFElectraMaskedLMHead(tf.keras.layers.Layer):
 
 
 class TFElectraForMaskedLM(TFElectraPreTrainedModel):
-
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
@@ -314,18 +315,21 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
             self.activation = config.hidden_act
         self.generator_lm_head = TFElectraMaskedLMHead(config, self.electra.embeddings, name="generator_lm_head")
 
+    def get_input_embeddings(self):
+        return self.electra.embeddings
+
     def get_output_embeddings(self):
         return self.generator_lm_head
 
     def call(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            training=False
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        training=False,
     ):
 
         generator_hidden_states = self.electra(
@@ -341,12 +345,14 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
 
 
 class TFElectraForPreTraining(TFElectraPreTrainedModel):
-
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
         self.electra = TFElectraMainLayer(config, name="electra")
         self.discriminator_predictions = TFElectraDiscriminatorPredictions(config, name="discriminator_predictions")
+
+    def get_input_embeddings(self):
+        return self.electra.embeddings
 
     def call(
         self,
@@ -356,7 +362,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        training=False
+        training=False,
     ):
 
         discriminator_hidden_states = self.electra(
@@ -371,13 +377,12 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
 
 
 class TFElectraForTokenClassification(TFElectraPreTrainedModel):
-
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
         self.electra = TFElectraMainLayer(config, name="electra")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(config.num_labels)
+        self.classifier = tf.keras.layers.Dense(config.num_labels, name="classifier")
 
     def call(
         self,
@@ -387,7 +392,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        training=False
+        training=False,
     ):
 
         discriminator_hidden_states = self.electra(

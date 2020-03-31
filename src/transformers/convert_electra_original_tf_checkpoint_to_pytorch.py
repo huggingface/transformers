@@ -39,7 +39,9 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_du
         raise ValueError("The discriminator_or_generator argument should be either 'discriminator' or 'generator'")
 
     # Load weights from tf checkpoint
-    load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_or_generator=discriminator_or_generator)
+    load_tf_weights_in_electra(
+        model, config, tf_checkpoint_path, discriminator_or_generator=discriminator_or_generator
+    )
 
     # Save pytorch-model
     print("Save PyTorch model to {}".format(pytorch_dump_path))
@@ -69,7 +71,7 @@ if __name__ == "__main__":
         type=str,
         required=True,
         help="Whether to export the generator or the discriminator. Should be a string, either 'discriminator' or "
-             "'generator'.",
+        "'generator'.",
     )
     args = parser.parse_args()
     convert_tf_checkpoint_to_pytorch(

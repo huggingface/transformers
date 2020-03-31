@@ -480,7 +480,7 @@ if is_tf_available():
         TFElectraForPreTraining,
         TFElectraForMaskedLM,
         TFElectraForTokenClassification,
-        TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
+        TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
     # Optimization

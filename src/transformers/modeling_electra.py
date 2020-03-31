@@ -65,14 +65,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
             # print(original_name, name)
             # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
             # which are not required for using pretrained model
-            if any(
-                n
-                in [
-                    "global_step",
-                    "temperature",
-                ]
-                for n in name
-            ):
+            if any(n in ["global_step", "temperature",] for n in name):
                 logger.info("Skipping {}".format(original_name))
                 continue
             pointer = model
@@ -297,7 +290,6 @@ class ElectraModel(ElectraPreTrainedModel):
 
 
 class ElectraForMaskedLM(ElectraPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -343,7 +335,6 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
 
 
 class ElectraForPreTraining(ElectraPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -389,7 +380,6 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 
 
 class ElectraForTokenClassification(ElectraPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
