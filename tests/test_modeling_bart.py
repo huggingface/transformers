@@ -421,15 +421,15 @@ class BartModelIntegrationTests(unittest.TestCase):
         checkpoint_name = "mbart-large-en-ro"
         tokenizer = MBartTokenizer.from_pretrained(checkpoint_name)
         model = BartForConditionalGeneration.from_pretrained(checkpoint_name)
-        example_english_phrase = " How are you doing today?"
-        expected_translation_romanian = "Cum te descurci astăzi?"
+        example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
+        expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
 
         dct = tokenizer.batch_encode_plus([example_english_phrase], return_tensors="pt",)
 
         translated_tokens = model.generate(
             input_ids=dct["input_ids"].to(torch_device),
             attention_mask=dct["attention_mask"].to(torch_device),
-            # Implicity testing that config has correct generation kwargs
+            # Implicitly testing that config has correct generation kwargs
         )
         decoded = [
             tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False)
