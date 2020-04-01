@@ -135,14 +135,21 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
         train_dataloader = pl.ParallelLoader(dataloader, [args.device]).per_device_loader(args.device)
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", total=len(dataloader), disable=disable_logging)
         for step, batch in enumerate(epoch_iterator):
+
             # Save model checkpoint.
             if args.save_steps > 0 and global_step % args.save_steps == 0:
-                output_dir = os.path.join(args.output_dir, 'checkpoint-{}-xla{}'.format(global_step, xm.get_ordinal()))
+                output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
                 logger.info("Saving model checkpoint to %s", output_dir)
-                if not os.path.exists(output_dir):
-                    os.makedirs(output_dir)
+
+                if xm.is_master_ordinal():
+                    if not os.path.exists(output_dir):
+                        os.makedirs(output_dir)
+                    torch.save(args, os.path.join(output_dir, 'training_args.bin'))
+
+                # Barrier to wait for saving checkpoint.
+                xm.rendezvous('mid_training_checkpoint')
+                # model.save_pretrained needs to be called by all ordinals
                 model.save_pretrained(output_dir, xla_device=True)
-                torch.save(args, os.path.join(output_dir, 'training_args.bin'))
 
             model.train()
             inputs = {'input_ids':      batch[0],
@@ -263,15 +270,19 @@ def evaluate(args, model, tokenizer, prefix="", disable_logging=False):
 
 
 def load_and_cache_examples(args, task, tokenizer, evaluate=False):
+    if not xm.is_master_ordinal():
+        xm.rendezvous('load_and_cache_examples')
+
     processor = processors[task]()
     output_mode = output_modes[task]
+    cached_features_file = os.path.join(
+        args.data_dir, 'cached_{}_{}_{}_{}'.format(
+            'dev' if evaluate else 'train',
+            list(filter(None, args.model_name_or_path.split('/'))).pop(),
+            str(args.max_seq_length),
+            str(task)))
+
     # Load data features from cache or dataset file
-    cached_features_file = os.path.join(args.data_dir, 'cached_{}_{}_{}_{}_xla{}'.format(
-        'dev' if evaluate else 'train',
-        list(filter(None, args.model_name_or_path.split('/'))).pop(),
-        str(args.max_seq_length),
-        str(task),
-        xm.get_ordinal()))
     if os.path.exists(cached_features_file) and not args.overwrite_cache:
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
@@ -293,6 +304,9 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         )
         logger.info("Saving features into cached file %s", cached_features_file)
         torch.save(features, cached_features_file)
+
+    if xm.is_master_ordinal():
+        xm.rendezvous('load_and_cache_examples')
 
     # Convert to Tensors and build dataset
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
@@ -341,6 +355,9 @@ def main(args):
     label_list = processor.get_labels()
     num_labels = len(label_list)
 
+    if not xm.is_master_ordinal():
+        xm.rendezvous('download_only_once')  # Make sure only the first process in distributed training will download model & vocab
+
     # Load pretrained model and tokenizer
     args.model_type = args.model_type.lower()
     config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
@@ -359,47 +376,53 @@ def main(args):
                                         cache_dir=args.cache_dir if args.cache_dir else None,
                                         xla_device=True)
 
+    if xm.is_master_ordinal():
+        xm.rendezvous('download_only_once')
+
     # Send model to TPU/XLA device.
     model.to(args.device)
 
     logger.info("Training/evaluation parameters %s", args)
 
-    output_dir = os.path.join(args.output_dir, 'final-xla{}'.format(xm.get_ordinal()))
     if args.do_train:
         # Train the model.
         train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
         global_step, tr_loss = train(args, train_dataset, model, tokenizer, disable_logging=disable_logging)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
-        # Save trained model.
-        # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
 
-        # Create output directory if needed
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+        if xm.is_master_ordinal():
+            # Save trained model.
+            # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
 
-        logger.info("Saving model checkpoint to %s", output_dir)
-        # Save a trained model, configuration and tokenizer using `save_pretrained()`.
-        # They can then be reloaded using `from_pretrained()`
-        model.save_pretrained(output_dir, xla_device=True)
-        tokenizer.save_pretrained(output_dir)
+            # Create output directory if needed
+            if not os.path.exists(args.output_dir):
+                os.makedirs(args.output_dir)
 
-        # Good practice: save your training arguments together with the trained.
-        torch.save(args, os.path.join(output_dir, 'training_args.bin'))
+            logger.info("Saving model checkpoint to %s", args.output_dir)
+            # Save a trained model, configuration and tokenizer using `save_pretrained()`.
+            # They can then be reloaded using `from_pretrained()`
+            tokenizer.save_pretrained(args.output_dir)
+            # Good practice: save your training arguments together with the trained.
+            torch.save(args, os.path.join(args.output_dir, 'training_args.bin'))
+
+        xm.rendezvous('post_training_checkpoint')
+        # model.save_pretrained needs to be called by all ordinals
+        model.save_pretrained(args.output_dir, xla_device=True)
 
         # Load a trained model and vocabulary that you have fine-tuned
-        model = model_class.from_pretrained(output_dir, xla_device=True)
-        tokenizer = tokenizer_class.from_pretrained(output_dir, xla_device=True)
+        model = model_class.from_pretrained(args.output_dir, xla_device=True)
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir, xla_device=True)
         model.to(args.device)
 
 
     # Evaluation
     results = {}
     if args.do_eval:
-        tokenizer = tokenizer_class.from_pretrained(output_dir, do_lower_case=args.do_lower_case, xla_device=True)
-        checkpoints = [output_dir]
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case, xla_device=True)
+        checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
-            checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
+            checkpoints = list(os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + '/**/' + WEIGHTS_NAME, recursive=True)))
             logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:

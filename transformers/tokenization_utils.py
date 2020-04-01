@@ -287,7 +287,6 @@ class PreTrainedTokenizer(object):
         cache_dir = kwargs.pop('cache_dir', None)
         force_download = kwargs.pop('force_download', False)
         proxies = kwargs.pop('proxies', None)
-        xla_device = kwargs.pop('xla_device', False)
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
@@ -343,7 +342,7 @@ class PreTrainedTokenizer(object):
                     "We assumed '{}' was a path or url to a directory containing vocabulary files "
                     "named {} but couldn't find such vocabulary files at this path or url.".format(
                         pretrained_model_name_or_path, ', '.join(s3_models),
-                        pretrained_model_name_or_path, 
+                        pretrained_model_name_or_path,
                         list(cls.vocab_files_names.values())))
 
         # Get files from url, cache, or disk depending on the case
@@ -354,7 +353,7 @@ class PreTrainedTokenizer(object):
                     resolved_vocab_files[file_id] = None
                 else:
                     resolved_vocab_files[file_id] = cached_path(file_path, cache_dir=cache_dir,
-                        force_download=force_download, proxies=proxies, xla_device=xla_device)
+                        force_download=force_download, proxies=proxies)
         except EnvironmentError:
             if pretrained_model_name_or_path in s3_models:
                 msg = "Couldn't reach server at '{}' to download vocabulary files."

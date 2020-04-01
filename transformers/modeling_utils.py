@@ -245,17 +245,20 @@ class PreTrainedModel(nn.Module):
         # Only save the model itself if we are using distributed training
         model_to_save = self.module if hasattr(self, 'module') else self
 
-        # Save configuration file
-        model_to_save.config.save_pretrained(save_directory)
-
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
+
+        # Save configuration file
         if xla_device:
-            # Saving for each process is save since output_dir is proc# namespaced.
             import torch_xla.core.xla_model as xm
-            xm.save(model_to_save.state_dict(), output_model_file, master_only=False)
+            if xm.is_master_ordinal():
+                model_to_save.config.save_pretrained(save_directory)
+            # xm.save takes care of saving only from master
+            xm.save(model_to_save.state_dict(), output_model_file)
         else:
+            model_to_save.config.save_pretrained(save_directory)
             torch.save(model_to_save.state_dict(), output_model_file)
+
         logger.info("Model weights saved in {}".format(output_model_file))
 
     @classmethod
@@ -371,8 +374,7 @@ class PreTrainedModel(nn.Module):
 
             # redirect to the cache, if necessary
             try:
-                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download,
-                    proxies=proxies, xla_device=xla_device)
+                resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
             except EnvironmentError:
                 if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
                     msg = "Couldn't reach server at '{}' to download pretrained weights.".format(

@@ -122,7 +122,6 @@ class PretrainedConfig(object):
         force_download = kwargs.pop('force_download', False)
         proxies = kwargs.pop('proxies', None)
         return_unused_kwargs = kwargs.pop('return_unused_kwargs', False)
-        xla_device = kwargs.pop('xla_device', False)
 
         if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
             config_file = cls.pretrained_config_archive_map[pretrained_model_name_or_path]
@@ -132,8 +131,7 @@ class PretrainedConfig(object):
             config_file = pretrained_model_name_or_path
         # redirect to the cache, if necessary
         try:
-            resolved_config_file = cached_path(config_file, cache_dir=cache_dir, force_download=force_download,
-                proxies=proxies, xla_device=xla_device)
+            resolved_config_file = cached_path(config_file, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
         except EnvironmentError:
             if pretrained_model_name_or_path in cls.pretrained_config_archive_map:
                 msg = "Couldn't reach server at '{}' to download pretrained model configuration file.".format(

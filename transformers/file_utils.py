@@ -102,7 +102,7 @@ else:
             return fn
         return docstring_decorator
 
-def url_to_filename(url, etag=None, xla_device=False):
+def url_to_filename(url, etag=None):
     """
     Convert `url` into a hashed filename in a repeatable way.
     If `etag` is specified, append its hash to the url's, delimited
@@ -119,10 +119,6 @@ def url_to_filename(url, etag=None, xla_device=False):
         etag_bytes = etag.encode('utf-8')
         etag_hash = sha256(etag_bytes)
         filename += '.' + etag_hash.hexdigest()
-
-    if xla_device:
-        import torch_xla.core.xla_model as xm
-        filename += '.xla' + str(xm.get_ordinal())
 
     if url.endswith('.h5'):
         filename += '.h5'
@@ -156,7 +152,7 @@ def filename_to_url(filename, cache_dir=None):
     return url, etag
 
 
-def cached_path(url_or_filename, cache_dir=None, force_download=False, proxies=None, xla_device=False):
+def cached_path(url_or_filename, cache_dir=None, force_download=False, proxies=None):
     """
     Given something that might be a URL (or might be a local path),
     determine which. If it's a URL, download the file and cache it, and
@@ -177,8 +173,7 @@ def cached_path(url_or_filename, cache_dir=None, force_download=False, proxies=N
 
     if parsed.scheme in ('http', 'https', 's3'):
         # URL, so get it from the cache (downloading if necessary)
-        return get_from_cache(url_or_filename, cache_dir=cache_dir, force_download=force_download,
-            proxies=proxies, xla_device=xla_device)
+        return get_from_cache(url_or_filename, cache_dir=cache_dir, force_download=force_download, proxies=proxies)
     elif os.path.exists(url_or_filename):
         # File, and it exists.
         return url_or_filename
@@ -252,7 +247,7 @@ def http_get(url, temp_file, proxies=None):
 
 
 def get_from_cache(url, cache_dir=None, force_download=False, proxies=None,
-        etag_timeout=10, xla_device=False):
+        etag_timeout=10):
     """
     Given a URL, look for the corresponding dataset in the local cache.
     If it's not there, download it. Then return the path to the cached file.
@@ -282,7 +277,7 @@ def get_from_cache(url, cache_dir=None, force_download=False, proxies=None,
 
     if sys.version_info[0] == 2 and etag is not None:
         etag = etag.decode('utf-8')
-    filename = url_to_filename(url, etag, xla_device=xla_device)
+    filename = url_to_filename(url, etag)
 
     # get cache path to put the file
     cache_path = os.path.join(cache_dir, filename)
