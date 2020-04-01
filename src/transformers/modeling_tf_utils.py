@@ -1064,12 +1064,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             assert shape_list(next_scores) == shape_list(next_tokens) == [batch_size, 2 * num_beams]
 
             # next batch beam content
-            # list of (batch_size * num_beams) tuple(next hypothesis score, next token, current position in the batch)
             next_batch_beam = []
 
             # for each sentence
             for batch_idx in range(batch_size):
 
+                # if we are done with this sentence
                 if done[batch_idx]:
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
@@ -1087,14 +1087,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 for beam_token_rank, (beam_token_id, beam_token_score) in enumerate(
                     zip(next_tokens[batch_idx], next_scores[batch_idx])
                 ):
-
                     # get beam and token IDs
                     beam_id = beam_token_id // vocab_size
                     token_id = beam_token_id % vocab_size
 
                     effective_beam_id = batch_idx * num_beams + beam_id
                     # add to generated hypotheses if end of sentence or last iteration
-                    if eos_token_id is not None and token_id.numpy() is eos_token_id:
+                    if (eos_token_id is not None) and (token_id.numpy() == eos_token_id):
                         # if beam_token does not belong to top num_beams tokens, it should not be added
                         is_beam_token_worse_than_top_num_beams = beam_token_rank >= num_beams
                         if is_beam_token_worse_than_top_num_beams:
@@ -1110,9 +1109,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     if len(next_sent_beam) == num_beams:
                         break
 
-                # if we are done with this sentence
+                # Check if were done so that we can save a pad step if all(done)
                 done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
-                    tf.reduce_max(next_scores[batch_idx]).numpy()
+                    tf.reduce_max(next_scores[batch_idx]).numpy(), cur_len=cur_len
                 )
 
                 # update next beam content
@@ -1130,6 +1129,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             beam_tokens = tf.convert_to_tensor([x[1] for x in next_batch_beam], dtype=tf.int32)
             beam_idx = tf.convert_to_tensor([x[2] for x in next_batch_beam], dtype=tf.int32)
 
+            print("Scores: {}-{}".format(cur_len, beam_scores.numpy()))
+
             # re-order batch
             input_ids = tf.stack([tf.identity(input_ids[x, :]) for x in beam_idx])
             input_ids = tf.concat([input_ids, tf.expand_dims(beam_tokens, 1)], axis=-1)
@@ -1137,6 +1138,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             if past is not None:
                 past = self._reorder_cache(past, beam_idx)
 
+            # extend attention_mask for new generated input if only decoder
             if self.config.is_encoder_decoder is False:
                 attention_mask = tf.concat(
                     [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
