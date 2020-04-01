@@ -454,7 +454,7 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
 
 class RobertaFastTokenizerTest(CommonFastTokenizerTest):
     TOKENIZERS_CLASSES = frozenset(
-        [Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file", filter_roberta_detectors),]
+        [Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file", filter_roberta_detectors)]
     )
 
     def assert_embeded_special_tokens(self, tokenizer_r, tokenizer_p):
@@ -517,7 +517,7 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
 
 class TransfoXLFastTokenizerTest(NoPaddingTokenFastTokenizerMatchingTest):
     TOKENIZERS_CLASSES = frozenset(
-        [Tokenizer("TransfoXL", TransfoXLTokenizerFast, TransfoXLTokenizer, "pretrained_vocab_file", None),]
+        [Tokenizer("TransfoXL", TransfoXLTokenizerFast, TransfoXLTokenizer, "pretrained_vocab_file", None)]
     )
 
     @require_torch
