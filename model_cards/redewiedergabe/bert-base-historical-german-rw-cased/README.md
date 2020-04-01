@@ -42,15 +42,15 @@ Hyperparameters
 
 Results are reported below in comparison to a custom trained flair embedding, which was stacked onto a custom trained fastText-model. Both models were trained on the same dataset.
 
-|                | BERT       ||| FastText+Flair  |||
-|----------------|----------|-----------|----------|------|-----------|--------|
-|                | F1       | Precision | Recall   | F1   | Precision | Recall |
-| Direct         | 0.80     | 0.86      | 0.74     | 0.84 | 0.90      | 0.79   |
-| Indirect       | **0.76** | **0.79**  | **0.73** | 0.73 | 0.78      | 0.68   |
-| Reported       | **0.58** | **0.69**  | **0.51** | 0.56 | 0.68      | 0.48   |
-| Free indirect  | **0.57** | **0.80**  | **0.44** | 0.47 | 0.78      | 0.34   |
+|                | BERT       ||| FastText+Flair  |||Test data|
+|----------------|----------|-----------|----------|------|-----------|--------|--------|
+|                | F1       | Precision | Recall   | F1   | Precision | Recall ||
+| Direct         | 0.80     | 0.86      | 0.74     | 0.84 | 0.90      | 0.79   |historical German, fictional & non-fictional|
+| Indirect       | **0.76** | **0.79**  | **0.73** | 0.73 | 0.78      | 0.68   |historical German, fictional & non-fictional|
+| Reported       | **0.58** | **0.69**  | **0.51** | 0.56 | 0.68      | 0.48   |historical German, fictional & non-fictional|
+| Free indirect  | **0.57** | **0.80**  | **0.44** | 0.47 | 0.78      | 0.34   |modern German, fictional|
 
-## Intended used:
+## Intended use:
 Historical German Texts (1840 to 1920)
 
 (Showed good performance with modern German fictional texts as well)
