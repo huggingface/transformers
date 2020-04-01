@@ -149,7 +149,7 @@ class ReformerIntegrationTests(unittest.TestCase):
     def _create_config(
         self,
         input_size=8,
-        num_attention_heads=1,
+        num_attention_heads=2,
         num_hashes=2,
         num_buckets=4,
         num_chunks_before=1,
@@ -198,14 +198,10 @@ class ReformerIntegrationTests(unittest.TestCase):
             hf_layer.query_key.weight = torch.nn.Parameter(torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, self.hidden_size))
             hf_layer.value.weight = torch.nn.Parameter(torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, self.hidden_size))
 
-#        trax_query_out = np.load(config_dict['path_to_save_weights'] + '_1_query_out.npy')
-#        trax_query_weight = np.load(config_dict['path_to_save_weights'] + '_1_query_weight.npy')
-#        trax_query_input = np.load(config_dict['path_to_save_weights'] + '_1_query_input.npy')
+        trax_buckets_1 = np.load(config_dict['path_to_save_weights'] + '_1_buckets.npy')
+        trax_buckets_2 = np.load(config_dict['path_to_save_weights'] + '_2_buckets.npy')
 
-        # check that buckets are equal
         buckets = hf_layer(torch_input)
 
-        import ipdb
-        ipdb.set_trace()
 
         pass
