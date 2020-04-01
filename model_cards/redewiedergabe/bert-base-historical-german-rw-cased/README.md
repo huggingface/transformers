@@ -1,3 +1,7 @@
+---
+language: german
+---
+
 # Model description
 ## Dataset
 Trained on fictional and non-fictional German texts written between 1840 and 1920:
