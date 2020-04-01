@@ -477,9 +477,7 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
 
         # Rust should have 'Ġ' before <mask> which should be left as an entire token
         tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
-        self.assertSequenceEqual(
-            tokens_r, ["<s>", "ĠA", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
-        )
+        self.assertSequenceEqual(tokens_r, ["<s>", "ĠA", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"])
 
 
 class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):

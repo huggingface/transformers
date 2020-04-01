@@ -21,8 +21,8 @@ from typing import List, Optional
 from tokenizers import AddedToken
 from tokenizers.processors import RobertaProcessing
 
-from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+from .tokenization_utils import PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -283,7 +283,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             (sep_token, self.sep_token_id), (cls_token, self.cls_token_id)
         )
 
-        self.tokenizer.add_special_tokens([kwargs['mask_token']])
+        self.tokenizer.add_special_tokens([kwargs["mask_token"]])
 
         # As we override the post_processor post super.__init__ the computed num_added_tokens is wrong in super().
         # We need to recompute max_len according to the newly register post_processor to get real values.

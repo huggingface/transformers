@@ -230,10 +230,17 @@ class SpecialTokensMixin:
 
     def __init__(self, **kwargs):
 
-        __slots__ = ['_bos_token', '_eos_token', '_unk_token',
-                     '_sep_token', '_pad_token', '_cls_token',
-                     '_mask_token', '_pad_token_type_id',
-                     '_additional_special_tokens']
+        __slots__ = [
+            "_bos_token",
+            "_eos_token",
+            "_unk_token",
+            "_sep_token",
+            "_pad_token",
+            "_cls_token",
+            "_mask_token",
+            "_pad_token_type_id",
+            "_additional_special_tokens",
+        ]
 
         self._bos_token = None
         self._eos_token = None
@@ -254,9 +261,9 @@ class SpecialTokensMixin:
                 elif isinstance(value, str):
                     setattr(self, key, value)
                 else:
-                    raise TypeError("special token {} has to be either str or AddedToken but got: {}"
-                                    .format(key, type(value)))
-
+                    raise TypeError(
+                        "special token {} has to be either str or AddedToken but got: {}".format(key, type(value))
+                    )
 
     @property
     def bos_token(self):

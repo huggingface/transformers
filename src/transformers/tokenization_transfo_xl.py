@@ -31,7 +31,7 @@ import numpy as np
 from tokenizers import Tokenizer
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import WordLevel
-from tokenizers.normalizers import Lowercase, Sequence, unicode_normalizer_from_str, Strip
+from tokenizers.normalizers import Lowercase, Sequence, Strip, unicode_normalizer_from_str
 from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
 
@@ -407,6 +407,7 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
         }
 
         super().__init__(tokenizer, parameters)
+
 
 class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
 
