@@ -93,14 +93,16 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_mecab_tokenizer_with_option(self):
         try:
-            tokenizer = MecabTokenizer(do_lower_case=True, normalize_text=False, mecab_option="-d /usr/local/lib/mecab/dic/jumandic")
+            tokenizer = MecabTokenizer(
+                do_lower_case=True, normalize_text=False, mecab_option="-d /usr/local/lib/mecab/dic/jumandic"
+            )
         except RuntimeError:
             # if dict doesn't exist in the system, previous code raises this error.
             return
 
         self.assertListEqual(
             tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
-            ['ｱｯﾌﾟﾙストア', 'で', 'iPhone', '８', 'が', '発売', 'さ', 'れた', '\u3000', '。']
+            ["ｱｯﾌﾟﾙストア", "で", "iPhone", "８", "が", "発売", "さ", "れた", "\u3000", "。"],
         )
 
     def test_mecab_tokenizer_no_normalize(self):

@@ -136,7 +136,9 @@ class BertJapaneseTokenizer(BertTokenizer):
                     do_lower_case=do_lower_case, never_split=never_split, tokenize_chinese_chars=False
                 )
             elif word_tokenizer_type == "mecab":
-                self.word_tokenizer = MecabTokenizer(do_lower_case=do_lower_case, never_split=never_split, **(mecab_kwargs or {}))
+                self.word_tokenizer = MecabTokenizer(
+                    do_lower_case=do_lower_case, never_split=never_split, **(mecab_kwargs or {})
+                )
             else:
                 raise ValueError("Invalid word_tokenizer_type '{}' is specified.".format(word_tokenizer_type))
 
