@@ -218,6 +218,12 @@ class SpecialTokensMixin:
     ]
 
     def __init__(self, **kwargs):
+
+        __slots__ = ['_bos_token', '_eos_token', '_unk_token',
+                     '_sep_token', '_pad_token', '_cls_token',
+                     '_mask_token', '_pad_token_type_id',
+                     '_additional_special_tokens']
+
         self._bos_token = None
         self._eos_token = None
         self._unk_token = None
