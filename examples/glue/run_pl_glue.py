@@ -68,7 +68,7 @@ class GLUETransformer(BaseTransformer):
                     output_mode=args.glue_output_mode,
                     pad_on_left=bool(args.model_type in ["xlnet"]),  # pad on the left for xlnet
                     pad_token=self.tokenizer.convert_tokens_to_ids([self.tokenizer.pad_token])[0],
-                    pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
+                    pad_token_segment_id=self.tokenizer.pad_token_type_id,
                 )
                 logger.info("Saving features into cached file %s", cached_features_file)
                 torch.save(features, cached_features_file)
