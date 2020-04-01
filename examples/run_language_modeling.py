@@ -68,7 +68,7 @@ class Model(nn.Module):
         self.encoder = encoder
         
     def forward(self, input_ids,masked_lm_labels=None): 
-        return self.encoder.roberta(input_ids,masked_lm_labels)[0]
+        return self.encoder(input_ids,masked_lm_labels)[0]
     
     
 class TextDataset(Dataset):
