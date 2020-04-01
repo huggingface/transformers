@@ -181,7 +181,7 @@ class LSHSelfAttention(nn.Module):
 
         self.hidden_states_input_size = config['input_size']
         self.num_attention_heads = config['num_attention_heads']
-        self.hidden_size = config['hidden_size'] * self.num_attention_heads
+        self.hidden_size = config['hf_hidden_size']
 
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
@@ -192,12 +192,12 @@ class LSHSelfAttention(nn.Module):
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query_key = nn.Linear(self.hidden_states_input_size, self.all_head_size)
-        self.value = nn.Linear(self.hidden_states_input_size, self.all_head_size)
-        self.dense = nn.Linear(self.all_head_size, self.hidden_size)
+        self.query_key = nn.Linear(self.hidden_states_input_size, self.all_head_size, bias=False)
+        self.value = nn.Linear(self.hidden_states_input_size, self.all_head_size, bias=False)
+        self.dense = nn.Linear(self.all_head_size, self.hidden_size, bias=False)
 
         # add Dropout
-        self.python_seed = config['seed']
+        self.hash_seed = config['seed']
 
         self.num_hashes = config['num_hashes']
         self.num_buckets = config['num_buckets']
@@ -212,9 +212,6 @@ class LSHSelfAttention(nn.Module):
         head_mask=None,
     ):
 
-        import ipdb
-        ipdb.set_trace()
-
         mixed_query_key_vectors = self.query_key(hidden_states)
         mixed_value_vectors = self.value(hidden_states)
 
@@ -222,6 +219,8 @@ class LSHSelfAttention(nn.Module):
         value_vectors = self.transpose_for_scores(mixed_value_vectors)
 
         buckets = self._hash_vectors(query_key_vectors)
+
+        return buckets
 
         sequence_len = hidden_states.shape[1]
 
@@ -295,7 +294,7 @@ class LSHSelfAttention(nn.Module):
             rotation_size = self.num_buckets
             num_buckets = self.num_buckets
         else:
-            # Factorize the hash if self.n_buckets is a list or tuple
+            # Factorize the hash if self.num_buckets is a list or tuple
             rotation_size, num_buckets = 0, 1
             for num_bucket in self.num_buckets:
                 assert num_bucket % 2 == 0, 'The number of buckets should be even, but `num_bucket`: {}'.format(num_bucket)
@@ -304,12 +303,19 @@ class LSHSelfAttention(nn.Module):
 
         rotations_shape = (vectors.shape[-1], self.num_hashes, rotation_size // 2)
 
+        # TODO: delete later when integration tests are ok
         numpy.random.seed(self.hash_seed)
         random_rotations = torch.tensor(numpy.random.normal(size=rotations_shape), dtype=torch.float32)
 
+        # create a random self.attention_head_size x self.num_hashes x self.num_buckets/2
 #        random_rotations = torch.randn(rotations_shape, device=vectors.device)
-        # TODO: check with dimensions here!
-        rotated_vectors = torch.einsum('td,dhb->htb', vectors, random_rotations)
+
+        # rotated_vectors has dim:
+        # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2
+        # TODO: IMPORTANT: At the moment we use the same random rotation over all batches
+        # and heads -> is that bad? It seems like in original reformer a different random
+        # rotation is used over heads and batches
+        rotated_vectors = torch.einsum('bmtd,dhr->bmhtr', vectors, random_rotations)
 
         if isinstance(self.num_buckets, int) or len(self.num_buckets) == 1:
             rotated_vectors = torch.cat([rotated_vectors, -rotated_vectors], dim=-1)
@@ -327,10 +333,16 @@ class LSHSelfAttention(nn.Module):
                     buckets += cur_product * torch.argmax(rotated_vectors, dim=-1)
                 cur_product *= num_bucket
 
-        # buckets is now (self.n_hashes, seqlen). Next we add offsets so that
-        # bucket numbers from different hashing rounds don't overlap.
+        # buckets is now (Batch_size x Num_Attn_Heads x Num_Hashes x Seq_Len).
+        # Next we add offsets so that bucket numbers from different hashing rounds don't overlap.
         offsets = torch.arange(self.num_hashes, device=vectors.device)
         offsets = torch.reshape(offsets * num_buckets, (-1, 1))
+
+        batch_size = vectors.shape[0]
+        assert vectors.shape[1] == self.num_attention_heads
+
+        # repeat same values for Batch_size and Num_Attn_Heads
+        offsets = offsets.repeat(batch_size, self.num_attention_heads, 1, 1)
         buckets = torch.reshape(buckets + offsets, (-1,))
 
         return buckets
