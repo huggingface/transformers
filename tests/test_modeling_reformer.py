@@ -79,7 +79,8 @@ class TraxUtils(object):
         use_reference_code=True,
         attention_dropout=0.0,
         mode="train",
-        seed=0,
+        seed=None,
+        path_to_save_weights=None,
         **kwargs
     ):
 
@@ -100,6 +101,7 @@ class TraxUtils(object):
                 attention_dropout=attention_dropout,
                 mode=mode,
                 hash_seed=seed,
+                path_to_save_weights=path_to_save_weights
             )
 
         return layer
@@ -147,27 +149,30 @@ class ReformerIntegrationTests(unittest.TestCase):
     def _create_config(
         self,
         input_size=8,
-        num_attention_heads=5,
+        num_attention_heads=1,
         num_hashes=2,
         num_buckets=4,
         num_chunks_before=1,
         num_chunks_after=0,
         seed=0,
+        path_to_save_weights="/home/patrick/hugging_face/experiments/reformer/intermediate_weights"
     ):
         return {
             "input_size": self.hidden_size,
             "num_attention_heads": num_attention_heads,
             "hidden_size": self.hidden_size,
+            "hf_hidden_size": num_attention_heads * self.hidden_size,
             "num_hashes": num_hashes,
             "num_buckets": num_buckets,
             "query_key_chunk_len": self.seq_len,
             "num_chunks_before": num_chunks_before,
             "num_chunks_after": num_chunks_after,
             "seed": seed,
+            "path_to_save_weights": path_to_save_weights
         }
 
     def test_lsh_hashing(self):
-        shape = (3, self.seq_len, self.hidden_size)  # Batch x SeqLen x ModelDim
+        shape = (1, self.seq_len, self.hidden_size)  # Batch x SeqLen x ModelDim
 
         config_dict = self._create_config()
 
@@ -176,13 +181,31 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_utils = self._get_trax_utils(shape)
 
         trax_layer = trax_utils.get_layer(**config_dict)
-        lsh_trax_output, weights, state = trax_utils.forward_layer(
+        output, weights, state = trax_utils.forward_layer(
             np_input, layer=trax_layer
         )  # noqa: F841
 
         torch_input = torch.tensor(np_input, dtype=torch.float)
 
         hf_layer = LSHSelfAttention(config_dict)
-        lsh_hf_output = hf_layer(torch_input)
+
+        # set torch weights for 1-to-1 comparison
+        with torch.no_grad():
+
+            np_query_key = np.asarray(weights[0])
+            np_value = np.asarray(weights[1])
+
+            hf_layer.query_key.weight = torch.nn.Parameter(torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, self.hidden_size))
+            hf_layer.value.weight = torch.nn.Parameter(torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, self.hidden_size))
+
+#        trax_query_out = np.load(config_dict['path_to_save_weights'] + '_1_query_out.npy')
+#        trax_query_weight = np.load(config_dict['path_to_save_weights'] + '_1_query_weight.npy')
+#        trax_query_input = np.load(config_dict['path_to_save_weights'] + '_1_query_input.npy')
+
+        # check that buckets are equal
+        buckets = hf_layer(torch_input)
+
+        import ipdb
+        ipdb.set_trace()
 
         pass
