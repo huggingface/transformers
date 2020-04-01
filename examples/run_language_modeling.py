@@ -156,12 +156,18 @@ class LazyLineByLineTextDataset(Dataset):
         self.num_entries = self._get_n_lines(self.file_path)
 
     @staticmethod
-    def _get_n_lines(file_path):
-        with Path(file_path).resolve().open(encoding="utf-8") as fhin:
-            for line_idx, _ in enumerate(fhin, 1):
-                pass
+    def _get_n_lines(fin, size=65536):
+        # borrowed from https://stackoverflow.com/a/9631635/1150683
+        def blocks(files):
+            while True:
+                b = files.read(size)
+                if not b:
+                    break
+                yield b
 
-        return line_idx
+        with open(fin, encoding='utf-8') as fhin:
+            n_lines = sum(bl.count("\n") for bl in blocks(fhin))
+        return n_lines
 
     def __getitem__(self, idx):
         """
@@ -170,8 +176,7 @@ class LazyLineByLineTextDataset(Dataset):
         :return (str or None): The line as a string (newline removed) or None if there is an exception.
         """
         # linecache starts counting from one, not zero, +1 the given index
-        line = linecache.getline(self.file_path, idx + 1).strip()
-        return line
+        return linecache.getline(self.file_path, idx + 1).rstrip()
 
     def __len__(self):
         return self.num_entries
@@ -196,13 +201,11 @@ def make_collate(tokenizer, block_size, lazy=False):
         """
         # Filter empty strings. LazyLineByLineTextDataset will return empty string if there is an error on a line.
         examples = [ex for ex in examples if ex]
-        examples = tokenizer.batch_encode_plus(examples, max_len=block_size)
-        # Seems that the above tokenisation statement doesn't correctly truncate leading to sequence-too-long errors in
-        # training.
-        examples = [torch.tensor(ex[:block_size]) for ex in examples["input_ids"]]
-        if tokenizer._pad_token is None:
-            return pad_sequence(examples, batch_first=True)
-        return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
+        examples = tokenizer.batch_encode_plus(examples,
+                                               max_length=block_size,
+                                               return_tensors='pt',
+                                               pad_to_max_length=True)
+        return examples['input_ids']
 
     def simple_collate(examples):
         """
@@ -417,7 +420,6 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
-
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
@@ -550,9 +552,6 @@ def evaluate(args, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, prefi
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(result[key]))
             writer.write("%s = %s\n" % (key, str(result[key])))
-    if hasattr(eval_dataset, "close"):
-        # For lazy loaders, clean up file handles.
-        eval_dataset.close()
     return result
 
 
@@ -829,9 +828,6 @@ def main():
 
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
-        if hasattr(train_dataset, "close"):
-            # For lazy loaders, clean up file handles.
-            train_dataset.close()
 
     # Saving best-practices: if you use save_pretrained for the model and tokenizer, you can reload them using from_pretrained()
     if args.do_train and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
