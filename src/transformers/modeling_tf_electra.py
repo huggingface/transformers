@@ -3,8 +3,8 @@ import logging
 import tensorflow as tf
 
 from transformers import ElectraConfig
-from .file_utils import add_start_docstrings_to_callable, add_start_docstrings
 
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_utils import get_initializer, shape_list
 
@@ -333,6 +333,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
 
 """
 
+
 @add_start_docstrings(
     "The bare Electra Model transformer outputting raw hidden-states without any specific head on top. Identical to "
     "the BERT model except that it uses an additional linear layer between the embedding layer and the encoder if the "
@@ -403,14 +404,14 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
     def call(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            training=False,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        training=False,
     ):
         r"""
     Returns:
