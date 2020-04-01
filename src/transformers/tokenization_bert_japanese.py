@@ -168,7 +168,7 @@ class BertJapaneseTokenizer(BertTokenizer):
 class MecabTokenizer(object):
     """Runs basic tokenization with MeCab morphological parser."""
 
-    def __init__(self, do_lower_case=False, never_split=None, normalize_text=True, mecab_option=""):
+    def __init__(self, do_lower_case=False, never_split=None, normalize_text=True, mecab_option=None):
         """Constructs a MecabTokenizer.
 
         Args:
@@ -188,7 +188,7 @@ class MecabTokenizer(object):
 
         import MeCab
 
-        self.mecab = MeCab.Tagger(mecab_option)
+        self.mecab = MeCab.Tagger(mecab_option) if mecab_option is not None else MeCab.Tagger()
 
     def tokenize(self, text, never_split=None, **kwargs):
         """Tokenizes a piece of text."""
