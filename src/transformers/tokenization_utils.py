@@ -15,9 +15,11 @@
 """Tokenization classes for OpenAI GPT."""
 
 import copy
+import functools
 import itertools
 import json
 import logging
+import operator
 import os
 import re
 from collections import UserDict, defaultdict
@@ -48,6 +50,15 @@ TextInput = str
 TextPairInput = Tuple[str, str]
 PreTokenizedInput = List[str]
 PreTokenizedInputPair = Tuple[List[str], List[str]]
+
+
+def flatten(x: Sequence):
+    """
+    Flatten the provided (potentially nested) sequence
+    :param x: Sequence (potentially nested)
+    :return: Flattened sequence
+    """
+    return functools.reduce(operator.iconcat, x, [])
 
 
 @contextmanager
@@ -1840,6 +1851,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return self._tokenizer._tokenizer.decoder
 
     @property
+    def is_fast(self) -> bool:
+        return True
+
+    @property
     def vocab_size(self) -> int:
         return self._tokenizer.get_vocab_size(with_added_tokens=False)
 
@@ -1849,50 +1864,42 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     @PreTrainedTokenizer.bos_token.setter
     def bos_token(self, value):
         self._bos_token = value
-        self._update_special_tokens()
+        self._tokenizer.add_special_tokens([self._bos_token])
 
     @PreTrainedTokenizer.eos_token.setter
     def eos_token(self, value):
         self._eos_token = value
-        self._update_special_tokens()
+        self._tokenizer.add_special_tokens([self._eos_token])
 
     @PreTrainedTokenizer.unk_token.setter
     def unk_token(self, value):
         self._unk_token = value
-        self._update_special_tokens()
+        self._tokenizer.add_special_tokens([self._unk_token])
 
     @PreTrainedTokenizer.sep_token.setter
     def sep_token(self, value):
         self._sep_token = value
-        self._update_special_tokens()
+        self._tokenizer.add_special_tokens([self._sep_token])
 
     @PreTrainedTokenizer.pad_token.setter
     def pad_token(self, value):
         self._pad_token = value
-        self._update_special_tokens()
+        self._tokenizer.add_special_tokens([self._pad_token])
 
     @PreTrainedTokenizer.cls_token.setter
     def cls_token(self, value):
         self._cls_token = value
-        self._update_special_tokens()
+        self._tokenizer.add_special_tokens([self._cls_token])
 
     @PreTrainedTokenizer.mask_token.setter
     def mask_token(self, value):
         self._mask_token = value
-        self._update_special_tokens()
+        self._tokenizer.add_special_tokens([self._mask_token])
 
     @PreTrainedTokenizer.additional_special_tokens.setter
     def additional_special_tokens(self, value):
         self._additional_special_tokens = value
-        self._update_special_tokens()
-
-    @property
-    def is_fast(self) -> bool:
-        return True
-
-    def _update_special_tokens(self):
-        if self._tokenizer is not None:
-            self._tokenizer.add_special_tokens(self.all_special_tokens)
+        self._tokenizer.add_special_tokens(self.all_special_tokens)
 
     def _convert_encoding(
         self,
@@ -1971,7 +1978,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     def add_special_tokens(self, special_tokens_dict: dict) -> int:
         added = super().add_special_tokens(special_tokens_dict)
-        self._update_special_tokens()
+        tokens = flatten(special_tokens_dict.values())
+        self._tokenizer.add_special_tokens(tokens)
         return added
 
     def build_inputs_with_special_tokens(
