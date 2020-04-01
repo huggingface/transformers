@@ -243,9 +243,26 @@ class BartHeadTests(unittest.TestCase):
         self.assertEqual(logits.shape, expected_shape)
         self.assertIsInstance(loss.item(), float)
 
-    def test_mbart_tokenizer(self):
-        tok = MBartTokenizer.from_pretrained("mbart-large-cc25")
-        dct = tok.batch_encode_plus(["This test data is meant to awe and inspire."])
+    def test_mbart_enro_tokenizer(self):
+        tok = MBartTokenizer.from_pretrained("mbart-large-en-ro")
+        raw = 'UN Chief Says There Is No Military Solution in Syria'
+        ids = tok.batch_encode_plus(
+            [raw])['input_ids'][0]
+        expected_result = [  8274, 127873,  25916,      7,   8622,   2071,    438,  67485,     53,
+        187895,     23,  51712,      2, 250004]
+        self.assertListEqual(expected_result, ids)
+
+
+    def test_disk_mbart_enro_tokenizer(self):
+        vocab_file = '/Users/shleifer/sentencepiece/src/m2.model'
+        tok = MBartTokenizer(vocab_file)
+        raw = 'UN Chief Says There Is No Military Solution in Syria'
+        ids = tok.batch_encode_plus(
+            [raw])['input_ids'][0]
+        expected_result = [  8274, 127873,  25916,      7,   8622,   2071,    438,  67485,     53,
+        187895,     23,  51712,      2, 250004]
+        self.assertListEqual(expected_result, ids)
+
 
     def test_mbart_forward(self):
         config = BartConfig(
@@ -424,11 +441,12 @@ class BartModelIntegrationTests(unittest.TestCase):
         example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
 
-        dct = tokenizer.batch_encode_plus([example_english_phrase], return_tensors="pt",)
+        inputs: dict = tokenizer.batch_encode_plus([example_english_phrase], return_tensors="pt",)
+        print(inputs['input_ids'])
 
         translated_tokens = model.generate(
-            input_ids=dct["input_ids"].to(torch_device),
-            attention_mask=dct["attention_mask"].to(torch_device),
+            input_ids=inputs["input_ids"].to(torch_device),
+            attention_mask=inputs["attention_mask"].to(torch_device),
             # Implicitly testing that config has correct generation kwargs
         )
         decoded = [
