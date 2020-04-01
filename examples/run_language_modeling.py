@@ -165,7 +165,7 @@ class LazyLineByLineTextDataset(Dataset):
                     break
                 yield b
 
-        with open(fin, encoding='utf-8') as fhin:
+        with open(fin, encoding="utf-8") as fhin:
             n_lines = sum(bl.count("\n") for bl in blocks(fhin))
         return n_lines
 
@@ -201,11 +201,10 @@ def make_collate(tokenizer, block_size, lazy=False):
         """
         # Filter empty strings. LazyLineByLineTextDataset will return empty string if there is an error on a line.
         examples = [ex for ex in examples if ex]
-        examples = tokenizer.batch_encode_plus(examples,
-                                               max_length=block_size,
-                                               return_tensors='pt',
-                                               pad_to_max_length=True)
-        return examples['input_ids']
+        examples = tokenizer.batch_encode_plus(
+            examples, max_length=block_size, return_tensors="pt", pad_to_max_length=True
+        )
+        return examples["input_ids"]
 
     def simple_collate(examples):
         """
