@@ -38,7 +38,8 @@ class ElectraConfig(PretrainedConfig):
         This is the configuration class to store the configuration of a :class:`~transformers.ElectraModel`.
         It is used to instantiate an ELECTRA model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the ELECTRA `electra-base-uncased <https://huggingface.co/electra-base-uncased>`__ architecture.
+        the ELECTRA `google/electra-small-discriminator <https://huggingface.co/google/electra-small-discriminator>`__
+        architecture.
 
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
