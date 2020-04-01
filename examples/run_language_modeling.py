@@ -62,7 +62,15 @@ logger = logging.getLogger(__name__)
 MODEL_CONFIG_CLASSES = list(MODEL_WITH_LM_HEAD_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
-
+class Model(nn.Module):   
+    def __init__(self, encoder):
+        super(Roberta, self).__init__()
+        self.encoder = encoder
+        
+    def forward(self, input_ids,masked_lm_labels=None): 
+        return self.encoder.roberta(input_ids,masked_lm_labels)[0]
+    
+    
 class TextDataset(Dataset):
     def __init__(self, tokenizer: PreTrainedTokenizer, args, file_path: str, block_size=512):
         assert os.path.isfile(file_path)
@@ -330,8 +338,8 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
             model.train()
-            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
-            loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
+            loss = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
+
 
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -440,8 +448,7 @@ def evaluate(args, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, prefi
         labels = labels.to(args.device)
 
         with torch.no_grad():
-            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
-            lm_loss = outputs[0]
+            lm_loss  = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
             eval_loss += lm_loss.mean().item()
         nb_eval_steps += 1
 
@@ -708,9 +715,11 @@ def main():
             config=config,
             cache_dir=args.cache_dir,
         )
+        model = Model(model)
     else:
         logger.info("Training new model from scratch")
         model = AutoModelWithLMHead.from_config(config)
+        model = Model(model)
 
     model.to(args.device)
 
