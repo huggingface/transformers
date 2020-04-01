@@ -220,22 +220,25 @@ class LSHSelfAttention(nn.Module):
 
         buckets = self._hash_vectors(query_key_vectors)
 
-        return buckets
+        sequence_length = hidden_states.shape[1]
+        batch_size = hidden_states.shape[0]
 
-        sequence_len = hidden_states.shape[1]
+        assert int(buckets.shape[-1]) == self.num_hashes * sequence_length
 
-        # TODO: check shapes here
-        assert int(buckets.shape[0]) == self.num_hashes * sequence_len
+        # TODO: what is ticker? Is ticker something like indices?? Ask authors
+        ticker = torch.arange(self.num_hashes * sequence_length, device=buckets.device)
+        ticker = ticker.repeat(batch_size, self.num_attention_heads, 1)
 
-        # TODO: what is ticker?
-        ticker = torch.arange(self.num_hashes * sequence_len, device=buckets.device)
-        buckets_and_t = sequence_len * buckets + (ticker % sequence_len)
+        buckets_and_t = sequence_length * buckets + (ticker % sequence_length)
 
         # Hash-based sort
         sorted_buckets, sorted_ticker = torch.sort(buckets_and_t, dim=-1)
         _, undo_sort_indices = torch.sort(sorted_ticker, dim=-1)
 
-        sorted_ticker = (sorted_ticker % sequence_len)
+        import ipdb
+        ipdb.set_trace()
+
+        sorted_ticker = (sorted_ticker % sequence_length)
         sorted_query_key_vectors = torch.gather(query_key_vectors, sorted_ticker, dim=0)
         sorted_value_vectors = torch.gather(value_vectors, sorted_ticker, dim=0)
 
@@ -273,12 +276,12 @@ class LSHSelfAttention(nn.Module):
         logits = torch.gather(dots_logsumexp, undo_sort_indices, dim=0)
 
         if self.num_hashes > 1:
-            out = torch.reshape(out, (self.num_hashes, sequence_len, out.shape[-1]))
-            logits = torch.reshape(logits, (self.num_hashes, sequence_len, 1))
+            out = torch.reshape(out, (self.num_hashes, sequence_length, out.shape[-1]))
+            logits = torch.reshape(logits, (self.num_hashes, sequence_length, 1))
             probs = torch.exp(logits - torch.logsumexp(logits, dim=0, keepdim=True))
             out = torch.sum(out * probs, dim=0)
 
-        assert out.shape == (sequence_len, self.value_vectors[-1])
+        assert out.shape == (sequence_length, self.value_vectors[-1])
         out = self.dense(out)
 
         # TODO: apply broadcasted dropout
@@ -343,7 +346,7 @@ class LSHSelfAttention(nn.Module):
 
         # repeat same values for Batch_size and Num_Attn_Heads
         offsets = offsets.repeat(batch_size, self.num_attention_heads, 1, 1)
-        buckets = torch.reshape(buckets + offsets, (-1,))
+        buckets = torch.reshape(buckets + offsets, (batch_size, self.num_attention_heads, -1))
 
         return buckets
 
@@ -378,51 +381,6 @@ class LSHSelfAttention(nn.Module):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
-
-
-class LSHAttention(nn.Module):
-    def __init__(self, bucket_size: int, nb_hashs: int = 1):
-        super().__init__()
-
-        if (bucket_size % 2) != 0:
-            raise ValueError("bucket_size should be multiple of 2")
-
-        if nb_hashs < 1:
-            raise ValueError("nb_hashs should be >= 1")
-
-        self.bucket_size = bucket_size
-        self.nb_hashes = nb_hashs
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        nb_buckets = max(1, x.size(1) // self.bucket_size)
-
-        # Random projection matrices
-        if self.nb_hashes == 1:
-            h = torch.randn(1, x.size(-1), nb_buckets, device=x.device)
-
-            # Hash
-            rotated = torch.bmm(x, h)
-            rotated = torch.cat((rotated, -rotated), dim=-1)
-            bucket_range = torch.arange(rotated.shape[-1], device=x.device).expand_as(rotated)
-
-            # Extract bucket
-            rotated_sorted, idx = rotated.sort(dim=-1)
-            rotated_buckets = bucket_range.gather(-1, idx)[:, -self.nb_hashes:]
-
-            h, *_ = rotated_buckets.shape
-            buckets = torch.reshape(rotated_buckets.permute((*_, h)), (-1,))
-        else:
-            h = torch.randn(1, x.size(-1), self.nb_hashes, nb_buckets, device=x.device)
-            offsets = torch.arange(self.nb_hashes, device=x.device)
-            offsets = (offsets * nb_buckets).view(1, 1, -1)
-
-            # Hash
-            rotated = torch.matmul(x, h.flatten(2)).view(x.size()[:2] + (self.nb_hashes, nb_buckets))
-            rotated = torch.cat((rotated, -rotated), dim=-1)
-            buckets = torch.argmax(rotated, dim=-1)
-            buckets = (buckets + offsets).view(x.size(0), -1)
-
-        return buckets
 
 
 class ReformerSelfAttention(nn.Module):
