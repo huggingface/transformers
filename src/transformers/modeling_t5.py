@@ -20,7 +20,7 @@ import itertools
 import logging
 import math
 import os
-from typing import Optional, List
+from typing import List, Optional
 
 import torch
 import torch.nn.functional as F
@@ -827,7 +827,6 @@ class T5Model(T5PreTrainedModel):
         # Move the remaining modules (embeddings) on the first device
         for module in list(modules_to_move):
             module.to(devices[0])
-
 
     def get_block_list(self):
         return list(self.encoder.get_block_list()) + list(self.decoder.get_block_list())
