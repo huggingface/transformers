@@ -66,6 +66,8 @@ nlp_ner = pipeline(
         {"use_fast": False}
 ))
 
+text = 'Mis amigos están pensando viajar a Londres este verano'
+
 nlp_ner(text)
 
 #Output: [{'entity': 'B-LOC', 'score': 0.9998720288276672, 'word': 'Londres'}]

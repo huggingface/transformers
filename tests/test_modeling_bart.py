@@ -27,7 +27,9 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 if is_torch_available():
     import torch
     from transformers import (
+        AutoModel,
         AutoModelForSequenceClassification,
+        AutoTokenizer,
         BartModel,
         BartForConditionalGeneration,
         BartForSequenceClassification,
@@ -36,8 +38,8 @@ if is_torch_available():
     from transformers.modeling_bart import (
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
         shift_tokens_right,
+        invert_mask,
         _prepare_bart_decoder_inputs,
-        LARGE_NEGATIVE,
     )
     from transformers.tokenization_bart import BartTokenizer
 
@@ -113,7 +115,8 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_head_masking = False
-    test_resize_embeddings = False  # This requires inputs_dict['input_ids']
+    test_resize_embeddings = True  # This requires inputs_dict['input_ids']
+    test_missing_keys = False  # because BartForConditionalGeneration and BartModel now have identical state_dict
 
     def setUp(self):
         self.model_tester = ModelTester(self)
@@ -122,10 +125,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_advanced_inputs(self):
+    def test_initialization_more(self):
         # (config, input_ids, token_type_ids, input_mask, *unused) = \
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(config, inputs_dict["input_ids"])
         model = BartModel(config)
         model.to(torch_device)
         model.eval()
@@ -141,9 +143,17 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
         _check_var(model.encoder.layers[0].fc1)
         _check_var(model.encoder.embed_positions)
 
+    def test_advanced_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict["input_ids"][:, -2:] = config.pad_token_id
+        decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
+            config, inputs_dict["input_ids"]
+        )
+        model = BartModel(config).to(torch_device).eval()
+
         decoder_features_with_created_mask = model(**inputs_dict)[0]
         decoder_features_with_passed_mask = model(
-            decoder_attention_mask=decoder_attn_mask, decoder_input_ids=decoder_input_ids, **inputs_dict
+            decoder_attention_mask=invert_mask(decoder_attn_mask), decoder_input_ids=decoder_input_ids, **inputs_dict
         )[0]
         _assert_tensors_equal(decoder_features_with_passed_mask, decoder_features_with_created_mask)
         useless_mask = torch.zeros_like(decoder_attn_mask)
@@ -174,6 +184,15 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("Passing inputs_embeds not implemented for Bart.")
     def test_inputs_embeds(self):
         pass
+
+    def test_tiny_model(self):
+        model_name = "sshleifer/bart-tiny-random"
+        tiny = AutoModel.from_pretrained(model_name)  # same vocab size
+        tok = AutoTokenizer.from_pretrained(model_name)  # same tokenizer
+        inputs_dict = tok.batch_encode_plus(["Hello my friends"], return_tensors="pt")
+
+        with torch.no_grad():
+            tiny(**inputs_dict)
 
 
 @require_torch
@@ -237,7 +256,7 @@ class BartHeadTests(unittest.TestCase):
         lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
         lm_model = BartForConditionalGeneration(config)
         lm_model.to(torch_device)
-        loss, logits, enc_features = lm_model(input_ids=input_ids, lm_labels=lm_labels, decoder_input_ids=input_ids)
+        loss, logits, enc_features = lm_model(input_ids=input_ids, lm_labels=lm_labels)
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
         self.assertIsInstance(loss.item(), float)
@@ -335,41 +354,39 @@ class BartHeadTests(unittest.TestCase):
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
     def test_dummy_inputs(self):
-        config, *_ = self._get_config_and_data(output_past=True)
+        config, *_ = self._get_config_and_data()
         model = BartForConditionalGeneration(config).eval().to(torch_device)
         model(**model.dummy_inputs)
 
     def test_prepare_bart_decoder_inputs(self):
         config, *_ = self._get_config_and_data(output_past=False)
-        input_ids = _long_tensor(([4, 4, 2]))  # only used for .device if decoder_input_ids is passed
+        input_ids = _long_tensor(([4, 4, 2]))
         decoder_input_ids = _long_tensor([[26388, 2, config.pad_token_id]])
-        ignore = LARGE_NEGATIVE
-        decoder_input_ids, decoder_attn_mask = _prepare_bart_decoder_inputs(config, input_ids, decoder_input_ids)
-        expected_mask = torch.tensor(
-            [
-                [0, ignore, ignore],
-                [0, 0, ignore],
-                [ignore, ignore, ignore],  # never attend to the final token, because its pad
-            ]
-        ).to(input_ids.device)
-        self.assertEqual(decoder_attn_mask.size(), (1, 1, 3, 3))
-        self.assertTrue(torch.eq(expected_mask, decoder_attn_mask).all())
-
-        # Test no causal mask
-        config, *_ = self._get_config_and_data(output_past=True)
-        expected_just_padding_mask = torch.tensor(
-            [[0, 0, 0], [0, 0, 0], [ignore, ignore, ignore]]  # never attend to the final token, because its pad
-        ).to(input_ids.device)
-        _, decoder_attn_mask_no_causal_mask = _prepare_bart_decoder_inputs(config, input_ids, decoder_input_ids)
-        self.assertEqual(decoder_attn_mask_no_causal_mask.size(), (1, 1, 3, 3))
-        self.assertTrue(torch.eq(expected_just_padding_mask, decoder_attn_mask_no_causal_mask).all())
-
-        decoder_input_ids = _long_tensor([[0, 26388, 4133, 2]])
-        # Attend to everything if no pad tokens and no causal mask
-        _, decoder_attn_mask_no_padding_no_causal_mask = _prepare_bart_decoder_inputs(
+        ignore = float("-inf")
+        decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
             config, input_ids, decoder_input_ids
         )
-        self.assertTrue(torch.eq(decoder_attn_mask_no_padding_no_causal_mask, 0).all())
+        expected_causal_mask = torch.tensor(
+            [[0, ignore, ignore], [0, 0, ignore], [0, 0, 0]]  # never attend to the final token, because its pad
+        ).to(input_ids.device)
+        self.assertEqual(decoder_attn_mask.size(), decoder_input_ids.size())
+        self.assertTrue(torch.eq(expected_causal_mask, causal_mask).all())
+
+    def test_resize_tokens_embeddings_more(self):
+        config, input_ids, _ = self._get_config_and_data()
+
+        def _get_embs(m):
+            return (m.get_input_embeddings().weight.data.clone(), m.get_output_embeddings().weight.data.clone())
+
+        model = BartForConditionalGeneration(config).eval().to(torch_device)
+        input, output = _get_embs(model)
+        self.assertTrue(torch.eq(input, output).all())
+        new_vocab_size = 45
+        model.resize_token_embeddings(new_vocab_size)
+        input_new, output_new = _get_embs(model)
+        self.assertEqual(input_new.shape, (new_vocab_size, config.d_model))
+        self.assertEqual(output_new.shape, (new_vocab_size, config.d_model))
+        self.assertTrue(torch.eq(input_new, output_new).all())
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
@@ -443,6 +460,38 @@ class BartModelIntegrationTests(unittest.TestCase):
         for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys()):
             model = BartModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+    @slow
+    def test_xsum_summarization_same_as_fairseq(self):
+        model = BartForConditionalGeneration.from_pretrained("bart-large-xsum").to(torch_device)
+        tok = BartTokenizer.from_pretrained("bart-large")
+
+        PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
+        EXPECTED_SUMMARY = "California's largest power company has begun shutting off power to tens of thousands of homes and businesses in the state."
+        dct = tok.batch_encode_plus([PGE_ARTICLE], max_length=1024, pad_to_max_length=True, return_tensors="pt",)
+
+        hypotheses_batch = model.generate(
+            input_ids=dct["input_ids"].to(torch_device),
+            attention_mask=dct["attention_mask"].to(torch_device),
+            num_beams=2,
+            max_length=62,
+            min_length=11,
+            length_penalty=1.0,
+            no_repeat_ngram_size=3,
+            early_stopping=True,
+            decoder_start_token_id=model.config.eos_token_id,
+        )
+
+        decoded = [
+            tok.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in hypotheses_batch
+        ]
+        self.assertEqual(EXPECTED_SUMMARY, decoded[0])
+
+    def test_xsum_config_generation_params(self):
+        config = BartConfig.from_pretrained("bart-large-xsum")
+        expected_params = dict(num_beams=6, do_sample=False, early_stopping=True, length_penalty=1.0)
+        config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
+        self.assertDictEqual(expected_params, config_params)
 
     @slow
     def test_cnn_summarization_same_as_fairseq(self):
