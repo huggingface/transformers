@@ -523,5 +523,5 @@ class TransfoXLFastTokenizerTest(NoPaddingTokenFastTokenizerMatchingTest):
     )
 
     @require_torch
-    def fast_align_python(self, tokenizer_r, tokenizer_p):
-        super().fast_align_python(tokenizer_r, tokenizer_p)
+    def test_all_tokenizers(self):
+        super().test_all_tokenizers()
