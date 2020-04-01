@@ -83,7 +83,6 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assert_add_tokens(tokenizer_r)
         self.assert_offsets_mapping(tokenizer_r)
         self.assert_add_special_tokens(tokenizer_r)
-        # self.assert_offsets_with_special_characters(tokenizer_r)
 
     def assert_tokenization_python_rust_equals(self, tokenizer_p, tokenizer_r):
         # Ensure basic input match
@@ -464,7 +463,7 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
         tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True, return_token_type_ids=True)
 
         # Rust correctly handles the space before the mask while python doesnt
-        self.assertSequenceEqual(tokens_r["input_ids"], [0, 83, 6, 1437, 50264, 3823, 487, 21992, 3645, 4, 2])
+        self.assertSequenceEqual(tokens_r["input_ids"], [0, 83, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
         self.assertSequenceEqual(tokens_p["input_ids"], [0, 83, 6, 50264, 3823, 487, 21992, 3645, 4, 2])
 
         # token_type_ids should put 0 everywhere
@@ -479,7 +478,7 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
         # Rust should have 'Ġ' before <mask> which should be left as an entire token
         tokens_r = tokenizer_r.convert_ids_to_tokens(tokens_r["input_ids"])
         self.assertSequenceEqual(
-            tokens_r, ["<s>", "ĠA", ",", "Ġ", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
+            tokens_r, ["<s>", "ĠA", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
         )
 
 

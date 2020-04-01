@@ -232,9 +232,14 @@ class SpecialTokensMixin:
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
                     assert isinstance(value, (list, tuple)) and all(isinstance(t, str) for t in value)
+                elif isinstance(value, AddedToken):
+                    setattr(self, key, str(value))
+                elif isinstance(value, str):
+                    setattr(self, key, value)
                 else:
-                    assert isinstance(value, str)
-                setattr(self, key, value)
+                    raise TypeError("special token {} has to be either str or AddedToken but got: {}"
+                                    .format(key, type(value)))
+
 
     @property
     def bos_token(self):
