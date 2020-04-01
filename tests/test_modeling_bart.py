@@ -41,6 +41,7 @@ if is_torch_available():
         _prepare_bart_decoder_inputs,
         LARGE_NEGATIVE,
     )
+    from transformers.tokenization_bart import MBartTokenizerV2
 
 
 @require_torch
@@ -263,6 +264,15 @@ class BartHeadTests(unittest.TestCase):
         187895,     23,  51712,      2, 250004]
         self.assertListEqual(expected_result, ids)
 
+    def test_xlm_enro_tokenizer(self):
+        #vocab_file = '/Users/shleifer/sentencepiece/src/m2.model'
+        tok = MBartTokenizerV2.from_pretrained("mbart-large-en-ro")
+        raw = 'UN Chief Says There Is No Military Solution in Syria'
+        ids = tok.batch_encode_plus(
+            [raw])['input_ids'][0]
+        expected_result = [  8274, 127873,  25916,      7,   8622,   2071,    438,  67485,     53,
+        187895,     23,  51712,      2, 250004]
+        self.assertListEqual(expected_result, ids)
 
     def test_mbart_forward(self):
         config = BartConfig(

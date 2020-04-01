@@ -15,6 +15,7 @@
 
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_t5 import T5Tokenizer
+from .tokenization_xlm_roberta import XLMRobertaTokenizer
 import logging
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,16 @@ lang_codes = {'ar_AR': 0, 'cs_CZ': 1, 'de_DE': 2, 'en_XX': 3, 'es_XX': 4, 'et_EE
               'gu_IN': 8, 'hi_IN': 9, 'it_IT': 10, 'ja_XX': 11, 'kk_KZ': 12, 'ko_KR': 13, 'lt_LT': 14, 'lv_LV': 15,
               'my_MM': 16, 'ne_NP': 17, 'nl_XX': 18, 'ro_RO': 19, 'ru_RU': 20, 'si_LK': 21, 'tr_TR': 22,
               'vi_VN': 23, 'zh_CN': 24}
+
+class MBartTokenizerV2(XLMRobertaTokenizer):
+    vocab_files_names = VOCAB_FILES_NAMES
+    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
+    pretrained_vocab_files_map = {
+        "vocab_file": {
+            "mbart-large-en-ro": _s3_url("facebook/mbart-large-en-ro/sentence.bpe.model"),
+            "mbart-large-cc25": _s3_url("facebook/mbart-large-cc25/sentence.bpe.model"),
+        }
+    }
 
 class MBartTokenizer(T5Tokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
