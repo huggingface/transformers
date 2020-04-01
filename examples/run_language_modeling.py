@@ -64,7 +64,7 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 class Model(nn.Module):   
     def __init__(self, encoder):
-        super(Roberta, self).__init__()
+        super(Model, self).__init__()
         self.encoder = encoder
         
     def forward(self, input_ids,masked_lm_labels=None): 
