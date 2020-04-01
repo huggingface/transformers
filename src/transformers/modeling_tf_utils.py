@@ -1198,16 +1198,26 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
             # fill with hypothesis and eos_token_id if necessary
             for i, hypo in enumerate(best):
-                padding = tf.ones((sent_max_len - shape_list(hypo)[0],), dtype=tf.int32) * pad_token_id
-                decoded_hypo = tf.concat([hypo, padding], axis=0)
+                assert sent_lengths[i] == shape_list(hypo)[0]
+                # if sent_length is max_len do not pad
+                if sent_lengths[i] == sent_max_len:
+                    decoded_slice = hypo
+                else:
+                    # else pad to sent_max_len
+                    num_pad_tokens = sent_max_len - sent_lengths[i]
+                    padding = pad_token_id * tf.ones((num_pad_tokens,), dtype=tf.int32)
+                    decoded_slice = tf.concat([hypo, padding], axis=-1)
 
-                if sent_lengths[i] < max_length:
-                    decoded_hypo = tf.where(
-                        tf.range(max_length) == sent_lengths[i],
-                        eos_token_id * tf.ones((sent_max_len,), dtype=tf.int32),
-                        decoded_hypo,
-                    )
-                decoded_list.append(decoded_hypo)
+                    # finish sentence with EOS token
+                    if sent_lengths[i] < max_length:
+                        decoded_slice = tf.where(
+                            tf.range(sent_max_len, dtype=tf.int32) == sent_lengths[i],
+                            eos_token_id * tf.ones((sent_max_len,), dtype=tf.int32),
+                            decoded_slice,
+                        )
+                # add to list
+                decoded_list.append(decoded_slice)
+
             decoded = tf.stack(decoded_list)
         else:
             # none of the hypotheses have an eos_token

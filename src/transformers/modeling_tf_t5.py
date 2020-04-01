@@ -119,7 +119,7 @@ class TFT5Attention(tf.keras.layers.Layer):
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = tf.keras.layers.Embedding(
-                self.relative_attention_num_buckets, self.n_heads, name="relative_attention_bias"
+                self.relative_attention_num_buckets, self.n_heads, name="relative_attention_bias",
             )
         self.pruned_heads = set()
 
@@ -178,13 +178,15 @@ class TFT5Attention(tf.keras.layers.Layer):
         memory_position = tf.range(klen)[None, :]
         relative_position = memory_position - context_position  # shape (qlen, klen)
         rp_bucket = self._relative_position_bucket(
-            relative_position, bidirectional=not self.is_decoder, num_buckets=self.relative_attention_num_buckets
+            relative_position, bidirectional=not self.is_decoder, num_buckets=self.relative_attention_num_buckets,
         )
         values = self.relative_attention_bias(rp_bucket)  # shape (qlen, klen, num_heads)
         values = tf.expand_dims(tf.transpose(values, [2, 0, 1]), axis=0)  # shape (1, num_heads, qlen, klen)
         return values
 
-    def call(self, input, mask=None, kv=None, position_bias=None, cache=None, head_mask=None, training=False):
+    def call(
+        self, input, mask=None, kv=None, position_bias=None, cache=None, head_mask=None, training=False,
+    ):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
         """
@@ -261,15 +263,17 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
         super().__init__(**kwargs)
         self.SelfAttention = TFT5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, name="SelfAttention"
+            config, has_relative_attention_bias=has_relative_attention_bias, name="SelfAttention",
         )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
-    def call(self, hidden_states, attention_mask=None, position_bias=None, head_mask=None, training=False):
+    def call(
+        self, hidden_states, attention_mask=None, position_bias=None, head_mask=None, training=False,
+    ):
         norm_x = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
-            norm_x, mask=attention_mask, position_bias=position_bias, head_mask=head_mask, training=training
+            norm_x, mask=attention_mask, position_bias=position_bias, head_mask=head_mask, training=training,
         )
         y = attention_output[0]
         layer_output = hidden_states + self.dropout(y, training=training)
@@ -281,15 +285,17 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
         super().__init__(**kwargs)
         self.EncDecAttention = TFT5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, name="EncDecAttention"
+            config, has_relative_attention_bias=has_relative_attention_bias, name="EncDecAttention",
         )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
-    def call(self, hidden_states, kv, attention_mask=None, position_bias=None, head_mask=None, training=False):
+    def call(
+        self, hidden_states, kv, attention_mask=None, position_bias=None, head_mask=None, training=False,
+    ):
         norm_x = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
-            norm_x, mask=attention_mask, kv=kv, position_bias=position_bias, head_mask=head_mask, training=training
+            norm_x, mask=attention_mask, kv=kv, position_bias=position_bias, head_mask=head_mask, training=training,
         )
         y = attention_output[0]
         layer_output = hidden_states + self.dropout(y, training=training)
@@ -303,12 +309,12 @@ class TFT5Block(tf.keras.layers.Layer):
         self.is_decoder = config.is_decoder
         self.layer = []
         self.layer.append(
-            TFT5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias, name="layer_._0")
+            TFT5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias, name="layer_._0",)
         )
         if self.is_decoder:
             self.layer.append(
                 TFT5LayerCrossAttention(
-                    config, has_relative_attention_bias=has_relative_attention_bias, name="layer_._1"
+                    config, has_relative_attention_bias=has_relative_attention_bias, name="layer_._1",
                 )
             )
             self.layer.append(TFT5LayerFF(config, name="layer_._2"))
@@ -402,7 +408,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         self.num_hidden_layers = config.num_layers
 
         self.block = [
-            TFT5Block(config, has_relative_attention_bias=bool(i == 0), name="block_._{}".format(i))
+            TFT5Block(config, has_relative_attention_bias=bool(i == 0), name="block_._{}".format(i),)
             for i in range(config.num_layers)
         ]
         self.final_layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="final_layer_norm")
@@ -469,7 +475,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             if self.config.is_decoder:
                 seq_ids = tf.range(seq_length)
                 causal_mask = tf.less_equal(
-                    tf.tile(seq_ids[None, None, :], (batch_size, seq_length, 1)), seq_ids[None, :, None]
+                    tf.tile(seq_ids[None, None, :], (batch_size, seq_length, 1)), seq_ids[None, :, None],
                 )
                 causal_mask = tf.cast(causal_mask, dtype=tf.float32)
                 extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
@@ -748,7 +754,7 @@ class TFT5Model(TFT5PreTrainedModel):
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+                input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask,
             )
 
         hidden_states = encoder_outputs[0]
@@ -852,7 +858,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder(
-                input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+                input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask,
             )
 
         hidden_states = encoder_outputs[0]
