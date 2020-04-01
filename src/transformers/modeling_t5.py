@@ -20,6 +20,7 @@ import itertools
 import logging
 import math
 import os
+from typing import Optional, List
 
 import torch
 import torch.nn.functional as F
@@ -541,6 +542,9 @@ class T5Stack(T5PreTrainedModel):
 
         self.init_weights()
 
+    def get_block_list(self):
+        return list(self.block)
+
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -772,6 +776,61 @@ class T5Model(T5PreTrainedModel):
         self.decoder = T5Stack(decoder_config, self.shared)
 
         self.init_weights()
+
+    def spread_on_devices(self, devices: Optional[List] = None):
+        """ Spread a transformers model on several devices by moving block on several devices (simple model parallelism)
+
+            The blocks of the transformers are spread among the given device list
+            or on all visible CUDA devices if no device list is given.
+
+            The first device will host in addition the embeddings and the input/output tensors.
+
+            Note that we use `forward_pre_hook` to move tensors around and that this type of hooks currently
+            only act on the positional arguments send to the forward pass (PyTorch 1.4.0).
+            So you should probably call your model's forward pass with tensors as positional arguments
+            when using this model parallelism method.
+            see: https://github.com/pytorch/pytorch/blob/master/torch/nn/modules/module.py#L548-L554
+        """
+        if devices is None and torch.cuda.is_available():
+            devices = list(range(torch.cuda.device_count()))
+        if len(devices) < 2:
+            self.to(devices[0] if devices else None)
+            return
+
+        modules_to_move = set(self.modules)
+
+        # Evenly spread the blocks on devices
+        # We use a pre_forward hook to move the inputs from one device to the other
+        block_list = self.get_block_list()
+        group_size = len(block_list) // len(devices)
+        for i, block in enumerate(block_list):
+            device = devices[i // group_size]
+            if isinstance(block, nn.Module):
+                block.register_forward_pre_hook(lambda module, input: tuple(t.to(device) for t in input))
+                block.to(device)
+                modules_to_move.remove(block)
+            elif isinstance(block, (tuple, list)) and all(isinstance(b, nn.Module) for b in block):
+                block[0].register_forward_pre_hook(lambda module, input: tuple(t.to(device) for t in input))
+                for module in block:
+                    module.to(device)
+                    modules_to_move.remove(module)
+            else:
+                raise ValueError("Can't spread model on devices")
+
+        # Take care of brining back the tensors to the first device at the end of the last block's forward
+        # using a forward hook
+        if isinstance(block, nn.Module):
+            block.register_forward_hook(lambda module, input, output: tuple(t.to(device[0]) for t in input))
+        elif isinstance(block, (tuple, list)) and isinstance(block[0], nn.Module):
+            block[-1].register_forward_hook(lambda module, input, output: tuple(t.to(device[0]) for t in input))
+
+        # Move the remaining modules (embeddings) on the first device
+        for module in list(modules_to_move):
+            module.to(devices[0])
+
+
+    def get_block_list(self):
+        return list(self.encoder.get_block_list()) + list(self.decoder.get_block_list())
 
     def get_input_embeddings(self):
         return self.shared
