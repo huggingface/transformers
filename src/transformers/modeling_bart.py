@@ -34,6 +34,7 @@ BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/pytorch_model.bin",
     "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/pytorch_model.bin",
     "bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/pytorch_model.bin",
+    "bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/pytorch_model.bin",
 }
 
 BART_START_DOCSTRING = r"""
@@ -72,6 +73,10 @@ BART_INPUTS_DOCSTRING = r"""
             Mask to avoid performing attention on padding token indices in input_ids.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        encoder_outputs (tuple(:obj:`tuple(torch.FloatTensor)`, `optional`, defaults to :obj:`None`):
+            Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`)
+            `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`) is a sequence of hidden-states at the output of the last layer of the encoder.
+            Used in the cross-attention of the decoder.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
             Provide for translation and summarization training. By default, the model will create this tensor by shifting the input_ids right, following the paper.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
@@ -972,7 +977,7 @@ class BartForSequenceClassification(PretrainedBartModel):
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BartConfig`) and inputs:
             loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
-                Classification  loss (cross entropy)
+                Classification loss (cross entropy)
             logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
                 Classification (or regression if config.num_labels==1) scores (before SoftMax).
             hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
