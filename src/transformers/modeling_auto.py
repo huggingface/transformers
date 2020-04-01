@@ -192,7 +192,6 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertWithLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
-        # ELECTRA's main model is for classifying tokens as being generated or not, hence the token classification model
         (ElectraConfig, ElectraForPreTraining),
     ]
 )
@@ -295,8 +294,8 @@ class AutoModel(object):
                 - isInstance of `transfo-xl` configuration class: :class:`~transformers.TransfoXLModel` (Transformer-XL model)
                 - isInstance of `xlnet` configuration class: :class:`~transformers.XLNetModel` (XLNet model)
                 - isInstance of `xlm` configuration class: :class:`~transformers.XLMModel` (XLM model)
-                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertModel` (XLM model)
-                - isInstance of `electra` configuration class: :class:`~transformers.ElectraModel` (XLM model)
+                - isInstance of `flaubert` configuration class: :class:`~transformers.FlaubertModel` (Flaubert model)
+                - isInstance of `electra` configuration class: :class:`~transformers.ElectraModel` (Electra model)
 
         Examples::
 
