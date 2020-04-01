@@ -294,12 +294,6 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             True
         )  # take into account special tokens
 
-        logger.warning(
-            "RobertaTokenizerFast has an issue when working on mask language modeling "
-            "where it introduces an extra encoded space before the mask token."
-            "See https://github.com/huggingface/transformers/pull/2778 for more information."
-        )
-
     @PreTrainedTokenizer.mask_token.setter
     def mask_token(self, value):
         if not isinstance(value, AddedToken):
