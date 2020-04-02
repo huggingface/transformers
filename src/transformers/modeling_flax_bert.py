@@ -4,15 +4,14 @@ import jax
 import jax.numpy as jnp
 import flax.nn as nn
 import numpy as np
-import torch
 
 from typing import Callable
 
-from flax.serialization import from_state_dict, to_bytes, to_state_dict
-from flax.traverse_util import unflatten_dict
+from flax.serialization import to_bytes
 from jax.random import PRNGKey
 
 from transformers import BertModel as PTBertModel, BertTokenizerFast, BertConfig
+from transformers.modeling_jax_utils import JaxPreTrainedModel
 
 ACT2FN = {
     "gelu": nn.gelu,
@@ -212,10 +211,13 @@ class BertModel(nn.Module):
         return encoder, pooled
 
 
-class FlaxBertModel:
+class FlaxBertModel(JaxPreTrainedModel):
     """
     BERT implementation using JAX/Flax as backend
     """
+
+    MODEL_CLASS = BertModel
+    config_class = BertConfig
 
     def __init__(self, config: BertConfig, state: dict, **kwargs):
         self.config = config
@@ -247,10 +249,10 @@ class FlaxBertModel:
 
         return predict(input_ids, token_type_ids, attention_mask)
 
-    @staticmethod
-    def from_pretrained(config: BertConfig, state: dict):
-        state = from_state_dict(BertModel, state)
-        return FlaxBertModel(config, state)
+    # @staticmethod
+    # def from_pretrained(config: BertConfig, state: dict):
+    #     state = from_state_dict(BertModel, state)
+    #     return FlaxBertModel(config, state)
 
     def save_pretrained(self, folder):
         folder_abs = os.path.abspath(folder)
@@ -268,32 +270,34 @@ if __name__ == '__main__':
     model_pt = PTBertModel.from_pretrained('bert-base-cased')
     model_pt.eval()
 
-    with open("/data/Downloads/bert-base-cased-pytorch_model.bin", 'rb') as model_f:
-        state = torch.load(model_f)
-        state = {k: v.numpy() for k, v in state.items()}
+    # with open("/data/Downloads/bert-base-cased-pytorch_model.bin", 'rb') as model_f:
+    #     state = torch.load(model_f)
+    #     state = {k: v.numpy() for k, v in state.items()}
+    #
+    #     # Need to change some parameters name to match Flax names so that we don't have to fork any layer
+    #     state = {k.replace("weight", "kernel") if {"dense", "query", "key", "value"} & set(k.split('.')) else k: v
+    #              for k, v in state.items()}
+    #
+    #     # SelfAttention output is not a separate layer, remove one nesting
+    #     state = {k.replace("attention.output.dense", "attention.self.out"): v for k, v in state.items()}
+    #     state = {k.replace("attention.output.LayerNorm", "attention.layer_norm"): v for k, v in state.items()}
+    #
+    #     # SelfAttention.out
+    #     state = {k: v.T if v.shape == (3072, 768) or v.shape == (768, 3072) else v for k, v in state.items()}
+    #     state = {k: v.reshape((12, 64, 768)).transpose((2, 0, 1)) if v.shape == (768, 768) and "out" not in k and "pooler" not in k else v for k, v in state.items()}
+    #
+    #     # Bias
+    #     state = {k: v.reshape((12, -1)) if v.shape == (768, ) and ("bias" in k) and ("out" not in k) and ("pooler" not in k) else v for k, v in state.items()}
+    #
+    #     # Self Attention output projection
+    #     state = {k: v.reshape((768, 12, 64)).transpose(1, 2, 0) if "out.kernel" in k else v for k, v in state.items()}
+    #
+    #     # Pooler
+    #     state = {k: v.T if "pooler.dense.kernel" in k else v for k, v in state.items()}
+    #     state = unflatten_dict({tuple(k.split('.')[1:]): v for k, v in state.items()})
+    #     model = FlaxBertModel.from_pretrained(model_pt.config, state)
 
-        # Need to change some parameters name to match Flax names so that we don't have to fork any layer
-        state = {k.replace("weight", "kernel") if {"dense", "query", "key", "value"} & set(k.split('.')) else k: v
-                 for k, v in state.items()}
-
-        # SelfAttention output is not a separate layer, remove one nesting
-        state = {k.replace("attention.output.dense", "attention.self.out"): v for k, v in state.items()}
-        state = {k.replace("attention.output.LayerNorm", "attention.layer_norm"): v for k, v in state.items()}
-
-        # SelfAttention.out
-        state = {k: v.T if v.shape == (3072, 768) or v.shape == (768, 3072) else v for k, v in state.items()}
-        state = {k: v.reshape((12, 64, 768)).transpose((2, 0, 1)) if v.shape == (768, 768) and "out" not in k and "pooler" not in k else v for k, v in state.items()}
-
-        # Bias
-        state = {k: v.reshape((12, -1)) if v.shape == (768, ) and ("bias" in k) and ("out" not in k) and ("pooler" not in k) else v for k, v in state.items()}
-
-        # Self Attention output projection
-        state = {k: v.reshape((768, 12, 64)).transpose(1, 2, 0) if "out.kernel" in k else v for k, v in state.items()}
-
-        # Pooler
-        state = {k: v.T if "pooler.dense.kernel" in k else v for k, v in state.items()}
-        state = unflatten_dict({tuple(k.split('.')[1:]): v for k, v in state.items()})
-        model = FlaxBertModel.from_pretrained(model_pt.config, state)
+    model = FlaxBertModel.from_pretrained('/data/Workspace/transformers/src/transformers/bert-base-cased/bert-base-cased.bin')
 
     # Inputs
     flax_input = tokenizer.encode_plus("My name is Morgan")
