@@ -204,8 +204,10 @@ class BartTranslationTests(unittest.TestCase):
         cls.model, cls.loading_info = BartForConditionalGeneration.from_pretrained(checkpoint_name,
                                                              scale_embedding=True,
                                                              normalize_before=True,
-                                                             output_loading_info=True
+                                                             output_loading_info=True,
+                                                                output_past=True,
                                                              )
+        assert cls.model.config.output_past
         cls.pad_token_id = cls.model.config.pad_token_id
         net_input = {
             'input_ids': _long_tensor([[3493, 3060, 621, 104064, 1810, 100, 142, 566, 13158, 6889, 5, 2, 250004],
@@ -243,14 +245,13 @@ class BartTranslationTests(unittest.TestCase):
         translated_tokens = model.generate(
             input_ids=inputs["input_ids"].to(torch_device),
 
-            num_beams=4,
-            # attention_mask=inputs["attention_mask"].to(torch_device),
-            # Implicitly testing that config has correct generation kwargs
+            num_beams=5,
         )
         decoded = [
-            tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+            self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False)
             for g in translated_tokens
         ]
+        import ipdb; ipdb.set_trace()
         self.assertEqual(expected_translation_romanian, decoded[0])
 
 
