@@ -150,7 +150,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | ',' | '.' | '▁' | 's'   | '▁de' | '-'
         # spm      | '<unk>' | '<s>'   | '</s>' | ','     | '.' | '▁' | 's' | '▁de' | '-'   | '▁a'
 
-        # Mimic fairseq token-to-id alignment for the first 4 token
+        # Mimic fairseq token-to-id alignment for the first 4 token`
         self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
 
         # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab

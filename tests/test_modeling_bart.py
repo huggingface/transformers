@@ -264,6 +264,7 @@ class BartHeadTests(unittest.TestCase):
         187895,     23,  51712,      2, 250004]
         self.assertListEqual(expected_result, ids)
 
+
     def test_xlm_enro_tokenizer(self):
         #vocab_file = '/Users/shleifer/sentencepiece/src/m2.model'
         tok = MBartTokenizerV2.from_pretrained("mbart-large-en-ro")
@@ -425,7 +426,7 @@ def _long_tensor(tok_lst):
 
 
 TOLERANCE = 1e-4
-
+from durbango import *
 
 @require_torch
 class BartModelIntegrationTests(unittest.TestCase):
@@ -446,17 +447,22 @@ class BartModelIntegrationTests(unittest.TestCase):
     @slow
     def test_mbart_en_ro(self):
         checkpoint_name = "mbart-large-en-ro"
-        tokenizer = MBartTokenizer.from_pretrained(checkpoint_name)
-        model = BartForConditionalGeneration.from_pretrained(checkpoint_name)
+        tokenizer = MBartTokenizerV2.from_pretrained(checkpoint_name)
+        model = BartForConditionalGeneration.from_pretrained(checkpoint_name, output_past=True)
         example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
+        #inputs: dict = tokenizer.batch_encode_plus([example_english_phrase], return_tensors="pt",)
+        inputs = {'input_ids': torch.LongTensor(
+            [[8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]])}
 
-        inputs: dict = tokenizer.batch_encode_plus([example_english_phrase], return_tensors="pt",)
-        print(inputs['input_ids'])
-
+        net_input = pickle_load('/Users/shleifer/transformers_fork/test_batch.pkl')
+        out = model(**{'input_ids': net_input['src_tokens'],
+                       'decoder_input_ids': net_input['prev_output_tokens']})
+        import ipdb; ipdb.set_trace()
         translated_tokens = model.generate(
             input_ids=inputs["input_ids"].to(torch_device),
-            attention_mask=inputs["attention_mask"].to(torch_device),
+            num_beams=4,
+            #attention_mask=inputs["attention_mask"].to(torch_device),
             # Implicitly testing that config has correct generation kwargs
         )
         decoded = [
