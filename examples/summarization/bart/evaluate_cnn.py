@@ -45,7 +45,7 @@ def generate_summaries(
             fout.flush()
 
 
-def _run_generate():
+def run_generate():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "source_path", type=str, help="like cnn_dm/test.source",
@@ -68,4 +68,4 @@ def _run_generate():
 
 
 if __name__ == "__main__":
-    _run_generate()
+    run_generate()
