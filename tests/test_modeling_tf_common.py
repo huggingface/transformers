@@ -453,9 +453,8 @@ class TFModelTesterMixin:
                 tf.squeeze(ids_tensor((1, 1), self.model_tester.vocab_size), -1).numpy().tolist(),
                 tf.squeeze(ids_tensor((2, 1), self.model_tester.vocab_size), -1).numpy().tolist(),
             ]
-
             output_tokens = model.generate(
-                input_ids, do_sample=False, bad_words_ids=bad_words_ids, num_return_sequences=3
+                input_ids, do_sample=True, bad_words_ids=bad_words_ids, num_return_sequences=3
             )
             import ipdb
             ipdb.set_trace()
@@ -491,8 +490,6 @@ class TFModelTesterMixin:
                 tf.squeeze(ids_tensor((1, 1), self.model_tester.vocab_size), -1).numpy().tolist(),
                 tf.squeeze(ids_tensor((2, 1), self.model_tester.vocab_size), -1).numpy().tolist(),
             ]
-
-            # beam search
             output_tokens = model.generate(
                 input_ids, do_sample=False, bad_words_ids=bad_words_ids, num_beams=3, num_return_sequences=3
             )
