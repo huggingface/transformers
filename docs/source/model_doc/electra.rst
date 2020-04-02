@@ -42,7 +42,7 @@ Tips:
   into the correct architecture. Once converted to the HuggingFace format, these checkpoints may be loaded into all
   available ELECTRA models, however. This means that the discriminator may be loaded in the `ElectraForMaskedLM` model,
   and the generator may be loaded in the `ElectraForPreTraining` model (the classification head will be randomly
-  initialized, however, as it doesn't exist in the generator).
+  initialized as it doesn't exist in the generator).
 
 
 ElectraConfig

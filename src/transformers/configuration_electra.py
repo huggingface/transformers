@@ -112,9 +112,10 @@ class ElectraConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        pad_token_id=0,
         **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.embedding_size = embedding_size

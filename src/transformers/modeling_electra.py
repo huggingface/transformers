@@ -49,7 +49,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
         names.append(name)
         arrays.append(array)
     for name, array in zip(names, arrays):
-        original_name = name
+        original_name: str = name
 
         try:
             if isinstance(model, ElectraForMaskedLM):
@@ -88,7 +88,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
                 if len(scope_names) >= 2:
                     num = int(scope_names[1])
                     pointer = pointer[num]
-            if m_name[-11:] == "_embeddings":
+            if m_name.endswith("_embeddings"):
                 pointer = getattr(pointer, "weight")
             elif m_name == "kernel":
                 array = np.transpose(array)
@@ -110,7 +110,7 @@ class ElectraEmbeddings(BertEmbeddings):
 
     def __init__(self, config):
         super().__init__(config)
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=0)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
 
@@ -132,7 +132,7 @@ class ElectraDiscriminatorPredictions(nn.Module):
     def forward(self, discriminator_hidden_states, attention_mask):
         hidden_states = self.dense(discriminator_hidden_states)
         hidden_states = get_activation(self.config.hidden_act)(hidden_states)
-        logits = self.dense_prediction(hidden_states).squeeze_()
+        logits = self.dense_prediction(hidden_states).squeeze()
 
         return logits
 
@@ -286,7 +286,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
     "the BERT model except that it uses an additional linear layer between the embedding layer and the encoder if the "
     "hidden size and embedding size are different."
     ""
-    "Both the generator and discriminator checkpoints may be loaded into that model.",
+    "Both the generator and discriminator checkpoints may be loaded into this model.",
     ELECTRA_START_DOCSTRING,
 )
 class ElectraModel(ElectraPreTrainedModel):
@@ -296,7 +296,10 @@ class ElectraModel(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.embeddings = ElectraEmbeddings(config)
-        self.embeddings_project = nn.Linear(config.embedding_size, config.hidden_size)
+
+        if config.embedding_size != config.hidden_size:
+            self.embeddings_project = nn.Linear(config.embedding_size, config.hidden_size)
+
         self.encoder = BertEncoder(config)
         self.config = config
         self.init_weights()
@@ -379,7 +382,7 @@ class ElectraModel(ElectraPreTrainedModel):
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
 
-        if hidden_states.shape[-1] != self.config.hidden_size:
+        if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states)
 
         hidden_states = self.encoder(hidden_states, attention_mask=extended_attention_mask, head_mask=head_mask)
@@ -392,8 +395,7 @@ class ElectraModel(ElectraPreTrainedModel):
     Electra model with a binary classification head on top as used during pre-training for identifying generated
     tokens.
 
-    Even though both the discriminator and generator may be loaded into that model, the discriminator is
-    the only model of the two to have the correct classification head to be used for that model.""",
+    It is recommended to load the discriminator checkpoint into that model.""",
     ELECTRA_START_DOCSTRING,
 )
 class ElectraForPreTraining(ElectraPreTrainedModel):
@@ -486,7 +488,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
     """
     Electra model with a language modeling head on top.
 
-    Even though both the discriminator and generator may be loaded into that model, the generator is
+    Even though both the discriminator and generator may be loaded into this model, the generator is
     the only model of the two to have been trained for the masked language modeling task.""",
     ELECTRA_START_DOCSTRING,
 )
@@ -579,7 +581,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
     """
     Electra model with a token classification head on top.
 
-    Both the discriminator and generator may be loaded into that model.""",
+    Both the discriminator and generator may be loaded into this model.""",
     ELECTRA_START_DOCSTRING,
 )
 class ElectraForTokenClassification(ElectraPreTrainedModel):

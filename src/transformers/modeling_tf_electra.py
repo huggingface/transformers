@@ -200,7 +200,9 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
         self.embeddings = TFElectraEmbeddings(config, name="embeddings")
-        self.embeddings_project = tf.keras.layers.Dense(config.hidden_size, name="embeddings_project")
+
+        if config.embedding_size != config.hidden_size:
+            self.embeddings_project = tf.keras.layers.Dense(config.hidden_size, name="embeddings_project")
         self.encoder = TFBertEncoder(config, name="encoder")
         self.config = config
 
@@ -265,7 +267,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
 
         hidden_states = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
 
-        if hidden_states.shape[-1] != self.config.hidden_size:
+        if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states, training=training)
 
         hidden_states = self.encoder([hidden_states, extended_attention_mask, head_mask], training=training)
@@ -339,7 +341,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
     "the BERT model except that it uses an additional linear layer between the embedding layer and the encoder if the "
     "hidden size and embedding size are different."
     ""
-    "Both the generator and discriminator checkpoints may be loaded into that model.",
+    "Both the generator and discriminator checkpoints may be loaded into this model.",
     ELECTRA_START_DOCSTRING,
 )
 class TFElectraModel(TFElectraPreTrainedModel):
@@ -388,8 +390,8 @@ class TFElectraModel(TFElectraPreTrainedModel):
 Electra model with a binary classification head on top as used during pre-training for identifying generated
 tokens.
 
-Even though both the discriminator and generator may be loaded into that model, the discriminator is
-the only model of the two to have the correct classification head to be used for that model.""",
+Even though both the discriminator and generator may be loaded into this model, the discriminator is
+the only model of the two to have the correct classification head to be used for this model.""",
     ELECTRA_START_DOCSTRING,
 )
 class TFElectraForPreTraining(TFElectraPreTrainedModel):
@@ -472,7 +474,7 @@ class TFElectraMaskedLMHead(tf.keras.layers.Layer):
     """
 Electra model with a language modeling head on top.
 
-Even though both the discriminator and generator may be loaded into that model, the generator is
+Even though both the discriminator and generator may be loaded into this model, the generator is
 the only model of the two to have been trained for the masked language modeling task.""",
     ELECTRA_START_DOCSTRING,
 )
@@ -551,7 +553,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
     """
 Electra model with a token classification head on top.
 
-Both the discriminator and generator may be loaded into that model.""",
+Both the discriminator and generator may be loaded into this model.""",
     ELECTRA_START_DOCSTRING,
 )
 class TFElectraForTokenClassification(TFElectraPreTrainedModel):
