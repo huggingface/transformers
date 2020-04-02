@@ -61,7 +61,6 @@ from transformers import glue_processors as processors
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
 
 logger = logging.getLogger(__name__)
-script_start_time = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (
     BertConfig, XLNetConfig, XLMConfig, RobertaConfig, DistilBertConfig)), ())
@@ -90,7 +89,9 @@ def get_sampler(dataset):
 
 def train(args, train_dataset, model, tokenizer, disable_logging=False):
     """ Train the model """
-    tb_writer = SummaryWriter('./runs/{}/xla{}'.format(script_start_time, xm.get_ordinal()))
+    if xm.is_master_ordinal():
+        # Only master writes to Tensorboard
+        tb_writer = SummaryWriter()
 
     train_sampler = get_sampler(train_dataset)
     dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
@@ -177,15 +178,18 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
 
                 if args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     # Log metrics.
+                    results = {}
                     if args.evaluate_during_training:
                         results = evaluate(args, model, tokenizer, disable_logging=disable_logging)
-                        for key, value in results.items():
-                            tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
                     loss_scalar = loss.item()
-                    tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
-                    tb_writer.add_scalar('loss', loss_scalar, global_step)
                     logger.info('global_step: {global_step}, lr: {lr:.3f}, loss: {loss:.3f}'.format(
                         global_step=global_step, lr=scheduler.get_lr()[0], loss=loss_scalar))
+                    if xm.is_master_ordinal():
+                        # All values must be in CPU and not on TPU device
+                        for key, value in results.items():
+                            tb_writer.add_scalar('eval_{}'.format(key), value, global_step)
+                        tb_writer.add_scalar('lr', scheduler.get_lr()[0], global_step)
+                        tb_writer.add_scalar('loss', loss_scalar, global_step)
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
@@ -196,13 +200,16 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
             train_iterator.close()
             break
 
-    tb_writer.close()
+    if xm.is_master_ordinal():
+        tb_writer.close()
     return global_step, loss.item()
 
 
 def evaluate(args, model, tokenizer, prefix="", disable_logging=False):
     """Evaluate the model"""
-    tb_writer = SummaryWriter('./runs/{}/xla{}'.format(script_start_time, xm.get_ordinal()))
+    if xm.is_master_ordinal():
+        # Only master writes to Tensorboard
+        tb_writer = SummaryWriter()
 
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
@@ -276,7 +283,9 @@ def evaluate(args, model, tokenizer, prefix="", disable_logging=False):
     if args.metrics_debug:
         xm.master_print(met.metrics_report())
 
-    tb_writer.close()
+    if xm.is_master_ordinal():
+        tb_writer.close()
+
     return results
 
 
