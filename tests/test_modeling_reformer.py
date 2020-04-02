@@ -181,27 +181,26 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_utils = self._get_trax_utils(shape)
 
         trax_layer = trax_utils.get_layer(**config_dict)
-        output, weights, state = trax_utils.forward_layer(
+        trax_output, trax_weights, trax_state = trax_utils.forward_layer(
             np_input, layer=trax_layer
         )  # noqa: F841
-
-        torch_input = torch.tensor(np_input, dtype=torch.float)
+        trax_torch_output = torch.tensor(np.asarray(trax_output))
 
         hf_layer = LSHSelfAttention(config_dict)
 
         # set torch weights for 1-to-1 comparison
         with torch.no_grad():
-
-            np_query_key = np.asarray(weights[0])
-            np_value = np.asarray(weights[1])
+            np_query_key = np.asarray(trax_weights[0])
+            np_value = np.asarray(trax_weights[1])
+            np_dense = np.asarray(trax_weights[2])
 
             hf_layer.query_key.weight = torch.nn.Parameter(torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, self.hidden_size))
             hf_layer.value.weight = torch.nn.Parameter(torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, self.hidden_size))
+            hf_layer.dense.weight = torch.nn.Parameter(torch.tensor(np_dense).view(-1, self.hidden_size).contiguous().transpose(0, 1))
 
-        trax_buckets_1 = np.load(config_dict['path_to_save_weights'] + '_1_buckets.npy')
-        trax_buckets_2 = np.load(config_dict['path_to_save_weights'] + '_2_buckets.npy')
+        hf_input = torch.tensor(np_input, dtype=torch.float)
+        hf_output = hf_layer(hf_input)
 
-        buckets = hf_layer(torch_input)
-
+        assert torch.allclose(hf_output, trax_torch_output, atol=1e-6)
 
         pass
