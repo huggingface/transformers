@@ -1,5 +1,5 @@
 function addIcon() {
-    const huggingFaceLogo = "https://huggingface.co/assets/transformers-docs/huggingface_logo.svg";
+    const huggingFaceLogo = "https://huggingface.co/landing/assets/transformers-docs/huggingface_logo.svg";
     const image = document.createElement("img");
     image.setAttribute("src", huggingFaceLogo);
 
@@ -24,10 +24,10 @@ function addCustomFooter() {
     social.classList.add("footer__Social");
 
     const imageDetails = [
-        { link: "https://huggingface.co", imageLink: "https://huggingface.co/assets/transformers-docs/website.svg" },
-        { link: "https://twitter.com/huggingface", imageLink: "https://huggingface.co/assets/transformers-docs/twitter.svg" },
-        { link: "https://github.com/huggingface", imageLink: "https://huggingface.co/assets/transformers-docs/github.svg" },
-        { link: "https://www.linkedin.com/company/huggingface/", imageLink: "https://huggingface.co/assets/transformers-docs/linkedin.svg" }
+        { link: "https://huggingface.co", imageLink: "https://huggingface.co/landing/assets/transformers-docs/website.svg" },
+        { link: "https://twitter.com/huggingface", imageLink: "https://huggingface.co/landing/assets/transformers-docs/twitter.svg" },
+        { link: "https://github.com/huggingface", imageLink: "https://huggingface.co/landing/assets/transformers-docs/github.svg" },
+        { link: "https://www.linkedin.com/company/huggingface/", imageLink: "https://huggingface.co/landing/assets/transformers-docs/linkedin.svg" }
     ];
 
     imageDetails.forEach(imageLinks => {
@@ -58,6 +58,84 @@ function addGithubButton() {
     document.querySelector(".wy-side-nav-search .icon-home").insertAdjacentHTML('afterend', div);
 }
 
+function addHfMenu() {
+    const div = `
+    <div class="menu">
+        <a href="/welcome">🔥 Sign in</a>
+        <a href="/models">🚀 Models</a>
+    </div>
+    `;
+    document.body.insertAdjacentHTML('afterbegin', div);
+}
+
+function platformToggle() {
+    const codeBlocks = Array.from(document.getElementsByClassName("highlight"));
+    const pytorchIdentifier = "## PYTORCH CODE";
+    const tensorflowIdentifier = "## TENSORFLOW CODE";
+    const pytorchSpanIdentifier = `<span class="c1">${pytorchIdentifier}</span>`;
+    const tensorflowSpanIdentifier = `<span class="c1">${tensorflowIdentifier}</span>`;
+
+    const getFrameworkSpans = filteredCodeBlock => {
+        const spans = filteredCodeBlock.element.innerHTML;
+        const pytorchSpanPosition = spans.indexOf(pytorchSpanIdentifier);
+        const tensorflowSpanPosition = spans.indexOf(tensorflowSpanIdentifier);
+
+        let pytorchSpans;
+        let tensorflowSpans;
+
+        if(pytorchSpanPosition < tensorflowSpanPosition){
+            pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, tensorflowSpanPosition);
+            tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, spans.length);
+        }else{
+            tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, pytorchSpanPosition);
+            pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, spans.length);
+        }
+
+        return {
+            ...filteredCodeBlock,
+            pytorchSample: pytorchSpans ,
+            tensorflowSample: tensorflowSpans
+        }
+    };
+
+    const createFrameworkButtons = sample => {
+            const pytorchButton = document.createElement("button");
+            pytorchButton.innerText = "PyTorch";
+
+            const tensorflowButton = document.createElement("button");
+            tensorflowButton.innerText = "TensorFlow";
+
+            const selectorDiv = document.createElement("div");
+            selectorDiv.classList.add("framework-selector");
+            selectorDiv.appendChild(pytorchButton);
+            selectorDiv.appendChild(tensorflowButton);
+            sample.element.parentElement.prepend(selectorDiv);
+
+            // Init on PyTorch
+            sample.element.innerHTML = sample.pytorchSample;
+            pytorchButton.classList.add("selected");
+            tensorflowButton.classList.remove("selected");
+
+            pytorchButton.addEventListener("click", () => {
+                sample.element.innerHTML = sample.pytorchSample;
+                pytorchButton.classList.add("selected");
+                tensorflowButton.classList.remove("selected");
+            });
+            tensorflowButton.addEventListener("click", () => {
+               sample.element.innerHTML = sample.tensorflowSample;
+                tensorflowButton.classList.add("selected");
+                pytorchButton.classList.remove("selected");
+            });
+        };
+
+    codeBlocks
+        .map(element => {return {element: element.firstChild, innerText: element.innerText}})
+        .filter(codeBlock => codeBlock.innerText.includes(pytorchIdentifier) && codeBlock.innerText.includes(tensorflowIdentifier))
+        .map(getFrameworkSpans)
+        .forEach(createFrameworkButtons);
+}
+
+
 /*!
  * github-buttons v2.2.10
  * (c) 2019 なつき
@@ -74,6 +152,8 @@ function onLoad() {
     addCustomFooter();
     addGithubButton();
     parseGithubButtons();
+    addHfMenu();
+    platformToggle();
 }
 
 window.addEventListener("load", onLoad);

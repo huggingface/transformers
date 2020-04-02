@@ -53,7 +53,7 @@ from transformers import (WEIGHTS_NAME, BertConfig,
                                   DistilBertForSequenceClassification,
                                   DistilBertTokenizer)
 
-from transformers import AdamW, WarmupLinearSchedule
+from transformers import AdamW, get_linear_schedule_with_warmup
 
 from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_output_modes as output_modes
@@ -115,7 +115,8 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
         },
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
 
     # Train!
     logger.info("***** Running training *****")
@@ -182,7 +183,7 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
                     if args.evaluate_during_training:
                         results = evaluate(args, model, tokenizer, disable_logging=disable_logging)
                     loss_scalar = loss.item()
-                    logger.info('global_step: {global_step}, lr: {lr:.3f}, loss: {loss:.3f}'.format(
+                    logger.info('global_step: {global_step}, lr: {lr:.6f}, loss: {loss:.3f}'.format(
                         global_step=global_step, lr=scheduler.get_lr()[0], loss=loss_scalar))
                     if xm.is_master_ordinal():
                         # All values must be in CPU and not on TPU device

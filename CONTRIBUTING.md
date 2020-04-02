@@ -41,14 +41,10 @@ Did not find it? :( So we can act quickly on it, please follow these steps:
   less than 30s;
 * Provide the *full* traceback if an exception is raised.
 
-To get the OS and software versions, execute the following code and copy-paste
-the output:
+To get the OS and software versions automatically, you can run the following command:
 
-```
-import platform; print("Platform", platform.platform())
-import sys; print("Python", sys.version)
-import torch; print("PyTorch", torch.__version__)
-import tensorflow; print("Tensorflow", tensorflow.__version__)
+```bash
+python transformers-cli env
 ```
 
 ### Do you want to implement a new model?
@@ -100,13 +96,14 @@ Follow these steps to start contributing:
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the 'Fork' button on the repository's page. This creates a copy of the code
-   under your github user account.
+   under your GitHub user account.
+
 2. Clone your fork to your local disk, and add the base repository as a remote:
-   
+
    ```bash
    $ git clone git@github.com:<your Github handle>/transformers.git
    $ cd transformers
-   $ git remote add upstream git@github.com:huggingface/transformers.git
+   $ git remote add upstream https://github.com/huggingface/transformers.git
    ```
 
 3. Create a new branch to hold your development changes:
@@ -114,43 +111,78 @@ Follow these steps to start contributing:
    ```bash
    $ git checkout -b a-descriptive-name-for-my-changes
    ```
-   
+
    **do not** work on the `master` branch.
-   
+
 4. Set up a development environment by running the following command in a virtual environment:
 
    ```bash
-   $ pip install -r requirements-dev.txt
+   $ pip install -e ".[dev]"
    ```
 
-5. Develop the features on your branch. Add changed files using `git add` and
-   then `git commit` to record your changes locally:
-   
+   (If transformers was already installed in the virtual environment, remove
+   it with `pip uninstall transformers` before reinstalling it in editable
+   mode with the `-e` flag.)
+
+   Right now, we need an unreleased version of `isort` to avoid a
+   [bug](https://github.com/timothycrosley/isort/pull/1000):
+
+   ```bash
+   $ pip install -U git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
+   ```
+
+5. Develop the features on your branch.
+
+   As you work on the features, you should make sure that the test suite
+   passes:
+
+   ```bash
+   $ make test
+   ```
+
+   `transformers` relies on `black` and `isort` to format its source code
+   consistently. After you make changes, format them with:
+
+   ```bash
+   $ make style
+   ```
+
+   `transformers` also uses `flake8` to check for coding mistakes. Quality
+   control runs in CI, however you can also run the same checks with:
+
+   ```bash
+   $ make quality
+   ```
+
+   Once you're happy with your changes, add changed files using `git add` and
+   make a commit with `git commit` to record your changes locally:
+
    ```bash
    $ git add modified_file.py
    $ git commit
    ```
-   
+
    Please write [good commit
-   messages](https://chris.beams.io/posts/git-commit/). It
-   is a good idea to sync your copy of the code with the original repository
-   regularly. This way you can quickly account for changes:
-   
+   messages](https://chris.beams.io/posts/git-commit/).
+
+   It is a good idea to sync your copy of the code with the original
+   repository regularly. This way you can quickly account for changes:
+
    ```bash
    $ git fetch upstream
    $ git rebase upstream/master
    ```
-   
+
    Push the changes to your account using:
-   
+
    ```bash
    $ git push -u origin a-descriptive-name-for-my-changes
    ```
-   
+
 6. Once you are satisfied (**and the checklist below is happy too**), go to the
-   webpage of your fork on Github. Click on 'Pull request' to send your changes
+   webpage of your fork on GitHub. Click on 'Pull request' to send your changes
    to the project maintainers for review.
-   
+
 7. It's ok if maintainers ask you for changes. It happens to core contributors
    too! So everyone can see the changes in the Pull request, work in your local
    branch and push the changes to your fork. They will automatically appear in
@@ -166,9 +198,58 @@ Follow these steps to start contributing:
 3. To indicate a work in progress please prefix the title with `[WIP]`. These
    are useful to avoid duplicated work, and to differentiate it from PRs ready
    to be merged;
-4. Make sure pre-existing tests still pass;
-5. Add high-coverage tests. No quality test, no merge;
-6. All public methods must have informative doctrings;
+4. Make sure existing tests pass;
+5. Add high-coverage tests. No quality test, no merge. 
+ - If you are adding a new model, make sure that you use `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)`, which triggers the common tests.
+ - If you are adding new `@slow` tests, make sure they pass using `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`. 
+CircleCI does not run them. 
+6. All public methods must have informative docstrings;
+
+### Tests
+
+You can run 🤗 Transformers tests with `unittest` or `pytest`.
+
+We like `pytest` and `pytest-xdist` because it's faster. From the root of the
+repository, here's how to run tests with `pytest` for the library:
+
+```bash
+$ python -m pytest -n auto --dist=loadfile -s -v ./tests/
+```
+
+and for the examples:
+
+```bash
+$ pip install -r examples/requirements.txt  # only needed the first time
+$ python -m pytest -n auto --dist=loadfile -s -v ./examples/
+```
+
+In fact, that's how `make test` and `make test-examples` are implemented!
+
+You can specify a smaller set of tests in order to test only the feature
+you're working on.
+
+By default, slow tests are skipped. Set the `RUN_SLOW` environment variable to
+`yes` to run them. This will download many gigabytes of models — make sure you
+have enough disk space and a good Internet connection, or a lot of patience!
+
+```bash
+$ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/
+$ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/
+```
+
+Likewise, set the `RUN_CUSTOM_TOKENIZERS` environment variable to `yes` to run
+tests for custom tokenizers, which don't run by default either.
+
+🤗 Transformers uses `pytest` as a test runner only. It doesn't use any
+`pytest`-specific features in the test suite itself.
+
+This means `unittest` is fully supported. Here's how to run tests with
+`unittest`:
+
+```bash
+$ python -m unittest discover -s tests -t . -v
+$ python -m unittest discover -s examples -t examples -v
+```
 
 
 ### Style guide
