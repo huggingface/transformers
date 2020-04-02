@@ -25,7 +25,6 @@ from transformers import is_tf_available, is_torch_available
 
 from .utils import _tf_gpu_memory_limit, require_tf
 
-
 if is_tf_available():
     import tensorflow as tf
     import numpy as np
@@ -420,8 +419,7 @@ class TFModelTesterMixin:
 
             model(inputs_dict)
 
-    def test_lm_head_model_random_generate(self):
-
+    def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
 
@@ -436,27 +434,52 @@ class TFModelTesterMixin:
                     model.generate(do_sample=True, max_length=5)
                 # batch_size = 1
                 self._check_generated_ids(model.generate(input_ids, do_sample=True))
-                # batch_size = 1, num_beams > 1
-                self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=3))
             else:
                 # batch_size = 1
                 self._check_generated_ids(model.generate(do_sample=True, max_length=5))
-                # batch_size = 1, num_beams > 1
-                self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=3))
 
             with self.assertRaises(AssertionError):
-                # generating multiple sequences when greedy no beam generation
+                # generating multiple sequences when no beam search generation
                 # is not allowed as it would always generate the same sequences
                 model.generate(input_ids, do_sample=False, num_return_sequences=2)
-
-            with self.assertRaises(AssertionError):
-                # generating more sequences than having beams leads is not possible
-                model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 
             # batch_size > 1, sample
             self._check_generated_ids(model.generate(input_ids, do_sample=True, num_return_sequences=3))
             # batch_size > 1, greedy
             self._check_generated_ids(model.generate(input_ids, do_sample=False))
+
+            # check bad words tokens language generation
+            bad_words_ids = [
+                tf.squeeze(ids_tensor((1, 1), self.model_tester.vocab_size), -1).numpy().tolist(),
+                tf.squeeze(ids_tensor((2, 1), self.model_tester.vocab_size), -1).numpy().tolist(),
+            ]
+
+            output_tokens = model.generate(
+                input_ids, do_sample=False, bad_words_ids=bad_words_ids, num_return_sequences=3
+            )
+            import ipdb
+            ipdb.set_trace()
+            generated_ids = output_tokens[:, input_ids.shape[-1] :]
+            self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
+
+    def test_lm_head_model_random_beam_search_generate(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
+
+        if self.is_encoder_decoder:
+            config.output_past = True  # needed for Bart TODO: might have to update for other encoder-decoder models
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+
+            if config.bos_token_id is None:
+                self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=3))
+            else:
+                self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=3))
+
+            with self.assertRaises(AssertionError):
+                # generating more sequences than having beams leads is not possible
+                model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 
             # batch_size > 1, num_beams > 1, sample
             self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=3, num_return_sequences=3,))
@@ -468,13 +491,6 @@ class TFModelTesterMixin:
                 tf.squeeze(ids_tensor((1, 1), self.model_tester.vocab_size), -1).numpy().tolist(),
                 tf.squeeze(ids_tensor((2, 1), self.model_tester.vocab_size), -1).numpy().tolist(),
             ]
-
-            # sampling
-            output_tokens = model.generate(
-                input_ids, do_sample=True, bad_words_ids=bad_words_ids, num_return_sequences=3
-            )
-            generated_ids = output_tokens[:, input_ids.shape[-1] :]
-            self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
 
             # beam search
             output_tokens = model.generate(
