@@ -458,7 +458,7 @@ class TFModelTesterMixin:
             )
             import ipdb
             ipdb.set_trace()
-            generated_ids = output_tokens[:, input_ids.shape[-1] :]
+            generated_ids = output_tokens[:, tf.shape(input_ids).numpy().tolist()[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
 
     def test_lm_head_model_random_beam_search_generate(self):
@@ -493,7 +493,7 @@ class TFModelTesterMixin:
             output_tokens = model.generate(
                 input_ids, do_sample=False, bad_words_ids=bad_words_ids, num_beams=3, num_return_sequences=3
             )
-            generated_ids = output_tokens[:, input_ids.shape[-1] :]
+            generated_ids = output_tokens[:, tf.shape(input_ids).numpy().tolist()[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
 
     def _check_generated_ids(self, output_ids):
