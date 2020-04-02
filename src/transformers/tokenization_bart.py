@@ -27,7 +27,7 @@ def _s3_url(suffix):
 # vocab and merges same as roberta
 vocab_url = _s3_url("roberta-large-vocab.json")
 merges_url = _s3_url("roberta-large-merges.txt")
-_all_bart_models = ["bart-large", "bart-large-mnli", "bart-large-cnn"]
+_all_bart_models = ["bart-large", "bart-large-mnli", "bart-large-cnn", "bart-large-xsum"]
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentence.bpe.model"}
 

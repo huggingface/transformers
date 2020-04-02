@@ -108,6 +108,10 @@ class ModuleUtilsMixin:
             module.mem_rss_post_forward = 0
             module.mem_rss_pre_forward = 0
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     r""" Base class for all models.
@@ -717,13 +721,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 Padding token. Default to specicic model pad_token_id or None if it does not exist.
 
             bos_token_id: (`optional`) int
-                BOS token. Defaults to bos_token_id as defined in the models config.
+                BOS token. Defaults to `bos_token_id` as defined in the models config.
 
-            pad_token_id: (`optional`) int
-                Pad token. Defaults to pad_token_id as defined in the models config.
-
-            eos_token_ids: (`optional`) int or list of int
-                End of sequence token or list of tokens to stop the generation. Default to eos_token_ids as defined in the models config.
+            eos_token_id: (`optional`) int
+                EOS token. Defaults to `eos_token_id` as defined in the models config.
 
             length_penalty: (`optional`) float
                 Exponential penalty to the length. Default to 1.
@@ -895,6 +896,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             effective_batch_size = batch_size
             effective_batch_mult = 1
 
+        if self.config.is_encoder_decoder:
+            if decoder_start_token_id is None:
+                decoder_start_token_id = bos_token_id
+
+            assert (
+                decoder_start_token_id is not None
+            ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
+            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
+            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
+
+            # get encoder and store encoder outputs
+            encoder = self.get_encoder()
+
+            encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
+
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
             input_ids_len = input_ids.shape[-1]
@@ -911,20 +927,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
         if self.config.is_encoder_decoder:
-            if decoder_start_token_id is None:
-                decoder_start_token_id = bos_token_id
-
-            assert (
-                decoder_start_token_id is not None
-            ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
-            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
-            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
-
-            # get encoder and store encoder outputs
-            encoder = self.get_encoder()
-
-            encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
-
             # create empty decoder_input_ids
             input_ids = torch.full(
                 (effective_batch_size * num_beams, 1),
@@ -933,6 +935,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 device=next(self.parameters()).device,
             )
             cur_len = 1
+            batch_idx = self.encoder_outputs_batch_dim_idx
+            assert (
+                batch_size == encoder_outputs[0].shape[batch_idx]
+            ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[1]} "
+            expanded_idx = (
+                torch.arange(batch_size)
+                .view(-1, 1)
+                .repeat(1, num_beams * effective_batch_mult)
+                .view(-1)
+                .to(input_ids.device)
+            )
+            encoder_outputs = (encoder_outputs[0].index_select(batch_idx, expanded_idx), *encoder_outputs[1:])
         else:
             encoder_outputs = None
             cur_len = input_ids.shape[-1]

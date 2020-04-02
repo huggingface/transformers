@@ -78,6 +78,7 @@ def load_xsum_checkpoint(checkpoint_path):
     return hub_interface
 
 
+
 def convert_checkpoint_from_disk(checkpoint_path, **config_kwargs):
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     remove_ignore_keys_(state_dict)
@@ -91,6 +92,7 @@ def convert_checkpoint_from_disk(checkpoint_path, **config_kwargs):
     return model
 
 
+
 @torch.no_grad()
 def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path, hf_checkpoint_name=None):
     """
@@ -100,8 +102,8 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path, hf_checkp
         bart = torch.hub.load("pytorch/fairseq", checkpoint_path).eval()
     else:
         bart = load_xsum_checkpoint(checkpoint_path)
-    bart.model.upgrade_state_dict(bart.model.state_dict())
 
+    bart.model.upgrade_state_dict(bart.model.state_dict())
     if hf_checkpoint_name is None:
         hf_checkpoint_name = checkpoint_path.replace(".", "-")
     config = BartConfig.from_pretrained(hf_checkpoint_name)

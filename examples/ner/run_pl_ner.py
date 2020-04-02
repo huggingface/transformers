@@ -192,5 +192,5 @@ if __name__ == "__main__":
         # https://github.com/PyTorchLightning/pytorch-lightning/blob/master\
         # /pytorch_lightning/callbacks/model_checkpoint.py#L169
         checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
-        NERTransformer.load_from_checkpoint(checkpoints[-1])
+        model = model.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)

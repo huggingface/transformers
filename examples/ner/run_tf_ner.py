@@ -157,7 +157,9 @@ def train(
     writer = tf.summary.create_file_writer("/tmp/mylogs")
 
     with strategy.scope():
-        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
+        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
         optimizer = create_optimizer(args["learning_rate"], num_train_steps, args["warmup_steps"])
 
         if args["fp16"]:
@@ -205,11 +207,9 @@ def train(
 
             with tf.GradientTape() as tape:
                 logits = model(train_features["input_ids"], **inputs)[0]
-                logits = tf.reshape(logits, (-1, len(labels) + 1))
-                active_loss = tf.reshape(train_features["input_mask"], (-1,))
-                active_logits = tf.boolean_mask(logits, active_loss)
-                train_labels = tf.reshape(train_labels, (-1,))
-                active_labels = tf.boolean_mask(train_labels, active_loss)
+                active_loss = tf.reshape(train_labels, (-1,)) != pad_token_label_id
+                active_logits = tf.boolean_mask(tf.reshape(logits, (-1, len(labels))), active_loss)
+                active_labels = tf.boolean_mask(tf.reshape(train_labels, (-1,)), active_loss)
                 cross_entropy = loss_fct(active_labels, active_logits)
                 loss = tf.reduce_sum(cross_entropy) * (1.0 / train_batch_size)
                 grads = tape.gradient(loss, model.trainable_variables)
@@ -329,11 +329,9 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
 
         with strategy.scope():
             logits = model(eval_features["input_ids"], **inputs)[0]
-            tmp_logits = tf.reshape(logits, (-1, len(labels) + 1))
-            active_loss = tf.reshape(eval_features["input_mask"], (-1,))
-            active_logits = tf.boolean_mask(tmp_logits, active_loss)
-            tmp_eval_labels = tf.reshape(eval_labels, (-1,))
-            active_labels = tf.boolean_mask(tmp_eval_labels, active_loss)
+            active_loss = tf.reshape(eval_labels, (-1,)) != pad_token_label_id
+            active_logits = tf.boolean_mask(tf.reshape(logits, (-1, len(labels))), active_loss)
+            active_labels = tf.boolean_mask(tf.reshape(eval_labels, (-1,)), active_loss)
             cross_entropy = loss_fct(active_labels, active_logits)
             loss += tf.reduce_sum(cross_entropy) * (1.0 / eval_batch_size)
 
@@ -497,8 +495,8 @@ def main(_):
     )
 
     labels = get_labels(args["labels"])
-    num_labels = len(labels) + 1
-    pad_token_label_id = 0
+    num_labels = len(labels)
+    pad_token_label_id = -1
     config = AutoConfig.from_pretrained(
         args["config_name"] if args["config_name"] else args["model_name_or_path"],
         num_labels=num_labels,
@@ -522,7 +520,6 @@ def main(_):
                 config=config,
                 cache_dir=args["cache_dir"] if args["cache_dir"] else None,
             )
-            model.layers[-1].activation = tf.keras.activations.softmax
 
         train_batch_size = args["per_device_train_batch_size"] * args["n_device"]
         train_dataset, num_train_examples = load_and_cache_examples(
