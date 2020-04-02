@@ -172,7 +172,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         }
 
     def test_lsh_hashing(self):
-        shape = (1, self.seq_len, self.hidden_size)  # Batch x SeqLen x ModelDim
+        shape = (3, self.seq_len, self.hidden_size)  # Batch x SeqLen x ModelDim
 
         config_dict = self._create_config()
 
