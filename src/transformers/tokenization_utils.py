@@ -55,9 +55,14 @@ PreTokenizedInputPair = Tuple[List[str], List[str]]
 def flatten(x: Sequence):
     """
     Flatten the provided (potentially nested) sequence
-    :param x: Sequence (potentially nested)
-    :return: Flattened sequence
+
+    Args:
+        x (Sequence): Potentially nested sequence to flatten
+
+    Returns:
+        list: Flattened sequence
     """
+
     return functools.reduce(operator.iconcat, x, [])
 
 
@@ -81,16 +86,19 @@ def truncate_and_pad(
     before the managed section. If your tokenizer set a padding / truncation strategy before,
     then it will be reset to no padding/truncation when exiting the managed section.
 
-    :param tokenizer:
-    :param max_length:
-    :param stride:
-    :param strategy:
-    :param pad_to_max_length:
-    :param padding_side:
-    :param pad_token_id:
-    :param pad_token_type_id:
-    :param pad_token:
-    :return:
+    Args:
+        tokenizer (BaseTokenizer): The tokenizer which will be used
+        max_length (int): The maximum size of the sequence
+        stride (int): The stride to use when handling overflow
+        strategy (str): Overflowing logic to use
+        pad_to_max_length (bool): Boolean indicating if the output needs to be padded up to max_length
+        padding_side (str): "left" or "right" indicating the direction the output sequence will be padded
+        pad_token_id (int): The integer representation of the padding token to use
+        pad_token_type_id (int): The integer representation of the padding token type to use
+        pad_token (str): The string representation of the padding token to use
+
+    Returns:
+
     """
 
     # Handle all the truncation and padding stuff
@@ -154,7 +162,8 @@ class BatchEncoding(UserDict):
     def encodings(self) -> Optional[List[Encoding]]:
         """
         Return the list all encoding from the tokenization process
-        :return: List[Encoding] or None if input was tokenized through Python tokenizer
+
+        Returns: List[Encoding] or None if input was tokenized through Python tokenizer
         """
         return self._encodings
 
@@ -170,9 +179,14 @@ class BatchEncoding(UserDict):
     def char_to_token_offsets(self, sentence: int, char: int) -> Tuple[int, int]:
         """
         Find the Offsets of the token containing the character at the specified position
-        :param sentence: Index of the sentence relative to the batch provided to the tokenizer.
-        :param char: Char index to get the relative token offsets
-        :return: (token start, token end)
+
+        Args:
+            sentence: Index of the sentence relative to the batch provided to the tokenizer
+            char: Char index to get the relative token offsets
+
+        Returns:
+            tuple: (token start, token end)
+
         """
 
         if not self._encodings:
@@ -182,9 +196,13 @@ class BatchEncoding(UserDict):
     def char_to_token(self, sentence: int, char: int) -> int:
         """
         Return the index of the token at position of the given char.
-        :param sentence: Index of the sentence relative to the batch provided to the tokenizer.
-        :param char: Char index to get the relative token offsets
-        :return: int referring to the position of the token in the returned set of tokens for the sentence
+
+        Args:
+            sentence (int): Index of the sentence relative to the batch provided to the tokenizer
+            char (int): Char index to get the relative token offsets
+
+        Returns:
+            int: Integer referring to the position of the token in the returned set of tokens for the sentence
         """
 
         if not self._encodings:
@@ -194,9 +212,13 @@ class BatchEncoding(UserDict):
     def char_to_word_offsets(self, sentence: int, char: int) -> Tuple[int, int]:
         """
         Find the Offsets of the word containing the character at the specified position
-        :param sentence: Index of the sentence relative to the batch provided to the tokenizer.
-        :param char: Char index to get the relative token offsets
-        :return: tuple(word start, word end) representing the first and last characters of the word
+
+        Args:
+            sentence (int): Index of the sentence relative to the batch provided to the tokenizer
+            char (int): Char index to get the relative token offsets
+
+        Returns:
+            tuple: (word start, word end) representing the first and last characters of the word
         """
 
         if not self._encodings:
@@ -206,9 +228,13 @@ class BatchEncoding(UserDict):
     def token_to_word_offsets(self, sentence: int, index: int) -> Optional[Tuple[int, int]]:
         """
         Find the Offsets of the word containing the token at the given index
-        :param sentence: Index of the sentence relative to the batch provided to the tokenizer.
-        :param index: Index of the token to map to the original word offsets
-        :return: tuple(word start, word end) or None
+
+        Args:
+            sentence (int): Index of the sentence relative to the batch provided to the tokenizer
+            index (int): Index of the token to map to the original word offsets
+
+        Returns:
+            Optional[tuple]: (word start, word end) or None
         """
 
         if not self._encodings:
