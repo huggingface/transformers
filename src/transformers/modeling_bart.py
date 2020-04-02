@@ -467,7 +467,6 @@ class BartDecoder(nn.Module):
                 - hidden states
                 - attentions
         """
-        print(f'hf dec_input_ids: {input_ids[0]}')
         # check attention mask and invert
         if encoder_padding_mask is not None:
             encoder_padding_mask = invert_mask(encoder_padding_mask)
@@ -481,20 +480,14 @@ class BartDecoder(nn.Module):
             assert input_ids.ne(self.padding_idx).any()
 
         x = self.embed_tokens(input_ids) * self.embed_scale
-        print(f'hf scaled word emb: {x[0][0]}')
         x += positions
-        print(f'hf before layernorm_embedding: {x[0][0]}')
         x = self.layernorm_embedding(x)
-        print(f'hf after layernorm_embedding: {x[0][0]}')
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = x.transpose(0, 1)  # (seq_len, BS, model_dim)
         # decoder layers
         all_hidden_states = ()
         all_self_attns = ()
         next_decoder_cache = []
-        print(f'hf: input before any dec layers: {x[0][0]}')
-        print(f'hf_causal_mask: {decoder_causal_mask}')
-        print(f'hf_padding_mask: {decoder_padding_mask}')
         for idx, decoder_layer in enumerate(self.layers):
             decoder_layer  # type: DecoderLayer
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -514,14 +507,11 @@ class BartDecoder(nn.Module):
                 causal_mask=decoder_causal_mask,
             )
 
-            print(f'hf after layer {idx}: {x[0][0]}')
-
             if generation_mode:
                 next_decoder_cache.append(layer_past.copy())
 
             if self.layer_norm and (idx == len(self.layers)-1):
                 x = self.layer_norm(x)
-                print(f'hf after layernorm: {x[0][0]}')
             if self.output_hidden_states:
                 all_hidden_states += (x,)
             if self.output_attentions:
@@ -530,7 +520,6 @@ class BartDecoder(nn.Module):
         # Convert shapes from (seq_len, BS, model_dim) to (BS, seq_len, model_dim)
         all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
         x = x.transpose(0, 1)
-        print(f'hf transpose: {x[0][0]}')
         if generation_mode:
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
         else:

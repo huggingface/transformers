@@ -242,7 +242,7 @@ class BartTranslationTests(unittest.TestCase):
         net_input = pickle_load('/Users/shleifer/transformers_fork/test_batch.pkl')
         translated_tokens = model.generate(
             input_ids=inputs["input_ids"].to(torch_device),
-            
+
             num_beams=4,
             # attention_mask=inputs["attention_mask"].to(torch_device),
             # Implicitly testing that config has correct generation kwargs
