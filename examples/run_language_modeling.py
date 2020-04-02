@@ -198,10 +198,11 @@ def make_collate(tokenizer, block_size, lazy=False):
         :param examples: (list[str]) the text lines to be collated in this batch.
         :return: (torch.tensor) of the tokenized examples padded/truncated to form a 2d tensor of ints.
         """
-        # Filter empty strings. LazyLineByLineTextDataset will return empty string if there is an error on a line.
-        examples = [ex for ex in examples if ex]
+        # We need to filter empty strings in examples.
+        # LazyLineByLineTextDataset will return empty string if there is an error when reading a line in the data file.
+
         examples = tokenizer.batch_encode_plus(
-            examples, max_length=block_size, return_tensors="pt", pad_to_max_length=True
+            [ex for ex in examples if ex], max_length=block_size, return_tensors="pt", pad_to_max_length=True,
         )
         return examples["input_ids"]
 
