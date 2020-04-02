@@ -168,16 +168,17 @@ class ReformerEmbeddings(nn.Module):
 
 class LSHSelfAttention(nn.Module):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
+#    def __init__(self, n_heads=2, dim_qk=64, dim_v=64, share_qk='unused',
+#                causal=False, chunk_len=None, n_chunks_before=1, n_chunks_after=0,
+#                n_hashes=1, n_buckets=256, mode='train',
+#                predict_mem_len=2048, predict_drop_len=256,
+#                attention_dropout=0.0, n_parallel_heads=1,
+#                use_python_loop=False, use_reference_code=False
+#                ):
 
         self.num_attention_heads = config.num_attention_heads
         self.hidden_size = config.hidden_size
-        self.hash_seed = config.seed
-        self.num_hashes = config.num_hashes
-        self.num_buckets = config.num_buckets
-        self.chunk_length = config.chunk_length
-        self.num_chunks_before = config.num_chunks_before
-        self.num_chunks_after = config.num_chunks_after
 
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -193,6 +194,13 @@ class LSHSelfAttention(nn.Module):
         self.dense = nn.Linear(self.all_head_size, self.hidden_size, bias=False)
 
         # add Dropout
+        self.hash_seed = config.seed
+
+        self.num_hashes = config.num_hashes
+        self.num_buckets = config.num_buckets
+        self.chunk_length = config.chunk_length
+        self.num_chunks_before = config.num_chunks_before
+        self.num_chunks_after = config.num_chunks_after
 
     def forward(
         self,
