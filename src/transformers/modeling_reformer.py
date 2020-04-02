@@ -194,7 +194,7 @@ class LSHSelfAttention(nn.Module):
 
         self.query_key = nn.Linear(self.hidden_states_input_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.hidden_states_input_size, self.all_head_size, bias=False)
-        self.dense = nn.Linear(self.all_head_size, self.hidden_size, bias=False)
+        self.dense = nn.Linear(self.all_head_size, self.hidden_states_input_size, bias=False)
 
         # add Dropout
         self.hash_seed = config['seed']
@@ -235,25 +235,33 @@ class LSHSelfAttention(nn.Module):
         sorted_buckets, sorted_ticker = torch.sort(buckets_and_t, dim=-1)
         _, undo_sort_indices = torch.sort(sorted_ticker, dim=-1)
 
-        import ipdb
-        ipdb.set_trace()
+        assert query_key_vectors.shape[-1] == self.attention_head_size
+        assert value_vectors.shape[-1] == self.attention_head_size
 
         sorted_ticker = (sorted_ticker % sequence_length)
-        sorted_query_key_vectors = torch.gather(query_key_vectors, sorted_ticker, dim=0)
-        sorted_value_vectors = torch.gather(value_vectors, sorted_ticker, dim=0)
+        expanded_sorted_ticker = sorted_ticker.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
+        sorted_query_key_vectors = torch.gather(query_key_vectors.repeat(1, 1, self.num_hashes, 1), 2, expanded_sorted_ticker)
+        sorted_value_vectors = torch.gather(value_vectors.repeat(1, 1, self.num_hashes, 1), 2, expanded_sorted_ticker)
 
         query_info = sorted_ticker
 
-        sorted_query_key_vectors = torch.reshape(sorted_query_key_vectors, (-1, self.query_key_chunk_len, sorted_query_key_vectors.shape[-1]))
-        query_info = torch.reshape(query_info, (-1, self.query_key_chunk_len))
+        sorted_query_key_vectors = torch.reshape(sorted_query_key_vectors, (batch_size, self.num_attention_heads, -1, self.query_key_chunk_len, self.attention_head_size))
+        query_info = torch.reshape(query_info, (batch_size, self.num_attention_heads, -1, self.query_key_chunk_len))
 
         key_vectors = sorted_query_key_vectors
         key_value_chunk_len = self.query_key_chunk_len
         key_value_info = query_info
 
-        sorted_value_vectors = torch.reshape(sorted_value_vectors, (-1, key_value_chunk_len, value_vectors.shape[-1]))
+        sorted_value_vectors = torch.reshape(sorted_value_vectors, (batch_size, self.num_attention_heads, -1, key_value_chunk_len, value_vectors.shape[-1]))
 
         key_vectors = self._length_normalize(key_vectors)
+        key_vectors = key_vectors / torch.sqrt(torch.tensor(self.attention_head_size, device=key_vectors.device, dtype=torch.float32))
+
+        # Optionally include adjacent chunks.
+        if self.query_key_chunk_len is not None or key_value_chunk_len is not None:
+            assert self.query_key_chunk_len is not None and key_value_chunk_len is not None
+        else:
+            assert self.num_chunks_before == 0 and self.num_chunks_after == 0
 
         key_vectors = self._look_adjacent(key_vectors, self.num_chunks_before, self.num_chunks_after)
         sorted_value_vectors = self._look_adjacent(sorted_value_vectors, self.num_chunks_before, self.num_chunks_after)
@@ -268,22 +276,25 @@ class LSHSelfAttention(nn.Module):
 
         # TODO: add dropout here
 
+        # attend values
         sorted_out = torch.matmul(dots, sorted_value_vectors)
-        sorted_out = torch.reshape(sorted_out, (-1, sorted_out.shape[-1]))
-        dots_logsumexp = torch.reshape(dots_logsumexp, (-1,))
+        sorted_out = torch.reshape(sorted_out, (batch_size, self.num_attention_heads, -1, self.attention_head_size))
+        dots_logsumexp = torch.reshape(dots_logsumexp, (batch_size, self.num_attention_heads, -1))
 
-        out = torch.gather(sorted_out, undo_sort_indices, dim=0)
-        logits = torch.gather(dots_logsumexp, undo_sort_indices, dim=0)
+        expanded_undo_sort_indices = undo_sort_indices.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
+        out = torch.gather(sorted_out, 2, expanded_undo_sort_indices)
+        logits = torch.gather(dots_logsumexp, 2, undo_sort_indices)
 
         if self.num_hashes > 1:
-            out = torch.reshape(out, (self.num_hashes, sequence_length, out.shape[-1]))
-            logits = torch.reshape(logits, (self.num_hashes, sequence_length, 1))
-            probs = torch.exp(logits - torch.logsumexp(logits, dim=0, keepdim=True))
-            out = torch.sum(out * probs, dim=0)
+            out = torch.reshape(out, (batch_size, self.num_attention_heads, self.num_hashes, sequence_length, self.attention_head_size))
+            logits = torch.reshape(logits, (batch_size, self.num_attention_heads, self.num_hashes, sequence_length, 1))
+            probs = torch.exp(logits - torch.logsumexp(logits, dim=2, keepdim=True))
+            out = torch.sum(out * probs, dim=2)
 
-        assert out.shape == (sequence_length, self.value_vectors[-1])
+        assert out.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size)
+
+        out = self.transpose_for_output(out)
         out = self.dense(out)
-
         # TODO: apply broadcasted dropout
 
         return out
@@ -354,7 +365,7 @@ class LSHSelfAttention(nn.Module):
         """ Used to implement attention between consecutive chunks.
 
             Args:
-                x: array of shape [n_chunks, chunk_len, ...]
+                x: array of shape [batch_size, num_attention_heads, n_chunks, chunk_len, ...]
                 n_chunks_before: Number of previous chunks to attend to.
                 n_chunks_after: Number of subsequent chunks to attend to.
             Returns:
@@ -369,8 +380,8 @@ class LSHSelfAttention(nn.Module):
             if i == 0:
                 slices.append(x)
             else:
-                slices.append(torch.cat([x[i:, ...], x[:i, ...]], dim=0))
-        return torch.cat(slices, dim=1)
+                slices.append(torch.cat([x[:, :, i:, ...], x[:, :, :i, ...]], dim=2))
+        return torch.cat(slices, dim=3)
 
     def _length_normalize(self, x, epsilon=1e-6):
         variance = torch.mean(x**2, -1, keepdim=True)
@@ -381,6 +392,10 @@ class LSHSelfAttention(nn.Module):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
+
+    def transpose_for_output(self, x):
+        x = x.permute(0, 2, 1, 3)
+        return torch.reshape(x, (x.size()[0], -1, self.num_attention_heads * self.attention_head_size))
 
 
 class ReformerSelfAttention(nn.Module):
