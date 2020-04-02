@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import logging
+from typing import List
 
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_t5 import T5Tokenizer
@@ -33,7 +34,7 @@ merges_url = _s3_url("roberta-large-merges.txt")
 _all_bart_models = ["bart-large", "bart-large-mnli", "bart-large-cnn", "bart-large-xsum"]
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentence.bpe.model"}
-from typing import List
+
 
 class BartTokenizer(RobertaTokenizer):
     # merges and vocab same as Roberta

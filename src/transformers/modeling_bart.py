@@ -35,8 +35,8 @@ BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/pytorch_model.bin",
     "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/pytorch_model.bin",
     "bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/pytorch_model.bin",
-    "mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/pytorch_model.bin",
     "bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/pytorch_model.bin",
+    "mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/pytorch_model.bin",
 }
 
 BART_START_DOCSTRING = r"""
@@ -254,10 +254,8 @@ class BartEncoder(nn.Module):
         self.embed_positions = LearnedPositionalEmbedding(config.max_position_embeddings, embed_dim, self.padding_idx,)
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim)
-        if config.normalize_before:  # mbart
-            self.layer_norm = LayerNorm(config.d_model)
-        else:
-            self.layer_norm = nn.Identity()
+        # mbart has one extra layer_norm
+        self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
     def forward(
         self, input_ids, attention_mask=None,
@@ -416,15 +414,14 @@ class BartDecoder(nn.Module):
 
     def __init__(self, config: BartConfig, embed_tokens: nn.Embedding):
         super().__init__()
-        # self.output_past = config.output_past
+        self.output_past = config.output_past
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = embed_tokens.padding_idx
         self.max_target_positions = config.max_position_embeddings
-        embed_dim = config.d_model
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.embed_tokens = embed_tokens
         self.embed_positions = LearnedPositionalEmbedding(
             config.max_position_embeddings, config.d_model, self.padding_idx,
@@ -433,10 +430,7 @@ class BartDecoder(nn.Module):
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
         self.layernorm_embedding = LayerNorm(config.d_model)
-        if config.add_final_layer_norm:  # mbart
-            self.layer_norm = LayerNorm(config.d_model)
-        else:
-            self.layer_norm = nn.Identity()
+        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
     def forward(
         self,
@@ -510,10 +504,10 @@ class BartDecoder(nn.Module):
                 causal_mask=decoder_causal_mask,
             )
 
-            if generation_mode:
+            if self.output_past:
                 next_decoder_cache.append(layer_past.copy())
 
-            if self.layer_norm and (idx == len(self.layers) - 1):
+            if self.layer_norm and (idx == len(self.layers) - 1):  # last layer of mbart
                 x = self.layer_norm(x)
             if self.output_hidden_states:
                 all_hidden_states += (x,)
@@ -525,8 +519,7 @@ class BartDecoder(nn.Module):
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
-        if generation_mode:
-
+        if self.output_past:
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
         else:
             next_cache = None
@@ -606,7 +599,6 @@ class SelfAttention(nn.Module):
             v = self.v_proj(query)
 
         q = self._shape(q, tgt_len, bsz)
-        # print(f'hf: scaled_q {q[0][0]}')
         if k is not None:
             k = self._shape(k, -1, bsz)
         if v is not None:
@@ -625,7 +617,6 @@ class SelfAttention(nn.Module):
         assert k is not None
         src_len = k.size(1)
         attn_weights = torch.bmm(q, k.transpose(1, 2))
-        # print(f'hf: attn_weights after bmm: {attn_weights[0][0]}')
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
@@ -934,9 +925,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             decoder_cached_states=decoder_cached_states,
             generation_mode=generation_mode,
         )
-        print(f"hf before lm_head: {outputs[0][0][0]}")
         lm_logits = F.linear(outputs[0], self.model.shared.weight)
-        print(f"hf after lm_head: {lm_logits[0][0][0]}")
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
         if lm_labels is not None:
             loss_fct = nn.CrossEntropyLoss()
