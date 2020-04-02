@@ -228,14 +228,13 @@ class LSHSelfAttention(nn.Module):
         buckets = self._hash_vectors(query_key_vectors)
         assert int(buckets.shape[-1]) == self.num_hashes * sequence_length
 
-        sorted_ticker, undo_sorted_ticker = self._get_sorted_and_undo_sorted_ticker(sequence_length, buckets)
+        ticker, undo_ticker = self._get_ticker_and_undo_ticker(sequence_length, buckets)
 
-        sorted_query_key_vectors = self._sort_by_indices(query_key_vectors, sorted_ticker)
-        sorted_value_vectors = self._sort_by_indices(value_vectors, sorted_ticker)
+        sorted_query_key_vectors = self._sort_by_indices(query_key_vectors, ticker)
+        sorted_value_vectors = self._sort_by_indices(value_vectors, ticker)
 
         sorted_query_key_vectors = self._split_by_chunk_len(sorted_query_key_vectors)
         sorted_value_vectors = self._split_by_chunk_len(sorted_value_vectors)
-        sorted_ticker = self._split_by_chunk_len(sorted_ticker)
 
         # Optionally include adjacent chunks.
         if self.query_key_chunk_len is None:
@@ -243,7 +242,7 @@ class LSHSelfAttention(nn.Module):
 
         key_vectors = self._len_and_dim_norm(sorted_query_key_vectors)
 
-        out, logits = self._attend(sorted_query_key_vectors, key_vectors, sorted_value_vectors, sorted_ticker, undo_sorted_ticker)
+        out, logits = self._attend(sorted_query_key_vectors, key_vectors, sorted_value_vectors, undo_ticker)
 
         if self.num_hashes > 1:
             out = torch.reshape(out, (batch_size, self.num_attention_heads, self.num_hashes, sequence_length, self.attention_head_size))
@@ -337,10 +336,9 @@ class LSHSelfAttention(nn.Module):
         sorted_ticker = (sorted_ticker % sequence_length)
         return sorted_ticker, undo_sorted_ticker
 
-    def _attend(self, query_vectors, key_vectors, value_vectors, ticker, undo_ticker):
+    def _attend(self, query_vectors, key_vectors, value_vectors, undo_ticker):
         key_vectors = self._look_adjacent(key_vectors)
         value_vectors = self._look_adjacent(value_vectors)
-        ticker = self._look_adjacent(ticker)
 
         # TODO: add masking here
 
