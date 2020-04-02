@@ -230,35 +230,38 @@ class LSHSelfAttention(nn.Module):
 
         ticker, undo_ticker = self._get_ticker_and_undo_ticker(sequence_length, buckets)
 
-        sorted_query_key_vectors = self._sort_by_indices(query_key_vectors, ticker)
-        sorted_value_vectors = self._sort_by_indices(value_vectors, ticker)
+        query_key_vectors = self._gather_by_expansion(query_key_vectors.repeat(1, 1, self.num_hashes, 1), ticker)
+        value_vectors = self._gather_by_expansion(value_vectors.repeat(1, 1, self.num_hashes, 1), ticker)
 
-        sorted_query_key_vectors = self._split_by_chunk_len(sorted_query_key_vectors)
-        sorted_value_vectors = self._split_by_chunk_len(sorted_value_vectors)
+        query_key_vectors = self._split_dim_by(query_key_vectors, -1, self.query_key_chunk_len)
+        value_vectors = self._split_dim_by(value_vectors, -1, self.query_key_chunk_len)
 
         # Optionally include adjacent chunks.
         if self.query_key_chunk_len is None:
             assert self.num_chunks_before == 0 and self.num_chunks_after == 0
 
-        key_vectors = self._len_and_dim_norm(sorted_query_key_vectors)
+        key_vectors = self._len_and_dim_norm(query_key_vectors)
 
-        out, logits = self._attend(sorted_query_key_vectors, key_vectors, sorted_value_vectors, undo_ticker)
+        out_vectors, logits = self._attend(query_key_vectors, key_vectors, value_vectors, undo_ticker)
 
         if self.num_hashes > 1:
-            out = torch.reshape(out, (batch_size, self.num_attention_heads, self.num_hashes, sequence_length, self.attention_head_size))
-            logits = torch.reshape(logits, (batch_size, self.num_attention_heads, self.num_hashes, sequence_length, 1))
-            probs = torch.exp(logits - torch.logsumexp(logits, dim=2, keepdim=True))
-            out = torch.sum(out * probs, dim=2)
+            out_vectors = self._split_dim_by(out_vectors, self.num_hashes, sequence_length)
+            logits = self._split_dim_by(logits, self.num_hashes, sequence_length).unsqueeze(-1)
 
-        assert out.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size)
+            probs_vectors = torch.exp(logits - torch.logsumexp(logits, dim=2, keepdim=True))
+            out_vectors = torch.sum(out_vectors * probs_vectors, dim=2)
 
-        out = self._transpose_for_output(out)
-        out = self.dense(out)
+        assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size)
+
+        out_vectors = self._transpose_for_output(out_vectors)
+        out = self.dense(out_vectors)
         # TODO: apply broadcasted dropout
 
         return out
 
     def _hash_vectors(self, vectors):
+        batch_size = vectors.shape[0]
+
         # See https://arxiv.org/pdf/1509.02897.pdf
         # We sample a different random rotation for each round of hashing to
         # decrease the probability of hash misses.
@@ -277,12 +280,10 @@ class LSHSelfAttention(nn.Module):
         rotations_shape = (vectors.shape[-1], self.num_hashes, rotation_size // 2)
 
         # TODO: delete later when integration tests are ok
-        numpy.random.seed(self.hash_seed)
-        random_rotations = torch.tensor(numpy.random.normal(size=rotations_shape), dtype=torch.float32)
-
         # create a random self.attention_head_size x self.num_hashes x self.num_buckets/2
 #        random_rotations = torch.randn(rotations_shape, device=vectors.device)
-
+        numpy.random.seed(self.hash_seed)
+        random_rotations = torch.tensor(numpy.random.normal(size=rotations_shape), dtype=torch.float32)
         # rotated_vectors has dim:
         # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2
         # TODO: IMPORTANT: At the moment we use the same random rotation over all batches
@@ -300,10 +301,12 @@ class LSHSelfAttention(nn.Module):
                 rotated_vectors = rotated_vectors[..., cur_sum:cur_sum + (num_bucket // 2)]
                 cur_sum += num_bucket // 2
                 rotated_vectors = torch.cat([rotated_vectors, -rotated_vectors], dim=-1)
+
                 if buckets is None:
                     buckets = torch.argmax(rotated_vectors, dim=-1)
                 else:
                     buckets += cur_product * torch.argmax(rotated_vectors, dim=-1)
+
                 cur_product *= num_bucket
 
         # buckets is now (Batch_size x Num_Attn_Heads x Num_Hashes x Seq_Len).
@@ -311,14 +314,11 @@ class LSHSelfAttention(nn.Module):
         offsets = torch.arange(self.num_hashes, device=vectors.device)
         offsets = torch.reshape(offsets * num_buckets, (-1, 1))
 
-        batch_size = vectors.shape[0]
-        assert vectors.shape[1] == self.num_attention_heads
-
         # repeat same values for Batch_size and Num_Attn_Heads
         offsets = offsets.repeat(batch_size, self.num_attention_heads, 1, 1)
-        buckets = torch.reshape(buckets + offsets, (batch_size, self.num_attention_heads, -1))
+        offset_buckets = self._merge_by_middle_dim(buckets + offsets)
 
-        return buckets
+        return offset_buckets
 
     def _get_ticker_and_undo_ticker(self, sequence_length, buckets):
         batch_size = buckets.shape[0]
@@ -353,8 +353,8 @@ class LSHSelfAttention(nn.Module):
         out_vectors = torch.matmul(dots, value_vectors)
 
         # merge chunk length
-        logits = self._merge_by_chunk_len(logits)
-        out_vectors = self._merge_by_chunk_len(out_vectors)
+        logits = self._merge_by_middle_dim(logits).squeeze(-1)
+        out_vectors = self._merge_by_middle_dim(out_vectors)
 
         expanded_undo_sort_indices = undo_ticker.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
         out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
@@ -392,10 +392,10 @@ class LSHSelfAttention(nn.Module):
         norm_x = x / torch.sqrt(variance + epsilon)
         return norm_x
 
-    def _sort_by_indices(self, vectors, indices):
-        expanded_indices = indices.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
-        sorted_vectors = torch.gather(vectors.repeat(1, 1, self.num_hashes, 1), 2, expanded_indices)
-        return sorted_vectors
+    def _gather_by_expansion(self, vectors, idxs):
+        expanded_idxs = idxs.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
+        vectors = vectors.repeat(1, 1, self.num_hashes, 1)
+        return torch.gather(vectors, 2, expanded_idxs)
 
     def _transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -406,9 +406,9 @@ class LSHSelfAttention(nn.Module):
         x = x.permute(0, 2, 1, 3)
         return torch.reshape(x, (x.size()[0], -1, self.num_attention_heads * self.attention_head_size))
 
-    def _split_by_chunk_len(self, vectors):
+    def _split_dim_by(self, vectors, dim_factor_1, dim_factor_2):
         batch_size = vectors.shape[0]
-        split_dim_shape = (batch_size, self.num_attention_heads, -1, self.query_key_chunk_len)
+        split_dim_shape = (batch_size, self.num_attention_heads, dim_factor_1, dim_factor_2)
 
         if len(vectors.shape) == 4:
             return torch.reshape(vectors, split_dim_shape + (self.attention_head_size,))
@@ -417,12 +417,16 @@ class LSHSelfAttention(nn.Module):
         else:
             raise ValueError("Input vector rank should be one of [3, 4], but is: {}".format(len(vectors.shape)))
 
-    def _merge_by_chunk_len(self, vectors):
-        assert len(vectors.shape) == 5, "Input vectors should be of rank 5, but is of rank {}".format(len(vectors.shape))
-
+    def _merge_by_middle_dim(self, vectors):
         batch_size = vectors.shape[0]
-        new_dim_shape = (batch_size, self.num_attention_heads, -1, vectors.shape[-1])
-        return torch.reshape(vectors, new_dim_shape).squeeze(-1)
+        new_dim_shape = (batch_size, self.num_attention_heads, -1)
+
+        if len(vectors.shape) == 5:
+            return torch.reshape(vectors, new_dim_shape + (vectors.shape[-1],))
+        elif len(vectors.shape) == 4:
+            return torch.reshape(vectors, new_dim_shape)
+        else:
+            raise ValueError("Input vector rank should be one of [4, 5], but is: {}".format(len(vectors.shape)))
 
 
 class ReformerSelfOutput(nn.Module):
