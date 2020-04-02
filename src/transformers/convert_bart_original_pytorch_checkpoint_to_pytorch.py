@@ -78,7 +78,6 @@ def load_xsum_checkpoint(checkpoint_path):
     return hub_interface
 
 
-
 def convert_checkpoint_from_disk(checkpoint_path, **config_kwargs):
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     remove_ignore_keys_(state_dict)
@@ -90,7 +89,6 @@ def convert_checkpoint_from_disk(checkpoint_path, **config_kwargs):
     if hasattr(model, "lm_head"):
         model.lm_head = _make_linear_from_emb(model.model.shared)
     return model
-
 
 
 @torch.no_grad()

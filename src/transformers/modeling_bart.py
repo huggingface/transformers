@@ -227,8 +227,6 @@ class EncoderLayer(nn.Module):
         return x, attn_weights
 
 
-
-
 class BartEncoder(nn.Module):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
@@ -363,7 +361,7 @@ class DecoderLayer(nn.Module):
         x, self_attn_weights = self.self_attn(
             query=x,
             key=x,
-            layer_state=layer_state, # adds keys to layer state
+            layer_state=layer_state,  # adds keys to layer state
             key_padding_mask=decoder_padding_mask,
             attn_mask=causal_mask,
             need_weights=self.output_attentions,
@@ -418,7 +416,7 @@ class BartDecoder(nn.Module):
 
     def __init__(self, config: BartConfig, embed_tokens: nn.Embedding):
         super().__init__()
-        #self.output_past = config.output_past
+        # self.output_past = config.output_past
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
@@ -503,7 +501,6 @@ class BartDecoder(nn.Module):
 
             layer_state = decoder_cached_states[idx] if decoder_cached_states is not None else None
 
-
             x, layer_self_attn, layer_past = decoder_layer(
                 x,
                 encoder_hidden_states,
@@ -516,7 +513,7 @@ class BartDecoder(nn.Module):
             if generation_mode:
                 next_decoder_cache.append(layer_past.copy())
 
-            if self.layer_norm and (idx == len(self.layers)-1):
+            if self.layer_norm and (idx == len(self.layers) - 1):
                 x = self.layer_norm(x)
             if self.output_hidden_states:
                 all_hidden_states += (x,)
@@ -609,7 +606,7 @@ class SelfAttention(nn.Module):
             v = self.v_proj(query)
 
         q = self._shape(q, tgt_len, bsz)
-        #print(f'hf: scaled_q {q[0][0]}')
+        # print(f'hf: scaled_q {q[0][0]}')
         if k is not None:
             k = self._shape(k, -1, bsz)
         if v is not None:
@@ -628,7 +625,7 @@ class SelfAttention(nn.Module):
         assert k is not None
         src_len = k.size(1)
         attn_weights = torch.bmm(q, k.transpose(1, 2))
-        #print(f'hf: attn_weights after bmm: {attn_weights[0][0]}')
+        # print(f'hf: attn_weights after bmm: {attn_weights[0][0]}')
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
@@ -937,9 +934,9 @@ class BartForConditionalGeneration(PretrainedBartModel):
             decoder_cached_states=decoder_cached_states,
             generation_mode=generation_mode,
         )
-        print(f'hf before lm_head: {outputs[0][0][0]}')
+        print(f"hf before lm_head: {outputs[0][0][0]}")
         lm_logits = F.linear(outputs[0], self.model.shared.weight)
-        print(f'hf after lm_head: {lm_logits[0][0][0]}')
+        print(f"hf after lm_head: {lm_logits[0][0][0]}")
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
         if lm_labels is not None:
             loss_fct = nn.CrossEntropyLoss()

@@ -96,14 +96,14 @@ class T5Tokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
-            self,
-            vocab_file,
-            eos_token="</s>",
-            unk_token="<unk>",
-            pad_token="<pad>",
-            extra_ids=100,
-            additional_special_tokens=None,
-            **kwargs
+        self,
+        vocab_file,
+        eos_token="</s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        extra_ids=100,
+        additional_special_tokens=None,
+        **kwargs
     ):
         # Add extra_ids to the special token list
         if extra_ids > 0:
