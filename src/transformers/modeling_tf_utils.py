@@ -218,7 +218,22 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         Return: ``tf.Variable``
             Pointer to the input tokens Embeddings Module of the model
         """
-        raise NotImplementedError
+        base_model = getattr(self, self.base_model_prefix, self)  # get the base model if needed
+        weights = base_model.embeddings.word_embeddings.numpy()
+        nb_tokens, h_dim = weights.shape
+        base_model.embeddings.word_embeddings = base_model.embeddings.add_weight("weight",
+            shape=[new_num_tokens, h_dim],
+            initializer=get_initializer(self.config.initializer_range),
+            dtype=tf.float32)
+        new_init_weights = base_model.embeddings.word_embeddings.numpy()
+        new_init_weights[:nb_tokens, :] = weights
+        base_model.embeddings.word_embeddings.assign(new_init_weights)
+
+        # Update base model and current model config
+        self.config.vocab_size = new_num_tokens
+        base_model.vocab_size = new_num_tokens
+        # set the embedding
+        return base_model.embeddings.word_embeddings
 
     def prune_heads(self, heads_to_prune):
         """ Prunes heads of the base model.
