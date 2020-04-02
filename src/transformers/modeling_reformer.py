@@ -320,7 +320,7 @@ class LSHSelfAttention(nn.Module):
 
         return buckets
 
-    def _get_sorted_and_undo_sorted_ticker(self, sequence_length, buckets):
+    def _get_ticker_and_undo_ticker(self, sequence_length, buckets):
         batch_size = buckets.shape[0]
 
         # TODO: what is ticker? Is ticker something like indices?? Ask authors
