@@ -48,6 +48,7 @@ class BartConfig(PretrainedConfig):
         encoder_ffn_dim=4096,
         encoder_layers=12,
         encoder_attention_heads=16,
+        normalize_before=False,
         decoder_ffn_dim=4096,
         decoder_layers=12,
         decoder_attention_heads=16,
@@ -87,6 +88,8 @@ class BartConfig(PretrainedConfig):
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = self.num_hidden_layers = encoder_layers
+
+        self.normalize_before = normalize_before
         self.encoder_attention_heads = encoder_attention_heads
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop

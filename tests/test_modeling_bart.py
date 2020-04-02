@@ -272,6 +272,12 @@ class BartHeadTests(unittest.TestCase):
         187895,     23,  51712,      2, 250004]
         self.assertListEqual(expected_result, ids)
 
+    def test_mbart_enro_config(self):
+        config = BartConfig.from_pretrained("mbart-large-en-ro")
+        expected = {'scale_embedding': True}
+        for k,v in expected.items():
+            self.assertEqual( v, getattr(config, k),)
+
 
     def test_disk_mbart_enro_tokenizer(self):
         vocab_file = '/Users/shleifer/sentencepiece/src/m2.model'

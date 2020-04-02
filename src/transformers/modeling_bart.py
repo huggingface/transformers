@@ -183,6 +183,7 @@ class EncoderLayer(nn.Module):
         self.self_attn = SelfAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout,
         )
+        self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -204,20 +205,26 @@ class EncoderLayer(nn.Module):
             encoded output of shape `(seq_len, batch, embed_dim)`
         """
         residual = x
+        if self.normalize_before:
+            x = self.self_attn_layer_norm(x)
         x, attn_weights = self.self_attn(
             query=x, key=x, key_padding_mask=encoder_padding_mask, need_weights=self.output_attentions
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        x = self.self_attn_layer_norm(x)
+        if not self.normalize_before:
+            x = self.self_attn_layer_norm(x)
 
         residual = x
+        if self.normalize_before:
+            x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
         x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        x = self.final_layer_norm(x)
+        if not self.normalize_before:
+            x = self.final_layer_norm(x)
         return x, attn_weights
 
 
@@ -225,7 +232,7 @@ class EncoderLayer(nn.Module):
 
 class BartEncoder(nn.Module):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
+    Transformer encoder consisting of *config.encoder_layers* hf_enc attention layers. Each layer
     is a :class:`EncoderLayer`.
 
     Args:
@@ -256,7 +263,7 @@ class BartEncoder(nn.Module):
             self.layer_norm = None
 
     def forward(
-        self, input_ids, attention_mask=None,
+        hf_enc, input_ids, attention_mask=None,
     ):
         """
         Args:
@@ -269,7 +276,7 @@ class BartEncoder(nn.Module):
                   shape `(src_len, batch, embed_dim)`
                 - **encoder_states** (List[Tensor]): all intermediate
                   hidden states of shape `(src_len, batch, embed_dim)`.
-                  Only populated if *self.output_hidden_states:* is True.
+                  Only populated if *hf_enc.output_hidden_states:* is True.
                 - **all_attentions** (List[Tensor]): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
@@ -277,32 +284,32 @@ class BartEncoder(nn.Module):
         if attention_mask is not None:
             attention_mask = invert_mask(attention_mask)
 
-        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-        embed_pos = self.embed_positions(input_ids)
+        inputs_embeds = hf_enc.embed_tokens(input_ids) * hf_enc.embed_scale
+        embed_pos = hf_enc.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
-        x = self.layernorm_embedding(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = hf_enc.layernorm_embedding(x)
+        x = F.dropout(x, p=hf_enc.dropout, training=hf_enc.training)
 
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
 
         encoder_states, all_attentions = [], []
-        for encoder_layer in self.layers:
-            if self.output_hidden_states:
+        for encoder_layer in hf_enc.layers:
+            if hf_enc.output_hidden_states:
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            if hf_enc.training and (dropout_probability < hf_enc.layerdrop):  # skip the layer
                 attn = None
             else:
                 x, attn = encoder_layer(x, attention_mask)
 
-            if self.output_attentions:
+            if hf_enc.output_attentions:
                 all_attentions.append(attn)
 
-        if self.layer_norm:
-            x = self.layer_norm(x)
-        if self.output_hidden_states:
+        if hf_enc.layer_norm:
+            x = hf_enc.layer_norm(x)
+        if hf_enc.output_hidden_states:
             encoder_states.append(x)
 
         encoder_states = [hidden_state.transpose(0, 1) for hidden_state in encoder_states]
@@ -320,6 +327,7 @@ class DecoderLayer(nn.Module):
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
+        self.normalize_before = config.normalize_before
 
         self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.encoder_attn = SelfAttention(
@@ -346,21 +354,28 @@ class DecoderLayer(nn.Module):
 
         if layer_state is None:
             layer_state = {}
-        # next line mutates layer state
+        if self.normalize_before:
+            x = self.self_attn_layer_norm(x)
+        # Self Attention
+
         x, self_attn_weights = self.self_attn(
             query=x,
             key=x,
-            layer_state=layer_state,
+            layer_state=layer_state, # adds keys to layer state
             key_padding_mask=decoder_padding_mask,
             attn_mask=causal_mask,
             need_weights=self.output_attentions,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        x = self.self_attn_layer_norm(x)
+        if not self.normalize_before:
+            x = self.self_attn_layer_norm(x)
+
+        # Cross attention
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
-
+        if self.normalize_before:
+            x = self.encoder_attn_layer_norm(x)
         x, _ = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
@@ -369,16 +384,20 @@ class DecoderLayer(nn.Module):
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
+        if not self.normalize_before:
+            x = self.encoder_attn_layer_norm(x)
 
-        x = self.encoder_attn_layer_norm(x)
-
+        # Fully Connected
         residual = x
+        if self.normalize_before:
+            x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
         x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
-        x = self.final_layer_norm(x)
+        if not self.normalize_before:
+            x = self.final_layer_norm(x)
         return (
             x,
             self_attn_weights,
@@ -404,6 +423,7 @@ class BartDecoder(nn.Module):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = embed_tokens.padding_idx
         self.max_target_positions = config.max_position_embeddings
+        embed_dim = config.d_model
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
         self.embed_tokens = embed_tokens
         self.embed_positions = LearnedPositionalEmbedding(
@@ -538,7 +558,7 @@ class SelfAttention(nn.Module):
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
+        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "hf_enc"
 
     def _shape(self, tensor, dim_0, bsz):
         return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
@@ -580,6 +600,7 @@ class SelfAttention(nn.Module):
             v = self.v_proj(query)
 
         q = self._shape(q, tgt_len, bsz)
+        #print(f'hf: scaled_q {q[0][0]}')
         if k is not None:
             k = self._shape(k, -1, bsz)
         if v is not None:
@@ -598,6 +619,7 @@ class SelfAttention(nn.Module):
         assert k is not None
         src_len = k.size(1)
         attn_weights = torch.bmm(q, k.transpose(1, 2))
+        #print(f'hf: attn_weights after bmm: {attn_weights[0][0]}')
         assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
 
         if attn_mask is not None:
@@ -879,7 +901,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            Attentions weights after the attention softmax, used to compute the weighted average in the hf_enc-attention
             heads.
 
     Examples::
@@ -945,7 +967,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         ((enc_out, enc_mask), decoder_cached_states) = past
         reordered_past = []
         for layer_past in decoder_cached_states:
-            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
+            # get the correct batch idx from decoder layer's batch dim for cross and hf_enc-attn
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
             }
@@ -1008,7 +1030,7 @@ class BartForSequenceClassification(PretrainedBartModel):
             attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
                 Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
                 Attentions weights after the attention softmax, used to compute the weighted average in the
-                self-attention
+                hf_enc-attention
                 heads.
 
     Examples::
