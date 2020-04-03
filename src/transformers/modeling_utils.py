@@ -948,18 +948,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 device=next(self.parameters()).device,
             )
             cur_len = 1
-            batch_idx = self.encoder_outputs_batch_dim_idx
+
             assert (
-                batch_size == encoder_outputs[0].shape[batch_idx]
-            ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[1]} "
-            expanded_idx = (
+                batch_size == encoder_outputs[0].shape[0]
+            ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[0]} "
+
+            # expand batch_idx to assign correct encoder output for expanded input_ids (due to num_beams > 1 and num_return_sequences > 1)
+            expanded_batch_idxs = (
                 torch.arange(batch_size)
                 .view(-1, 1)
                 .repeat(1, num_beams * effective_batch_mult)
                 .view(-1)
                 .to(input_ids.device)
             )
-            encoder_outputs = (encoder_outputs[0].index_select(batch_idx, expanded_idx), *encoder_outputs[1:])
+            # expand encoder_outputs
+            encoder_outputs = (encoder_outputs[0].index_select(0, expanded_batch_idxs), *encoder_outputs[1:])
+
         else:
             encoder_outputs = None
             cur_len = input_ids.shape[-1]
@@ -1284,14 +1288,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 for beam_token_rank, (beam_token_id, beam_token_score) in enumerate(
                     zip(next_tokens[batch_idx], next_scores[batch_idx])
                 ):
-                    # get beam and word IDs
+                    # get beam and token IDs
                     beam_id = beam_token_id // vocab_size
                     token_id = beam_token_id % vocab_size
 
                     effective_beam_id = batch_idx * num_beams + beam_id
-
-                    # add to generated hypotheses if end of sentence
-                    if (eos_token_id is not None) and (token_id.item() is eos_token_id):
+                    # add to generated hypotheses if end of sentence or last iteration
+                    if (eos_token_id is not None) and (token_id.item() == eos_token_id):
                         # if beam_token does not belong to top num_beams tokens, it should not be added
                         is_beam_token_worse_than_top_num_beams = beam_token_rank >= num_beams
                         if is_beam_token_worse_than_top_num_beams:
@@ -1300,7 +1303,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                             input_ids[effective_beam_id].clone(), beam_token_score.item(),
                         )
                     else:
-                        # add next predicted word if it is not eos_token
+                        # add next predicted token if it is not eos_token
                         next_sent_beam.append((beam_token_score, token_id, effective_beam_id))
 
                     # the beam for next step is full
@@ -1330,7 +1333,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             # re-order batch
             input_ids = input_ids[beam_idx, :]
             input_ids = torch.cat([input_ids, beam_tokens.unsqueeze(1)], dim=-1)
-
             # re-order internal states
             if past is not None:
                 past = self._reorder_cache(past, beam_idx)

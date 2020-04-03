@@ -29,7 +29,14 @@ class TestT5Examples(unittest.TestCase):
         output_file_name = Path(tempfile.gettempdir()) / "utest_output_t5_sum.hypo"
         score_file_name = Path(tempfile.gettempdir()) / "utest_score_t5_sum.hypo"
 
-        testargs = ["evaluate_cnn.py", "t5-small", str(tmp), str(output_file_name), str(tmp), str(score_file_name)]
+        testargs = [
+            "evaluate_cnn.py",
+            "patrickvonplaten/t5-tiny-random",
+            str(tmp),
+            str(output_file_name),
+            str(tmp),
+            str(score_file_name),
+        ]
 
         with patch.object(sys, "argv", testargs):
             run_generate()
