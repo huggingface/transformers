@@ -99,7 +99,6 @@ class BartConfig(PretrainedConfig):
         self.activation_function = activation_function
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
-
         # True for mbart, False otherwise
         self.normalize_before = normalize_before  # combo of fairseq's encoder_ and decoder_normalize_before
         self.add_final_layer_norm = add_final_layer_norm
@@ -126,5 +125,5 @@ class BartConfig(PretrainedConfig):
         if self.normalize_before and self.add_final_layer_norm and self.scale_embedding:
             return True
         if self.normalize_before or self.add_final_layer_norm or self.scale_embedding:
-            logger.info('This configuration is a mixture of MBART and BART settings')
+            logger.info("This configuration is a mixture of MBART and BART settings")
         return False
