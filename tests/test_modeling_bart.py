@@ -228,9 +228,7 @@ class BartTranslationTests(unittest.TestCase):
     def model(self):
         """Only load the model if needed."""
         if self._model is None:
-            model = BartForConditionalGeneration.from_pretrained(
-                "mbart-large-en-ro", scale_embedding=True, normalize_before=True,
-            )
+            model = BartForConditionalGeneration.from_pretrained("mbart-large-en-ro",)
             self._model = model
         return self._model
 
