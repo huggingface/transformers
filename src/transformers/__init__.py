@@ -321,7 +321,7 @@ if is_torch_available():
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
 
     from .modeling_reformer import (
-        LSHSelfAttention
+        ReformerAttention
     )
 
     # Optimization

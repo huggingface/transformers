@@ -25,7 +25,7 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import gelu, gelu_new, swish
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, prune_linear_layer
+from .modeling_utils import PreTrainedModel
 
 # DELETE later
 import numpy
@@ -178,6 +178,7 @@ class LSHSelfAttention(nn.Module):
         self.chunk_length = config.chunk_length
         self.num_chunks_before = config.num_chunks_before
         self.num_chunks_after = config.num_chunks_after
+        self.output_attentions = config.output_attentions
 
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -190,9 +191,8 @@ class LSHSelfAttention(nn.Module):
 
         self.query_key = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
-        self.dense = nn.Linear(self.all_head_size, self.hidden_size, bias=False)
 
-        # add Dropout
+        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def forward(
         self,
@@ -232,7 +232,7 @@ class LSHSelfAttention(nn.Module):
 
         key_vectors = self._len_and_dim_norm(query_key_vectors)
 
-        out_vectors, logits = self._attend(query_key_vectors, key_vectors, value_vectors, undo_ticker)
+        out_vectors, logits, attention_probs = self._attend(query_key_vectors, key_vectors, value_vectors, undo_ticker, attention_mask, head_mask)
 
         if self.num_hashes > 1:
             out_vectors = self._split_dim_by(out_vectors, self.num_hashes, sequence_length)
@@ -244,10 +244,8 @@ class LSHSelfAttention(nn.Module):
         assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size)
 
         out_vectors = self._transpose_for_output(out_vectors)
-        out = self.dense(out_vectors)
-        # TODO: apply broadcasted dropout
-
-        return out
+        outputs = (out_vectors, attention_probs) if self.output_attentions else (out_vectors,)
+        return outputs
 
     def _hash_vectors(self, vectors):
         batch_size = vectors.shape[0]
@@ -326,18 +324,27 @@ class LSHSelfAttention(nn.Module):
         sorted_ticker = (sorted_ticker % sequence_length)
         return sorted_ticker, undo_sorted_ticker
 
-    def _attend(self, query_vectors, key_vectors, value_vectors, undo_ticker):
+    def _attend(self, query_vectors, key_vectors, value_vectors, undo_ticker, attention_mask, head_mask):
         key_vectors = self._look_adjacent(key_vectors)
         value_vectors = self._look_adjacent(value_vectors)
 
-        # TODO: add masking here
-
         # get logits and dots
         query_key_dots = torch.matmul(query_vectors, key_vectors.transpose(-1, -2))
+
+        if attention_mask is not None:
+            # Apply the attention mask.
+            # Attention mask is precomputed for all layers in forward() function
+            query_key_dots = query_key_dots + attention_mask
+
         logits = torch.logsumexp(query_key_dots, dim=-1, keepdim=True)
         dots = torch.exp(query_key_dots - logits)
 
-        # TODO: add dropout here
+        # dropout
+        dots = self.dropout(dots)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            dots = dots * head_mask
 
         # attend values
         out_vectors = torch.matmul(dots, value_vectors)
@@ -350,7 +357,7 @@ class LSHSelfAttention(nn.Module):
         out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
         logits = torch.gather(logits, 2, undo_ticker)
 
-        return out_vectors, logits
+        return out_vectors, logits, dots
 
     def _look_adjacent(self, vectors):
         """ Used to implement attention between consecutive chunks.
@@ -422,57 +429,31 @@ class LSHSelfAttention(nn.Module):
 class ReformerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = ReformerLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
+
+        # TODO (PVP): Add residual here
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
 class ReformerAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = LSHSelfAttention(config)
+        self.self_attention = LSHSelfAttention(config)
         self.output = ReformerSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        mask = torch.ones(self.self.num_attention_heads, self.self.attention_head_size)
-        heads = set(heads) - self.pruned_heads  # Convert to set and remove already pruned heads
-        for head in heads:
-            # Compute how many pruned heads are before the head and move the index accordingly
-            head = head - sum(1 if h < head else 0 for h in self.pruned_heads)
-            mask[head] = 0
-        mask = mask.view(-1).contiguous().eq(1)
-        index = torch.arange(len(mask))[mask].long()
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
     ):
-        self_outputs = self.self(
-            hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask
+        self_outputs = self.self_attention(
+            hidden_states, attention_mask, head_mask
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
