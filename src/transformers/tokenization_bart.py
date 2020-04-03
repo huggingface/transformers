@@ -14,10 +14,8 @@
 # limitations under the License.
 
 import logging
-from typing import List
 
 from .tokenization_roberta import RobertaTokenizer
-from .tokenization_t5 import T5Tokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 
 

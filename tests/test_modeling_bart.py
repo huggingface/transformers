@@ -17,7 +17,6 @@
 import tempfile
 import unittest
 
-from durbango import *
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
@@ -44,7 +43,6 @@ if is_torch_available():
         invert_mask,
         _prepare_bart_decoder_inputs,
     )
-    from transformers.tokenization_bart import MBartTokenizer
 
 
 @require_torch
@@ -214,7 +212,6 @@ class BartTranslationTests(unittest.TestCase):
                     [64511, 7, 765, 2837, 45188, 297, 4049, 237, 10, 122122, 5, 2, 250004],
                 ]
             ),
-            #'src_lengths': _T([13, 13]),
             "decoder_input_ids": _long_tensor(
                 [
                     [250020, 31952, 144, 9019, 242307, 21980, 55749, 11, 5, 2, 1, 1],
@@ -242,12 +239,12 @@ class BartTranslationTests(unittest.TestCase):
     def test_enro_generate(self):
         model = self.model
 
-        example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
+        # example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
         # inputs: dict = tokenizer.batch_encode_plus([example_english_phrase], return_tensors="pt",)
         inputs = {
             "input_ids": torch.LongTensor(
-                [[8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]]
+                [[8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2]]  # 250004
             )
         }
         translated_tokens = model.generate(input_ids=inputs["input_ids"].to(torch_device), num_beams=5,)
@@ -265,16 +262,7 @@ class BartTranslationTests(unittest.TestCase):
                 v, getattr(config, k),
             )
 
-    def test_disk_mbart_enro_tokenizer(self):
-        vocab_file = "/Users/shleifer/sentencepiece/src/m2.model"
-        tok = MBartTokenizer(vocab_file)
-        raw = "UN Chief Says There Is No Military Solution in Syria"
-        ids = tok.batch_encode_plus([raw])["input_ids"][0]
-        expected_result = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]
-        self.assertListEqual(expected_result, ids)
-
-    def test_xlm_enro_tokenizer(self):
-        # vocab_file = '/Users/shleifer/sentencepiece/src/m2.model'
+    def test_enro_tokenizer(self):
         tok = MBartTokenizer.from_pretrained("mbart-large-en-ro")
         raw = "UN Chief Says There Is No Military Solution in Syria"
         ids = tok.batch_encode_plus([raw])["input_ids"][0]
