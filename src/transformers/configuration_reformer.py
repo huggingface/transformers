@@ -100,7 +100,7 @@ class ReformerConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=30522,
-        hidden_size=64,
+        hidden_size=32,
         num_hidden_layers=12,
         num_attention_heads=2,
         num_buckets=4,
@@ -108,7 +108,7 @@ class ReformerConfig(PretrainedConfig):
         chunk_length=7,
         num_chunks_before=1,
         num_chunks_after=0,
-        intermediate_size=3072,
+        intermediate_size=64,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
@@ -130,8 +130,8 @@ class ReformerConfig(PretrainedConfig):
         self.seed = 0
         self.num_attention_chunks = 1
         self.ff_chunk_size = 0
-        self.d_model = 32
-        self.d_ff = 64
+        self.d_model = hidden_size
+        self.d_ff = intermediate_size
 #        self.ff_activation =  # GELU
 
         self.vocab_size = vocab_size
