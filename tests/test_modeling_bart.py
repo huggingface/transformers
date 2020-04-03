@@ -516,6 +516,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_mnli_inference(self):
+
         example_b = [0, 31414, 232, 328, 740, 1140, 69, 46078, 1588, 2, 1]
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2], example_b])
 
