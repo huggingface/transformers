@@ -23,7 +23,7 @@ import jax
 from trax.layers.research.efficient_attention_v2 import (
     LSHSelfAttention as TraxLSHSelfAttention,
 )
-from transformers import LSHSelfAttention, ReformerConfig
+from transformers import ReformerAttention, ReformerConfig
 
 
 from transformers import is_torch_available  # noqa: F401
@@ -87,6 +87,7 @@ class TraxUtils(object):
                 n_hashes=config.num_hashes,
                 n_buckets=config.num_buckets,
                 attention_dropout=config.attention_probs_dropout_prob,
+                output_dropout=config.hidden_dropout_prob,
                 hash_seed=config.seed,
                 causal=False,
                 use_reference_code=use_reference_code,
@@ -131,9 +132,11 @@ class ReformerIntegrationTests(unittest.TestCase):
             np_value = np.asarray(weights[1])
             np_dense = np.asarray(weights[2])
 
-            torch_layer.query_key.weight = torch.nn.Parameter(torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, hidden_size_per_head))
-            torch_layer.value.weight = torch.nn.Parameter(torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size_per_head))
-            torch_layer.dense.weight = torch.nn.Parameter(torch.tensor(np_dense).view(-1, hidden_size_per_head).contiguous().transpose(0, 1))
+            torch_layer.self_attention.query_key.weight = torch.nn.Parameter(torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, hidden_size_per_head))
+
+            torch_layer.self_attention.value.weight = torch.nn.Parameter(torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size_per_head))
+
+            torch_layer.output.dense.weight = torch.nn.Parameter(torch.tensor(np_dense).view(-1, hidden_size_per_head).contiguous().transpose(0, 1))
 
     def test_lsh_hashing(self):
         config = ReformerConfig()
@@ -149,8 +152,8 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_torch_output = torch.tensor(np.asarray(trax_output))
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
-        hf_layer = LSHSelfAttention(config)
+        hf_layer = ReformerAttention(config)
         self._set_weights_in_torch(trax_weights, hf_layer, hidden_size_per_head)
-        hf_output = hf_layer(hf_input)
+        hf_output = hf_layer(hf_input)[0]
 
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-6))
