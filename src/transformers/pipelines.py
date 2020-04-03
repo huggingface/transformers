@@ -797,6 +797,7 @@ class NerPipeline(Pipeline):
                             "word": self.tokenizer.convert_ids_to_tokens(int(input_ids[idx])),
                             "score": score[idx][label_idx].item(),
                             "entity": self.model.config.id2label[label_idx],
+                            "index": idx,
                         }
                     ]
 
