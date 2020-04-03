@@ -196,8 +196,6 @@ class TraxUtils(object):
 class ReformerIntegrationTests(unittest.TestCase):
 
     def _set_param(self, torch_layer, weight, bias=None):
-        import ipdb
-        ipdb.set_trace()
         with torch.no_grad():
             assert torch_layer.weight.shape == weight.shape, "{} layer.weight does not match".format(torch.layer)
             torch_layer.weight = torch.nn.Parameter(weight)
@@ -207,13 +205,13 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def _set_layer_weights_in_torch(self, weights, torch_layer, hidden_size):
         # set torch weights for 1-to-1 comparison
-            np_query_key = np.asarray(weights[0])
-            np_value = np.asarray(weights[1])
-            np_dense = np.asarray(weights[2])
+        np_query_key = np.asarray(weights[0])
+        np_value = np.asarray(weights[1])
+        np_dense = np.asarray(weights[2])
 
-            self._set_param(torch_layer.self_attention.query_key, torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, hidden_size))
-            self._set_param(torch_layer.self_attention.value.weight, torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size))
-            self._set_param(torch_layer.output.dense.weight, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1))
+        self._set_param(torch_layer.self_attention.query_key, torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, hidden_size))
+        self._set_param(torch_layer.self_attention.value, torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size))
+        self._set_param(torch_layer.output.dense, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1))
 
     def _set_block_weights_in_torch(self, weights, torch_layer, hidden_size):
         weights = weights[0]
@@ -222,9 +220,8 @@ class ReformerIntegrationTests(unittest.TestCase):
         layer_norm_1 = weights[0][0][0]
         layer_norm_1_weight = np.asarray(layer_norm_1[0])
         layer_norm_1_bias = np.asarray(layer_norm_1[1])
-        with torch.no_grad():
-            torch_layer.attention.layer_norm.weight = torch.nn.Parameter(torch.tensor(layer_norm_1_weight))
-            torch_layer.attention.layer_norm.bias = torch.nn.Parameter(torch.tensor(layer_norm_1_bias))
+        self._set_param(torch_layer.attention.layer_norm, torch.tensor(layer_norm_1_weight), torch.tensor(layer_norm_1_bias))
+
         # lsh weights + output
         lsh_weights = weights[0][1]
         self._set_layer_weights_in_torch(lsh_weights, torch_layer.attention, hidden_size)
@@ -235,22 +232,17 @@ class ReformerIntegrationTests(unittest.TestCase):
         # layernorm 2
         layer_norm_2_weight = np.asarray(intermediate_weights[0][0])
         layer_norm_2_bias = np.asarray(intermediate_weights[0][1])
-        with torch.no_grad():
-            torch_layer.layer_norm.weight = torch.nn.Parameter(torch.tensor(layer_norm_2_weight))
-            torch_layer.layer_norm.bias = torch.nn.Parameter(torch.tensor(layer_norm_2_bias))
+        self._set_param(torch_layer.layer_norm, torch.tensor(layer_norm_2_weight), torch.tensor(layer_norm_2_bias))
 
         # intermediate dense
         inter_dense_weight = np.asarray(intermediate_weights[1][0])
         inter_dense_bias = np.asarray(intermediate_weights[1][1])
-        with torch.no_grad():
-            torch_layer.intermediate.dense.weight = torch.nn.Parameter(torch.tensor(inter_dense_weight).transpose(0, 1).contiguous())
-            torch_layer.intermediate.dense.bias = torch.nn.Parameter(torch.tensor(inter_dense_bias))
+        self._set_param(torch_layer.intermediate.dense, torch.tensor(inter_dense_weight).transpose(0, 1).contiguous(), torch.tensor(inter_dense_bias))
+
         # intermediate out
         out_dense_weight = np.asarray(intermediate_weights[4][0])
         out_dense_bias = np.asarray(intermediate_weights[4][1])
-        with torch.no_grad():
-            torch_layer.output.dense.weight = torch.nn.Parameter(torch.tensor(out_dense_weight).transpose(0, 1).contiguous())
-            torch_layer.output.dense.bias = torch.nn.Parameter(torch.tensor(out_dense_bias))
+        self._set_param(torch_layer.output.dense, torch.tensor(out_dense_weight).transpose(0, 1).contiguous(), torch.tensor(out_dense_bias))
 
     def test_lsh_layer(self):
         # Remove residual connection in ReformerSelfOutput to test this layer only
@@ -262,13 +254,13 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_utils = TraxUtils(shape)
         trax_layer = trax_utils.get_layer(config)
         trax_output, trax_weights, trax_state = trax_utils.forward_layer(np_input, layer=trax_layer)
-        trax_torch_output = torch.tensor(np.asarray(trax_output))
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
         hf_layer = ReformerAttention(config)
         self._set_layer_weights_in_torch(trax_weights, hf_layer, config.hidden_size)
         hf_output = hf_layer(hf_input)[0]
 
+        trax_torch_output = torch.tensor(np.asarray(trax_output))
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-6))
 
     def test_lsh_block(self):
@@ -280,12 +272,14 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_utils = TraxUtils(shape)
         trax_block = trax_utils.get_block(config)
         trax_output, trax_weights, trax_state = trax_utils.forward_block(np_input, block=trax_block)
-        trax_torch_output = torch.tensor(np.asarray(trax_output))
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
         hf_block = ReformerLayer(config)
         self._set_block_weights_in_torch(trax_weights, hf_block, config.hidden_size)
+        hf_output = hf_block(hf_input)[0]
 
+        # check which trax output is correct
+        trax_torch_output = torch.tensor(np.asarray(trax_output))
         import ipdb
         ipdb.set_trace()
 
