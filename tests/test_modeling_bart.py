@@ -195,6 +195,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             tiny(**inputs_dict)
 
 
+@require_torch
 class BartTranslationTests(unittest.TestCase):
     _model = None
 
@@ -228,10 +229,7 @@ class BartTranslationTests(unittest.TestCase):
         """Only load the model if needed."""
         if self._model is None:
             model = BartForConditionalGeneration.from_pretrained(
-                "mbart-large-en-ro",
-                scale_embedding=True,
-                normalize_before=True,
-                # output_past=True,
+                "mbart-large-en-ro", scale_embedding=True, normalize_before=True,
             )
             self._model = model
         return self._model
@@ -267,14 +265,13 @@ class BartTranslationTests(unittest.TestCase):
 
     def test_mbart_enro_config(self):
         mbart_models = ["mbart-large-en-ro", "mbart-large-cc25"]
-        expected = {"scale_embedding": True}
+        expected = {"scale_embedding": True, "output_past": True}
         for name in mbart_models:
             config = BartConfig.from_pretrained(name)
+            self.assertTrue(config.is_valid_mbart())
             for k, v in expected.items():
                 try:
-                    self.assertEqual(
-                        v, getattr(config, k),
-                    )
+                    self.assertEqual(v, getattr(config, k))
                 except AssertionError as e:
                     e.args += (name, k)
                     raise
@@ -555,7 +552,7 @@ class BartModelIntegrationTests(unittest.TestCase):
     @slow
     def test_xsum_summarization_same_as_fairseq(self):
         model = BartForConditionalGeneration.from_pretrained("bart-large-xsum").to(torch_device)
-        self.assertFalse(model.config.is_mbart)
+        self.assertFalse(model.config.is_valid_mbart())
         tok = BartTokenizer.from_pretrained("bart-large")
 
         PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""

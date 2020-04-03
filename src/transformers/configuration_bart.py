@@ -119,8 +119,7 @@ class BartConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
-    @property
-    def is_mbart(self) -> bool:
+    def is_valid_mbart(self) -> bool:
         """Is the configuration aligned with the MBART paper."""
         if self.normalize_before and self.add_final_layer_norm and self.scale_embedding:
             return True
