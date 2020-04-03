@@ -350,8 +350,8 @@ class ElectraModel(ElectraPreTrainedModel):
         from transformers import ElectraModel, ElectraTokenizer
         import torch
 
-        tokenizer = ElectraTokenizer.from_pretrained('electra-small-discriminator')
-        model = ElectraModel.from_pretrained('electra-small-discriminator')
+        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+        model = ElectraModel.from_pretrained('google/electra-small-discriminator')
 
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
@@ -448,8 +448,8 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         from transformers import ElectraTokenizer, ElectraForPreTraining
         import torch
 
-        tokenizer = ElectraTokenizer.from_pretrained('electra-small-discriminator')
-        model = ElectraForPreTraining.from_pretrained('electra-small-discriminator')
+        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+        model = ElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
 
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
@@ -546,8 +546,8 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
             from transformers import ElectraTokenizer, ElectraForMaskedLM
             import torch
 
-            tokenizer = ElectraTokenizer.from_pretrained('electra-small-generator')
-            model = ElectraForMaskedLM.from_pretrained('electra-small-generator')
+            tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-generator')
+            model = ElectraForMaskedLM.from_pretrained('google/electra-small-generator')
 
             input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             outputs = model(input_ids, masked_lm_labels=input_ids)
@@ -632,8 +632,8 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         from transformers import ElectraTokenizer, ElectraForTokenClassification
         import torch
 
-        tokenizer = ElectraTokenizer.from_pretrained('electra-small-discriminator')
-        model = ElectraForTokenClassification.from_pretrained('electra-small-discriminator')
+        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+        model = ElectraForTokenClassification.from_pretrained('google/electra-small-discriminator')
 
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1

@@ -375,8 +375,8 @@ class TFElectraModel(TFElectraPreTrainedModel):
         import tensorflow as tf
         from transformers import ElectraTokenizer, TFElectraModel
 
-        tokenizer = ElectraTokenizer.from_pretrained('electra-small-discriminator')
-        model = TFElectraModel.from_pretrained('electra-small-discriminator')
+        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+        model = TFElectraModel.from_pretrained('google/electra-small-discriminator')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
@@ -436,8 +436,8 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         import tensorflow as tf
         from transformers import ElectraTokenizer, TFElectraForPreTraining
 
-        tokenizer = ElectraTokenizer.from_pretrained('electra-small-discriminator')
-        model = TFElectraForPreTraining.from_pretrained('electra-small-discriminator')
+        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+        model = TFElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         scores = outputs[0]
@@ -529,8 +529,8 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         import tensorflow as tf
         from transformers import ElectraTokenizer, TFElectraForMaskedLM
 
-        tokenizer = ElectraTokenizer.from_pretrained('electra-small-generator')
-        model = TFElectraForMaskedLM.from_pretrained('electra-small-generator')
+        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-generator')
+        model = TFElectraForMaskedLM.from_pretrained('google/electra-small-generator')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         prediction_scores = outputs[0]
@@ -596,8 +596,8 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel):
         import tensorflow as tf
         from transformers import ElectraTokenizer, TFElectraForTokenClassification
 
-        tokenizer = ElectraTokenizer.from_pretrained('electra-small-discriminator')
-        model = TFElectraForTokenClassification.from_pretrained('electra-small-discriminator')
+        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
+        model = TFElectraForTokenClassification.from_pretrained('google/electra-small-discriminator')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
         outputs = model(input_ids)
         scores = outputs[0]
