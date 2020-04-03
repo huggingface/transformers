@@ -46,33 +46,6 @@ class BartTokenizer(RobertaTokenizer):
 
 
 _all_mbart_models = ["mbart-large-en-ro", "mbart-large-cc25"]
-lang_codes = {
-    "ar_AR": 0,
-    "cs_CZ": 1,
-    "de_DE": 2,
-    "en_XX": 3,
-    "es_XX": 4,
-    "et_EE": 5,
-    "fi_FI": 6,
-    "fr_XX": 7,
-    "gu_IN": 8,
-    "hi_IN": 9,
-    "it_IT": 10,
-    "ja_XX": 11,
-    "kk_KZ": 12,
-    "ko_KR": 13,
-    "lt_LT": 14,
-    "lv_LV": 15,
-    "my_MM": 16,
-    "ne_NP": 17,
-    "nl_XX": 18,
-    "ro_RO": 19,
-    "ru_RU": 20,
-    "si_LK": 21,
-    "tr_TR": 22,
-    "vi_VN": 23,
-    "zh_CN": 24,
-}
 
 
 class MBartTokenizer(XLMRobertaTokenizer):
@@ -84,28 +57,3 @@ class MBartTokenizer(XLMRobertaTokenizer):
             "mbart-large-cc25": _s3_url("facebook/mbart-large-cc25/sentence.bpe.model"),
         }
     }
-
-    # def build_inputs_with_special_tokens(
-    #     self, token_ids_0: List[int], token_ids_1= None
-    # ) -> List[int]:
-    #     """
-    #     Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-    #     by concatenating and adding special tokens.
-    #     A XLM-R sequence has the following format:
-    #
-    #     - single sequence: ``<s> X </s>``
-    #     - pair of sequences: ``<s> A </s></s> B </s>``
-    #
-    #     Args:
-    #         token_ids_0 (:obj:`List[int]`):
-    #             List of IDs to which the special tokens will be added
-    #         token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
-    #             Optional second list of IDs for sequence pairs.
-    #
-    #     Returns:
-    #         :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
-    #     """
-    #
-    #     if token_ids_1 is None:
-    #         return token_ids_0 + [self.sep_token_id, self.lang_id]
-    #     raise NotImplementedError("MBart does not support text pairs")
