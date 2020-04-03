@@ -49,7 +49,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
-    lang_code_to_id = {
+    lang_code_to_id = {  # TODO(SS): resize embeddings will break this
         "ar_AR": 250001,
         "cs_CZ": 250002,
         "de_DE": 250003,

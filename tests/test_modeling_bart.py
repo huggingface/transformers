@@ -232,6 +232,17 @@ class BartTranslationTests(unittest.TestCase):
             self._model = model
         return self._model
 
+    def test_tokenizer(self):
+        example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
+        expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
+        example: dict = self.tokenizer.prepare_translation_example(
+            example_english_phrase,
+        src_lang='en_XX', tgt_lang='ro_RO', tgt_text=expected_translation_romanian
+        )
+        expected_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]
+        self.assertListEqual(expected_tokens, example['input_ids'].tolist())
+        self.assertEqual(2, example['decoder_input_ids'][-2])  # EOS
+
     @slow
     def test_enro_forward(self):
         model = self.model
