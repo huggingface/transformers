@@ -39,11 +39,11 @@ class BartTokenizer(RobertaTokenizer):
     }
 
 
-_all_mbart_models = ["mbart-large-en-ro", "mbart-large-cc25"]
+_all_mbart_models = ["mbart-large-en-ro"]
 SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
 
 
 class MBartTokenizer(XLMRobertaTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
-    pretrained_vocab_files_map = {"vocab_file": {"mbart-large-en-ro": SPM_URL, "mbart-large-cc25": SPM_URL}}
+    pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}

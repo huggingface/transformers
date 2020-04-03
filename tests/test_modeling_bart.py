@@ -262,7 +262,7 @@ class BartTranslationTests(unittest.TestCase):
         self.assertEqual(expected_translation_romanian, decoded[0])
 
     def test_mbart_enro_config(self):
-        mbart_models = ["mbart-large-en-ro", "mbart-large-cc25"]
+        mbart_models = ["mbart-large-en-ro"]
         expected = {"scale_embedding": True, "output_past": True}
         for name in mbart_models:
             config = BartConfig.from_pretrained(name)
