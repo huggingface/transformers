@@ -550,15 +550,11 @@ class BartModelIntegrationTests(unittest.TestCase):
     @slow
     def test_xsum_summarization_same_as_fairseq(self):
         model = BartForConditionalGeneration.from_pretrained("bart-large-xsum").to(torch_device)
+        self.assertFalse(model.config.is_mbart)
         tok = BartTokenizer.from_pretrained("bart-large")
 
-        PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry 
-        conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be 
-        affected by the shutoffs which were expected to last through at least midday tomorrow."""
-        EXPECTED_SUMMARY = (
-            "California's largest power company has begun shutting off power to tens of thousands of "
-            "homes and businesses in the state."
-        )
+        PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
+        EXPECTED_SUMMARY = "California's largest power company has begun shutting off power to tens of thousands of homes and businesses in the state."
         dct = tok.batch_encode_plus([PGE_ARTICLE], max_length=1024, pad_to_max_length=True, return_tensors="pt",)
 
         hypotheses_batch = model.generate(
