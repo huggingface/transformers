@@ -495,7 +495,7 @@ class Pipeline(_ScikitCompat):
 class FeatureExtractionPipeline(Pipeline):
     """
     Feature extraction pipeline using Model head. This pipeline extracts the hidden states from the base transformer,
-    which can be used as features in a downstream tasks.
+    which can be used as features in downstream tasks.
 
     This feature extraction pipeline can currently be loaded from the :func:`~transformers.pipeline` method using
     the following task identifier(s):
