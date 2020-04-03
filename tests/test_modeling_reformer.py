@@ -198,16 +198,15 @@ class ReformerIntegrationTests(unittest.TestCase):
     def _set_param(self, torch_layer, weight, bias=None):
         import ipdb
         ipdb.set_trace()
-
-        assert torch_layer.weight.shape == weight.shape, "{} layer.weight does not match".format(torch.layer)
-        torch_layer.weight = torch.nn.Parameter(weight)
-        if bias is not None:
-            assert torch_layer.bias.shape == bias.shape, "{} layer.bias does not match".format(torch.layer)
-            torch_layer.bias = torch.nn.Parameter(bias)
+        with torch.no_grad():
+            assert torch_layer.weight.shape == weight.shape, "{} layer.weight does not match".format(torch.layer)
+            torch_layer.weight = torch.nn.Parameter(weight)
+            if bias is not None:
+                assert torch_layer.bias.shape == bias.shape, "{} layer.bias does not match".format(torch.layer)
+                torch_layer.bias = torch.nn.Parameter(bias)
 
     def _set_layer_weights_in_torch(self, weights, torch_layer, hidden_size):
         # set torch weights for 1-to-1 comparison
-        with torch.no_grad():
             np_query_key = np.asarray(weights[0])
             np_value = np.asarray(weights[1])
             np_dense = np.asarray(weights[2])
