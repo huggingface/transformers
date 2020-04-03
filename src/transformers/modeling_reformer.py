@@ -433,16 +433,18 @@ class ReformerSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
-
-        # TODO (PVP): Add residual here
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        return hidden_states
+        output = (hidden_states + input_tensor)
+        # Uncomment here if testing only LSHSelfAttentionLayer
+        output = hidden_states  # Uncomment for layer only test
+        return output
 
 
 class ReformerAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.layer_norm = ReformerLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.self_attention = LSHSelfAttention(config)
         self.output = ReformerSelfOutput(config)
 
@@ -452,8 +454,11 @@ class ReformerAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
     ):
+        norm_hidden_states = self.layer_norm(hidden_states)
+        # Uncomment here if testing only LSHSelfAttentionLayer
+        norm_hidden_states = hidden_states
         self_outputs = self.self_attention(
-            hidden_states, attention_mask, head_mask
+            norm_hidden_states, attention_mask, head_mask
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -464,6 +469,7 @@ class ReformerIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -471,6 +477,7 @@ class ReformerIntermediate(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
@@ -479,23 +486,20 @@ class ReformerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = ReformerLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
+        output = (hidden_states + input_tensor)
+        return output
 
 
 class ReformerLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.attention = ReformerAttention(config)
-        self.is_decoder = config.is_decoder
-        if self.is_decoder:
-            self.crossattention = ReformerAttention(config)
+        self.layer_norm = ReformerLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.intermediate = ReformerIntermediate(config)
         self.output = ReformerOutput(config)
 
@@ -504,20 +508,12 @@ class ReformerLayer(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
     ):
         self_attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        if self.is_decoder and encoder_hidden_states is not None:
-            cross_attention_outputs = self.crossattention(
-                attention_output, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask
-            )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
-
+        norm_outputs = self.layer_norm(outputs)
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         outputs = (layer_output,) + outputs

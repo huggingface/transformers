@@ -26,7 +26,7 @@ from trax.layers.research.efficient_attention_v2 import (
 from trax.models.reformer.reformer import DecoderBlock as TraxLSHAttentionBlock
 from trax import layers as tl
 
-from transformers import ReformerAttention, ReformerConfig
+from transformers import ReformerAttention, ReformerLayer, ReformerConfig
 
 
 from transformers import is_torch_available  # noqa: F401
@@ -195,24 +195,69 @@ class TraxUtils(object):
 @require_torch
 class ReformerIntegrationTests(unittest.TestCase):
 
-    def _set_weights_in_torch(self, weights, torch_layer, hidden_size_per_head):
+    def _set_param(self, torch_layer, weight, bias=None):
+        import ipdb
+        ipdb.set_trace()
+
+        assert torch_layer.weight.shape == weight.shape, "{} layer.weight does not match".format(torch.layer)
+        torch_layer.weight = torch.nn.Parameter(weight)
+        if bias is not None:
+            assert torch_layer.bias.shape == bias.shape, "{} layer.bias does not match".format(torch.layer)
+            torch_layer.bias = torch.nn.Parameter(bias)
+
+    def _set_layer_weights_in_torch(self, weights, torch_layer, hidden_size):
         # set torch weights for 1-to-1 comparison
         with torch.no_grad():
             np_query_key = np.asarray(weights[0])
             np_value = np.asarray(weights[1])
             np_dense = np.asarray(weights[2])
 
-            torch_layer.self_attention.query_key.weight = torch.nn.Parameter(torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, hidden_size_per_head))
+            self._set_param(torch_layer.self_attention.query_key, torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, hidden_size))
+            self._set_param(torch_layer.self_attention.value.weight, torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size))
+            self._set_param(torch_layer.output.dense.weight, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1))
 
-            torch_layer.self_attention.value.weight = torch.nn.Parameter(torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size_per_head))
+    def _set_block_weights_in_torch(self, weights, torch_layer, hidden_size):
+        weights = weights[0]
 
-            torch_layer.output.dense.weight = torch.nn.Parameter(torch.tensor(np_dense).view(-1, hidden_size_per_head).contiguous().transpose(0, 1))
+        # layernorm 1
+        layer_norm_1 = weights[0][0][0]
+        layer_norm_1_weight = np.asarray(layer_norm_1[0])
+        layer_norm_1_bias = np.asarray(layer_norm_1[1])
+        with torch.no_grad():
+            torch_layer.attention.layer_norm.weight = torch.nn.Parameter(torch.tensor(layer_norm_1_weight))
+            torch_layer.attention.layer_norm.bias = torch.nn.Parameter(torch.tensor(layer_norm_1_bias))
+        # lsh weights + output
+        lsh_weights = weights[0][1]
+        self._set_layer_weights_in_torch(lsh_weights, torch_layer.attention, hidden_size)
 
-    def test_lsh_hashing_layer(self):
+        # intermediate weighs
+        intermediate_weights = weights[2][0][2][2]
+
+        # layernorm 2
+        layer_norm_2_weight = np.asarray(intermediate_weights[0][0])
+        layer_norm_2_bias = np.asarray(intermediate_weights[0][1])
+        with torch.no_grad():
+            torch_layer.layer_norm.weight = torch.nn.Parameter(torch.tensor(layer_norm_2_weight))
+            torch_layer.layer_norm.bias = torch.nn.Parameter(torch.tensor(layer_norm_2_bias))
+
+        # intermediate dense
+        inter_dense_weight = np.asarray(intermediate_weights[1][0])
+        inter_dense_bias = np.asarray(intermediate_weights[1][1])
+        with torch.no_grad():
+            torch_layer.intermediate.dense.weight = torch.nn.Parameter(torch.tensor(inter_dense_weight).transpose(0, 1).contiguous())
+            torch_layer.intermediate.dense.bias = torch.nn.Parameter(torch.tensor(inter_dense_bias))
+        # intermediate out
+        out_dense_weight = np.asarray(intermediate_weights[4][0])
+        out_dense_bias = np.asarray(intermediate_weights[4][1])
+        with torch.no_grad():
+            torch_layer.output.dense.weight = torch.nn.Parameter(torch.tensor(out_dense_weight).transpose(0, 1).contiguous())
+            torch_layer.output.dense.bias = torch.nn.Parameter(torch.tensor(out_dense_bias))
+
+    def test_lsh_layer(self):
+        # Remove residual connection in ReformerSelfOutput to test this layer only
+        # Remove layer norm in ReformerAttention to test this layer only
         config = ReformerConfig()
-        hidden_size_per_head = config.hidden_size // config.num_attention_heads
-
-        shape = (3, 7, hidden_size_per_head)  # Batch x SeqLen x ModelDimPerHead
+        shape = (3, 7, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
         trax_utils = TraxUtils(shape)
@@ -222,20 +267,27 @@ class ReformerIntegrationTests(unittest.TestCase):
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
         hf_layer = ReformerAttention(config)
-        self._set_weights_in_torch(trax_weights, hf_layer, hidden_size_per_head)
+        self._set_layer_weights_in_torch(trax_weights, hf_layer, config.hidden_size)
         hf_output = hf_layer(hf_input)[0]
 
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-6))
 
     def test_lsh_block(self):
         config = ReformerConfig()
-        hidden_size_per_head = config.hidden_size // config.num_attention_heads
 
-        shape = (3, 7, hidden_size_per_head)  # Batch x SeqLen x ModelDimPerHead
+        shape = (3, 7, config.hidden_size)  # Batch x SeqLen x ModelDimPerHead
         np_input = np.random.rand(*shape)
 
         trax_utils = TraxUtils(shape)
         trax_block = trax_utils.get_block(config)
         trax_output, trax_weights, trax_state = trax_utils.forward_block(np_input, block=trax_block)
+        trax_torch_output = torch.tensor(np.asarray(trax_output))
+
+        hf_input = torch.tensor(np_input, dtype=torch.float)
+        hf_block = ReformerLayer(config)
+        self._set_block_weights_in_torch(trax_weights, hf_block, config.hidden_size)
+
+        import ipdb
+        ipdb.set_trace()
 
         pass
