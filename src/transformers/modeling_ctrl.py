@@ -330,8 +330,10 @@ class CTRLModel(CTRLPreTrainedModel):
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
+            batch_size = input_ids.shape[0]
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+            batch_size = inputs_embeds.shape[0]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -347,7 +349,8 @@ class CTRLModel(CTRLPreTrainedModel):
 
         # Attention mask.
         if attention_mask is not None:
-            attention_mask = attention_mask.view(-1, input_shape[-1])
+            assert batch_size > 0, "batch_size has to be defined and > 0"
+            attention_mask = attention_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
@@ -454,14 +457,12 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    def prepare_inputs_for_generation(self, input_ids, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
-        if "past" in kwargs and kwargs["past"]:
+        if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
-        inputs = {"input_ids": input_ids}
-        inputs.update(kwargs)
-        return inputs
+        return {"input_ids": input_ids, "past": past}
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
     def forward(

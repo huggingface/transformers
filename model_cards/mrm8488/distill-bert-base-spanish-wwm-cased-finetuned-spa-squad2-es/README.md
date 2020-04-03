@@ -46,7 +46,7 @@ The model was trained on a Tesla P100 GPU and 25GB of RAM with the following com
   --predict_file $SQUAD_DIR/dev-v2.json \
   --per_gpu_train_batch_size 12 \
   --learning_rate 3e-5 \
-  --num_train_epochs 3.0 \
+  --num_train_epochs 5.0 \
   --max_seq_length 384 \
   --doc_stride 128 \
   --output_dir /content/model_output \
@@ -59,23 +59,23 @@ The model was trained on a Tesla P100 GPU and 25GB of RAM with the following com
 
 | Metric    | # Value     |
 | --------- | ----------- |
-| **Exact** | **82.40**65 |
-| **F1**    | **90.50**36 |
+| **Exact** | **90.77**48 |
+| **F1**    | **94.94**71 |
 
 ```json
 {
-  "exact": 82.40657784457096,
-  "f1": 90.50369643376753,
+  "exact": 90.77483309730933,
+  "f1": 94.94714391266254,
   "total": 69202,
-  "HasAns_exact": 75.13413304253,
-  "HasAns_f1": 87.35521920631561,
+  "HasAns_exact": 86.60850599781898,
+  "HasAns_f1": 92.90582885592328,
   "HasAns_total": 45850,
-  "NoAns_exact": 96.68550873586845,
-  "NoAns_f1": 96.68550873586845,
+  "NoAns_exact": 98.95512161699212,
+  "NoAns_f1": 98.95512161699212,
   "NoAns_total": 23352,
-  "best_exact": 82.40657784457096,
+  "best_exact": 90.77483309730933,
   "best_exact_thresh": 0.0,
-  "best_f1": 90.50369643376902,
+  "best_f1": 94.94714391266305,
   "best_f1_thresh": 0.0
 }
 ```
@@ -85,11 +85,41 @@ The model was trained on a Tesla P100 GPU and 25GB of RAM with the following com
 |                              Model                              | f1 score  |
 | :-------------------------------------------------------------: | :-------: |
 |       bert-base-spanish-wwm-cased-finetuned-spa-squad2-es       |   86.07   |
-| **distill**-bert-base-spanish-wwm-cased-finetuned-spa-squad2-es | **90.50** |
+| **distill**-bert-base-spanish-wwm-cased-finetuned-spa-squad2-es | **94.94** |
 
 So, yes, this version is even more accurate.
 
-### Model in action (in a Colab Notebook)
+### Model in action
+
+Fast usage with **pipelines**:
+
+```python
+from transformers import *
+
+# Important!: By now the QA pipeline is not compatible with fast tokenizer, but they are working on it. So that pass the object to the tokenizer {"use_fast": False} as in the following example:
+
+nlp = pipeline(
+    'question-answering', 
+    model='mrm8488/distill-bert-base-spanish-wwm-cased-finetuned-spa-squad2-es',
+    tokenizer=(
+        'mrm8488/distill-bert-base-spanish-wwm-cased-finetuned-spa-squad2-es',  
+        {"use_fast": False}
+    )
+)
+
+nlp(
+    {
+        'question': '¿Para qué lenguaje está trabajando?',
+        'context': 'Manuel Romero está colaborando activamente con huggingface/transformers ' +
+                    'para traer el poder de las últimas técnicas de procesamiento de lenguaje natural al idioma español'
+    }
+)
+# Output: {'answer': 'español', 'end': 169, 'score': 0.67530957344621, 'start': 163}
+```
+
+Play with this model and ```pipelines``` in a Colab:
+
+<a href="https://colab.research.google.com/github/mrm8488/shared_colab_notebooks/blob/master/Using_Spanish_BERT_fine_tuned_for_Q%26A_pipelines.ipynb" target="_parent"><img src="https://camo.githubusercontent.com/52feade06f2fecbf006889a904d221e6a730c194/68747470733a2f2f636f6c61622e72657365617263682e676f6f676c652e636f6d2f6173736574732f636f6c61622d62616467652e737667" alt="Open In Colab" data-canonical-src="https://colab.research.google.com/assets/colab-badge.svg"></a>
 
 <details>
 
@@ -100,8 +130,11 @@ So, yes, this version is even more accurate.
 2.  Run predictions:
 
 ![Run the model](https://media.giphy.com/media/WT453aptcbCP7hxWTZ/giphy.gif)
-
 </details>
+
+More about ``` Huggingface pipelines```? check this Colab out:
+
+<a href="https://colab.research.google.com/github/mrm8488/shared_colab_notebooks/blob/master/Huggingface_pipelines_demo.ipynb" target="_parent"><img src="https://camo.githubusercontent.com/52feade06f2fecbf006889a904d221e6a730c194/68747470733a2f2f636f6c61622e72657365617263682e676f6f676c652e636f6d2f6173736574732f636f6c61622d62616467652e737667" alt="Open In Colab" data-canonical-src="https://colab.research.google.com/assets/colab-badge.svg"></a>
 
 > Created by [Manuel Romero/@mrm8488](https://twitter.com/mrm8488)
 

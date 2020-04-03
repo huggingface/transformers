@@ -18,7 +18,10 @@ def _gelu_python(x):
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
-gelu = getattr(F, "gelu", _gelu_python)
+if torch.__version__ < "1.4.0":
+    gelu = _gelu_python
+else:
+    gelu = F.gelu
 
 
 def gelu_new(x):
@@ -41,8 +44,4 @@ def get_activation(activation_string):
     if activation_string in ACT2FN:
         return ACT2FN[activation_string]
     else:
-        raise KeyError(
-            "function {} not found in ACT2FN mapping {} or torch.nn.functional".format(
-                activation_string, list(ACT2FN.keys())
-            )
-        )
+        raise KeyError("function {} not found in ACT2FN mapping {}".format(activation_string, list(ACT2FN.keys())))

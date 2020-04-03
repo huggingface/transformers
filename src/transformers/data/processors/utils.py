@@ -16,8 +16,11 @@
 
 import copy
 import csv
+import dataclasses
 import json
 import logging
+from dataclasses import dataclass
+from typing import Optional
 
 from ...file_utils import is_tf_available, is_torch_available
 
@@ -25,37 +28,29 @@ from ...file_utils import is_tf_available, is_torch_available
 logger = logging.getLogger(__name__)
 
 
-class InputExample(object):
+@dataclass(frozen=False)
+class InputExample:
     """
     A single training/test example for simple sequence classification.
 
     Args:
         guid: Unique id for the example.
         text_a: string. The untokenized text of the first sequence. For single
-        sequence tasks, only this sequence must be specified.
+            sequence tasks, only this sequence must be specified.
         text_b: (Optional) string. The untokenized text of the second sequence.
-        Only must be specified for sequence pair tasks.
+            Only must be specified for sequence pair tasks.
         label: (Optional) string. The label of the example. This should be
-        specified for train and dev examples, but not for test examples.
+            specified for train and dev examples, but not for test examples.
     """
 
-    def __init__(self, guid, text_a, text_b=None, label=None):
-        self.guid = guid
-        self.text_a = text_a
-        self.text_b = text_b
-        self.label = label
-
-    def __repr__(self):
-        return str(self.to_json_string())
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
+    guid: str
+    text_a: str
+    text_b: Optional[str] = None
+    label: Optional[str] = None
 
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+        return json.dumps(dataclasses.asdict(self), indent=2, sort_keys=True) + "\n"
 
 
 class InputFeatures(object):

@@ -361,7 +361,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
             args.max_seq_length,
             tokenizer,
             pad_on_left=bool(args.model_type in ["xlnet"]),  # pad on the left for xlnet
-            pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
+            pad_token_segment_id=tokenizer.pad_token_type_id,
         )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
@@ -535,7 +535,7 @@ def main():
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        args.n_gpu = torch.cuda.device_count()
+        args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)

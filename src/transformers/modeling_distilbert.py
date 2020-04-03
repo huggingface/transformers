@@ -217,11 +217,6 @@ class TransformerBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.n_heads = config.n_heads
-        self.dim = config.dim
-        self.hidden_dim = config.hidden_dim
-        self.dropout = nn.Dropout(p=config.dropout)
-        self.activation = config.activation
         self.output_attentions = config.output_attentions
 
         assert config.dim % config.n_heads == 0
@@ -823,8 +818,10 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
             # Only keep active parts of the loss
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1) == 1
-                active_logits = logits.view(-1, self.num_labels)[active_loss]
-                active_labels = labels.view(-1)[active_loss]
+                active_logits = logits.view(-1, self.num_labels)
+                active_labels = torch.where(
+                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
+                )
                 loss = loss_fct(active_logits, active_labels)
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))

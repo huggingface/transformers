@@ -214,7 +214,7 @@ class GradientAccumulator(object):
             raise ValueError("Expected %s gradients, but got %d" % (len(self._gradients), len(gradients)))
 
         for accum_gradient, gradient in zip(self._get_replica_gradients(), gradients):
-            if accum_gradient is not None:
+            if accum_gradient is not None and gradient is not None:
                 accum_gradient.assign_add(gradient)
 
         self._accum_steps.assign_add(1)
@@ -241,6 +241,7 @@ class GradientAccumulator(object):
             return (
                 gradient.device_map.select_for_current_replica(gradient.values, replica_context)
                 for gradient in self._gradients
+                if gradient is not None
             )
         else:
             return self._gradients

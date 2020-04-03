@@ -59,7 +59,7 @@ MODEL_CLASSES = {
 # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
 # in https://github.com/rusiaaman/XLNet-gen#methodology
 # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
-PADDING_TEXT = """ In 1991, the remains of Russian Tsar Nicholas II and his family
+PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
 (except for Alexei and Maria) are discovered.
 The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
 remainder of the story. 1883 Western Siberia,
@@ -106,6 +106,8 @@ def prepare_xlm_input(args, model, tokenizer, prompt_text):
             language = None
             while language not in available_languages:
                 language = input("Using XLM. Select language in " + str(list(available_languages)) + " >>> ")
+
+        model.config.lang_id = model.config.lang2id[language]
         # kwargs["language"] = tokenizer.lang2id[language]
 
     # TODO fix mask_token_id setup when configurations will be synchronized between models and tokenizers
@@ -119,12 +121,12 @@ def prepare_xlm_input(args, model, tokenizer, prompt_text):
 
 def prepare_xlnet_input(args, _, tokenizer, prompt_text):
     prompt_text = (args.padding_text if args.padding_text else PADDING_TEXT) + prompt_text
-    return prompt_text, {}
+    return prompt_text
 
 
 def prepare_transfoxl_input(args, _, tokenizer, prompt_text):
     prompt_text = (args.padding_text if args.padding_text else PADDING_TEXT) + prompt_text
-    return prompt_text, {}
+    return prompt_text
 
 
 PREPROCESSING_FUNCTIONS = {
@@ -183,10 +185,11 @@ def main():
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
     parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
+    parser.add_argument("--num_return_sequences", type=int, default=1, help="The number of samples to generate.")
     args = parser.parse_args()
 
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    args.n_gpu = torch.cuda.device_count()
+    args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
 
     set_seed(args)
 
@@ -210,28 +213,50 @@ def main():
     requires_preprocessing = args.model_type in PREPROCESSING_FUNCTIONS.keys()
     if requires_preprocessing:
         prepare_input = PREPROCESSING_FUNCTIONS.get(args.model_type)
-        prompt_text = prepare_input(args, model, tokenizer, prompt_text)
-    encoded_prompt = tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors="pt")
+        preprocessed_prompt_text = prepare_input(args, model, tokenizer, prompt_text)
+        encoded_prompt = tokenizer.encode(
+            preprocessed_prompt_text, add_special_tokens=False, return_tensors="pt", add_space_before_punct_symbol=True
+        )
+    else:
+        encoded_prompt = tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors="pt")
     encoded_prompt = encoded_prompt.to(args.device)
 
     output_sequences = model.generate(
         input_ids=encoded_prompt,
-        max_length=args.length,
+        max_length=args.length + len(encoded_prompt[0]),
         temperature=args.temperature,
         top_k=args.k,
         top_p=args.p,
         repetition_penalty=args.repetition_penalty,
         do_sample=True,
+        num_return_sequences=args.num_return_sequences,
     )
 
-    # Batch size == 1. to add more examples please use num_return_sequences > 1
-    generated_sequence = output_sequences[0].tolist()
-    text = tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
-    text = text[: text.find(args.stop_token) if args.stop_token else None]
+    # Remove the batch dimension when returning multiple sequences
+    if len(output_sequences.shape) > 2:
+        output_sequences.squeeze_()
 
-    print(text)
+    generated_sequences = []
 
-    return text
+    for generated_sequence_idx, generated_sequence in enumerate(output_sequences):
+        print("=== GENERATED SEQUENCE {} ===".format(generated_sequence_idx + 1))
+        generated_sequence = generated_sequence.tolist()
+
+        # Decode text
+        text = tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
+
+        # Remove all text after the stop token
+        text = text[: text.find(args.stop_token) if args.stop_token else None]
+
+        # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
+        total_sequence = (
+            prompt_text + text[len(tokenizer.decode(encoded_prompt[0], clean_up_tokenization_spaces=True)) :]
+        )
+
+        generated_sequences.append(total_sequence)
+        print(total_sequence)
+
+    return generated_sequences
 
 
 if __name__ == "__main__":

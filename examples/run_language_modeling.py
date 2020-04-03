@@ -38,28 +38,14 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 from transformers import (
+    MODEL_WITH_LM_HEAD_MAPPING,
     WEIGHTS_NAME,
     AdamW,
-    BertConfig,
-    BertForMaskedLM,
-    BertTokenizer,
-    CamembertConfig,
-    CamembertForMaskedLM,
-    CamembertTokenizer,
-    DistilBertConfig,
-    DistilBertForMaskedLM,
-    DistilBertTokenizer,
-    GPT2Config,
-    GPT2LMHeadModel,
-    GPT2Tokenizer,
-    OpenAIGPTConfig,
-    OpenAIGPTLMHeadModel,
-    OpenAIGPTTokenizer,
+    AutoConfig,
+    AutoModelWithLMHead,
+    AutoTokenizer,
     PreTrainedModel,
     PreTrainedTokenizer,
-    RobertaConfig,
-    RobertaForMaskedLM,
-    RobertaTokenizer,
     get_linear_schedule_with_warmup,
 )
 
@@ -73,14 +59,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-MODEL_CLASSES = {
-    "gpt2": (GPT2Config, GPT2LMHeadModel, GPT2Tokenizer),
-    "openai-gpt": (OpenAIGPTConfig, OpenAIGPTLMHeadModel, OpenAIGPTTokenizer),
-    "bert": (BertConfig, BertForMaskedLM, BertTokenizer),
-    "roberta": (RobertaConfig, RobertaForMaskedLM, RobertaTokenizer),
-    "distilbert": (DistilBertConfig, DistilBertForMaskedLM, DistilBertTokenizer),
-    "camembert": (CamembertConfig, CamembertForMaskedLM, CamembertTokenizer),
-}
+MODEL_CONFIG_CLASSES = list(MODEL_WITH_LM_HEAD_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 class TextDataset(Dataset):
@@ -253,6 +233,9 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
     else:
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
+    model = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
+    model.resize_token_embeddings(len(tokenizer))
+
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
@@ -328,9 +311,6 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             logger.info("  Starting fine-tuning.")
 
     tr_loss, logging_loss = 0.0, 0.0
-
-    model_to_resize = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
-    model_to_resize.resize_token_embeddings(len(tokenizer))
 
     model.zero_grad()
     train_iterator = trange(
@@ -644,6 +624,7 @@ def main():
         and os.listdir(args.output_dir)
         and args.do_train
         and not args.overwrite_output_dir
+        and not args.should_continue
     ):
         raise ValueError(
             "Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(
@@ -663,7 +644,7 @@ def main():
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-        args.n_gpu = torch.cuda.device_count()
+        args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
     else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
@@ -693,23 +674,26 @@ def main():
     if args.local_rank not in [-1, 0]:
         torch.distributed.barrier()  # Barrier to make sure only the first process in distributed training download model & vocab
 
-    config_class, model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
-
     if args.config_name:
-        config = config_class.from_pretrained(args.config_name, cache_dir=args.cache_dir)
+        config = AutoConfig.from_pretrained(args.config_name, cache_dir=args.cache_dir)
     elif args.model_name_or_path:
-        config = config_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
+        config = AutoConfig.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     else:
-        config = config_class()
+        # When we release a pip version exposing CONFIG_MAPPING,
+        # we can do `config = CONFIG_MAPPING[args.model_type]()`.
+        raise ValueError(
+            "You are instantiating a new config instance from scratch. This is not supported, but you can do it from another script, save it,"
+            "and load it from here, using --config_name"
+        )
 
     if args.tokenizer_name:
-        tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name, cache_dir=args.cache_dir)
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, cache_dir=args.cache_dir)
     elif args.model_name_or_path:
-        tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
     else:
         raise ValueError(
-            "You are instantiating a new {} tokenizer. This is not supported, but you can do it from another script, save it,"
-            "and load it from here, using --tokenizer_name".format(tokenizer_class.__name__)
+            "You are instantiating a new tokenizer from scratch. This is not supported, but you can do it from another script, save it,"
+            "and load it from here, using --tokenizer_name"
         )
 
     if args.block_size <= 0:
@@ -719,7 +703,7 @@ def main():
         args.block_size = min(args.block_size, tokenizer.max_len)
 
     if args.model_name_or_path:
-        model = model_class.from_pretrained(
+        model = AutoModelWithLMHead.from_pretrained(
             args.model_name_or_path,
             from_tf=bool(".ckpt" in args.model_name_or_path),
             config=config,
@@ -727,7 +711,7 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = model_class(config=config)
+        model = AutoModelWithLMHead.from_config(config)
 
     model.to(args.device)
 
@@ -768,8 +752,8 @@ def main():
         torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
 
         # Load a trained model and vocabulary that you have fine-tuned
-        model = model_class.from_pretrained(args.output_dir)
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir)
+        model = AutoModelWithLMHead.from_pretrained(args.output_dir)
+        tokenizer = AutoTokenizer.from_pretrained(args.output_dir)
         model.to(args.device)
 
     # Evaluation
@@ -786,7 +770,7 @@ def main():
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
             prefix = checkpoint.split("/")[-1] if checkpoint.find("checkpoint") != -1 else ""
 
-            model = model_class.from_pretrained(checkpoint)
+            model = AutoModelWithLMHead.from_pretrained(checkpoint)
             model.to(args.device)
             result = evaluate(args, model, tokenizer, prefix=prefix)
             result = dict((k + "_{}".format(global_step), v) for k, v in result.items())

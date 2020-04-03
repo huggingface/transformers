@@ -52,6 +52,9 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    all_generative_model_classes = (
+        (XLNetLMHeadModel,) if is_torch_available() else ()
+    )  # TODO (PVP): Check other models whether language generation is also applicable
     test_pruning = False
 
     class XLNetModelTester(object):
@@ -78,6 +81,9 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             initializer_range=0.05,
             seed=1,
             type_vocab_size=2,
+            bos_token_id=1,
+            eos_token_id=2,
+            pad_token_id=5,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -101,6 +107,9 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             self.seed = seed
             self.type_vocab_size = type_vocab_size
             self.type_sequence_label_size = type_sequence_label_size
+            self.bos_token_id = bos_token_id
+            self.pad_token_id = pad_token_id
+            self.eos_token_id = eos_token_id
 
         def prepare_config_and_inputs(self):
             input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -110,11 +119,11 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             input_ids_q = ids_tensor([self.batch_size, self.seq_length + 1], self.vocab_size)
             perm_mask = torch.zeros(
-                self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float, device=torch_device
+                self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float, device=torch_device,
             )
             perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
             target_mapping = torch.zeros(
-                self.batch_size, 1, self.seq_length + 1, dtype=torch.float, device=torch_device
+                self.batch_size, 1, self.seq_length + 1, dtype=torch.float, device=torch_device,
             )
             target_mapping[:, 0, -1] = 1.0  # predict last token
 
@@ -142,6 +151,9 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
                 bi_data=self.bi_data,
                 initializer_range=self.initializer_range,
                 num_labels=self.type_sequence_label_size,
+                bos_token_id=self.bos_token_id,
+                pad_token_id=self.pad_token_id,
+                eos_token_id=self.eos_token_id,
             )
 
             return (
@@ -200,7 +212,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertEqual(len(no_mems_outputs), 1)
 
             self.parent.assertListEqual(
-                list(result["outputs"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+                list(result["outputs"].size()), [self.batch_size, self.seq_length, self.hidden_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -271,7 +283,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss_1"].size()), [])
             self.parent.assertListEqual(
-                list(result["all_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["all_logits_1"].size()), [self.batch_size, self.seq_length, self.vocab_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -280,7 +292,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss_2"].size()), [])
             self.parent.assertListEqual(
-                list(result["all_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+                list(result["all_logits_2"].size()), [self.batch_size, self.seq_length, self.vocab_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_2"]),
@@ -307,7 +319,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             outputs = model(input_ids_1)
-            start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems = outputs
+            (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits, mems,) = outputs
 
             outputs = model(
                 input_ids_1,
@@ -328,7 +340,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             total_loss, mems = outputs
 
-            outputs = model(input_ids_1, start_positions=sequence_labels, end_positions=sequence_labels)
+            outputs = model(input_ids_1, start_positions=sequence_labels, end_positions=sequence_labels,)
 
             total_loss, mems = outputs
 
@@ -344,10 +356,10 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top]
+                list(result["start_top_log_probs"].size()), [self.batch_size, model.config.start_n_top],
             )
             self.parent.assertListEqual(
-                list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top]
+                list(result["start_top_index"].size()), [self.batch_size, model.config.start_n_top],
             )
             self.parent.assertListEqual(
                 list(result["end_top_log_probs"].size()),
@@ -393,7 +405,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["logits"].size()), [self.batch_size, self.seq_length, self.type_sequence_label_size]
+                list(result["logits"].size()), [self.batch_size, self.seq_length, self.type_sequence_label_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -430,7 +442,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertListEqual(list(result["loss"].size()), [])
             self.parent.assertListEqual(
-                list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size]
+                list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size],
             )
             self.parent.assertListEqual(
                 list(list(mem.size()) for mem in result["mems_1"]),
@@ -499,3 +511,405 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in list(XLNET_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = XLNetModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
+class XLNetModelLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_xlnet_base_cased(self):
+        model = XLNetLMHeadModel.from_pretrained("xlnet-base-cased")
+        input_ids = torch.tensor(
+            [
+                [
+                    67,
+                    2840,
+                    19,
+                    18,
+                    1484,
+                    20,
+                    965,
+                    29077,
+                    8719,
+                    1273,
+                    21,
+                    45,
+                    273,
+                    17,
+                    10,
+                    15048,
+                    28,
+                    27511,
+                    21,
+                    4185,
+                    11,
+                    41,
+                    2444,
+                    9,
+                    32,
+                    1025,
+                    20,
+                    8719,
+                    26,
+                    23,
+                    673,
+                    966,
+                    19,
+                    29077,
+                    20643,
+                    27511,
+                    20822,
+                    20643,
+                    19,
+                    17,
+                    6616,
+                    17511,
+                    18,
+                    8978,
+                    20,
+                    18,
+                    777,
+                    9,
+                    19233,
+                    1527,
+                    17669,
+                    19,
+                    24,
+                    673,
+                    17,
+                    28756,
+                    150,
+                    12943,
+                    4354,
+                    153,
+                    27,
+                    442,
+                    37,
+                    45,
+                    668,
+                    21,
+                    24,
+                    256,
+                    20,
+                    416,
+                    22,
+                    2771,
+                    4901,
+                    9,
+                    12943,
+                    4354,
+                    153,
+                    51,
+                    24,
+                    3004,
+                    21,
+                    28142,
+                    23,
+                    65,
+                    20,
+                    18,
+                    416,
+                    34,
+                    24,
+                    2958,
+                    22947,
+                    9,
+                    1177,
+                    45,
+                    668,
+                    3097,
+                    13768,
+                    23,
+                    103,
+                    28,
+                    441,
+                    148,
+                    48,
+                    20522,
+                    19,
+                    12943,
+                    4354,
+                    153,
+                    12860,
+                    34,
+                    18,
+                    326,
+                    27,
+                    17492,
+                    684,
+                    21,
+                    6709,
+                    9,
+                    8585,
+                    123,
+                    266,
+                    19,
+                    12943,
+                    4354,
+                    153,
+                    6872,
+                    24,
+                    3004,
+                    20,
+                    18,
+                    9225,
+                    2198,
+                    19,
+                    12717,
+                    103,
+                    22,
+                    401,
+                    24,
+                    6348,
+                    9,
+                    12943,
+                    4354,
+                    153,
+                    1068,
+                    2768,
+                    2286,
+                    19,
+                    33,
+                    104,
+                    19,
+                    176,
+                    24,
+                    9313,
+                    19,
+                    20086,
+                    28,
+                    45,
+                    10292,
+                    9,
+                    4,
+                    3,
+                ]
+            ],
+            dtype=torch.long,
+            device=torch_device,
+        )
+        #  In 1991, the remains of Russian Tsar Nicholas II and his family
+        #  (except for Alexei and Maria) are discovered.
+        #  The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+        #  remainder of the story. 1883 Western Siberia,
+        #  a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+        #  Rasputin has a vision and denounces one of the men as a horse thief. Although his
+        #  father initially slaps him for making such an accusation, Rasputin watches as the
+        #  man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+        #  the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+        #  with people, even a bishop, begging for his blessing. """
+
+        expected_output_ids = [
+            67,
+            2840,
+            19,
+            18,
+            1484,
+            20,
+            965,
+            29077,
+            8719,
+            1273,
+            21,
+            45,
+            273,
+            17,
+            10,
+            15048,
+            28,
+            27511,
+            21,
+            4185,
+            11,
+            41,
+            2444,
+            9,
+            32,
+            1025,
+            20,
+            8719,
+            26,
+            23,
+            673,
+            966,
+            19,
+            29077,
+            20643,
+            27511,
+            20822,
+            20643,
+            19,
+            17,
+            6616,
+            17511,
+            18,
+            8978,
+            20,
+            18,
+            777,
+            9,
+            19233,
+            1527,
+            17669,
+            19,
+            24,
+            673,
+            17,
+            28756,
+            150,
+            12943,
+            4354,
+            153,
+            27,
+            442,
+            37,
+            45,
+            668,
+            21,
+            24,
+            256,
+            20,
+            416,
+            22,
+            2771,
+            4901,
+            9,
+            12943,
+            4354,
+            153,
+            51,
+            24,
+            3004,
+            21,
+            28142,
+            23,
+            65,
+            20,
+            18,
+            416,
+            34,
+            24,
+            2958,
+            22947,
+            9,
+            1177,
+            45,
+            668,
+            3097,
+            13768,
+            23,
+            103,
+            28,
+            441,
+            148,
+            48,
+            20522,
+            19,
+            12943,
+            4354,
+            153,
+            12860,
+            34,
+            18,
+            326,
+            27,
+            17492,
+            684,
+            21,
+            6709,
+            9,
+            8585,
+            123,
+            266,
+            19,
+            12943,
+            4354,
+            153,
+            6872,
+            24,
+            3004,
+            20,
+            18,
+            9225,
+            2198,
+            19,
+            12717,
+            103,
+            22,
+            401,
+            24,
+            6348,
+            9,
+            12943,
+            4354,
+            153,
+            1068,
+            2768,
+            2286,
+            19,
+            33,
+            104,
+            19,
+            176,
+            24,
+            9313,
+            19,
+            20086,
+            28,
+            45,
+            10292,
+            9,
+            4,
+            3,
+            19,
+            12943,
+            4354,
+            153,
+            27,
+            442,
+            22,
+            2771,
+            4901,
+            9,
+            69,
+            27,
+            50,
+            551,
+            22,
+            2771,
+            4901,
+            19,
+            21,
+            45,
+            668,
+            21,
+            18,
+            416,
+            41,
+            1499,
+            22,
+            755,
+            18,
+            14285,
+            9,
+            12943,
+            4354,
+            153,
+            27,
+            1499,
+            22,
+            642,
+            22,
+        ]
+        #  In 1991, the remains of Russian Tsar Nicholas II and his family (except for Alexei and Maria)
+        #  are discovered. The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich,
+        #  narrates the remainder of the story. 1883 Western Siberia, a young Grigori Rasputin
+        #  is asked by his father and a group of men to perform magic. Rasputin has a vision and
+        #  denounces one of the men as a horse thief. Although his father initially slaps
+        #  him for making such an accusation, Rasputin watches as the man is chased outside and beaten.
+        #  Twenty years later, Rasputin sees a vision of the Virgin Mary, prompting him to become a priest.
+        #  Rasputin quickly becomes famous, with people, even a bishop, begging for his blessing.
+        #  <sep><cls>, Rasputin is asked to perform magic.
+        #  He is not able to perform magic, and his father and
+        # the men are forced to leave the monastery. Rasputin is forced to return to
+
+        output_ids = model.generate(input_ids, max_length=200, do_sample=False)
+        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

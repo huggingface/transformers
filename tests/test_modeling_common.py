@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import copy
 import logging
 import os.path
@@ -37,6 +36,7 @@ if is_torch_available():
         BertModel,
         BertConfig,
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        top_k_top_p_filtering,
     )
 
 
@@ -53,10 +53,12 @@ class ModelTesterMixin:
 
     model_tester = None
     all_model_classes = ()
+    all_generative_model_classes = ()
     test_torchscript = True
     test_pruning = True
     test_resize_embeddings = True
     test_head_masking = True
+    test_missing_keys = True
     is_encoder_decoder = False
 
     def test_save_load(self):
@@ -68,7 +70,7 @@ class ModelTesterMixin:
             model.eval()
             with torch.no_grad():
                 outputs = model(**inputs_dict)
-            out_2 = outputs[0].numpy()
+            out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -142,10 +144,17 @@ class ModelTesterMixin:
             out_len = len(outputs)
 
             if self.is_encoder_decoder:
-                self.assertEqual(out_len % 2, 0)
-                decoder_attentions = outputs[(out_len // 2) - 1]
-                self.assertEqual(model.config.output_attentions, True)
-                self.assertEqual(model.config.output_hidden_states, False)
+                correct_outlen = (
+                    4  # decoder_features_or_logits, decoder_attentions, encoder_features, encoder_attentions
+                )
+                decoder_attention_idx = 1
+                if "lm_labels" in inputs_dict:  # loss will come first
+                    correct_outlen += 1  # compute loss
+                    decoder_attention_idx += 1
+                self.assertEqual(out_len, correct_outlen)
+
+                decoder_attentions = outputs[decoder_attention_idx]
+                self.assertIsInstance(decoder_attentions, (list, tuple))
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
@@ -256,7 +265,7 @@ class ModelTesterMixin:
             # Prepare head_mask
             # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
             head_mask = torch.ones(
-                self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads, device=torch_device
+                self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads, device=torch_device,
             )
             head_mask[0, 0] = 0
             head_mask[-1, :-1] = 0
@@ -296,7 +305,7 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -306,7 +315,10 @@ class ModelTesterMixin:
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
-            heads_to_prune = {0: list(range(1, self.model_tester.num_attention_heads)), -1: [0]}
+            heads_to_prune = {
+                0: list(range(1, self.model_tester.num_attention_heads)),
+                -1: [0],
+            }
             model.prune_heads(heads_to_prune)
             with torch.no_grad():
                 outputs = model(**inputs_dict)
@@ -322,7 +334,7 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -332,7 +344,10 @@ class ModelTesterMixin:
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
-            heads_to_prune = {0: list(range(1, self.model_tester.num_attention_heads)), -1: [0]}
+            heads_to_prune = {
+                0: list(range(1, self.model_tester.num_attention_heads)),
+                -1: [0],
+            }
             model.prune_heads(heads_to_prune)
 
             with tempfile.TemporaryDirectory() as temp_dir_name:
@@ -352,7 +367,7 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -360,7 +375,10 @@ class ModelTesterMixin:
             config.output_attentions = True
             config.output_hidden_states = False
 
-            heads_to_prune = {0: list(range(1, self.model_tester.num_attention_heads)), -1: [0]}
+            heads_to_prune = {
+                0: list(range(1, self.model_tester.num_attention_heads)),
+                -1: [0],
+            }
             config.pruned_heads = heads_to_prune
 
             model = model_class(config=config)
@@ -380,7 +398,7 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -458,13 +476,14 @@ class ModelTesterMixin:
             )
 
     def test_resize_tokens_embeddings(self):
-        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config)
+            model.to(torch_device)
 
             model_vocab_size = config.vocab_size
             # Retrieve the embeddings and clone theme
@@ -507,6 +526,23 @@ class ModelTesterMixin:
             model.set_input_embeddings(torch.nn.Embedding(10, 10))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
+
+    def test_correct_missing_keys(self):
+        if not self.test_missing_keys:
+            return
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            base_model_prefix = model.base_model_prefix
+
+            if hasattr(model, base_model_prefix):
+                with tempfile.TemporaryDirectory() as temp_dir_name:
+                    model.base_model.save_pretrained(temp_dir_name)
+                    model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
+
+                    with self.subTest(msg="Missing keys for {}".format(model.__class__.__name__)):
+                        self.assertGreater(len(loading_info["missing_keys"]), 0)
 
     def test_tie_model_weights(self):
         if not self.test_torchscript:
@@ -562,15 +598,16 @@ class ModelTesterMixin:
             # self.assertTrue(check_same_values(model.transformer.wte, model.lm_head))
 
     def test_inputs_embeds(self):
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.is_encoder_decoder:
             input_ids = inputs_dict["input_ids"]
             del inputs_dict["input_ids"]
         else:
-            encoder_input_ids = inputs_dict["encoder_input_ids"]
-            decoder_input_ids = inputs_dict["decoder_input_ids"]
-            del inputs_dict["encoder_input_ids"]
-            del inputs_dict["decoder_input_ids"]
+            encoder_input_ids = inputs_dict["input_ids"]
+            decoder_input_ids = inputs_dict.get("decoder_input_ids", encoder_input_ids)
+            del inputs_dict["input_ids"]
+            inputs_dict.pop("decoder_input_ids", None)
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -581,18 +618,100 @@ class ModelTesterMixin:
             if not self.is_encoder_decoder:
                 inputs_dict["inputs_embeds"] = wte(input_ids)
             else:
-                inputs_dict["encoder_inputs_embeds"] = wte(encoder_input_ids)
+                inputs_dict["inputs_embeds"] = wte(encoder_input_ids)
                 inputs_dict["decoder_inputs_embeds"] = wte(decoder_input_ids)
 
             with torch.no_grad():
                 model(**inputs_dict)
+
+    def test_lm_head_model_random_generate(self):
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict.get("input_ids")
+
+        if self.is_encoder_decoder:
+            config.output_past = True  # needed for Bart TODO: might have to update for other encoder-decoder models
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            if config.bos_token_id is None:
+                with self.assertRaises(AssertionError):
+                    model.generate(do_sample=True, max_length=5)
+                # batch_size = 1
+                self._check_generated_ids(model.generate(input_ids, do_sample=True))
+                # batch_size = 1, num_beams > 1
+                self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=3))
+            else:
+                # batch_size = 1
+                self._check_generated_ids(model.generate(do_sample=True, max_length=5))
+                # batch_size = 1, num_beams > 1
+                self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=3))
+
+            with self.assertRaises(AssertionError):
+                # generating multiple sequences when greedy no beam generation
+                # is not allowed as it would always generate the same sequences
+                model.generate(input_ids, do_sample=False, num_return_sequences=2)
+
+            with self.assertRaises(AssertionError):
+                # generating more sequences than having beams leads is not possible
+                model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
+
+            # batch_size > 1, sample
+            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_return_sequences=3))
+            # batch_size > 1, greedy
+            self._check_generated_ids(model.generate(input_ids, do_sample=False))
+
+            # batch_size > 1, num_beams > 1, sample
+            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=3, num_return_sequences=3,))
+            # batch_size > 1, num_beams > 1, greedy
+            self._check_generated_ids(model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3))
+
+            # check bad words tokens language generation
+            bad_words_ids = [
+                ids_tensor((1, 1), self.model_tester.vocab_size).squeeze(-1).tolist(),
+                ids_tensor((2, 1), self.model_tester.vocab_size).squeeze(-1).tolist(),
+            ]
+
+            # sampling
+            output_tokens = model.generate(
+                input_ids, do_sample=True, bad_words_ids=bad_words_ids, num_return_sequences=3
+            )
+            generated_ids = output_tokens[:, input_ids.shape[-1] :]
+            self.assertFalse(self._check_match_tokens(generated_ids.tolist(), bad_words_ids))
+
+            # beam search
+            output_tokens = model.generate(
+                input_ids, do_sample=False, bad_words_ids=bad_words_ids, num_beams=3, num_return_sequences=3
+            )
+            generated_ids = output_tokens[:, input_ids.shape[-1] :]
+            self.assertFalse(self._check_match_tokens(generated_ids.tolist(), bad_words_ids))
+
+    def _check_generated_ids(self, output_ids):
+        for token_id in output_ids[0].tolist():
+            self.assertGreaterEqual(token_id, 0)
+            self.assertLess(token_id, self.model_tester.vocab_size)
+
+    def _check_match_tokens(self, generated_ids, bad_words_ids):
+        # for all bad word tokens
+        for bad_word_ids in bad_words_ids:
+            # for all slices in batch
+            for generated_ids_slice in generated_ids:
+                # for all word idx
+                for i in range(len(bad_word_ids), len(generated_ids_slice)):
+                    # if tokens match
+                    if generated_ids_slice[i - len(bad_word_ids) : i] == bad_word_ids:
+                        return True
+        return False
 
 
 global_rng = random.Random()
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None):
-    """Creates a random int32 tensor of the shape within the vocab size."""
+    #  Creates a random int32 tensor of the shape within the vocab size
     if rng is None:
         rng = global_rng
 
@@ -645,3 +764,110 @@ class ModelUtilsTest(unittest.TestCase):
             self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(model.config, config)
+
+
+@require_torch
+class UtilsFunctionsTest(unittest.TestCase):
+
+    # tests whether the top_k_top_p function behaves as expected
+    def test_top_k_top_p_filtering(self):
+        logits = torch.tensor(
+            [
+                [
+                    8.2220991,  # 3rd highest value; idx. 0
+                    -0.5620044,
+                    5.23229752,
+                    4.0386393,
+                    -6.8798378,
+                    -0.54785802,
+                    -3.2012153,
+                    2.92777176,
+                    1.88171953,
+                    7.35341276,  # 5th highest value; idx. 9
+                    8.43207833,  # 2nd highest value; idx. 10
+                    -9.85711836,
+                    -5.96209236,
+                    -1.13039161,
+                    -7.1115294,
+                    -0.8369633,
+                    -5.3186408,
+                    7.06427407,
+                    0.81369344,
+                    -0.82023817,
+                    -5.9179796,
+                    0.58813443,
+                    -6.99778438,
+                    4.71551189,
+                    -0.18771637,
+                    7.44020759,  # 4th highest value; idx. 25
+                    9.38450987,  # 1st highest value; idx. 26
+                    2.12662941,
+                    -9.32562038,
+                    2.35652522,
+                ],  # cummulative prob of 5 highest values <= 0.6
+                [
+                    0.58425518,
+                    4.53139238,
+                    -5.57510464,
+                    -6.28030699,
+                    -7.19529503,
+                    -4.02122551,
+                    1.39337037,
+                    -6.06707057,
+                    1.59480517,
+                    -9.643119,
+                    0.03907799,
+                    0.67231762,
+                    -8.88206726,
+                    6.27115922,  # 4th highest value; idx. 13
+                    2.28520723,
+                    4.82767506,
+                    4.30421368,
+                    8.8275313,  # 2nd highest value; idx. 17
+                    5.44029958,  # 5th highest value; idx. 18
+                    -4.4735794,
+                    7.38579536,  # 3rd highest value; idx. 20
+                    -2.91051663,
+                    2.61946077,
+                    -2.5674762,
+                    -9.48959302,
+                    -4.02922645,
+                    -1.35416918,
+                    9.67702323,  # 1st highest value; idx. 27
+                    -5.89478553,
+                    1.85370467,
+                ],  # cummulative prob of 5 highest values <= 0.6
+            ],
+            dtype=torch.float,
+            device=torch_device,
+        )
+
+        non_inf_expected_idx = torch.tensor(
+            [[0, 0], [0, 9], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 18], [1, 20], [1, 27]],
+            dtype=torch.long,
+            device=torch_device,
+        )  # expected non filtered idx as noted above
+
+        non_inf_expected_output = torch.tensor(
+            [
+                8.2221,
+                7.3534,
+                8.4321,
+                7.4402,
+                9.3845,
+                6.2712,
+                8.8275,
+                5.4403,
+                7.3858,
+                9.6770,
+            ],  # expected non filtered values as noted above
+            dtype=torch.float,
+            device=torch_device,
+        )
+
+        output = top_k_top_p_filtering(logits, top_k=10, top_p=0.6, min_tokens_to_keep=4)
+        non_inf_output = output[output != -float("inf")].to(device=torch_device)
+        non_inf_idx = (output != -float("inf")).nonzero().to(device=torch_device)
+
+        self.assertTrue(torch.allclose(non_inf_expected_output, non_inf_output, atol=1e-12))
+        self.assertTrue(torch.all(torch.eq(non_inf_expected_idx, non_inf_idx)))

@@ -43,7 +43,7 @@ CTRLTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.CTRLTokenizer
-    :members:
+    :members: save_vocabulary
 
 
 CTRLModel
