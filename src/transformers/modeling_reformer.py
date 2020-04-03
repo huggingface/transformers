@@ -437,7 +437,7 @@ class ReformerSelfOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         output = (hidden_states + input_tensor)
         # Uncomment here if testing only LSHSelfAttentionLayer
-        output = hidden_states  # Uncomment for layer only test
+#        output = hidden_states  # Uncomment for layer only test
         return output
 
 
@@ -456,7 +456,7 @@ class ReformerAttention(nn.Module):
     ):
         norm_hidden_states = self.layer_norm(hidden_states)
         # Uncomment here if testing only LSHSelfAttentionLayer
-        norm_hidden_states = hidden_states
+#        norm_hidden_states = hidden_states
         self_outputs = self.self_attention(
             norm_hidden_states, attention_mask, head_mask
         )
@@ -513,8 +513,8 @@ class ReformerLayer(nn.Module):
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        norm_outputs = self.layer_norm(outputs)
-        intermediate_output = self.intermediate(attention_output)
+        norm_attention_output = self.layer_norm(attention_output)
+        intermediate_output = self.intermediate(norm_attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         outputs = (layer_output,) + outputs
         return outputs
