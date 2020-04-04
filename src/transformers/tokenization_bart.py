@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import logging
+from typing import Dict
 
 import torch
 
@@ -46,6 +47,22 @@ SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-la
 
 
 class MBartTokenizer(XLMRobertaTokenizer):
+    """
+    This inherits from XLMRobertaTokenizer. ``prepare_translation_batch`` should be used to encode inputs.
+    Other tokenizer methods like encode do not work properly.
+    The tokenization method is <tokens> <eos> <language code>. There is no BOS token.
+
+    Examples::
+        from transformers import MBartTokenizer
+        tokenizer = MBartTokenizer.from_pretrained('mbart-large-en-ro')
+        tok.prepare_translation_batch([
+        example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
+        expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
+        batch: dict = tokenizer.prepare_translation_batch(
+            example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
+        )
+
+    """
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
@@ -77,22 +94,53 @@ class MBartTokenizer(XLMRobertaTokenizer):
         "zh_CN": 250025,
     }
 
-    def _encode_with_lang_code(self, raw_text: str, lang_code: int) -> list:
-        ids = self.convert_tokens_to_ids(self.tokenize(raw_text,))[: self.max_len_single_sentence]
-        return ids + [self.eos_token_id, self.lang_code_to_id[lang_code]]
+    def _encode_with_lang_code(self, raw_text: str, lang_code: str) -> Dict[str, torch.Tensor]:
+        """"""
+        tokenized_text: str = self.tokenize(raw_text)
+        ids: list = self.convert_tokens_to_ids(tokenized_text)[: self.max_len_single_sentence]
+        lang_id: int = self.lang_code_to_id[lang_code]
+        return self.prepare_for_model(
+            ids + [self.eos_token_id, lang_id], add_special_tokens=False, return_tensors="pt"
+        )
 
-    def prepare_translation_example(self, src_text: str, src_lang="en_XX", tgt_text=None, tgt_lang="ro_RO"):
-        id_key = "input_ids"
-        src_ids = self._encode_with_lang_code(src_text, src_lang)
-        encoder_inputs = self.prepare_for_model(src_ids, return_tensors="pt")
+    def prepare_translation_batch(
+        self,
+        src_texts: list,
+        src_lang="en_XX",
+        tgt_texts=None,
+        tgt_lang="ro_RO",
+        max_length=None,
+        pad_to_max_length=True,
+    ):
+        """
 
-        if tgt_text is not None:
-            tgt_ids = self._encode_with_lang_code(tgt_text, tgt_lang)
-            decoder_input_ids = self.prepare_for_model(tgt_ids, return_tensors="pt")[id_key]
+
+        :param src_texts:
+        :param src_lang:
+        :param tgt_texts:
+        :param tgt_lang:
+        :param max_length:
+        :param pad_to_max_length:
+        :return:
+        """
+        if isinstance(src_texts, str):
+            src_texts = [src_texts]
+        if isinstance(tgt_texts, str):
+            tgt_texts = [tgt_texts]
+        encoder_inputs = [self._encode_with_lang_code(t, src_lang) for t in src_texts]
+
+        def _batchify(dct, k):
+            return torch.cat([x[k] for x in encoder_inputs], dim=0)
+
+        input_ids = _batchify(encoder_inputs, "input_ids")
+        attention_mask = _batchify(encoder_inputs, "attention_mask")
+        if tgt_texts is not None:
+            decoder_inputs = [self._encode_with_lang_code(t, tgt_lang) for t in tgt_texts]
+            decoder_input_ids = _batchify(decoder_inputs, "input_ids")
         else:
             decoder_input_ids = None
         return {
-            id_key: encoder_inputs[id_key],
-            "attention_mask": encoder_inputs["attention_mask"],
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
         }
