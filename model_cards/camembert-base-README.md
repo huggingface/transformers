@@ -1,3 +1,7 @@
+---
+language: french
+---
+
 # CamemBERT 
 
 CamemBERT is a state-of-the-art language model for French based on the RoBERTa architecture pretrained on the French subcorpus of the newly available multilingual corpus OSCAR.  
