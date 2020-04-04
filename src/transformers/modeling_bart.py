@@ -388,7 +388,6 @@ class BartDecoder(nn.Module):
 
     def __init__(self, config: BartConfig, embed_tokens: nn.Embedding):
         super().__init__()
-        self.output_past = config.output_past
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
@@ -476,7 +475,7 @@ class BartDecoder(nn.Module):
                 causal_mask=decoder_causal_mask,
             )
 
-            if self.output_past:
+            if generation_mode:
                 next_decoder_cache.append(layer_past.copy())
             if self.output_hidden_states:
                 all_hidden_states += (x,)
@@ -488,7 +487,7 @@ class BartDecoder(nn.Module):
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
-        if self.output_past:
+        if generation_mode:
             next_cache = ((encoder_hidden_states, encoder_padding_mask), next_decoder_cache)
         else:
             next_cache = None
@@ -950,6 +949,10 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
     def get_output_embeddings(self):
         return _make_linear_from_emb(self.model.shared)  # make it on the fly
+
+    def _do_output_past(self, *args, **kwargs):
+        """ We should always use the cache in generate."""
+        return True
 
 
 @add_start_docstrings(
