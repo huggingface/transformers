@@ -37,6 +37,8 @@ if is_torch_available():
     import torch  # noqa: F401
 #    from transformers.modeling_reformer import ()
 
+PATH_TO_SAVE_WEIGHTS = "/home/patrick/hugging_face/experiments/reformer/intermediate_weights"
+
 
 class TraxUtils(object):
     """ class that will help for testing in the beginning
@@ -73,7 +75,7 @@ class TraxUtils(object):
         self,
         config,
         use_reference_code=True,
-        mode="train",
+        mode="eval",
         path_to_save_weights="/home/patrick/hugging_face/experiments/reformer/intermediate_weights",
         **kwargs
     ):
@@ -130,38 +132,39 @@ class TraxUtils(object):
         use_reference_code=True,
         share_qk=True,
         ff_use_sru=0,
-        mode="train",
+        mode="eval",
         causal=False,
-        path_to_save_weights="/home/patrick/hugging_face/experiments/reformer/intermediate_weights",
+        path_to_save_weights=PATH_TO_SAVE_WEIGHTS,
     ):
 
         with trax_math.use_backend("jax"):
-            hidden_size_per_head = config.hidden_size // config.num_attention_heads
-            list_of_layers = TraxLSHAttentionBlock(
-                d_model=config.d_model,
-                d_ff=config.d_ff,
-                d_attention_key=hidden_size_per_head,
-                d_attention_value=hidden_size_per_head,
-                n_heads=config.num_attention_heads,
-                n_attention_chunks=config.num_attention_chunks,
-                attention_type=tl.LSHSelfAttention,
-                dropout=config.hidden_dropout_prob,
-                share_qk=share_qk,
-                ff_activation=tl.Gelu,
-                ff_use_sru=ff_use_sru,
-                ff_chunk_size=config.ff_chunk_size,
-                mode=mode,
-                causal=causal,
-                chunk_len=config.chunk_length,
-                n_chunks_before=config.num_chunks_before,
-                n_chunks_after=config.num_chunks_after,
-                n_hashes=config.num_hashes,
-                n_buckets=config.num_buckets,
-                use_reference_code=use_reference_code,
-                hash_seed=config.seed,
-                path_to_save_weights=path_to_save_weights
-            )
-            layer = tl.Serial(tl.ReversibleSerial([list_of_layers]))
+            with jax.disable_jit():
+                hidden_size_per_head = config.hidden_size // config.num_attention_heads
+                list_of_layers = TraxLSHAttentionBlock(
+                    d_model=config.d_model,
+                    d_ff=config.d_ff,
+                    d_attention_key=hidden_size_per_head,
+                    d_attention_value=hidden_size_per_head,
+                    n_heads=config.num_attention_heads,
+                    n_attention_chunks=config.num_attention_chunks,
+                    attention_type=tl.LSHSelfAttention,
+                    dropout=config.hidden_dropout_prob,
+                    share_qk=share_qk,
+                    ff_activation=tl.Gelu,
+                    ff_use_sru=ff_use_sru,
+                    ff_chunk_size=config.ff_chunk_size,
+                    mode=mode,
+                    causal=causal,
+                    chunk_len=config.chunk_length,
+                    n_chunks_before=config.num_chunks_before,
+                    n_chunks_after=config.num_chunks_after,
+                    n_hashes=config.num_hashes,
+                    n_buckets=config.num_buckets,
+                    use_reference_code=use_reference_code,
+                    hash_seed=config.seed,
+                    path_to_save_weights=path_to_save_weights
+                )
+                layer = tl.Serial(tl.ReversibleSerial([list_of_layers]))
 
         return layer
 
@@ -232,23 +235,23 @@ class ReformerIntegrationTests(unittest.TestCase):
         # layernorm 2
         layer_norm_2_weight = np.asarray(intermediate_weights[0][0])
         layer_norm_2_bias = np.asarray(intermediate_weights[0][1])
-        self._set_param(torch_layer.layer_norm, torch.tensor(layer_norm_2_weight), torch.tensor(layer_norm_2_bias))
+        self._set_param(torch_layer.feed_forward.layer_norm, torch.tensor(layer_norm_2_weight), torch.tensor(layer_norm_2_bias))
 
         # intermediate dense
         inter_dense_weight = np.asarray(intermediate_weights[1][0])
         inter_dense_bias = np.asarray(intermediate_weights[1][1])
-        self._set_param(torch_layer.intermediate.dense, torch.tensor(inter_dense_weight).transpose(0, 1).contiguous(), torch.tensor(inter_dense_bias))
+        self._set_param(torch_layer.feed_forward.dense.dense, torch.tensor(inter_dense_weight).transpose(0, 1).contiguous(), torch.tensor(inter_dense_bias))
 
         # intermediate out
         out_dense_weight = np.asarray(intermediate_weights[4][0])
         out_dense_bias = np.asarray(intermediate_weights[4][1])
-        self._set_param(torch_layer.output.dense, torch.tensor(out_dense_weight).transpose(0, 1).contiguous(), torch.tensor(out_dense_bias))
+        self._set_param(torch_layer.feed_forward.output.dense, torch.tensor(out_dense_weight).transpose(0, 1).contiguous(), torch.tensor(out_dense_bias))
 
     def test_lsh_layer(self):
         # Remove residual connection in ReformerSelfOutput to test this layer only
         # Remove layer norm in ReformerAttention to test this layer only
         config = ReformerConfig()
-        shape = (3, 7, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        shape = (1, 7, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
         trax_utils = TraxUtils(shape)
@@ -258,7 +261,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_input = torch.tensor(np_input, dtype=torch.float)
         hf_layer = ReformerAttention(config)
         self._set_layer_weights_in_torch(trax_weights, hf_layer, config.hidden_size)
-        hf_output = hf_layer(hf_input)[0]
+        hf_output = hf_layer(hf_input, hf_input)[0]
 
         trax_torch_output = torch.tensor(np.asarray(trax_output))
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-6))
@@ -272,15 +275,15 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_utils = TraxUtils(shape)
         trax_block = trax_utils.get_block(config)
         trax_output, trax_weights, trax_state = trax_utils.forward_block(np_input, block=trax_block)
+        trax_torch_output_1 = torch.tensor(np.asarray(trax_output[0]))
+        trax_torch_output_2 = torch.tensor(np.asarray(trax_output[1]))
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
         hf_block = ReformerLayer(config)
         self._set_block_weights_in_torch(trax_weights, hf_block, config.hidden_size)
-        hf_output = hf_block(hf_input)[0]
+        hf_output_1, hf_output_2 = hf_block(hf_input, hf_input)[:2]
 
-        # check which trax output is correct
-        trax_torch_output = torch.tensor(np.asarray(trax_output))
-        import ipdb
-        ipdb.set_trace()
+        self.assertTrue(torch.allclose(hf_output_1, trax_torch_output_1, atol=1e-3))
+        self.assertTrue(torch.allclose(hf_output_2, trax_torch_output_2, atol=1e-3))
 
         pass
