@@ -95,7 +95,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
     }
 
     def _encode_with_lang_code(self, raw_text: str, lang_code: str) -> Dict[str, torch.Tensor]:
-        """"""
         tokenized_text: str = self.tokenize(raw_text)
         ids: list = self.convert_tokens_to_ids(tokenized_text)[: self.max_len_single_sentence]
         lang_id: int = self.lang_code_to_id[lang_code]
@@ -109,20 +108,24 @@ class MBartTokenizer(XLMRobertaTokenizer):
         src_lang="en_XX",
         tgt_texts=None,
         tgt_lang="ro_RO",
-        max_length=None,
+        max_len=None,
         pad_to_max_length=True,
-    ):
+    ) -> Dict[str, torch.Tensor]:
         """
+        Arguments:
 
+            src_texts:
+            src_lang: default en_XX (english)
+            tgt_texts:
+            tgt_lang: default ro_RO (romanian)
+            max_len: (None) defer to config (1024 for mbart-large-en-ro)
+            pad_to_max_length: (bool)
 
-        :param src_texts:
-        :param src_lang:
-        :param tgt_texts:
-        :param tgt_lang:
-        :param max_length:
-        :param pad_to_max_length:
-        :return:
+        Returns:
+            dict with keys input_ids, attention_mask, decoder_input_ids, each value is a torch.Tensor.
         """
+        if max_len is None:
+            max_len = self.max_len
         if isinstance(src_texts, str):
             src_texts = [src_texts]
         if isinstance(tgt_texts, str):
