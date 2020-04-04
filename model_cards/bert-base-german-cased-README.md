@@ -1,7 +1,11 @@
 ---
 language: german
 thumbnail: https://static.tildacdn.com/tild6438-3730-4164-b266-613634323466/german_bert.png
+tags:
+- exbert
 ---
+
+[![ExBERT](https://img.shields.io/badge/Visualize%20Attentions-ExBERT-green)](https://huggingface.co/exbert/?model=bert-base-german-cased)
 
 # German BERT
 ![bert_image](https://static.tildacdn.com/tild6438-3730-4164-b266-613634323466/german_bert.png)
