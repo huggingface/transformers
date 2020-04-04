@@ -19,6 +19,7 @@ import collections
 import logging
 import os
 import unicodedata
+from typing import Optional
 
 from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
 
@@ -165,10 +166,10 @@ class BertJapaneseTokenizer(BertTokenizer):
         return split_tokens
 
 
-class MecabTokenizer(object):
+class MecabTokenizer:
     """Runs basic tokenization with MeCab morphological parser."""
 
-    def __init__(self, do_lower_case=False, never_split=None, normalize_text=True, mecab_option=None):
+    def __init__(self, do_lower_case=False, never_split=None, normalize_text=True, mecab_option: Optional[str] = None):
         """Constructs a MecabTokenizer.
 
         Args:
