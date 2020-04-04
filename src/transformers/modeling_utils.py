@@ -251,7 +251,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
     def _resize_token_embeddings(self, new_num_tokens):
         old_embeddings = self.get_input_embeddings()
-        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+
+        if type(self).__name__ == 'TransfoXLModel':
+            # since the 'TransfoXLModel' has multiple embedding layers, the last layer is resized
+            new_num_tokens_last = new_num_tokens
+            for emb_layer in old_embeddings.emb_layers[:-1]:
+                new_num_tokens_last -= emb_layer.weight.size(0)
+
+            new_embeddings_last = self._get_resized_embeddings(old_embeddings.emb_layers[-1], new_num_tokens_last)
+            new_embeddings = old_embeddings
+            new_embeddings.emb_layers[-1] = new_embeddings_last
+        else:
+            new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+
         self.set_input_embeddings(new_embeddings)
         return self.get_input_embeddings()
 
