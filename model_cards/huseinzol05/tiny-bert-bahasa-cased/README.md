@@ -4,7 +4,7 @@ language: malay
 
 # Bahasa Tiny-BERT Model
 
-General Distilled Tiny BERT base language model for Malay and Indonesian. 
+General Distilled Tiny BERT language model for Malay and Indonesian. 
 
 ## Pretraining Corpus
 
@@ -36,7 +36,7 @@ from transformers import AlbertTokenizer, BertModel
 
 model = BertModel.from_pretrained('huseinzol05/tiny-bert-bahasa-cased')
 tokenizer = AlbertTokenizer.from_pretrained(
-    'huseinzol05/tiny-base-bahasa-cased',
+    'huseinzol05/tiny-bert-bahasa-cased',
     unk_token = '[UNK]',
     pad_token = '[PAD]',
     do_lower_case = False,
@@ -50,9 +50,9 @@ We use [google/sentencepiece](https://github.com/google/sentencepiece) to train 
 ```python
 from transformers import AlbertTokenizer, AutoModelWithLMHead, pipeline
 
-model = AutoModelWithLMHead.from_pretrained('huseinzol05/tiny-base-bahasa-cased')
+model = AutoModelWithLMHead.from_pretrained('huseinzol05/tiny-bert-bahasa-cased')
 tokenizer = AlbertTokenizer.from_pretrained(
-    'huseinzol05/tiny-base-bahasa-cased',
+    'huseinzol05/tiny-bert-bahasa-cased',
     unk_token = '[UNK]',
     pad_token = '[PAD]',
     do_lower_case = False,
