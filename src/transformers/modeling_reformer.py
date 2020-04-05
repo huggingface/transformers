@@ -98,8 +98,8 @@ class LSHSelfAttention(nn.Module):
 
         ticker, undo_ticker = self._get_ticker_and_undo_ticker(sequence_length, buckets)
 
-        query_key_vectors = self._gather_by_expansion(query_key_vectors.repeat(1, 1, self.num_hashes, 1), ticker)
-        value_vectors = self._gather_by_expansion(value_vectors.repeat(1, 1, self.num_hashes, 1), ticker)
+        query_key_vectors = self._gather_by_expansion(query_key_vectors, ticker)
+        value_vectors = self._gather_by_expansion(value_vectors, ticker)
 
         # q_info = ticker
 
@@ -339,8 +339,6 @@ class ReformerSelfOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         # residual connection
         output = (hidden_states + input_tensor)
-        # Uncomment here if testing only LSHSelfAttentionLayer
-#        output = hidden_states
         return output
 
 
@@ -358,10 +356,6 @@ class ReformerAttention(nn.Module):
         head_mask=None,
     ):
         norm_hidden_states = self.layer_norm(hidden_states)
-        # TODO: Remove comments later
-        # Uncomment here if testing only LSHSelfAttentionLayer
-#        norm_hidden_states = hidden_states
-
         self_attention_outputs = self.self_attention(
             norm_hidden_states, head_mask
         )
