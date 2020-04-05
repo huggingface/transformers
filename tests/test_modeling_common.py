@@ -629,9 +629,6 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict.get("input_ids")
 
-        if self.is_encoder_decoder:
-            config.output_past = True  # needed for Bart TODO: might have to update for other encoder-decoder models
-
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
             model.to(torch_device)

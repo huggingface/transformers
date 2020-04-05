@@ -425,9 +425,6 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
 
-        if self.is_encoder_decoder:
-            config.output_past = True  # needed for Bart TODO: might have to update for other encoder-decoder models
-
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
 
