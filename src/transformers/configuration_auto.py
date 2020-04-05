@@ -24,6 +24,7 @@ from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
+from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
@@ -57,6 +58,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -79,6 +81,7 @@ CONFIG_MAPPING = OrderedDict(
         ("xlnet", XLNetConfig,),
         ("xlm", XLMConfig,),
         ("ctrl", CTRLConfig,),
+        ("electra", ElectraConfig,),
     ]
 )
 
@@ -133,6 +136,7 @@ class AutoConfig:
             - contains `xlm`: :class:`~transformers.XLMConfig` (XLM model)
             - contains `ctrl` : :class:`~transformers.CTRLConfig` (CTRL model)
             - contains `flaubert` : :class:`~transformers.FlaubertConfig` (Flaubert model)
+            - contains `electra` : :class:`~transformers.ElectraConfig` (ELECTRA model)
 
 
         Args:

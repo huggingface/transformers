@@ -136,7 +136,7 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
         if "kernel" in name or "proj" in name:
             array = np.transpose(array)
         if ("r_r_bias" in name or "r_w_bias" in name) and len(pointer) > 1:
-            # Here we will split the TF weigths
+            # Here we will split the TF weights
             assert len(pointer) == array.shape[0]
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]
