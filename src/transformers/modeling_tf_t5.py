@@ -731,7 +731,7 @@ class TFT5Model(TFT5PreTrainedModel):
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = TFT5Model.from_pretrained('t5-small')
         input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        outputs = model(input_ids, input_ids=input_ids)
+        outputs = model(input_ids, decoder_input_ids=input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
@@ -829,7 +829,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
         input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        outputs = model(input_ids, input_ids=input_ids)
+        outputs = model(input_ids, decoder_input_ids=input_ids)
         prediction_scores = outputs[0]
 
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
