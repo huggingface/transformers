@@ -57,6 +57,7 @@ class LSHSelfAttention(nn.Module):
         self.num_chunks_before = config.num_chunks_before
         self.num_chunks_after = config.num_chunks_after
         self.output_attentions = config.output_attentions
+        self.is_decoder = config.is_decoder
 
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -75,7 +76,6 @@ class LSHSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states,
-        attention_mask=None,
         head_mask=None,
     ):
 
@@ -101,8 +101,11 @@ class LSHSelfAttention(nn.Module):
         query_key_vectors = self._gather_by_expansion(query_key_vectors.repeat(1, 1, self.num_hashes, 1), ticker)
         value_vectors = self._gather_by_expansion(value_vectors.repeat(1, 1, self.num_hashes, 1), ticker)
 
+        # q_info = ticker
+
         query_key_vectors = self._split_dim_by(query_key_vectors, -1, self.chunk_length)
         value_vectors = self._split_dim_by(value_vectors, -1, self.chunk_length)
+        ticker = self._split_dim_by(ticker, -1, self.chunk_length)
 
         # Optionally include adjacent chunks.
         if self.chunk_length is None:
@@ -110,7 +113,7 @@ class LSHSelfAttention(nn.Module):
 
         key_vectors = self._len_and_dim_norm(query_key_vectors)
 
-        out_vectors, logits, attention_probs = self._attend(query_key_vectors, key_vectors, value_vectors, undo_ticker, attention_mask, head_mask)
+        out_vectors, logits, attention_probs = self._attend(query_key_vectors, key_vectors, value_vectors, ticker, undo_ticker, head_mask)
 
         if self.num_hashes > 1:
             out_vectors = self._split_dim_by(out_vectors, self.num_hashes, sequence_length)
@@ -202,17 +205,38 @@ class LSHSelfAttention(nn.Module):
         sorted_ticker = (sorted_ticker % sequence_length)
         return sorted_ticker, undo_sorted_ticker
 
-    def _attend(self, query_vectors, key_vectors, value_vectors, undo_ticker, attention_mask, head_mask):
+    def _attend(self, query_vectors, key_vectors, value_vectors, ticker, undo_ticker, head_mask):
         key_vectors = self._look_adjacent(key_vectors)
         value_vectors = self._look_adjacent(value_vectors)
 
         # get logits and dots
         query_key_dots = torch.matmul(query_vectors, key_vectors.transpose(-1, -2))
 
-        if attention_mask is not None:
-            # Apply the attention mask.
-            # Attention mask is precomputed for all layers in forward() function
-            query_key_dots = query_key_dots + attention_mask
+        # TODO(PVP): better naming
+        query_info = ticker
+        key_value_info = self._look_adjacent(ticker)
+
+        # Causal mask
+        if self.is_decoder:
+            causal_mask = torch.lt(query_info.unsqueeze(-1), key_value_info.unsqueeze(-2)).long()
+            query_key_dots = query_key_dots - causal_mask * 1e9
+
+        # Self mask
+        self_mask = torch.eq(query_info.unsqueeze(-1), key_value_info.unsqueeze(-2)).long()
+        query_key_dots = query_key_dots - self_mask * 1e5
+
+        # Note: Causal mask probably uses higher mask value (-1e9) than Self mask (-1e5) so that token is able to attend to itself when it has no other valid attention targets.
+
+        # Note: Self mask is used because Q and K projection weights are shared.
+        # From the reformer paper (https://arxiv.org/pdf/2001.04451.pdf):
+
+        # " While attention to the future is not allowed, typical implementations of the
+        # Transformer do allow a position to attend to itself.
+        # Such behavior is undesirable in a shared-QK formulation because the dot-product
+        # of a query vector with itself will almost always be greater than the dot product of a
+        # query vector with a vector at another position. We therefore modify the masking
+        # to forbid a token from attending to itself, except in situations
+        # where a token has no other valid attention targets (e.g. the first token in a sequence) "
 
         logits = torch.logsumexp(query_key_dots, dim=-1, keepdim=True)
         dots = torch.exp(query_key_dots - logits)
@@ -331,7 +355,6 @@ class ReformerAttention(nn.Module):
         self,
         prev_attention_output,
         hidden_states,
-        attention_mask=None,
         head_mask=None,
     ):
         norm_hidden_states = self.layer_norm(hidden_states)
@@ -340,7 +363,7 @@ class ReformerAttention(nn.Module):
 #        norm_hidden_states = hidden_states
 
         self_attention_outputs = self.self_attention(
-            norm_hidden_states, attention_mask, head_mask
+            norm_hidden_states, head_mask
         )
 
         # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
@@ -404,14 +427,13 @@ class ReformerLayer(nn.Module):
         self,
         prev_attention_output,
         hidden_states,
-        attention_mask=None,
         head_mask=None,
     ):
 
         # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
         # X_1 = prev_attention_output; X_2 = hidden_states
         # Y_1 = attention_output; Y_2 = output
-        attention_outputs = self.attention(prev_attention_output, hidden_states, attention_mask, head_mask)
+        attention_outputs = self.attention(prev_attention_output, hidden_states, head_mask)
         attention_output = attention_outputs[0]
         output = self.feed_forward(attention_output, prev_attention_output)
 
