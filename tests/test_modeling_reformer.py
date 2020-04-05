@@ -250,7 +250,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         # Remove residual connection in ReformerSelfOutput to test this layer only
         # Remove layer norm in ReformerAttention to test this layer only
         config = ReformerConfig()
-        shape = (1, 7, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        shape = (2, 7, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
         trax_utils = TraxUtils(shape)
@@ -260,7 +260,9 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_input = torch.tensor(np_input, dtype=torch.float)
         hf_layer = ReformerAttention(config)
         self._set_layer_weights_in_torch(trax_weights, hf_layer, config.hidden_size)
-        hf_output = hf_layer(hf_input, hf_input)[0]
+
+        hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
+        hf_output = hf_layer.output(hf_attention_all_heads, torch.zeros_like(hf_input))
 
         trax_torch_output = torch.tensor(np.asarray(trax_output))
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
