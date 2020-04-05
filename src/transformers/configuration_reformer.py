@@ -132,6 +132,7 @@ class ReformerConfig(PretrainedConfig):
         self.ff_chunk_size = 0
         self.d_model = hidden_size
         self.d_ff = intermediate_size
+        self.is_decoder = True
 #        self.ff_activation =  # GELU
 
         self.vocab_size = vocab_size
