@@ -218,12 +218,14 @@ class LSHSelfAttention(nn.Module):
 
         # Causal mask
         if self.is_decoder:
-            causal_mask = torch.lt(query_info.unsqueeze(-1), key_value_info.unsqueeze(-2)).long().to(query_info.device)
-            query_key_dots = query_key_dots - causal_mask * 1e9
+            # TODO: This line can be improved in terms of memory
+            mask = torch.lt(query_info.unsqueeze(-1), key_value_info.unsqueeze(-2)).long().to(query_info.device)
+            query_key_dots = query_key_dots - mask * 1e9
 
         # Self mask
-        self_mask = torch.eq(query_info.unsqueeze(-1), key_value_info.unsqueeze(-2)).long().to(query_info.device)
-        query_key_dots = query_key_dots - self_mask * 1e5
+        # TODO: This line can be improved in terms of memory
+        mask = torch.eq(query_info.unsqueeze(-1), key_value_info.unsqueeze(-2)).long().to(query_info.device)
+        query_key_dots = query_key_dots - mask * 1e5
 
         # Note: Causal mask probably uses higher mask value (-1e9) than Self mask (-1e5) so that token is able to attend to itself when it has no other valid attention targets.
 
