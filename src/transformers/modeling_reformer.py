@@ -71,7 +71,7 @@ class LSHSelfAttention(nn.Module):
         self.query_key = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = config.attention_probs_dropout_prob
 
     def forward(
         self,
@@ -242,7 +242,7 @@ class LSHSelfAttention(nn.Module):
         dots = torch.exp(query_key_dots - logits)
 
         # dropout
-        dots = self.dropout(dots)
+        dots = nn.functional.dropout(dots, self.dropout, self.training)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -299,7 +299,7 @@ class LSHSelfAttention(nn.Module):
     def _transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
+        return x.transpose(2, 1)
 
     def _transpose_for_output(self, x):
         x = x.permute(0, 2, 1, 3)
@@ -332,11 +332,11 @@ class ReformerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = config.hidden_dropout_prob
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
         # residual connection
         output = (hidden_states + input_tensor)
         return output
@@ -371,7 +371,7 @@ class ReformerFeedForwardDense(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = config.hidden_dropout_prob
         if isinstance(config.hidden_act, str):
             self.act_fn = ACT2FN[config.hidden_act]
         else:
@@ -379,7 +379,7 @@ class ReformerFeedForwardDense(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
         hidden_states = self.act_fn(hidden_states)
         return hidden_states
 
@@ -388,11 +388,11 @@ class ReformerFeedForwardOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = config.hidden_dropout_prob
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
         output = (hidden_states + input_tensor)
         return output
 

@@ -260,6 +260,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_input = torch.tensor(np_input, dtype=torch.float)
         hf_layer = ReformerAttention(config)
         self._set_layer_weights_in_torch(trax_weights, hf_layer, config.hidden_size)
+        hf_layer.eval()
 
         hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
         hf_output = hf_layer.output(hf_attention_all_heads, torch.zeros_like(hf_input))
@@ -282,6 +283,8 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_input = torch.tensor(np_input, dtype=torch.float)
         hf_block = ReformerLayer(config)
         self._set_block_weights_in_torch(trax_weights, hf_block, config.hidden_size)
+        hf_block.eval()
+
         hf_output_1, hf_output_2 = hf_block(hf_input, hf_input)[:2]
 
         self.assertTrue(torch.allclose(hf_output_1, trax_torch_output_1, atol=1e-3))
