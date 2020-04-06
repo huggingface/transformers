@@ -126,8 +126,13 @@ class ReformerConfig(PretrainedConfig):
 #        predict_drop_len=256
 #        n_parallel_heads=1
 
-#        TO DELETE LATER:
+#        TO CHANGE LATER:
         self.seed = 0
+        self.num_attention_chunks = 1
+        self.ff_chunk_size = 0
+        self.d_model = 32
+        self.d_ff = 64
+#        self.ff_activation =  # GELU
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
