@@ -114,6 +114,6 @@ class JaxPreTrainedModel:
         # Instantiate model.
         with open(resolved_archive_file, 'rb') as state_f:
             state_data = state_f.read()
-            state = from_bytes(cls.MODEL_CLASS, state_data)
+            state = from_bytes(cls.MODEL_CLASS, state_data)["params"]
         model = cls(config, state, *model_args, **model_kwargs)
         return model
