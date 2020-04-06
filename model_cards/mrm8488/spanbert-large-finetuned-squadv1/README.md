@@ -23,7 +23,7 @@ You can get the fine-tuning script [here](https://github.com/facebookresearch/Sp
 python code/run_squad.py \
   --do_train \
   --do_eval \
-  --model spanbert-base-cased \
+  --model spanbert-large-cased \
   --train_file train-v1.1.json \
   --dev_file dev-v1.1.json \
   --train_batch_size 32 \
