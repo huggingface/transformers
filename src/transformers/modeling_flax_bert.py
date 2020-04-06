@@ -10,7 +10,7 @@ from typing import Callable
 from flax.serialization import to_bytes
 from jax.random import PRNGKey
 
-from transformers import BertModel as PTBertModel, BertTokenizerFast, BertConfig
+from transformers import BertTokenizerFast, BertConfig, AutoModel
 from transformers.modeling_jax_utils import JaxPreTrainedModel
 
 ACT2FN = {
@@ -166,7 +166,6 @@ class BertLayerCollection(nn.Module):
         for i in range(num_layers):
             output_i = BertLayer(input_i, attention_mask, num_heads, head_size, intermediate_size, name="{}".format(i))
             input_i = output_i
-        # output_i = BertLayer(input_i, attention_mask, num_heads, head_size, intermediate_size, name="0")
         return output_i
 
 
@@ -249,11 +248,6 @@ class FlaxBertModel(JaxPreTrainedModel):
 
         return predict(input_ids, token_type_ids, attention_mask)
 
-    # @staticmethod
-    # def from_pretrained(config: BertConfig, state: dict):
-    #     state = from_state_dict(BertModel, state)
-    #     return FlaxBertModel(config, state)
-
     def save_pretrained(self, folder):
         folder_abs = os.path.abspath(folder)
 
@@ -267,7 +261,7 @@ class FlaxBertModel(JaxPreTrainedModel):
 
 if __name__ == '__main__':
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
-    model_pt = PTBertModel.from_pretrained('bert-base-cased')
+    model_pt = AutoModel.from_pretrained('bert-base-cased')
     model_pt.eval()
 
     # with open("/data/Downloads/bert-base-cased-pytorch_model.bin", 'rb') as model_f:
@@ -297,7 +291,10 @@ if __name__ == '__main__':
     #     state = unflatten_dict({tuple(k.split('.')[1:]): v for k, v in state.items()})
     #     model = FlaxBertModel.from_pretrained(model_pt.config, state)
 
-    model = FlaxBertModel.from_pretrained('/data/Workspace/transformers/src/transformers/bert-base-cased/bert-base-cased.bin')
+    model = FlaxBertModel.from_pretrained(
+        '/data/Workspace/transformers/src/transformers/bert-base-cased/bert-base-cased.bin',
+        config=model_pt.config,
+    )
 
     # Inputs
     flax_input = tokenizer.encode_plus("My name is Morgan")
@@ -308,5 +305,4 @@ if __name__ == '__main__':
     pt_enc = model_pt(pt_input['input_ids'], pt_input['attention_mask'])
     flax_enc = model(**flax_input)
 
-    model.save_pretrained('bert-base-cased')
     input()
