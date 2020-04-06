@@ -17,7 +17,6 @@ BioMed-RoBERTa achieves competitive performance to state of the art models on a 
 | JNLPBA       | NER                 | 74.3 (0.2)   | 75.2 (0.1)          |
 | BC5CDR       | NER                 | 85.6 (0.1)   | 87.8 (0.1)          |
 | NCBI-Disease | NER                 | 86.6 (0.3)   | 87.1 (0.8)          |
-| EMBNLP       | PICO                | 75.7 (0.4)   | 76.8 (0.3)       |
 
 More evaluations TBD.
 
