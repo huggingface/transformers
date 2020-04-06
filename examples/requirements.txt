@@ -1,0 +1,8 @@
+tensorboardX
+tensorboard
+scikit-learn
+seqeval
+psutil
+sacrebleu
+rouge-score
+tensorflow_datasets

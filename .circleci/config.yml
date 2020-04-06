@@ -1,29 +1,120 @@
 version: 2
 jobs:
-    build_py3:
-        working_directory: ~/pytorch-pretrained-BERT
+    run_tests_torch_and_tf:
+        working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.6
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest ftfy spacy
-            - run: sudo python -m spacy download en
-            - run: python -m pytest -sv tests/
-    build_py2:
-        working_directory: ~/pytorch-pretrained-BERT
+            - run: sudo pip install .[sklearn,tf-cpu,torch,testing]
+            - run: sudo pip install codecov pytest-cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: codecov
+
+    run_tests_torch:
+        working_directory: ~/transformers
         docker:
-            - image: circleci/python:2.7
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest spacy
-            - run: sudo pip install ftfy==4.4.3
-            - run: sudo python -m spacy download en
-            - run: python -m pytest -sv tests/
+            - run: sudo pip install .[sklearn,torch,testing]
+            - run: sudo pip install codecov pytest-cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: codecov
+    run_tests_tf:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install .[sklearn,tf-cpu,testing]
+            - run: sudo pip install codecov pytest-cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: codecov
+    run_tests_custom_tokenizers:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        environment:
+            RUN_CUSTOM_TOKENIZERS: yes
+        steps:
+            - checkout
+            - run: sudo pip install .[mecab,testing]
+            - run: python -m pytest -sv ./tests/test_tokenization_bert_japanese.py
+    run_examples_torch:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install .[sklearn,torch,testing]
+            - run: sudo pip install -r examples/requirements.txt
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./examples/
+    deploy_doc:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
+            - checkout
+            - run: sudo pip install .[tf,torch,docs]
+            - run: ./.circleci/deploy.sh
+    check_code_quality:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        resource_class: medium
+        parallelism: 1
+        steps:
+            - checkout
+            # we need a version of isort with https://github.com/timothycrosley/isort/pull/1000
+            - run: sudo pip install git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
+            - run: sudo pip install .[tf,torch,quality]
+            - run: black --check --line-length 119 --target-version py35 examples templates tests src utils
+            - run: isort --check-only --recursive examples templates tests src utils
+            - run: flake8 examples templates tests src utils
+    check_repository_consistency:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        resource_class: small
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install requests
+            - run: python ./utils/link_tester.py
+workflow_filters: &workflow_filters
+    filters:
+        branches:
+            only:
+                - master
 workflows:
-  version: 2
-  build_and_test:
-    jobs:
-      - build_py3
-      - build_py2
+    version: 2
+    build_and_test:
+        jobs:
+            - check_code_quality
+            - check_repository_consistency
+            - run_examples_torch
+            - run_tests_custom_tokenizers
+            - run_tests_torch_and_tf
+            - run_tests_torch
+            - run_tests_tf
+            - deploy_doc: *workflow_filters

@@ -1,0 +1,256 @@
+/* Our DOM objects */
+
+.framework-selector {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+.framework-selector > button {
+    background-color: white;
+    color: #6670FF;
+    border: 1px solid #6670FF;
+    padding: 5px;
+}
+
+.framework-selector > button.selected{
+    background-color: #6670FF;
+    color: white;
+    border: 1px solid #6670FF;
+    padding: 5px;
+}
+
+/* The literal code blocks */
+.rst-content tt.literal, .rst-content tt.literal, .rst-content code.literal {
+    color: #6670FF;
+}
+
+/* To keep the logo centered */
+.wy-side-scroll {
+    width: auto;
+    font-size: 20px;
+}
+
+/* The div that holds the Hugging Face logo */
+.HuggingFaceDiv {
+    width: 100%
+}
+
+/* The research field on top of the toc tree */
+.wy-side-nav-search{
+    background-color: #6670FF;
+}
+
+/* The toc tree */
+.wy-nav-side{
+    background-color: #6670FF;
+}
+
+/* The selected items in the toc tree */
+.wy-menu-vertical li.current{
+    background-color: #A6B0FF;
+}
+
+/* When a list item that does belong to the selected block from the toc tree is hovered */
+.wy-menu-vertical li.current a:hover{
+    background-color: #B6C0FF;
+}
+
+/* When a list item that does NOT belong to the selected block from the toc tree is hovered. */
+.wy-menu-vertical li a:hover{
+    background-color: #A7AFFB;
+}
+
+/* The text items on the toc tree */
+.wy-menu-vertical a {
+    color: #FFFFDD;
+    font-family: Calibre-Light, sans-serif;
+}
+.wy-menu-vertical header, .wy-menu-vertical p.caption{
+    color: white;
+    font-family: Calibre-Light, sans-serif;
+}
+
+/* The color inside the selected toc tree block */
+.wy-menu-vertical li.toctree-l2 a, .wy-menu-vertical li.toctree-l3 a, .wy-menu-vertical li.toctree-l4 a {
+    color: black;
+}
+
+/* Inside the depth-2 selected toc tree block */
+.wy-menu-vertical li.toctree-l2.current>a {
+    background-color: #B6C0FF
+}
+.wy-menu-vertical li.toctree-l2.current li.toctree-l3>a {
+    background-color: #C6D0FF
+}
+
+/* Inside the depth-3 selected toc tree block */
+.wy-menu-vertical li.toctree-l3.current li.toctree-l4>a{
+    background-color: #D6E0FF
+}
+
+/* Inside code snippets */
+.rst-content dl:not(.docutils) dt{
+    font-size: 15px;
+}
+
+/* Links */
+a {
+    color: #6670FF;
+}
+
+/* Content bars */
+.rst-content dl:not(.docutils) dt {
+    background-color: rgba(251, 141, 104, 0.1);
+    border-right: solid 2px #FB8D68;
+    border-left: solid 2px #FB8D68;
+    color: #FB8D68;
+    font-family: Calibre-Light, sans-serif;
+    border-top: none;
+    font-style: normal !important;
+}
+
+/* Expand button */
+.wy-menu-vertical li.toctree-l2 span.toctree-expand,
+.wy-menu-vertical li.on a span.toctree-expand, .wy-menu-vertical li.current>a span.toctree-expand,
+.wy-menu-vertical li.toctree-l3 span.toctree-expand{
+    color: black;
+}
+
+/* Max window size */
+.wy-nav-content{
+    max-width: 1200px;
+}
+
+/* Mobile header */
+.wy-nav-top{
+    background-color: #6670FF;
+}
+
+
+/* Source spans */
+.rst-content .viewcode-link, .rst-content .viewcode-back{
+    color: #6670FF;
+    font-size: 110%;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+/* It would be better for table to be visible without horizontal scrolling */
+.wy-table-responsive table td, .wy-table-responsive table th{
+    white-space: normal;
+}
+
+.footer {
+    margin-top: 20px;
+}
+
+.footer__Social {
+    display: flex;
+    flex-direction: row;
+}
+
+.footer__CustomImage {
+    margin: 2px 5px 0 0;
+}
+
+/* class and method names in doc */
+.rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) tt.descclassname, .rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) code.descname, .rst-content dl:not(.docutils) tt.descclassname, .rst-content dl:not(.docutils) code.descclassname{
+    font-family: Calibre, sans-serif;
+    font-size: 20px !important;
+}
+
+/* class name in doc*/
+.rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) tt.descname, .rst-content dl:not(.docutils) code.descname{
+    margin-right: 10px;
+    font-family: Calibre-Medium, sans-serif;
+}
+
+/* Method and class parameters */
+.sig-param{
+    line-height: 23px;
+}
+
+/* Class introduction "class" string at beginning */
+.rst-content dl:not(.docutils) .property{
+    font-size: 18px;
+    color: black;
+}
+
+
+/* FONTS */
+body{
+    font-family: Calibre, sans-serif;
+    font-size: 16px;
+}
+
+h1 {
+    font-family: Calibre-Thin, sans-serif;
+    font-size: 70px;
+}
+
+h2, .rst-content .toctree-wrapper p.caption, h3, h4, h5, h6, legend{
+    font-family: Calibre-Medium, sans-serif;
+}
+
+@font-face {
+    font-family: Calibre-Medium;
+    src: url(./Calibre-Medium.otf);
+    font-weight:400;
+}
+
+@font-face {
+    font-family: Calibre;
+    src: url(./Calibre-Regular.otf);
+    font-weight:400;
+}
+
+@font-face {
+    font-family: Calibre-Light;
+    src: url(./Calibre-Light.ttf);
+    font-weight:400;
+}
+
+@font-face {
+    font-family: Calibre-Thin;
+    src: url(./Calibre-Thin.otf);
+    font-weight:400;
+}
+
+
+/**
+ * Nav Links to other parts of huggingface.co
+ */
+ div.menu {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding-top: 20px;
+    padding-right: 20px;
+    z-index: 1000;
+}
+div.menu a {
+    font-size: 14px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: white;
+    -webkit-font-smoothing: antialiased;
+    background: linear-gradient(0deg, #6671ffb8, #9a66ffb8 50%);
+    padding: 10px 16px 6px 16px;
+    border-radius: 3px;
+    margin-left: 12px;
+    position: relative;
+}
+div.menu a:active {
+    top: 1px;
+}
+@media (min-width: 768px) and (max-width: 1750px) {
+    .wy-breadcrumbs {
+        margin-top: 32px;
+    }
+}
+@media (max-width: 768px) {
+    div.menu {
+        display: none;
+    }
+}
