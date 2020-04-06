@@ -105,8 +105,48 @@ class TextDataset(Dataset):
 
 
 class LineByLineTextDataset(Dataset):
-    def __init__(self, tokenizer: PreTrainedTokenizer, args, file_path: str, block_size=512):
+    def __init__(self, tokenizer: PreTrainedTokenizer, args, file_path: str, file_para_path,block_size=512):
         assert os.path.isfile(file_path)
+        # Here, we do not cache the features, operating under the assumption
+        # that we will soon use fast multithreaded tokenizers from the
+        # `tokenizers` repo everywhere =)
+        logger.info("Creating features from dataset file at %s", file_path)
+
+        examples=self.produce_tokens(tokenizer, args, file_path, block_size)
+        positions_ids=self.produce_position_ids(examples)
+
+        if file_para_path:
+
+            file_src_para_path,file_tgt_para_path=file_para_path
+            assert os.path.isfile(file_src_para_path)
+            assert os.path.isfile(file_tgt_para_path)
+            examples_src=self.produce_tokens(tokenizer, args, file_src_para_path, block_size)
+            examples_tgt=self.produce_tokens(tokenizer, args, file_tgt_para_path, block_size)
+            examples_para,positions_ids_para=self.concatenat_parallel(examples_src,examples_tgt)
+            examples+=examples_para
+            positions_ids+=positions_ids_para
+
+            # with open(file_src_para_path, encoding="utf-8") as f:
+            #     lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
+            # src_para_data=tokenizer.batch_encode_plus(lines, add_special_tokens=True, max_length=block_size)["input_ids"]
+            # with open(file_tgt_para_path, encoding="utf-8") as f:
+            #     lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
+        self.examples=list(zip(examples,positions_ids))
+    def concatenat_parallel(self,examples_src,examples_tgt):
+        examples_para=[]
+        positions_para=[]
+        for i,data_src in enumerate(examples_src):
+            examples_para.append(data_src+examples_tgt[i])
+            positions_para.append(list(range(len(data_src)))+list(range(len(examples_tgt[i]))))
+        return examples_para,positions_para
+
+    def produce_position_ids(self,examples):
+        positions=[]
+        for data_src in examples:
+            positions.append(list(range(len(data_src))))
+        return positions
+
+    def produce_tokens(self,tokenizer: PreTrainedTokenizer, args, file_path: str, block_size):
         # Here, we do not cache the features, operating under the assumption
         # that we will soon use fast multithreaded tokenizers from the
         # `tokenizers` repo everywhere =)
@@ -115,7 +155,8 @@ class LineByLineTextDataset(Dataset):
         with open(file_path, encoding="utf-8") as f:
             lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
 
-        self.examples = tokenizer.batch_encode_plus(lines, add_special_tokens=True, max_length=block_size)["input_ids"]
+        examples = tokenizer.batch_encode_plus(lines, add_special_tokens=True, max_length=block_size)["input_ids"]
+        return examples
 
     def __len__(self):
         return len(self.examples)
@@ -126,10 +167,22 @@ class LineByLineTextDataset(Dataset):
 
 def load_and_cache_examples(args, tokenizer, evaluate=False):
     file_path = args.eval_data_file if evaluate else args.train_data_file
+    para_data_file = None if evaluate else args.para_data_file
+
+    if not evaluate:
+        ##parallel data
+        file_para_path_src=args.para_data_file[0]
+        file_para_path_tgt=args.para_data_file[1]
+        src_data=LineByLineTextDataset(tokenizer, args, file_path=file_para_path_src, block_size=args.block_size/2)
+        tgt_data=LineByLineTextDataset(tokenizer, args, file_path=file_para_path_tgt, block_size=args.block_size/2)
+
+
     if args.line_by_line:
-        return LineByLineTextDataset(tokenizer, args, file_path=file_path, block_size=args.block_size)
+        return LineByLineTextDataset(tokenizer, args, file_path=file_path, file_para_path=para_data_file,block_size=args.block_size)
     else:
         return TextDataset(tokenizer, args, file_path=file_path, block_size=args.block_size)
+
+
 
 
 def set_seed(args):
@@ -233,9 +286,6 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
     else:
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
-    model = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
-    model.resize_token_embeddings(len(tokenizer))
-
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
@@ -312,6 +362,9 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
 
     tr_loss, logging_loss = 0.0, 0.0
 
+    model_to_resize = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
+    model_to_resize.resize_token_embeddings(len(tokenizer))
+
     model.zero_grad()
     train_iterator = trange(
         epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]
@@ -319,18 +372,18 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
     set_seed(args)  # Added here for reproducibility
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
-        for step, batch in enumerate(epoch_iterator):
+        for step, batch_posids in enumerate(epoch_iterator):
 
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
                 continue
-
+            batch,posids=list(zip(*batch_posids))
             inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else (batch, batch)
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
             model.train()
-            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
+            outputs = model(inputs, position_ids=posids,masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.n_gpu > 1:
@@ -624,7 +677,6 @@ def main():
         and os.listdir(args.output_dir)
         and args.do_train
         and not args.overwrite_output_dir
-        and not args.should_continue
     ):
         raise ValueError(
             "Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(
