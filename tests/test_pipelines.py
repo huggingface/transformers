@@ -88,7 +88,7 @@ TRANSLATION_FINETUNED_MODELS = {
     ("patrickvonplaten/t5-tiny-random", "t5-small", "translation_en_to_de"),
     ("patrickvonplaten/t5-tiny-random", "t5-small", "translation_en_to_ro"),
 }
-TF_TRANSLATION_FINETUNED_MODELS = {("patrickvonplaten/t5-tiny-random", "t5-small", "translation_en_to_fr")}
+TF_TRANSLATION_FINETUNED_MODELS = {("t5-small", "t5-small", "translation_en_to_fr")}
 
 
 class MonoColumnInputTestCase(unittest.TestCase):
