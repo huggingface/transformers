@@ -7,14 +7,17 @@ Specific details of the adaptive pretraining procedure can be found in Gururanga
 
 ## Evaluation
 
-BioMed-RoBERTa achieves competitive performance to state of the art models on a number of NLP tasks in the biomedical domain:
+BioMed-RoBERTa achieves competitive performance to state of the art models on a number of NLP tasks in the biomedical domain (numbers are mean (standard deviation) over 3+ random seeds)
 
 
 | Task         | Task Type           | RoBERTa-base | BioMed-RoBERTa-base |
 |--------------|---------------------|--------------|---------------------|
-| RCT-180K     | Text Classification | 86.4         | 86.9                |
-| ChemProt     | Relation Extraction | 81.1         | 83.0                |
-
+| RCT-180K     | Text Classification | 86.4 (0.3)   | 86.9 (0.2)          |
+| ChemProt     | Relation Extraction | 81.1 (1.1)   | 83.0 (0.7)          |
+| JNLPBA       | NER                 | 74.3 (0.2)   | 75.1 ()             |
+| BC5CDR       | NER                 | 85.6 (0.1)   | 87.8 (0.1)          |
+| NCBI-Disease | NER                 | 86.6 (0.3)   | 87.1 (0.8)          |
+| EMBNLP       | PICO                | 75.7 ()      | 76.4 ()             |
 
 More evaluations TBD.
 
