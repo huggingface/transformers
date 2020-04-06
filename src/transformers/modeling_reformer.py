@@ -218,12 +218,12 @@ class LSHSelfAttention(nn.Module):
 
         # Causal mask
         if self.is_decoder:
-            # TODO: This line can be improved in terms of memory
+            # TODO (PVP): This line can be improved in terms of memory. Mask should be inserted and does not have to be created each time layer is called
             mask = torch.lt(query_info.unsqueeze(-1), key_value_info.unsqueeze(-2)).long().to(query_info.device)
             query_key_dots = query_key_dots - mask * 1e9
 
         # Self mask
-        # TODO: This line can be improved in terms of memory
+        # TODO (PVP): This line can be improved in terms of memory. Mask should be inserted and does not have to be created each time layer is called
         mask = torch.eq(query_info.unsqueeze(-1), key_value_info.unsqueeze(-2)).long().to(query_info.device)
         query_key_dots = query_key_dots - mask * 1e5
 
