@@ -64,7 +64,7 @@ TF_TEXT_CLASSIF_FINETUNED_MODELS = {
 
 TEXT_CLASSIF_FINETUNED_MODELS = {
     (
-        "bert-base-uncased",
+        "distilbert-base-cased",
         "distilbert-base-uncased-finetuned-sst-2-english",
         "distilbert-base-uncased-finetuned-sst-2-english",
     )
