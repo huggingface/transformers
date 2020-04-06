@@ -105,7 +105,7 @@ class ReformerConfig(PretrainedConfig):
         num_attention_heads=2,
         num_buckets=4,
         num_hashes=2,
-        chunk_length=7,
+        chunk_length=64,
         num_chunks_before=1,
         num_chunks_after=0,
         intermediate_size=64,
