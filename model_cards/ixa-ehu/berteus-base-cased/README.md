@@ -23,6 +23,7 @@ If using this model, please cite the following paper:
 @inproceedings{agerri2020give,
   title={Give your Text Representation Models some Love: the Case for Basque},
   author={Rodrigo Agerri and I{\~n}aki San Vicente and Jon Ander Campos and Ander Barrena and Xabier Saralegi and Aitor Soroa and Eneko Agirre},
+  booktitle={Proceedings of the 12th International Conference on Language Resources and Evaluation},
   year={2020}
 }
 ```
