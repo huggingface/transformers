@@ -21,7 +21,9 @@ import numpy as np
 from trax import math as trax_math
 from trax.shapes import ShapeDtype as trax_ShapeDtype
 import jax
+#from trax.layers.research.efficient_attention_v2 import LSHSelfAttention as TraxLSHSelfAttention
 from trax.layers.research.efficient_attention_v2 import LSHSelfAttention
+#from transformers import LSHSelfAttention
 
 
 from transformers import is_torch_available  # noqa: F401
@@ -52,7 +54,6 @@ class TraxUtils(object):
     """
 
     def __init__(self, shape=(3, 32, 8)):
-        self.LSHSelfAttention = LSHSelfAttention
         self._shape = shape
 
     def convert_to_jax_array(self, np_array):
@@ -65,7 +66,7 @@ class TraxUtils(object):
             input_signature = trax_ShapeDtype(shape)
         return input_signature
 
-    def get_lsh_self_attention_layer(
+    def get_layer(
         self,
         shape=None,
         num_attention_heads=None,
@@ -84,7 +85,7 @@ class TraxUtils(object):
         with trax_math.use_backend("jax"):
             if shape is None:
                 shape = self._shape
-            layer = self.LSHSelfAttention(
+            layer = LSHSelfAttention(
                 n_heads=num_attention_heads,
                 d_qk=hidden_size,
                 d_v=hidden_size,
@@ -113,7 +114,7 @@ class TraxUtils(object):
             input_data = self.convert_to_jax_array(np_input_data)
 
             if layer is None:
-                layer = self.get_lsh_self_attention_layer()
+                layer = self.get_layer()
 
             if input_signature is None:
                 input_signature = self.get_input_signature()
@@ -140,6 +141,7 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def _create_config(self, num_attention_heads=6, hidden_size=17, num_hashes=2, num_buckets=4, query_key_chunk_len=5, num_chunks_before=1, num_chunks_after=0, seed=0):
         return {
+                'num_attention_heads': num_attention_heads,
                 'hidden_size': hidden_size,
                 'num_hashes': num_hashes,
                 'num_buckets': num_buckets,
@@ -155,9 +157,18 @@ class ReformerIntegrationTests(unittest.TestCase):
         config_dict = self._create_config()
 
         np_input = self._get_random_input(shape)
+
         trax_utils = self._get_trax_utils(shape)
 
         trax_layer = trax_utils.get_layer(**config_dict)
-        lsh_trax_output = trax_utils.forward_layer(np_input, layer=trax_layer)  # noqa: F841
+        lsh_trax_output, weights, state = trax_utils.forward_layer(np_input, layer=trax_layer)  # noqa: F841
+
+        import ipdb
+        ipdb.set_trace()
+
+#        hf_layer = LSHSelfAttention(config_dict)
+
+        import ipdb
+        ipdb.set_trace()
 
         pass

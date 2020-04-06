@@ -25,12 +25,14 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from .activations import gelu, gelu_new, swish
-from .configuration_reformer import ReformerConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, prune_linear_layer
 
 # DELETE later
 import numpy
+
+# ADD later
+#from .configuration_reformer import ReformerConfig
 
 
 logger = logging.getLogger(__name__)
@@ -176,14 +178,16 @@ class LSHSelfAttention(nn.Module):
 #                attention_dropout=0.0, n_parallel_heads=1,
 #                use_python_loop=False, use_reference_code=False
 #                ):
-        if config['hidden_size'] % config['num_attention_heads'] != 0:
+
+        self.num_attention_heads = config['num_attention_heads']
+        self.hidden_size = config['hidden_size'] * self.num_attention_heads
+
+        if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (config['hidden_size'], config['num_attention_heads'])
             )
 
-        self.num_attention_heads = config['num_attention_heads']
-        self.hidden_size = config['hidden_size']
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
@@ -727,7 +731,7 @@ class ReformerPreTrainedModel(PreTrainedModel):
         a simple interface for downloading and loading pretrained models.
     """
 
-    config_class = ReformerConfig
+# TODO:    config_class = ReformerConfig
     pretrained_model_archive_map = REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_reformer
     base_model_prefix = "reformer"
