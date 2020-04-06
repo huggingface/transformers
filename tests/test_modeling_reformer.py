@@ -23,6 +23,9 @@ import jax
 from trax.layers.research.efficient_attention_v2 import (
     LSHSelfAttention as TraxLSHSelfAttention,
 )
+from trax.models.reformer.reformer import DecoderBlock as TraxLSHAttentionBlock
+from trax import layers as tl
+
 from transformers import ReformerAttention, ReformerConfig
 
 
@@ -121,6 +124,73 @@ class TraxUtils(object):
 
         return output, weights, state
 
+    def get_block(
+        self,
+        config,
+        use_reference_code=True,
+        share_qk=True,
+        ff_use_sru=0,
+        mode="train",
+        causal=False,
+        path_to_save_weights="/home/patrick/hugging_face/experiments/reformer/intermediate_weights",
+    ):
+
+        with trax_math.use_backend("jax"):
+            hidden_size_per_head = config.hidden_size // config.num_attention_heads
+            list_of_layers = TraxLSHAttentionBlock(
+                d_model=config.d_model,
+                d_ff=config.d_ff,
+                d_attention_key=hidden_size_per_head,
+                d_attention_value=hidden_size_per_head,
+                n_heads=config.num_attention_heads,
+                n_attention_chunks=config.num_attention_chunks,
+                attention_type=tl.LSHSelfAttention,
+                dropout=config.hidden_dropout_prob,
+                share_qk=share_qk,
+                ff_activation=tl.Gelu,
+                ff_use_sru=ff_use_sru,
+                ff_chunk_size=config.ff_chunk_size,
+                mode=mode,
+                causal=causal,
+                chunk_len=config.chunk_length,
+                n_chunks_before=config.num_chunks_before,
+                n_chunks_after=config.num_chunks_after,
+                n_hashes=config.num_hashes,
+                n_buckets=config.num_buckets,
+                use_reference_code=use_reference_code,
+                hash_seed=config.seed,
+                path_to_save_weights=path_to_save_weights
+            )
+            layer = tl.Serial(tl.ReversibleSerial([list_of_layers]))
+
+        return layer
+
+    def forward_block(
+        self,
+        np_input_data,
+        block,
+        input_signature=None,
+        random_number_generator=None,
+    ):
+        with trax_math.use_backend("jax"):
+            input_data = self.convert_to_jax_array(np_input_data)
+            input_data = (input_data,) * 2
+
+            if input_signature is None:
+                input_signature = self.get_input_signature()
+                input_signature = (input_signature, input_signature)
+
+            weights, state = block.init(input_signature)
+
+            if random_number_generator is None:
+                random_number_generator = block.new_rngs(1)[0]
+
+            output = block(
+                input_data, weights=weights, state=state, rng=random_number_generator
+            )
+
+        return output, weights, state
+
 
 @require_torch
 class ReformerIntegrationTests(unittest.TestCase):
@@ -138,9 +208,8 @@ class ReformerIntegrationTests(unittest.TestCase):
 
             torch_layer.output.dense.weight = torch.nn.Parameter(torch.tensor(np_dense).view(-1, hidden_size_per_head).contiguous().transpose(0, 1))
 
-    def test_lsh_hashing(self):
+    def test_lsh_hashing_layer(self):
         config = ReformerConfig()
-
         hidden_size_per_head = config.hidden_size // config.num_attention_heads
 
         shape = (3, 7, hidden_size_per_head)  # Batch x SeqLen x ModelDimPerHead
@@ -157,3 +226,16 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_output = hf_layer(hf_input)[0]
 
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-6))
+
+    def test_lsh_block(self):
+        config = ReformerConfig()
+        hidden_size_per_head = config.hidden_size // config.num_attention_heads
+
+        shape = (3, 7, hidden_size_per_head)  # Batch x SeqLen x ModelDimPerHead
+        np_input = np.random.rand(*shape)
+
+        trax_utils = TraxUtils(shape)
+        trax_block = trax_utils.get_block(config)
+        trax_output, trax_weights, trax_state = trax_utils.forward_block(np_input, block=trax_block)
+
+        pass

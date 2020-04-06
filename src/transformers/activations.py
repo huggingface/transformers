@@ -34,6 +34,10 @@ if torch.__version__ < "1.4.0":
 else:
     gelu = F.gelu
 
+
+gelu = _gelu_python
+
+
 ACT2FN = {
     "relu": F.relu,
     "swish": swish,
