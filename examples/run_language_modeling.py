@@ -161,9 +161,9 @@ class LineByLineTextDataset(Dataset):
         assert len(test_inputids[0])==3
         START_TOKEN=test_inputids[0][0]
         END_TOKEN=test_inputids[0][2]
-        logger.info('example sample',examples[0].__repr__())
+        logger.info('example sample {0}'.format(examples[0].__repr__()))
 
-        logger.info('start token id',str(START_TOKEN),'end token id', str(END_TOKEN),'test token id',str(test_inputids[0][1]))
+        logger.info('start token id {0}, end token id {1}'.format(str(START_TOKEN), str(END_TOKEN)))
 
         return examples
 
@@ -279,6 +279,19 @@ def mask_tokens(inputs: torch.Tensor, tokenizer: PreTrainedTokenizer, args) -> T
     # The rest of the time (10% of the time) we keep the masked input tokens unchanged
     return inputs, labels
 
+def create_posids(batch):
+    pos_ids=[]
+    for data in batch:
+        pos_id=[]
+        counter=0
+        for i,token_i in enumerate(data):
+            if token_i==START_TOKEN and i!=0:
+                counter=0
+            pos_id.append(counter)
+            counter+=1
+        pos_ids.append(pos_id)
+    pos_ids=torch.tensor(pos_ids,dtype=torch.long)
+    return pos_ids
 
 def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedTokenizer) -> Tuple[int, float]:
     """ Train the model """
@@ -395,13 +408,16 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
                 continue
-            batch,posids=list(zip(*batch_posids))
+            # batch,posids=list(zip(*batch_posids))
 
             inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else (batch, batch)
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
+            posids=create_posids(batch)
             model.train()
+            logger.info('sample posids {0}',posids[0].__repr__())
             outputs = model(inputs, position_ids=posids,masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
+
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
             if args.n_gpu > 1:
