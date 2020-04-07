@@ -459,7 +459,7 @@ class Pipeline(_ScikitCompat):
         )
 
         # Filter out features not available on specific models
-        inputs = self.inputs_for_model(inputs)
+        # inputs = self.inputs_for_model(inputs)
 
         return inputs
 
@@ -480,7 +480,7 @@ class Pipeline(_ScikitCompat):
         with self.device_placement():
             if self.framework == "tf":
                 # TODO trace model
-                predictions = self.model(inputs, training=False)[0]
+                predictions = self.model(inputs.data, training=False)[0]
             else:
                 with torch.no_grad():
                     inputs = self.ensure_tensor_on_device(**inputs)
@@ -778,7 +778,7 @@ class NerPipeline(Pipeline):
 
                 # Forward
                 if self.framework == "tf":
-                    entities = self.model(tokens)[0][0].numpy()
+                    entities = self.model(tokens.data)[0][0].numpy()
                     input_ids = tokens["input_ids"].numpy()[0]
                 else:
                     with torch.no_grad():
@@ -1235,17 +1235,19 @@ class SummarizationPipeline(Pipeline):
             elif self.framework == "tf":
                 input_length = tf.shape(inputs["input_ids"])[-1].numpy()
 
-            if input_length < self.model.config.min_length // 2:
+            min_length = generate_kwargs.get("min_length", self.model.config.min_length)
+            if input_length < min_length // 2:
                 logger.warning(
                     "Your min_length is set to {}, but you input_length is only {}. You might consider decreasing min_length manually, e.g. summarizer('...', min_length=10)".format(
-                        self.model.config.min_length, input_length
+                        min_length, input_length
                     )
                 )
 
-            if input_length < self.model.config.max_length:
+            max_length = generate_kwargs.get("max_length", self.model.config.max_length)
+            if input_length < max_length:
                 logger.warning(
                     "Your max_length is set to {}, but you input_length is only {}. You might consider decreasing max_length manually, e.g. summarizer('...', max_length=50)".format(
-                        self.model.config.max_length, input_length
+                        max_length, input_length
                     )
                 )
 
@@ -1349,10 +1351,11 @@ class TranslationPipeline(Pipeline):
             elif self.framework == "tf":
                 input_length = tf.shape(inputs["input_ids"])[-1].numpy()
 
-            if input_length > 0.9 * self.model.config.max_length:
+            max_length = generate_kwargs.get("max_length", self.model.config.max_length)
+            if input_length > 0.9 * max_length:
                 logger.warning(
                     "Your input_length: {} is bigger than 0.9 * max_length: {}. You might consider increasing your max_length manually, e.g. translator('...', max_length=400)".format(
-                        input_length, self.model.config.max_length
+                        input_length, max_length
                     )
                 )
 
@@ -1396,7 +1399,7 @@ SUPPORTED_TASKS = {
                 "tf": "distilbert-base-uncased-finetuned-sst-2-english",
             },
             "config": "distilbert-base-uncased-finetuned-sst-2-english",
-            "tokenizer": "distilbert-base-uncased",
+            "tokenizer": "distilbert-base-cased",
         },
     },
     "ner": {

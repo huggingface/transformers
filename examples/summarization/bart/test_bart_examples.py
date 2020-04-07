@@ -1,5 +1,4 @@
 import logging
-import os
 import sys
 import tempfile
 import unittest
@@ -10,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from transformers import BartTokenizer
 
-from .evaluate_cnn import _run_generate
+from .evaluate_cnn import run_generate
 from .utils import SummarizationDataset
 
 
@@ -29,14 +28,13 @@ class TestBartExamples(unittest.TestCase):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
         tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
-        output_file_name = "output_bart_sum.txt"
+        output_file_name = Path(tempfile.gettempdir()) / "utest_output_bart_sum.hypo"
         articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
         _dump_articles(tmp, articles)
-        testargs = ["evaluate_cnn.py", str(tmp), output_file_name]
+        testargs = ["evaluate_cnn.py", str(tmp), str(output_file_name), "sshleifer/bart-tiny-random"]
         with patch.object(sys, "argv", testargs):
-            _run_generate()
+            run_generate()
             self.assertTrue(Path(output_file_name).exists())
-            os.remove(Path(output_file_name))
 
     def test_bart_summarization_dataset(self):
         tmp_dir = Path(tempfile.gettempdir())
