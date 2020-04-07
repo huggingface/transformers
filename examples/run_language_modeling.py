@@ -285,7 +285,7 @@ def mask_tokens(inputs: torch.Tensor, tokenizer: PreTrainedTokenizer, args) -> T
     return inputs, labels
 
 def create_posids(batch):
-    logger.info('batch tensor shape {0}'.format(str(batch.size())))
+    # logger.info('batch tensor shape {0}'.format(str(batch.size())))
     pos_ids=[]
     for data in batch:
         pos_id=[]
@@ -297,7 +297,7 @@ def create_posids(batch):
             counter+=1
         pos_ids.append(pos_id)
     pos_ids=torch.tensor(pos_ids,dtype=torch.long)
-    logger.info('posids tensor shape {0}'.format(str(pos_ids.size())))
+    # logger.info('posids tensor shape {0}'.format(str(pos_ids.size())))
 
     return pos_ids
 
@@ -416,15 +416,17 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
                 continue
-            # batch,posids=list(zip(*batch_posids))
 
             inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else (batch, batch)
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
-            posids=create_posids(batch)
+            if args.para_data_file:
+                posids=create_posids(batch)
+            else:
+                posids=None
             model.train()
-            logger.info('sample posids {0}',posids[0].__repr__())
-            outputs = model(inputs, position_ids=posids,masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
+            # logger.info('sample posids {0}',posids[0].__repr__())
+            outputs = model(inputs, position_ids=posids,masked_lm_labels=labels) if args.mlm else model(inputs, position_ids=posid,labels=labels)
 
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
