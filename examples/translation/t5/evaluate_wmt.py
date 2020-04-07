@@ -14,13 +14,13 @@ def chunks(lst, n):
         yield lst[i : i + n]
 
 
-def generate_translations(lns, output_file_path, batch_size, device):
+def generate_translations(lns, output_file_path, model_size, batch_size, device):
     output_file = Path(output_file_path).open("w")
 
-    model = T5ForConditionalGeneration.from_pretrained("t5-base")
+    model = T5ForConditionalGeneration.from_pretrained(model_size)
     model.to(device)
 
-    tokenizer = T5Tokenizer.from_pretrained("t5-base")
+    tokenizer = T5Tokenizer.from_pretrained(model_size)
 
     # update config with summarization specific params
     task_specific_params = model.config.task_specific_params
@@ -53,6 +53,12 @@ def calculate_bleu_score(output_lns, refs_lns, score_path):
 def run_generate():
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "model_size",
+        type=str,
+        help="T5 model size, either 't5-small', 't5-base', 't5-large', 't5-3b', 't5-11b'. Defaults to 't5-base'.",
+        default="t5-base",
+    )
+    parser.add_argument(
         "input_path", type=str, help="like wmt/newstest2013.en",
     )
     parser.add_argument(
@@ -78,7 +84,7 @@ def run_generate():
 
     input_lns = [x.strip().replace(dash_pattern[0], dash_pattern[1]) for x in open(args.input_path).readlines()]
 
-    generate_translations(input_lns, args.output_path, args.batch_size, args.device)
+    generate_translations(input_lns, args.output_path, args.model_size, args.batch_size, args.device)
 
     output_lns = [x.strip() for x in open(args.output_path).readlines()]
     refs_lns = [x.strip().replace(dash_pattern[0], dash_pattern[1]) for x in open(args.reference_path).readlines()]

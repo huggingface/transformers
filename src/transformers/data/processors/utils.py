@@ -28,7 +28,7 @@ from ...file_utils import is_tf_available, is_torch_available
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class InputExample:
     """
     A single training/test example for simple sequence classification.
