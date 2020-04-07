@@ -56,7 +56,6 @@ class BartConfig(PretrainedConfig):
         max_position_embeddings=1024,
         init_std=0.02,
         classifier_dropout=0.0,
-        output_past=False,
         num_labels=3,
         is_encoder_decoder=True,
         pad_token_id=1,
@@ -72,7 +71,6 @@ class BartConfig(PretrainedConfig):
         """
         super().__init__(
             num_labels=num_labels,
-            output_past=output_past,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
