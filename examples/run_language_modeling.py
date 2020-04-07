@@ -162,6 +162,8 @@ class LineByLineTextDataset(Dataset):
         examples = tokenizer.batch_encode_plus(lines, add_special_tokens=True, max_length=block_size)["input_ids"]
         test_inputids=tokenizer.batch_encode_plus(['t'], add_special_tokens=True, max_length=block_size)["input_ids"]
         assert len(test_inputids[0])==3
+        global START_TOKEN
+        global END_TOKEN
         START_TOKEN=test_inputids[0][0]
         END_TOKEN=test_inputids[0][2]
         logger.info('example sample {0}'.format(examples[0].__repr__()))
