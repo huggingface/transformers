@@ -11,7 +11,35 @@ from flax.serialization import to_bytes
 from jax.random import PRNGKey
 
 from transformers import BertTokenizerFast, BertConfig, AutoModel
-from transformers.modeling_jax_utils import JaxPreTrainedModel
+from transformers.modeling_jax_utils import JaxPreTrainedModel, load_pytorch_weights_in_jax_model
+
+
+# Models are loaded from Pytorch checkpoints
+BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
+    "bert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-pytorch_model.bin",
+    "bert-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-pytorch_model.bin",
+    "bert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-pytorch_model.bin",
+    "bert-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-pytorch_model.bin",
+    "bert-base-multilingual-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-pytorch_model.bin",
+    "bert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-pytorch_model.bin",
+    "bert-base-chinese": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-pytorch_model.bin",
+    "bert-base-german-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-cased-pytorch_model.bin",
+    "bert-large-uncased-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-pytorch_model.bin",
+    "bert-large-cased-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-pytorch_model.bin",
+    "bert-large-uncased-whole-word-masking-finetuned-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-pytorch_model.bin",
+    "bert-large-cased-whole-word-masking-finetuned-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-pytorch_model.bin",
+    "bert-base-cased-finetuned-mrpc": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-pytorch_model.bin",
+    "bert-base-german-dbmdz-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-pytorch_model.bin",
+    "bert-base-german-dbmdz-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-pytorch_model.bin",
+    "bert-base-japanese": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-pytorch_model.bin",
+    "bert-base-japanese-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking-pytorch_model.bin",
+    "bert-base-japanese-char": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-pytorch_model.bin",
+    "bert-base-japanese-char-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking-pytorch_model.bin",
+    "bert-base-finnish-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-cased-v1/pytorch_model.bin",
+    "bert-base-finnish-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-uncased-v1/pytorch_model.bin",
+    "bert-base-dutch-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/wietsedv/bert-base-dutch-cased/pytorch_model.bin",
+}
+
 
 ACT2FN = {
     "gelu": nn.gelu,
@@ -21,6 +49,7 @@ ACT2FN = {
 }
 
 
+@jax.jit
 def gelu(x):
     r"""Gaussian error linear unit activation function.
 
@@ -217,6 +246,8 @@ class FlaxBertModel(JaxPreTrainedModel):
 
     MODEL_CLASS = BertModel
     config_class = BertConfig
+    pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "bert"
 
     def __init__(self, config: BertConfig, state: dict, **kwargs):
         self.config = config
@@ -260,41 +291,12 @@ class FlaxBertModel(JaxPreTrainedModel):
 
 
 if __name__ == '__main__':
-    tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
-    model_pt = AutoModel.from_pretrained('bert-base-cased')
+    MODEL = "bert-base-cased"
+    tokenizer = BertTokenizerFast.from_pretrained(MODEL)
+    model_pt = AutoModel.from_pretrained(MODEL)
     model_pt.eval()
 
-    # with open("/data/Downloads/bert-base-cased-pytorch_model.bin", 'rb') as model_f:
-    #     state = torch.load(model_f)
-    #     state = {k: v.numpy() for k, v in state.items()}
-    #
-    #     # Need to change some parameters name to match Flax names so that we don't have to fork any layer
-    #     state = {k.replace("weight", "kernel") if {"dense", "query", "key", "value"} & set(k.split('.')) else k: v
-    #              for k, v in state.items()}
-    #
-    #     # SelfAttention output is not a separate layer, remove one nesting
-    #     state = {k.replace("attention.output.dense", "attention.self.out"): v for k, v in state.items()}
-    #     state = {k.replace("attention.output.LayerNorm", "attention.layer_norm"): v for k, v in state.items()}
-    #
-    #     # SelfAttention.out
-    #     state = {k: v.T if v.shape == (3072, 768) or v.shape == (768, 3072) else v for k, v in state.items()}
-    #     state = {k: v.reshape((12, 64, 768)).transpose((2, 0, 1)) if v.shape == (768, 768) and "out" not in k and "pooler" not in k else v for k, v in state.items()}
-    #
-    #     # Bias
-    #     state = {k: v.reshape((12, -1)) if v.shape == (768, ) and ("bias" in k) and ("out" not in k) and ("pooler" not in k) else v for k, v in state.items()}
-    #
-    #     # Self Attention output projection
-    #     state = {k: v.reshape((768, 12, 64)).transpose(1, 2, 0) if "out.kernel" in k else v for k, v in state.items()}
-    #
-    #     # Pooler
-    #     state = {k: v.T if "pooler.dense.kernel" in k else v for k, v in state.items()}
-    #     state = unflatten_dict({tuple(k.split('.')[1:]): v for k, v in state.items()})
-    #     model = FlaxBertModel.from_pretrained(model_pt.config, state)
-
-    model = FlaxBertModel.from_pretrained(
-        '/data/Workspace/transformers/src/transformers/bert-base-cased/bert-base-cased.bin',
-        config=model_pt.config,
-    )
+    model = FlaxBertModel.from_pretrained(MODEL)
 
     # Inputs
     flax_input = tokenizer.encode_plus("My name is Morgan")
