@@ -16,7 +16,6 @@
 
 
 import copy
-import itertools
 import logging
 import math
 import os
@@ -185,11 +184,9 @@ class T5LayerFF(nn.Module):
 
 
 class T5Attention(nn.Module):
-    NEW_ID = itertools.count()
 
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.layer_id = next(T5Attention.NEW_ID)
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
 
@@ -318,20 +315,23 @@ class T5Attention(nn.Module):
         if kv is None:
             k = shape(self.k(input))  # (bs, n_heads, qlen, dim_per_head)
             v = shape(self.v(input))  # (bs, n_heads, qlen, dim_per_head)
-        elif cache is None or self.layer_id not in cache:
+        elif cache is None:
             k = v = kv
             k = shape(self.k(k))  # (bs, n_heads, qlen, dim_per_head)
             v = shape(self.v(v))  # (bs, n_heads, qlen, dim_per_head)
 
         if cache is not None:
-            if self.layer_id in cache:
-                if kv is None:
-                    k_, v_ = cache[self.layer_id]
-                    k = torch.cat([k_, k], dim=2)  # (bs, n_heads, klen, dim_per_head)
-                    v = torch.cat([v_, v], dim=2)  # (bs, n_heads, klen, dim_per_head)
-                else:
-                    k, v = cache[self.layer_id]
-            cache[self.layer_id] = (k, v)
+            if kv is None:
+                k_, v_ = cache
+                k = torch.cat([k_, k], dim=2)  # (bs, n_heads, klen, dim_per_head)
+                v = torch.cat([v_, v], dim=2)  # (bs, n_heads, klen, dim_per_head)
+            else:
+                k, v = cache
+
+        # TODO(PVP): Note that in cross attention the k, v values are also constantely recalculated
+        # -> that should be cached somewhere as well
+        if self.is_decoder and self.output_past:
+            cache = (k, v)
 
         # q = q / math.sqrt(dim_per_head)                                     # No scaling in T5
         scores = torch.einsum("bnqd,bnkd->bnqk", q, k)  # (bs, n_heads, qlen, klen)
@@ -357,6 +357,8 @@ class T5Attention(nn.Module):
         context = self.o(context)
 
         outputs = (context,)
+        if self.is_decoder and self.output_past:
+            outputs = outputs + (cache,)
         if self.output_attentions:
             outputs = outputs + (weights,)
         if self.has_relative_attention_bias:
@@ -371,10 +373,10 @@ class T5LayerSelfAttention(nn.Module):
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    def forward(self, hidden_states, attention_mask=None, position_bias=None, head_mask=None):
+    def forward(self, hidden_states, attention_mask=None, position_bias=None, head_mask=None, past_key_value_state=None):
         norm_x = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
-            norm_x, mask=attention_mask, position_bias=position_bias, head_mask=head_mask
+            norm_x, mask=attention_mask, position_bias=position_bias, head_mask=head_mask, past_key_value_state=past_key_value_state
         )
         y = attention_output[0]
         layer_output = hidden_states + self.dropout(y)
@@ -408,9 +410,8 @@ class T5Block(nn.Module):
         self.layer.append(T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
         if self.is_decoder:
             self.layer.append(T5LayerCrossAttention(config, has_relative_attention_bias=has_relative_attention_bias))
-            self.layer.append(T5LayerFF(config))
-        else:
-            self.layer.append(T5LayerFF(config))
+
+        self.layer.append(T5LayerFF(config))
 
     def forward(
         self,
@@ -421,9 +422,10 @@ class T5Block(nn.Module):
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
         head_mask=None,
+        past_key_value_state=None,
     ):
         self_attention_outputs = self.layer[0](
-            hidden_states, attention_mask=attention_mask, position_bias=position_bias, head_mask=head_mask
+            hidden_states, attention_mask=attention_mask, position_bias=position_bias, head_mask=head_mask, past_key_value_state=past_key_value_state
         )
         hidden_states = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
@@ -557,6 +559,7 @@ class T5Stack(T5PreTrainedModel):
         encoder_attention_mask=None,
         inputs_embeds=None,
         head_mask=None,
+        past_key_value_states=None,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -580,6 +583,10 @@ class T5Stack(T5PreTrainedModel):
         if self.is_decoder and encoder_attention_mask is None:
             encoder_seq_length = encoder_hidden_states.shape[1]
             encoder_attention_mask = torch.ones(batch_size, encoder_seq_length).to(inputs_embeds.device)
+
+        # initialize past_key_value_states with `None` if past does not exist
+        if past_key_value_states is None:
+            past_key_value_states = [None] * len(self.block)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -648,13 +655,14 @@ class T5Stack(T5PreTrainedModel):
         else:
             head_mask = [None] * self.config.num_layers
 
+        present_key_value_states = ()
         all_hidden_states = ()
         all_attentions = ()
         position_bias = None
         encoder_decoder_position_bias = None
 
         hidden_states = self.dropout(inputs_embeds)
-        for i, layer_module in enumerate(self.block):
+        for i, (layer_module, past_key_value_state) in enumerate(zip(self.block, past_key_value_states)):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -669,13 +677,15 @@ class T5Stack(T5PreTrainedModel):
             )
             # layer_outputs is a tuple with:
             # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-            hidden_states = layer_outputs[0]
+            hidden_states, present_key_value_state = layer_outputs[:2]
             if i == 0:
                 # We share the position biases between the layers - the first layer store them
                 # layer_outputs = hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
                 position_bias = layer_outputs[2 if self.output_attentions else 1]
-                if self.is_decoder:
+                if self.is_decoder and self.output_past:
                     encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 2]
+            if self.is_decoder:
+                present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if self.output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)  # We keep only self-attention weights for now
@@ -688,11 +698,13 @@ class T5Stack(T5PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
+        if self.is_decoder and self.output_past:
+            outputs = outputs + (present_key_value_states,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
-        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+        return outputs  # last-layer hidden state, (presents,) (all hidden states), (all attentions)
 
 
 T5_START_DOCSTRING = r"""    The T5 model was proposed in
