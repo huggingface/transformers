@@ -20,7 +20,6 @@ class JaxPreTrainedModel:
         config = kwargs.pop("config", None)
         state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
-        from_tf = kwargs.pop("from_tf", False)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -48,35 +47,10 @@ class JaxPreTrainedModel:
         if pretrained_model_name_or_path is not None:
             if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
                 archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
-            elif os.path.isdir(pretrained_model_name_or_path):
-                if from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")):
-                    # Load from a TF 1.0 checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")
-                elif from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
-                    # Load from a TF 2.0 checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
-                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
-                    # Load from a PyTorch checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
-                else:
-                    raise EnvironmentError(
-                        "Error no file named {} found in directory {} or `from_tf` set to False".format(
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"], pretrained_model_name_or_path
-                        )
-                    )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
-            elif os.path.isfile(pretrained_model_name_or_path + ".index"):
-                assert (
-                    from_tf
-                ), "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
-                    pretrained_model_name_or_path + ".index"
-                )
-                archive_file = pretrained_model_name_or_path + ".index"
             else:
-                archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path, postfix=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME)
-                )
+                archive_file = hf_bucket_url(pretrained_model_name_or_path, postfix=WEIGHTS_NAME)
 
             # redirect to the cache, if necessary
             try:
@@ -113,10 +87,12 @@ class JaxPreTrainedModel:
 
         # Instantiate model.
         with open(resolved_archive_file, 'rb') as state_f:
-            state_data = state_f.read()
-            state = from_bytes(cls.MODEL_CLASS, state_data)["params"]
-        model = cls(config, state, *model_args, **model_kwargs)
-        return model
+            import torch
+            state = torch.load(state_f)
+            state = load_pytorch_weights_in_jax_model(state, config)
+            # state = from_bytes(cls.MODEL_CLASS, state_data)
+            model = cls(config, state, *model_args, **model_kwargs)
+            return model
 
 
 def load_pytorch_weights_in_jax_model(pt_state_dict, config: BertConfig):
@@ -159,7 +135,7 @@ def load_pytorch_weights_in_jax_model(pt_state_dict, config: BertConfig):
             jax_state[key] = tensor
 
         # There are some transposed parameters w.r.t their PyTorch counterpart
-        if key in {"intermediate.dense.kernel", "ouput.dense.kernel"}:
+        if "intermediate.dense.kernel" in key or "output.dense.kernel" in key:
             jax_state[key] = tensor.T
 
         # Self Attention output projection needs to be transposed
