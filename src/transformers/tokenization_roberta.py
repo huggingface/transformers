@@ -18,9 +18,11 @@
 import logging
 from typing import List, Optional
 
+from tokenizers import AddedToken
 from tokenizers.processors import RobertaProcessing
 
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+from .tokenization_utils import PreTrainedTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -259,7 +261,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        add_prefix_space=False,
+        add_prefix_space=True,
         **kwargs
     ):
         kwargs.setdefault("pad_token", pad_token)
@@ -281,16 +283,24 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             (sep_token, self.sep_token_id), (cls_token, self.cls_token_id)
         )
 
+        self.tokenizer.add_special_tokens([kwargs["mask_token"]])
+
         # As we override the post_processor post super.__init__ the computed num_added_tokens is wrong in super().
         # We need to recompute max_len according to the newly register post_processor to get real values.
-        self.max_len_single_sentence = self.max_len - self.num_added_tokens(False)  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - self.num_added_tokens(True)  # take into account special tokens
+        self.max_len_single_sentence = self.max_len - self.num_special_tokens_to_add(
+            False
+        )  # take into account special tokens
+        self.max_len_sentences_pair = self.max_len - self.num_special_tokens_to_add(
+            True
+        )  # take into account special tokens
 
-        logger.warning(
-            "RobertaTokenizerFast has an issue when working on mask language modeling "
-            "where it introduces an extra encoded space before the mask token."
-            "See https://github.com/huggingface/transformers/pull/2778 for more information."
-        )
+    @PreTrainedTokenizer.mask_token.setter
+    def mask_token(self, value):
+        if not isinstance(value, AddedToken):
+            value = AddedToken(value, lstrip=True)
+
+        self._mask_token = str(value)
+        self.tokenizer.add_special_tokens([value])
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
