@@ -120,8 +120,8 @@ class LineByLineTextDataset(Dataset):
             file_src_para_path,file_tgt_para_path=file_para_path
             assert os.path.isfile(file_src_para_path)
             assert os.path.isfile(file_tgt_para_path)
-            examples_src=self.produce_tokens(tokenizer, args, file_src_para_path, block_size)
-            examples_tgt=self.produce_tokens(tokenizer, args, file_tgt_para_path, block_size)
+            examples_src,examples_tgt=self.produce_tokens_para(tokenizer, args, file_src_para_path,file_tgt_para_path, block_size/2)
+            assert len(examples_src)==len(examples_tgt)
             examples_para,positions_ids_para=self.concatenat_parallel(examples_src,examples_tgt)
             examples+=examples_para
             positions_ids+=positions_ids_para
@@ -157,6 +157,22 @@ class LineByLineTextDataset(Dataset):
 
         examples = tokenizer.batch_encode_plus(lines, add_special_tokens=True, max_length=block_size)["input_ids"]
         return examples
+
+    def produce_tokens_para(self,tokenizer: PreTrainedTokenizer, args, file_path_src: str, file_path_tgt: str, block_size):
+        # Here, we do not cache the features, operating under the assumption
+        # that we will soon use fast multithreaded tokenizers from the
+        # `tokenizers` repo everywhere =)
+        logger.info("Creating features from parallel dataset file at %s and %s", file_path_src,file_path_tgt)
+
+        with open(file_path_src, encoding="utf-8") as f_src, open(file_path_tgt,encoding='utf-8') as f_tgt:
+            srclines=f_src.read().splitlines()
+            tgtlines=f_tgt.read().splitlines()
+            lines = [(srcline,tgtlines[i]) for i,srcline in enumerate(srclines) if (len(srcline) > 0 and not srcline.isspace() and len(tgtlines[i])>0 and not tgtlines[i].isspace() )]
+            srclines,tgtlines=list(zip(*lines))
+        src_examples = tokenizer.batch_encode_plus(srclines, add_special_tokens=True, max_length=block_size)["input_ids"]
+        tgt_examples = tokenizer.batch_encode_plus(srclines, add_special_tokens=True, max_length=block_size)["input_ids"]
+
+        return src_examples,tgt_examples
 
     def __len__(self):
         return len(self.examples)
