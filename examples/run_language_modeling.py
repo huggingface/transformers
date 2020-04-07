@@ -169,14 +169,6 @@ def load_and_cache_examples(args, tokenizer, evaluate=False):
     file_path = args.eval_data_file if evaluate else args.train_data_file
     para_data_file = None if evaluate else args.para_data_file
 
-    if not evaluate:
-        ##parallel data
-        file_para_path_src=args.para_data_file[0]
-        file_para_path_tgt=args.para_data_file[1]
-        src_data=LineByLineTextDataset(tokenizer, args, file_path=file_para_path_src, block_size=args.block_size/2)
-        tgt_data=LineByLineTextDataset(tokenizer, args, file_path=file_para_path_tgt, block_size=args.block_size/2)
-
-
     if args.line_by_line:
         return LineByLineTextDataset(tokenizer, args, file_path=file_path, file_para_path=para_data_file,block_size=args.block_size)
     else:
@@ -531,6 +523,13 @@ def main():
     )
 
     # Other parameters
+    parser.add_argument(
+        "--para_data_file",
+        default=None,
+        type=str,
+        nargs='+',
+        help="[para src file, para tgt file]",
+    )
     parser.add_argument(
         "--eval_data_file",
         default=None,
