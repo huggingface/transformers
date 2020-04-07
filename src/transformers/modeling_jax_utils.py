@@ -2,7 +2,7 @@ import os
 
 from flax.serialization import from_bytes
 
-from transformers import PretrainedConfig, logger
+from transformers import PretrainedConfig, logger, BertConfig
 from transformers.file_utils import hf_bucket_url, cached_path, WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, \
     is_remote_url
 
@@ -117,3 +117,58 @@ class JaxPreTrainedModel:
             state = from_bytes(cls.MODEL_CLASS, state_data)["params"]
         model = cls(config, state, *model_args, **model_kwargs)
         return model
+
+
+def load_pytorch_weights_in_jax_model(pt_state_dict, config: BertConfig):
+    from flax.traverse_util import unflatten_dict
+    state = {k: v.numpy() for k, v in pt_state_dict.items()}
+    jax_state = dict(state)
+
+    # Need to change some parameters name to match Flax names so that we don't have to fork any layer
+    for key, tensor in state.items():
+        # Key parts
+        key_parts = set(key.split("."))
+
+        # Every dense layer have a "kernel" parameters instead of "weight"
+        if "dense.weight" in key:
+            del jax_state[key]
+            key = key.replace("weight", "kernel")
+            jax_state[key] = tensor
+
+        # SelfAttention needs also to replace "weight" by "kernel"
+        if {"query", "key", "value"} & key_parts:
+
+            # Flax SelfAttention decomposes the heads (num_head, size // num_heads)
+            if "bias" in key:
+                jax_state[key] = tensor.reshape((config.num_attention_heads, -1))
+            elif "weight":
+                del jax_state[key]
+                key = key.replace("weight", "kernel")
+                tensor = tensor.reshape((config.num_attention_heads, -1, config.hidden_size)).transpose((2, 0, 1))
+                jax_state[key] = tensor
+
+        # SelfAttention output is not a separate layer, remove one nesting
+        if "attention.output.dense" in key:
+            del jax_state[key]
+            key = key.replace("attention.output.dense", "attention.self.out")
+            jax_state[key] = tensor
+
+        if "attention.output.LayerNorm" in key:
+            del jax_state[key]
+            key = key.replace("attention.output.LayerNorm", "attention.layer_norm")
+            jax_state[key] = tensor
+
+        # There are some transposed parameters w.r.t their PyTorch counterpart
+        if key in {"intermediate.dense.kernel", "ouput.dense.kernel"}:
+            jax_state[key] = tensor.T
+
+        # Self Attention output projection needs to be transposed
+        if "out.kernel" in key:
+            jax_state[key] = tensor.reshape((768, 12, 64)).transpose(1, 2, 0)
+
+        # Pooler needs to transpose its kernel
+        if "pooler.dense.kernel" in key:
+            jax_state[key] = tensor.T
+
+    # Unflatten the dictionary to load into Jax
+    return unflatten_dict({tuple(k.split('.')[1:]): v for k, v in jax_state.items()})
