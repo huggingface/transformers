@@ -103,7 +103,7 @@ class ReformerConfig(PretrainedConfig):
         hidden_size=32,
         num_hidden_layers=12,
         num_attention_heads=2,
-        num_buckets=4,
+        num_buckets=[2, 2],
         num_hashes=2,
         chunk_length=7,
         num_chunks_before=1,
