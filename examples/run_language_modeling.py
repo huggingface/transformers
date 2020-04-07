@@ -120,7 +120,7 @@ class LineByLineTextDataset(Dataset):
             file_src_para_path,file_tgt_para_path=file_para_path
             assert os.path.isfile(file_src_para_path)
             assert os.path.isfile(file_tgt_para_path)
-            examples_src,examples_tgt=self.produce_tokens_para(tokenizer, args, file_src_para_path,file_tgt_para_path, block_size/2)
+            examples_src,examples_tgt=self.produce_tokens_para(tokenizer, args, file_src_para_path,file_tgt_para_path, int(block_size/2))
             assert len(examples_src)==len(examples_tgt)
             examples_para,positions_ids_para=self.concatenat_parallel(examples_src,examples_tgt)
             examples+=examples_para
