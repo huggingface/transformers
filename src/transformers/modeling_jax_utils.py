@@ -129,9 +129,10 @@ def load_pytorch_weights_in_jax_model(pt_state_dict, config: BertConfig):
             key = key.replace("attention.output.dense", "attention.self.out")
             jax_state[key] = tensor
 
+        # SelfAttention output is not a separate layer, remove nesting on layer norm
         if "attention.output.LayerNorm" in key:
             del jax_state[key]
-            key = key.replace("attention.output.LayerNorm", "attention.layer_norm")
+            key = key.replace("attention.output.LayerNorm", "attention.LayerNorm")
             jax_state[key] = tensor
 
         # There are some transposed parameters w.r.t their PyTorch counterpart
@@ -145,6 +146,20 @@ def load_pytorch_weights_in_jax_model(pt_state_dict, config: BertConfig):
         # Pooler needs to transpose its kernel
         if "pooler.dense.kernel" in key:
             jax_state[key] = tensor.T
+
+        # Handle LayerNorm conversion
+        if "LayerNorm" in key:
+            del jax_state[key]
+
+            # Replace LayerNorm by layer_norm
+            new_key = key.replace("LayerNorm", "layer_norm")
+
+            if "weight" in key:
+                new_key = new_key.replace("weight", "gamma")
+            elif "bias" in key:
+                new_key = new_key.replace("bias", "beta")
+
+            jax_state[new_key] = tensor
 
     # Unflatten the dictionary to load into Jax
     return unflatten_dict({tuple(k.split('.')[1:]): v for k, v in jax_state.items()})
