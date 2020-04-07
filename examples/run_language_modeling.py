@@ -61,7 +61,8 @@ logger = logging.getLogger(__name__)
 
 MODEL_CONFIG_CLASSES = list(MODEL_WITH_LM_HEAD_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
-
+START_TOKEN='\s'
+END_TOKEN='\s'
 
 class TextDataset(Dataset):
     def __init__(self, tokenizer: PreTrainedTokenizer, args, file_path: str, block_size=512):
@@ -113,7 +114,7 @@ class LineByLineTextDataset(Dataset):
         logger.info("Creating features from dataset file at %s", file_path)
 
         examples=self.produce_tokens(tokenizer, args, file_path, block_size)
-        positions_ids=self.produce_position_ids(examples)
+        # positions_ids=self.produce_position_ids(examples)
 
         if file_para_path:
 
@@ -122,29 +123,29 @@ class LineByLineTextDataset(Dataset):
             assert os.path.isfile(file_tgt_para_path)
             examples_src,examples_tgt=self.produce_tokens_para(tokenizer, args, file_src_para_path,file_tgt_para_path, int(block_size/2))
             assert len(examples_src)==len(examples_tgt)
-            examples_para,positions_ids_para=self.concatenat_parallel(examples_src,examples_tgt)
+            examples_para=self.concatenat_parallel(examples_src,examples_tgt)
             examples+=examples_para
-            positions_ids+=positions_ids_para
+            # positions_ids+=positions_ids_para
 
             # with open(file_src_para_path, encoding="utf-8") as f:
             #     lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
             # src_para_data=tokenizer.batch_encode_plus(lines, add_special_tokens=True, max_length=block_size)["input_ids"]
             # with open(file_tgt_para_path, encoding="utf-8") as f:
             #     lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
-        self.examples=list(zip(examples,positions_ids))
+        self.examples=examples
     def concatenat_parallel(self,examples_src,examples_tgt):
         examples_para=[]
-        positions_para=[]
+        # positions_para=[]
         for i,data_src in enumerate(examples_src):
             examples_para.append(data_src+examples_tgt[i])
-            positions_para.append(list(range(len(data_src)))+list(range(len(examples_tgt[i]))))
-        return examples_para,positions_para
-
-    def produce_position_ids(self,examples):
-        positions=[]
-        for data_src in examples:
-            positions.append(list(range(len(data_src))))
-        return positions
+            # positions_para.append(list(range(len(data_src)))+list(range(len(examples_tgt[i]))))
+        return examples_para#,positions_para
+    #
+    # def produce_position_ids(self,examples):
+    #     positions=[]
+    #     for data_src in examples:
+    #         positions.append(list(range(len(data_src))))
+    #     return positions
 
     def produce_tokens(self,tokenizer: PreTrainedTokenizer, args, file_path: str, block_size):
         # Here, we do not cache the features, operating under the assumption
@@ -156,6 +157,12 @@ class LineByLineTextDataset(Dataset):
             lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
 
         examples = tokenizer.batch_encode_plus(lines, add_special_tokens=True, max_length=block_size)["input_ids"]
+        test_inputids=tokenizer.batch_encode_plus(['t'], add_special_tokens=True, max_length=block_size)["input_ids"]
+        assert len(test_inputids[0])==3
+        START_TOKEN=test_inputids[0][0]
+        END_TOKEN=test_inputids[0][2]
+        logger.info('start token id',START_TOKEN,'end token id', END_TOKEN)
+
         return examples
 
     def produce_tokens_para(self,tokenizer: PreTrainedTokenizer, args, file_path_src: str, file_path_tgt: str, block_size):
