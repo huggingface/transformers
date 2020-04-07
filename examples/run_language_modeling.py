@@ -124,6 +124,8 @@ class LineByLineTextDataset(Dataset):
             examples_src,examples_tgt=self.produce_tokens_para(tokenizer, args, file_src_para_path,file_tgt_para_path, int(block_size/2))
             assert len(examples_src)==len(examples_tgt)
             examples_para=self.concatenat_parallel(examples_src,examples_tgt)
+            logger.info('example para sample {0}'.format(examples_para[0].__repr__()))
+
             examples+=examples_para
             # positions_ids+=positions_ids_para
 
@@ -133,6 +135,7 @@ class LineByLineTextDataset(Dataset):
             # with open(file_tgt_para_path, encoding="utf-8") as f:
             #     lines = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
         self.examples=examples
+
     def concatenat_parallel(self,examples_src,examples_tgt):
         examples_para=[]
         # positions_para=[]
@@ -280,6 +283,7 @@ def mask_tokens(inputs: torch.Tensor, tokenizer: PreTrainedTokenizer, args) -> T
     return inputs, labels
 
 def create_posids(batch):
+    logger.info('batch tensor shape {0}'.format(str(batch.size())))
     pos_ids=[]
     for data in batch:
         pos_id=[]
@@ -291,6 +295,8 @@ def create_posids(batch):
             counter+=1
         pos_ids.append(pos_id)
     pos_ids=torch.tensor(pos_ids,dtype=torch.long)
+    logger.info('posids tensor shape {0}'.format(str(pos_ids.size())))
+
     return pos_ids
 
 def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedTokenizer) -> Tuple[int, float]:
