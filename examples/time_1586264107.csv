@@ -1,0 +1,2 @@
+model,batch_size,sequence_length,time_in_s
+distilgpt2,1,16,0.0336
