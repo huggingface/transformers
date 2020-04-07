@@ -1,2 +1,0 @@
-model,batch_size,sequence_length,memory
-distilgpt2,1,16,256.000KB
