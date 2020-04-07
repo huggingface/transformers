@@ -161,7 +161,9 @@ class LineByLineTextDataset(Dataset):
         assert len(test_inputids[0])==3
         START_TOKEN=test_inputids[0][0]
         END_TOKEN=test_inputids[0][2]
-        logger.info('start token id',START_TOKEN,'end token id', END_TOKEN)
+        logger.info('example sample',examples[0].__repr__())
+
+        logger.info('start token id',str(START_TOKEN),'end token id', str(END_TOKEN),'test token id',str(test_inputids[0][1]))
 
         return examples
 
@@ -387,13 +389,14 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
     set_seed(args)  # Added here for reproducibility
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
-        for step, batch_posids in enumerate(epoch_iterator):
+        for step, batch in enumerate(epoch_iterator):
 
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
                 continue
             batch,posids=list(zip(*batch_posids))
+
             inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else (batch, batch)
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
