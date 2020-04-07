@@ -1007,7 +1007,7 @@ class QuestionAnsweringPipeline(Pipeline):
                     with torch.no_grad():
                         # Retrieve the score for the context tokens only (removing question tokens)
                         fw_args = {k: torch.tensor(v, device=self.device) for (k, v) in fw_args.items()}
-                        start, end = self.model(**fw_args)
+                        start, end = self.model(**fw_args)[:2]
                         start, end = start.cpu().numpy(), end.cpu().numpy()
 
             answers = []
