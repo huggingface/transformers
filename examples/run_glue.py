@@ -24,12 +24,12 @@ import os
 import random
 
 import numpy as np
-import pandas as pd
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
+import pandas as pd
 from transformers import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
     WEIGHTS_NAME,
