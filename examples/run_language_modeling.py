@@ -289,7 +289,7 @@ def create_posids(batch):
         pos_id=[]
         counter=0
         for i,token_i in enumerate(data):
-            if token_i==START_TOKEN and i!=0:
+            if int(token_i)==int(START_TOKEN) and i!=0:
                 counter=0
             pos_id.append(counter)
             counter+=1
