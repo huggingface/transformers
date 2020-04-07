@@ -27,7 +27,7 @@ loss = outputs[0]
 # In transformers you can also have access to the logits:
 loss, logits = outputs[:2]
 
-# And even the attention weigths if you configure the model to output them (and other outputs too, see the docstrings and documentation)
+# And even the attention weights if you configure the model to output them (and other outputs too, see the docstrings and documentation)
 model = BertForSequenceClassification.from_pretrained('bert-base-uncased', output_attentions=True)
 outputs = model(input_ids, labels=labels)
 loss, logits, attentions = outputs
@@ -104,6 +104,6 @@ for batch in train_data:
     loss = model(batch)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)  # Gradient clipping is not in AdamW anymore (so you can use amp without issue)
-    scheduler.step()
     optimizer.step()
+    scheduler.step()
 ```

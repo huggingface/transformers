@@ -1,17 +1,17 @@
 ---
-name: "\U0001F5A5 New Benchmark"
-about: You benchmark a part of this library and would like to share your results
+name: "\U0001F5A5 New benchmark"
+about: Benchmark a part of this library and share your results
 title: "[Benchmark]"
 labels: ''
 assignees: ''
 
 ---
 
-# Benchmarking Transformers
+# 🖥 Benchmarking `transformers`
 
 ## Benchmark
 
-Which part of Transformers did you benchmark?
+Which part of `transformers` did you benchmark?
 
 ## Set-up
 

@@ -209,7 +209,7 @@ past = None
 for i in range(100):
     print(i)
     output, past = model(context, past=past)
-    token = torch.argmax(output[0, :])
+    token = torch.argmax(output[..., -1, :])
 
     generated += [token.tolist()]
     context = token.unsqueeze(0)

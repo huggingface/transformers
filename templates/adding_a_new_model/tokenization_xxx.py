@@ -14,15 +14,13 @@
 # limitations under the License.
 """ Tokenization class for model XXX."""
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 import collections
 import logging
 import os
-import unicodedata
-from io import open
 
 from .tokenization_utils import PreTrainedTokenizer
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,17 +32,16 @@ logger = logging.getLogger(__name__)
 # Mapping from the keyword arguments names of Tokenizer `__init__`
 # to file names for serializing Tokenizer instances
 ####################################################
-VOCAB_FILES_NAMES = {'vocab_file': 'vocab.txt'}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 ####################################################
 # Mapping from the keyword arguments names of Tokenizer `__init__`
 # to pretrained vocabulary URL for all the model shortcut names.
 ####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
-    'vocab_file':
-    {
-        'xxx-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-vocab.txt",
-        'xxx-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-vocab.txt",
+    "vocab_file": {
+        "xxx-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-vocab.txt",
+        "xxx-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-vocab.txt",
     }
 }
 
@@ -52,8 +49,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
 # Mapping from model shortcut names to max length of inputs
 ####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    'xxx-base-uncased': 512,
-    'xxx-large-uncased': 512,
+    "xxx-base-uncased": 512,
+    "xxx-large-uncased": 512,
 }
 
 ####################################################
@@ -62,8 +59,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 # To be used for checkpoint specific configurations.
 ####################################################
 PRETRAINED_INIT_CONFIGURATION = {
-    'xxx-base-uncased': {'do_lower_case': True},
-    'xxx-large-uncased': {'do_lower_case': True},
+    "xxx-base-uncased": {"do_lower_case": True},
+    "xxx-large-uncased": {"do_lower_case": True},
 }
 
 
@@ -73,7 +70,7 @@ def load_vocab(vocab_file):
     with open(vocab_file, "r", encoding="utf-8") as reader:
         tokens = reader.readlines()
     for index, token in enumerate(tokens):
-        token = token.rstrip('\n')
+        token = token.rstrip("\n")
         vocab[token] = index
     return vocab
 
@@ -85,7 +82,7 @@ class XxxTokenizer(PreTrainedTokenizer):
 
     Args:
         vocab_file: Path to a one-wordpiece-per-line vocabulary file
-        do_lower_case: Whether to lower case the input. Only has an effect when do_wordpiece_only=False
+        do_lower_case: Whether to lower case the input. Only has an effect when do_basic_tokenize=True
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -93,9 +90,17 @@ class XxxTokenizer(PreTrainedTokenizer):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, vocab_file, do_lower_case=True,
-                 unk_token="[UNK]", sep_token="[SEP]", pad_token="[PAD]", cls_token="[CLS]",
-                 mask_token="[MASK]", **kwargs):
+    def __init__(
+        self,
+        vocab_file,
+        do_lower_case=True,
+        unk_token="[UNK]",
+        sep_token="[SEP]",
+        pad_token="[PAD]",
+        cls_token="[CLS]",
+        mask_token="[MASK]",
+        **kwargs
+    ):
         """Constructs a XxxTokenizer.
 
         Args:
@@ -104,16 +109,22 @@ class XxxTokenizer(PreTrainedTokenizer):
                 Whether to lower case the input
                 Only has an effect when do_basic_tokenize=True
         """
-        super(XxxTokenizer, self).__init__(unk_token=unk_token, sep_token=sep_token,
-                                           pad_token=pad_token, cls_token=cls_token,
-                                           mask_token=mask_token, **kwargs)
+        super().__init__(
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            **kwargs,
+        )
         self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
         self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = XxxTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file))
+                "model use `tokenizer = XxxTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file)
+            )
         self.vocab = load_vocab(vocab_file)
 
     @property
@@ -133,16 +144,16 @@ class XxxTokenizer(PreTrainedTokenizer):
         return split_tokens
 
     def _convert_token_to_id(self, token):
-        """ Converts a token (str/unicode) in an id using the vocab. """
+        """ Converts a token (str) in an id using the vocab. """
         return self.vocab.get(token, self.vocab.get(self.unk_token))
 
     def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (string/unicode) using the vocab."""
+        """Converts an index (integer) in a token (str) using the vocab."""
         return self.ids_to_tokens.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens):
         """ Converts a sequence of tokens (string) in a single string. """
-        out_string = ' '.join(tokens).replace(' ##', '').strip()
+        out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
@@ -177,8 +188,10 @@ class XxxTokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             if token_ids_1 is not None:
-                raise ValueError("You should not supply a second sequence if the provided sequence of "
-                                 "ids is already formated with special tokens for the model.")
+                raise ValueError(
+                    "You should not supply a second sequence if the provided sequence of "
+                    "ids is already formated with special tokens for the model."
+                )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
         if token_ids_1 is not None:
@@ -204,15 +217,17 @@ class XxxTokenizer(PreTrainedTokenizer):
         """Save the tokenizer vocabulary to a directory or file."""
         index = 0
         if os.path.isdir(vocab_path):
-            vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES['vocab_file'])
+            vocab_file = os.path.join(vocab_path, VOCAB_FILES_NAMES["vocab_file"])
         else:
             vocab_file = vocab_path
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
-                    logger.warning("Saving vocabulary to {}: vocabulary indices are not consecutive."
-                                   " Please check that the vocabulary is not corrupted!".format(vocab_file))
+                    logger.warning(
+                        "Saving vocabulary to {}: vocabulary indices are not consecutive."
+                        " Please check that the vocabulary is not corrupted!".format(vocab_file)
+                    )
                     index = token_index
-                writer.write(token + u'\n')
+                writer.write(token + "\n")
                 index += 1
         return (vocab_file,)

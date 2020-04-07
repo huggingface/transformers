@@ -15,11 +15,12 @@
 """ Dataset to distilled models
     adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
 """
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-import numpy as np
 from utils import logger
+
 
 class LmSeqsDataset(Dataset):
     """Custom Dataset wrapping language modeling sequences.
@@ -32,9 +33,7 @@ class LmSeqsDataset(Dataset):
         data: `List[np.array[int]]
     """
 
-    def __init__(self,
-                 params,
-                 data):
+    def __init__(self, params, data):
         self.params = params
 
         self.token_ids = np.array(data)
@@ -43,6 +42,7 @@ class LmSeqsDataset(Dataset):
         self.check()
         self.remove_long_sequences()
         self.remove_empty_sequences()
+        self.remove_unknown_sequences()
         self.check()
         self.print_statistics()
 
@@ -57,7 +57,7 @@ class LmSeqsDataset(Dataset):
         Some sanity checks
         """
         assert len(self.token_ids) == len(self.lengths)
-        assert all(self.lengths[i] == len(self.token_ids[i]) for i in range(len(self.lengths))) 
+        assert all(self.lengths[i] == len(self.token_ids[i]) for i in range(len(self.lengths)))
 
     def remove_long_sequences(self):
         """
@@ -65,17 +65,17 @@ class LmSeqsDataset(Dataset):
         """
         max_len = self.params.max_model_input_size
         indices = self.lengths > max_len
-        logger.info(f'Splitting {sum(indices)} too long sequences.')
+        logger.info(f"Splitting {sum(indices)} too long sequences.")
 
         def divide_chunks(l, n):
-            return [l[i:i + n] for i in range(0, len(l), n)]
+            return [l[i : i + n] for i in range(0, len(l), n)]
 
         new_tok_ids = []
         new_lengths = []
         if self.params.mlm:
-            cls_id, sep_id = self.params.special_tok_ids['cls_token'], self.params.special_tok_ids['sep_token']
+            cls_id, sep_id = self.params.special_tok_ids["cls_token"], self.params.special_tok_ids["sep_token"]
         else:
-            cls_id, sep_id = self.params.special_tok_ids['bos_token'], self.params.special_tok_ids['eos_token']
+            cls_id, sep_id = self.params.special_tok_ids["bos_token"], self.params.special_tok_ids["eos_token"]
 
         for seq_, len_ in zip(self.token_ids, self.lengths):
             assert (seq_[0] == cls_id) and (seq_[-1] == sep_id), seq_
@@ -84,7 +84,7 @@ class LmSeqsDataset(Dataset):
                 new_lengths.append(len_)
             else:
                 sub_seqs = []
-                for sub_s in divide_chunks(seq_, max_len-2):
+                for sub_s in divide_chunks(seq_, max_len - 2):
                     if sub_s[0] != cls_id:
                         sub_s = np.insert(sub_s, 0, cls_id)
                     if sub_s[-1] != sep_id:
@@ -108,7 +108,23 @@ class LmSeqsDataset(Dataset):
         self.token_ids = self.token_ids[indices]
         self.lengths = self.lengths[indices]
         new_size = len(self)
-        logger.info(f'Remove {init_size - new_size} too short (<=11 tokens) sequences.')
+        logger.info(f"Remove {init_size - new_size} too short (<=11 tokens) sequences.")
+
+    def remove_unknown_sequences(self):
+        """
+        Remove sequences with a (too) high level of unknown tokens.
+        """
+        if "unk_token" not in self.params.special_tok_ids:
+            return
+        else:
+            unk_token_id = self.params.special_tok_ids["unk_token"]
+        init_size = len(self)
+        unk_occs = np.array([np.count_nonzero(a == unk_token_id) for a in self.token_ids])
+        indices = (unk_occs / self.lengths) < 0.5
+        self.token_ids = self.token_ids[indices]
+        self.lengths = self.lengths[indices]
+        new_size = len(self)
+        logger.info(f"Remove {init_size - new_size} sequences with a high level of unknown tokens (50%).")
 
     def print_statistics(self):
         """
@@ -116,7 +132,7 @@ class LmSeqsDataset(Dataset):
         """
         if not self.params.is_master:
             return
-        logger.info(f'{len(self)} sequences')
+        logger.info(f"{len(self)} sequences")
         # data_len = sum(self.lengths)
         # nb_unique_tokens = len(Counter(list(chain(*self.token_ids))))
         # logger.info(f'{data_len} tokens ({nb_unique_tokens} unique)')
@@ -125,8 +141,7 @@ class LmSeqsDataset(Dataset):
         # nb_unkown = sum([(t==unk_idx).sum() for t in self.token_ids])
         # logger.info(f'{nb_unkown} unknown tokens (covering {100*nb_unkown/data_len:.2f}% of the data)')
 
-    def batch_sequences(self,
-                        batch):
+    def batch_sequences(self, batch):
         """
         Do the padding and transform into torch.tensor.
         """
@@ -139,13 +154,13 @@ class LmSeqsDataset(Dataset):
 
         # Pad token ids
         if self.params.mlm:
-            pad_idx = self.params.special_tok_ids['pad_token']
+            pad_idx = self.params.special_tok_ids["pad_token"]
         else:
-            pad_idx = self.params.special_tok_ids['unk_token']
-        tk_ = [list(t.astype(int)) + [pad_idx]*(max_seq_len_-len(t)) for t in token_ids]
+            pad_idx = self.params.special_tok_ids["unk_token"]
+        tk_ = [list(t.astype(int)) + [pad_idx] * (max_seq_len_ - len(t)) for t in token_ids]
         assert len(tk_) == len(token_ids)
         assert all(len(t) == max_seq_len_ for t in tk_)
 
-        tk_t = torch.tensor(tk_)      # (bs, max_seq_len_)
+        tk_t = torch.tensor(tk_)  # (bs, max_seq_len_)
         lg_t = torch.tensor(lengths)  # (bs)
         return tk_t, lg_t

@@ -14,21 +14,17 @@
 # limitations under the License.
 """ XXX model configuration """
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 
-import json
 import logging
-import sys
-import six
-from io import open
 
 from .configuration_utils import PretrainedConfig
+
 
 logger = logging.getLogger(__name__)
 
 XXX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    'xxx-base-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-config.json",
-    'xxx-large-uncased': "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-config.json",
+    "xxx-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-config.json",
+    "xxx-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-config.json",
 }
 
 
@@ -39,7 +35,7 @@ class XxxConfig(PretrainedConfig):
 
 
         Arguments:
-            vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `XxxModel`.
+            vocab_size: Vocabulary size of `inputs_ids` in `XxxModel`.
             hidden_size: Size of the encoder layers and the pooler layer.
             num_hidden_layers: Number of hidden layers in the Transformer encoder.
             num_attention_heads: Number of attention heads for each attention layer in
@@ -62,29 +58,30 @@ class XxxConfig(PretrainedConfig):
             layer_norm_eps: The epsilon used by LayerNorm.
     """
     pretrained_config_archive_map = XXX_PRETRAINED_CONFIG_ARCHIVE_MAP
+    model_type = "xxx"
 
-    def __init__(self,
-                 vocab_size_or_config_json_file=50257,
-                 n_positions=1024,
-                 n_ctx=1024,
-                 n_embd=768,
-                 n_layer=12,
-                 n_head=12,
-                 resid_pdrop=0.1,
-                 embd_pdrop=0.1,
-                 attn_pdrop=0.1,
-                 layer_norm_epsilon=1e-5,
-                 initializer_range=0.02,
-
-                 num_labels=1,
-                 summary_type='cls_index',
-                 summary_use_proj=True,
-                 summary_activation=None,
-                 summary_proj_to_labels=True,
-                 summary_first_dropout=0.1,
-                 **kwargs):
-        super(XxxConfig, self).__init__(**kwargs)
-        self.vocab_size = vocab_size_or_config_json_file if isinstance(vocab_size_or_config_json_file, six.string_types) else -1
+    def __init__(
+        self,
+        vocab_size=50257,
+        n_positions=1024,
+        n_ctx=1024,
+        n_embd=768,
+        n_layer=12,
+        n_head=12,
+        resid_pdrop=0.1,
+        embd_pdrop=0.1,
+        attn_pdrop=0.1,
+        layer_norm_epsilon=1e-5,
+        initializer_range=0.02,
+        summary_type="cls_index",
+        summary_use_proj=True,
+        summary_activation=None,
+        summary_proj_to_labels=True,
+        summary_first_dropout=0.1,
+        **kwargs
+    ):
+        super().__init__(**kwargs)
+        self.vocab_size = vocab_size
         self.n_ctx = n_ctx
         self.n_positions = n_positions
         self.n_embd = n_embd
@@ -95,23 +92,11 @@ class XxxConfig(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-
-        self.num_labels = num_labels
         self.summary_type = summary_type
         self.summary_use_proj = summary_use_proj
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
-        if isinstance(vocab_size_or_config_json_file, six.string_types):
-            with open(vocab_size_or_config_json_file, "r", encoding="utf-8") as reader:
-                json_config = json.loads(reader.read())
-            for key, value in json_config.items():
-                self.__dict__[key] = value
-        elif not isinstance(vocab_size_or_config_json_file, int):
-            raise ValueError(
-                "First argument must be either a vocabulary size (int)"
-                "or the path to a pretrained model config file (str)"
-            )
 
     @property
     def max_position_embeddings(self):

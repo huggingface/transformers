@@ -17,17 +17,19 @@
 import bisect
 import copy
 from collections import defaultdict
-import numpy as np
 
+import numpy as np
 from torch.utils.data.sampler import BatchSampler, Sampler
 
 from utils import logger
+
 
 def _quantize(x, bins):
     bins = copy.deepcopy(bins)
     bins = sorted(bins)
     quantized = list(map(lambda y: bisect.bisect_right(bins, y), x))
     return quantized
+
 
 def create_lengths_groups(lengths, k=0):
     bins = np.arange(start=3, stop=k, step=4).tolist() if k > 0 else [10]
@@ -38,6 +40,7 @@ def create_lengths_groups(lengths, k=0):
     logger.info("Using {} as bins for aspect lengths quantization".format(fbins))
     logger.info("Count of instances per bin: {}".format(counts))
     return groups
+
 
 class GroupedBatchSampler(BatchSampler):
     """
@@ -53,11 +56,11 @@ class GroupedBatchSampler(BatchSampler):
             0, i.e. they must be in the range [0, num_groups).
         batch_size (int): Size of mini-batch.
     """
+
     def __init__(self, sampler, group_ids, batch_size):
         if not isinstance(sampler, Sampler):
             raise ValueError(
-                "sampler should be an instance of "
-                "torch.utils.data.Sampler, but got sampler={}".format(sampler)
+                "sampler should be an instance of " "torch.utils.data.Sampler, but got sampler={}".format(sampler)
             )
         self.sampler = sampler
         self.group_ids = group_ids
@@ -73,7 +76,7 @@ class GroupedBatchSampler(BatchSampler):
             buffer_per_group[group_id].append(idx)
             samples_per_group[group_id].append(idx)
             if len(buffer_per_group[group_id]) == self.batch_size:
-                yield buffer_per_group[group_id] #TODO
+                yield buffer_per_group[group_id]  # TODO
                 num_batches += 1
                 del buffer_per_group[group_id]
             assert len(buffer_per_group[group_id]) < self.batch_size
@@ -90,8 +93,8 @@ class GroupedBatchSampler(BatchSampler):
             for group_id, idxs in sorted(buffer_per_group.items(), key=lambda x: x[0]):
                 batch_idx.extend(idxs)
                 if len(batch_idx) >= self.batch_size:
-                    yield batch_idx[:self.batch_size]
-                    batch_idx = batch_idx[self.batch_size:]
+                    yield batch_idx[: self.batch_size]
+                    batch_idx = batch_idx[self.batch_size :]
                     num_remaining -= 1
             if len(batch_idx) > 0:
                 yield batch_idx
