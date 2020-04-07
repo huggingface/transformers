@@ -16,13 +16,11 @@ from .utils import require_tf, require_torch, slow
 
 QA_FINETUNED_MODELS = [
     (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
-    # (("bert-base-cased", {"use_fast": False}), "bert-large-cased-whole-word-masking-finetuned-squad", None),
     (("bert-base-cased", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
 ]
 
 TF_QA_FINETUNED_MODELS = [
     (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
-    (("bert-base-cased", {"use_fast": False}), "bert-large-cased-whole-word-masking-finetuned-squad", None),
     (("bert-base-cased", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
 ]
 
@@ -49,7 +47,6 @@ FEATURE_EXTRACT_FINETUNED_MODELS = {
 }
 
 TF_FEATURE_EXTRACT_FINETUNED_MODELS = {
-    ("bert-base-cased", "bert-base-cased", None),
     # ('xlnet-base-cased', 'xlnet-base-cased', None), # Disabled for now as it crash for TF2
     ("distilbert-base-cased", "distilbert-base-cased", None),
 }
