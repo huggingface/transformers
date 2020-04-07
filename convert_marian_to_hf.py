@@ -5,8 +5,9 @@ import argparse
 from transformers import BertModel
 
 parser = argparse.ArgumentParser(description='Convert Huggingface Bert model to Marian weight file.')
-parser.add_argument('--bert', help='Path to Huggingface Bert PyTorch model', required=True)
-parser.add_argument('--marian', help='Output path for Marian weight file', required=True)
+parser.add_argument('--bert', default='bert-base-cased', help='Path to Huggingface Bert PyTorch model')
+parser.add_argument('--marian', default='marian_output.npz',
+                    help='Output path for Marian weight file')
 args = parser.parse_args()
 
 huggingface = BertModel.from_pretrained(args.bert)
@@ -43,8 +44,9 @@ def transposeOrder(mat):
     matT = np.transpose(mat)  # just a view with changed row order
     return matT.flatten(order="C").reshape(matT.shape)  # force row order change and reshape
 
-
+ALL_CONVERT_CALLS = []
 def convert(pd, srcs, trg, transpose=True, bias=False):
+    ALL_CONVERT_CALLS.append((srcs, trg, transpose, bias))
     if len(srcs) == 1:
         for src in srcs:
             num = pd[src].detach().numpy()
@@ -61,6 +63,7 @@ def convert(pd, srcs, trg, transpose=True, bias=False):
             nums = [np.transpose(np.atleast_2d(num)) for num in nums]
         marianModel[trg] = np.stack(nums, axis=0)
 
+# def inject(layer, nth, level):
 
 def extract(layer, nth, level):
     name = type(layer).__name__
@@ -147,3 +150,6 @@ print("\nMarian config:")
 print(configYamlStr)
 print("Saving Marian model to %s" % (args.marian,))
 np.savez(args.marian, **marianModel)
+
+from durbango import pickle_save
+pickle_save(ALL_CONVERT_CALLS, 'all_convert_calls.pkl')
