@@ -426,7 +426,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
                 posids=None
             model.train()
             # logger.info('sample posids {0}',posids[0].__repr__())
-            outputs = model(inputs, position_ids=posids,masked_lm_labels=labels) if args.mlm else model(inputs, position_ids=posid,labels=labels)
+            outputs = model(inputs, position_ids=posids,masked_lm_labels=labels) if args.mlm else model(inputs, position_ids=posids,labels=labels)
 
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
