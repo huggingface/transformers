@@ -140,7 +140,7 @@ def load_pytorch_weights_in_jax_model(pt_state_dict, config: BertConfig):
 
         # Self Attention output projection needs to be transposed
         if "out.kernel" in key:
-            jax_state[key] = tensor.reshape((768, 12, 64)).transpose(1, 2, 0)
+            jax_state[key] = tensor.reshape((config.hidden_size, config.num_attention_heads, -1)).transpose(1, 2, 0)
 
         # Pooler needs to transpose its kernel
         if "pooler.dense.kernel" in key:
