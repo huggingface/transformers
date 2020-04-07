@@ -271,7 +271,7 @@ class ReformerIntegrationTests(unittest.TestCase):
     def test_lsh_block(self):
         config = ReformerConfig()
 
-        shape = (3, 7, config.hidden_size)  # Batch x SeqLen x ModelDimPerHead
+        shape = (2, 7, config.hidden_size)  # Batch x SeqLen x ModelDimPerHead
         np_input = np.random.rand(*shape)
 
         trax_utils = TraxUtils(shape)
