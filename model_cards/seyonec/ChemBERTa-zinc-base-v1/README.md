@@ -1,6 +1,11 @@
-# RoBERTA: Training a BERT-like transformer model for masked language modelling of chemical SMILES strings.
+---
+tags: 
+- chemistry
+---
 
-Deep learning for chemistry and materials science remains a novel field with lots of potiential. However, the popularity of transfer learning based methods in areas such as NLP and computer vision have not yet been effectively developed in computational chemistry + machine learning. Using HuggingFace's suite of models and the ByteLeve tokenizer, we are able to train on a large corpus of 100k SMILES strings from a commonly known benchmark dataset, ZINC.
+# ChemBERTa: Training a BERT-like transformer model for masked language modelling of chemical SMILES strings.
+
+Deep learning for chemistry and materials science remains a novel field with lots of potiential. However, the popularity of transfer learning based methods in areas such as NLP and computer vision have not yet been effectively developed in computational chemistry + machine learning. Using HuggingFace's suite of models and the ByteLevel tokenizer, we are able to train on a large corpus of 100k SMILES strings from a commonly known benchmark dataset, ZINC.
 
 Training RoBERTa over 5 epochs, the model achieves a decent loss of 0.398, but may likely continue to decline if trained for a larger number of epochs. The model can predict tokens within a SMILES sequence/molecule, allowing for variants of a molecule within discoverable chemical space to be predicted.
 
