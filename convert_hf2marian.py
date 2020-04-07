@@ -3,6 +3,7 @@ import yaml
 import argparse
 
 from transformers import BertModel
+from durbango import pickle_save
 
 parser = argparse.ArgumentParser(description='Convert Huggingface Bert model to Marian weight file.')
 parser.add_argument('--bert', default='bert-base-cased', help='Path to Huggingface Bert PyTorch model')
@@ -12,6 +13,8 @@ args = parser.parse_args()
 
 huggingface = BertModel.from_pretrained(args.bert)
 huggingface.eval()
+
+
 
 print(huggingface.config)
 
@@ -43,6 +46,33 @@ marianModel = dict()
 def transposeOrder(mat):
     matT = np.transpose(mat)  # just a view with changed row order
     return matT.flatten(order="C").reshape(matT.shape)  # force row order change and reshape
+
+
+def reverse_transposeOrder(mat):
+    raise NotImplementedError()
+
+
+ELAYER_CONVERT = {'self_Wq': 'attention.self.query.weight',
+ 'self_Wk': 'attention.self.key.weight',
+ 'self_Wv': 'attention.self.value.weight',
+ 'self_bq': 'attention.self.query.bias',
+ 'self_bk': 'attention.self.key.bias',
+ 'self_bv': 'attention.self.value.bias',
+ 'self_Wo': 'attention.output.dense.weight',
+ 'self_bo': 'attention.output.dense.bias',
+ 'self_Wo_ln_scale': 'attention.output.LayerNorm.weight',
+ 'self_Wo_ln_bias': 'attention.output.LayerNorm.bias',
+ 'ffn_W1': 'intermediate.dense.weight',
+ 'ffn_b1': 'intermediate.dense.bias',
+ 'ffn_W2': 'output.dense.weight',
+ 'ffn_b2': 'output.dense.bias',
+ 'ffn_ffn_ln_scale': 'output.LayerNorm.weight',
+ 'ffn_ffn_ln_bias': 'output.LayerNorm.bias'}
+
+
+DLAYER_CONVERT = ELAYER_CONVERT.copy()
+
+
 
 ALL_CONVERT_CALLS = []
 def convert(pd, srcs, trg, transpose=True, bias=False):
@@ -140,10 +170,13 @@ for m in marianModel:
     print(m, marianModel[m].shape)
 
 configYamlStr = yaml.dump(config, default_flow_style=False)
+#pickle_save(configYamlStr, config)
 desc = list(configYamlStr)
 npDesc = np.chararray((len(desc),))
 npDesc[:] = desc
+import ipdb; ipdb.set_trace()
 npDesc.dtype = np.int8
+
 marianModel["special:model.yml"] = npDesc
 
 print("\nMarian config:")
@@ -151,5 +184,5 @@ print(configYamlStr)
 print("Saving Marian model to %s" % (args.marian,))
 np.savez(args.marian, **marianModel)
 
-from durbango import pickle_save
+
 pickle_save(ALL_CONVERT_CALLS, 'all_convert_calls.pkl')
