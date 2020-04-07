@@ -1396,7 +1396,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
-            if isinstance(ids_or_pair_ids, (list, tuple)) and len(ids_or_pair_ids) == 2:
+            if isinstance(ids_or_pair_ids, (list, tuple)) and len(ids_or_pair_ids) == 2 and not is_pretokenized:
                 ids, pair_ids = ids_or_pair_ids
             else:
                 ids, pair_ids = ids_or_pair_ids, None
