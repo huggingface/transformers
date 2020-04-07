@@ -20,10 +20,10 @@
 
 import argparse
 import csv
-import timeit
 import logging
+import timeit
 from time import time
-from typing import List, Callable
+from typing import Callable, List
 
 from transformers import (
     AutoConfig,
@@ -272,7 +272,7 @@ def create_setup_and_compute(
     save_to_csv: bool = False,
     csv_time_filename: str = f"time_{round(time())}.csv",
     csv_memory_filename: str = f"memory_{round(time())}.csv",
-    print_fn: Callable[[str], None] = print
+    print_fn: Callable[[str], None] = print,
 ):
     if xla:
         tf.config.optimizer.set_jit(True)
@@ -282,7 +282,16 @@ def create_setup_and_compute(
     if tensorflow:
         dictionary = {model_name: {} for model_name in model_names}
         results = _compute_tensorflow(
-            model_names, batch_sizes, slice_sizes, dictionary, average_over, amp, no_speed, no_memory, verbose, print_fn
+            model_names,
+            batch_sizes,
+            slice_sizes,
+            dictionary,
+            average_over,
+            amp,
+            no_speed,
+            no_memory,
+            verbose,
+            print_fn,
         )
     else:
         device = "cuda" if (gpu and torch.cuda.is_available()) else "cpu"
@@ -299,7 +308,7 @@ def create_setup_and_compute(
             no_speed,
             no_memory,
             verbose,
-            print_fn
+            print_fn,
         )
 
     print_fn("=========== RESULTS ===========")
@@ -321,7 +330,9 @@ def create_setup_and_compute(
                     )
 
     if save_to_csv:
-        with open(csv_time_filename, mode="w") as csv_time_file, open(csv_memory_filename, mode="w") as csv_memory_file:
+        with open(csv_time_filename, mode="w") as csv_time_file, open(
+            csv_memory_filename, mode="w"
+        ) as csv_memory_file:
 
             assert len(model_names) > 0, "At least 1 model should be defined, but got {}".format(model_names)
 
@@ -332,15 +343,29 @@ def create_setup_and_compute(
             memory_writer.writeheader()
 
             for model_name in model_names:
-                time_dict = results[model_name]['time']
-                memory_dict = results[model_name]['memory']
+                time_dict = results[model_name]["time"]
+                memory_dict = results[model_name]["memory"]
                 for bs in time_dict:
                     for ss in time_dict[bs]:
-                        time_writer.writerow({"model": model_name, "batch_size": bs, "sequence_length": ss, "time_in_s": "{:.4f}".format(time_dict[bs][ss])})
+                        time_writer.writerow(
+                            {
+                                "model": model_name,
+                                "batch_size": bs,
+                                "sequence_length": ss,
+                                "time_in_s": "{:.4f}".format(time_dict[bs][ss]),
+                            }
+                        )
 
                 for bs in memory_dict:
                     for ss in time_dict[bs]:
-                        memory_writer.writerow({"model": model_name, "batch_size": bs, "sequence_length": ss, "memory": memory_dict[bs][ss]})
+                        memory_writer.writerow(
+                            {
+                                "model": model_name,
+                                "batch_size": bs,
+                                "sequence_length": ss,
+                                "memory": memory_dict[bs][ss],
+                            }
+                        )
 
 
 def print_summary_statistics(summary: MemorySummary, print_fn: Callable[[str], None]):
@@ -370,7 +395,12 @@ def print_summary_statistics(summary: MemorySummary, print_fn: Callable[[str], N
 
 def get_print_function(save_print_log, log_filename):
     if save_print_log:
-        logging.basicConfig(level=logging.DEBUG, filename=log_filename, filemode="a+", format="%(asctime)-15s %(levelname)-8s %(message)s")
+        logging.basicConfig(
+            level=logging.DEBUG,
+            filename=log_filename,
+            filemode="a+",
+            format="%(asctime)-15s %(levelname)-8s %(message)s",
+        )
 
         def print_with_print_log(*args):
             logging.info(*args)
@@ -583,15 +613,26 @@ def main():
         help="Whether to use model.predict " "instead of model() to do a " "forward pass.",
     )
     parser.add_argument("--save_to_csv", required=False, action="store_true", help="Save to a CSV file.")
-    parser.add_argument("--log_print", required=False, action="store_true", help="Save all print statements in log file.")
     parser.add_argument(
-        "--csv_time_filename", required=False, default=f"time_{round(time())}.csv", help="CSV filename used if saving time results to csv."
+        "--log_print", required=False, action="store_true", help="Save all print statements in log file."
     )
     parser.add_argument(
-        "--csv_memory_filename", required=False, default=f"memory_{round(time())}.csv", help="CSV filename used if saving memory results to csv."
+        "--csv_time_filename",
+        required=False,
+        default=f"time_{round(time())}.csv",
+        help="CSV filename used if saving time results to csv.",
     )
     parser.add_argument(
-        "--log_filename", required=False, default=f"log_{round(time())}.txt", help="Log filename used if print statements are saved in log."
+        "--csv_memory_filename",
+        required=False,
+        default=f"memory_{round(time())}.csv",
+        help="CSV filename used if saving memory results to csv.",
+    )
+    parser.add_argument(
+        "--log_filename",
+        required=False,
+        default=f"log_{round(time())}.txt",
+        help="Log filename used if print statements are saved in log.",
     )
     parser.add_argument(
         "--average_over", required=False, default=30, type=int, help="Times an experiment will be run."
@@ -613,7 +654,7 @@ def main():
             "roberta-base",
             "ctrl",
             "t5-base",
-            "bart-large"
+            "bart-large",
         ]
     else:
         args.models = args.models.split()
@@ -638,7 +679,7 @@ def main():
                 no_speed=args.no_speed,
                 no_memory=args.no_memory,
                 verbose=args.verbose,
-                print_fn=print_fn
+                print_fn=print_fn,
             )
         else:
             raise ImportError("Trying to run a PyTorch benchmark but PyTorch was not found in the environment.")
@@ -659,7 +700,7 @@ def main():
                 no_speed=args.no_speed,
                 no_memory=args.no_memory,
                 verbose=args.verbose,
-                print_fn=print_fn
+                print_fn=print_fn,
             )
         else:
             raise ImportError("Trying to run a TensorFlow benchmark but TensorFlow was not found in the environment.")
