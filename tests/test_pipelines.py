@@ -16,7 +16,7 @@ from .utils import require_tf, require_torch, slow
 
 QA_FINETUNED_MODELS = [
     (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
-    (("bert-base-cased", {"use_fast": False}), "bert-large-cased-whole-word-masking-finetuned-squad", None),
+    # (("bert-base-cased", {"use_fast": False}), "bert-large-cased-whole-word-masking-finetuned-squad", None),
     (("bert-base-cased", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
 ]
 
@@ -82,13 +82,13 @@ SUMMARIZATION_FINETUNED_MODELS = {
     ("sshleifer/bart-tiny-random", "bart-large-cnn"),
     ("patrickvonplaten/t5-tiny-random", "t5-small"),
 }
-TF_SUMMARIZATION_FINETUNED_MODELS = {("t5-small", "t5-small")}
+TF_SUMMARIZATION_FINETUNED_MODELS = {("patrickvonplaten/t5-tiny-random", "t5-small")}
 
 TRANSLATION_FINETUNED_MODELS = {
     ("patrickvonplaten/t5-tiny-random", "t5-small", "translation_en_to_de"),
     ("patrickvonplaten/t5-tiny-random", "t5-small", "translation_en_to_ro"),
 }
-TF_TRANSLATION_FINETUNED_MODELS = {("t5-small", "t5-small", "translation_en_to_fr")}
+TF_TRANSLATION_FINETUNED_MODELS = {("patrickvonplaten/t5-tiny-random", "t5-small", "translation_en_to_fr")}
 
 
 class MonoColumnInputTestCase(unittest.TestCase):
