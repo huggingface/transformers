@@ -125,19 +125,19 @@ class BertEmbedding(nn.Module):
 
 
 class BertEmbeddings(nn.Module):
-    def apply(self, input_ids, token_type_ids, attention_mask, vocab_size: int,
-              hidden_size: int, type_vocab_size: int, max_length: int):
+    def apply(self, input_ids, token_type_ids, position_ids, attention_mask,
+              vocab_size: int, hidden_size: int, type_vocab_size: int, max_length: int):
 
         # Embed
         w_emb = BertEmbedding(jnp.atleast_2d(input_ids.astype('i4')), vocab_size, hidden_size, name="word_embeddings")
-        p_emb = BertEmbedding(jnp.atleast_2d(np.arange(input_ids.shape[-1])), max_length, hidden_size, name="position_embeddings")
-        t_emb = BertEmbedding(jnp.atleast_2d(token_type_ids.astype('i4')), 2, hidden_size, name="token_type_embeddings")
+        p_emb = BertEmbedding(jnp.atleast_2d(position_ids.astype('i4')), max_length, hidden_size, name="position_embeddings")
+        t_emb = BertEmbedding(jnp.atleast_2d(token_type_ids.astype('i4')), type_vocab_size, hidden_size, name="token_type_embeddings")
 
         # Sum all embeddings
         summed_emb = w_emb + jnp.broadcast_to(p_emb, w_emb.shape) + t_emb
 
         # Layer Norm
-        norm = BertLayerNorm(summed_emb, name="LayerNorm")
+        norm = BertLayerNorm(summed_emb, name="layer_norm")
 
         return norm
 
@@ -166,7 +166,7 @@ class BertIntermediate(nn.Module):
 class BertOutput(nn.Module):
     def apply(self, intermediate_output, attention_output):
         h = nn.Dense(intermediate_output, attention_output.shape[-1], name="dense")
-        h = BertLayerNorm(h + attention_output, name="LayerNorm")
+        h = BertLayerNorm(h + attention_output, name="layer_norm")
 
         return h
 
@@ -215,15 +215,15 @@ class BertPooler(nn.Module):
 
 class BertModel(nn.Module):
 
-    def apply(self, input_ids, token_type_ids, attention_mask,
+    def apply(self, input_ids, token_type_ids, position_ids, attention_mask,
               vocab_size: int, hidden_size: int, type_vocab_size: int,
               max_length: int, num_encoder_layers: int, num_heads: int,
-              head_size: int, intermediate_size: int,
+              head_size: int, intermediate_size: int, padding_idx: int,
               emb_init: Callable[..., np.ndarray] = nn.initializers.normal(stddev=0.1)):
 
         # Embedding
         embeddings = BertEmbeddings(
-            input_ids, token_type_ids, attention_mask,
+            input_ids, token_type_ids, position_ids, attention_mask,
             vocab_size, hidden_size, type_vocab_size, max_length,
             name="embeddings"
         )
@@ -262,18 +262,30 @@ class FlaxBertModel(JaxPreTrainedModel):
             num_encoder_layers=self.config.num_hidden_layers,
             num_heads=self.config.num_attention_heads,
             head_size=self.config.hidden_size,
-            intermediate_size=self.config.intermediate_size
+            intermediate_size=self.config.intermediate_size,
+            padding_idx=self.config.pad_token_id
         )
 
         self._bert = nn.Model(self._model_def, self.state)
 
-    def __call__(self, input_ids, token_type_ids, attention_mask):
+    def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
 
         @jax.jit
-        def predict(input_ids, token_type_ids, attention_mask):
+        def predict(input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
+
+            if token_type_ids is None:
+                token_type_ids = np.ones_like(input_ids)
+
+            if position_ids is None:
+                position_ids = np.arange(np.atleast_2d(input_ids.shape[-1]))
+
+            if attention_mask is None:
+                attention_mask = np.ones_like(input_ids)
+
             return self._bert(
                 jnp.array(input_ids, dtype='i4'),
                 jnp.array(token_type_ids, dtype='i4'),
+                jnp.array(position_ids, dtype='i4'),
                 jnp.array(attention_mask, dtype='i4')
             )
 
