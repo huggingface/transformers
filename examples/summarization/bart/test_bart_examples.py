@@ -34,7 +34,7 @@ class TestBartExamples(unittest.TestCase):
         testargs = ["evaluate_cnn.py", str(tmp), str(output_file_name), "sshleifer/bart-tiny-random"]
         with patch.object(sys, "argv", testargs):
             run_generate()
-            self.assertTrue(Path(output_file_name).exists())
+            self.assertTrue(output_file_name.exists())
 
     def test_bart_summarization_dataset(self):
         tmp_dir = Path(tempfile.gettempdir())
