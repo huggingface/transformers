@@ -22,7 +22,6 @@ import json
 import logging
 import os
 import random
-from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -84,13 +83,19 @@ def train(args, train_dataset, model, tokenizer):
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
     # Prepare optimizer and schedule (linear warmup and decay)
-    optimizer = get_optimizer(args, model)
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+        {
+            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "weight_decay": args.weight_decay,
+        },
+        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
+    ]
 
-    if args.warmup_steps != 0:
-        warmup_steps = args.warmup_steps
-    else:
-        warmup_steps = t_total * args.warmup_fraction
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=t_total)
+    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
+    )
 
     # Check if saved optimizer or scheduler states exist
     if os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt")) and os.path.isfile(
@@ -259,7 +264,7 @@ def evaluate(args, model, tokenizer, prefix=""):
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, set_type="dev")
+        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, mode='dev')
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
@@ -328,7 +333,7 @@ def test(args, model, tokenizer, prefix=""):
 
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, set_type="test")
+        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, mode='test')
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
@@ -343,7 +348,7 @@ def test(args, model, tokenizer, prefix=""):
             model = torch.nn.DataParallel(model)
 
         # Eval!
-        logger.info("***** Running test {} *****".format(prefix))
+        logger.info("***** Running predict {} *****".format(prefix))
         logger.info("  Num examples = %d", len(eval_dataset))
         logger.info("  Batch size = %d", args.eval_batch_size)
         nb_eval_steps = 0
@@ -383,43 +388,8 @@ def test(args, model, tokenizer, prefix=""):
     return results
 
 
-def get_optimizer(args, model):
-    no_decay = ["bias", "LayerNorm.weight"]
-    no_decay_params = []
-    no_lr_decay_params = []
-    layer_params = defaultdict(list)
-
-    for n, p in model.named_parameters():
-        name_split = n.split(".")
-        if any(nd in n for nd in no_decay):
-            no_decay_params.append(p)
-        elif args.layerwise_lr_decay and len(name_split) > 2 and name_split[2] == "layer":
-            layer_params[int(name_split[3])].append(p)
-        else:
-            no_lr_decay_params.append(p)
-
-    optimizer_grouped_parameters = [
-        {"params": no_decay_params, "weight_decay": 0.0, "lr": args.learning_rate},
-        {"params": no_lr_decay_params, "weight_decay": args.weight_decay, "lr": args.learning_rate},
-    ]
-
-    if args.layerwise_lr_decay:
-        n_layers = len(layer_params)
-        for layer_n, params in layer_params.items():
-            optimizer_grouped_parameters.append(
-                {
-                    "params": params,
-                    "weight_decay": args.weight_decay,
-                    "lr": args.learning_rate * (args.layerwise_lr_decay ** (n_layers - layer_n - 1)),
-                }
-            )
-
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    return optimizer
-
-
-def load_and_cache_examples(args, task, tokenizer, set_type="train"):
-    if args.local_rank not in [-1, 0] and set_type != "train":
+def load_and_cache_examples(args, task, tokenizer, mode='train'):
+    if args.local_rank not in [-1, 0] and mode == 'train':
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     processor = processors[task]()
@@ -428,7 +398,7 @@ def load_and_cache_examples(args, task, tokenizer, set_type="train"):
     cached_features_file = os.path.join(
         args.data_dir,
         "cached_{}_{}_{}_{}".format(
-            set_type,
+            mode,
             list(filter(None, args.model_name_or_path.split("/"))).pop(),
             str(args.max_seq_length),
             str(task),
@@ -443,13 +413,12 @@ def load_and_cache_examples(args, task, tokenizer, set_type="train"):
         if task in ["mnli", "mnli-mm"] and args.model_type in ["roberta", "xlmroberta"]:
             # HACK(label indices are swapped in RoBERTa pretrained model)
             label_list[1], label_list[2] = label_list[2], label_list[1]
-        if set_type == "train":
+        if mode == 'train':
             examples = processor.get_train_examples(args.data_dir)
-        elif set_type == "dev":
+        elif mode == 'dev':
             examples = processor.get_dev_examples(args.data_dir)
-        elif set_type == "test":
+        elif mode == 'test':
             examples = processor.get_test_examples(args.data_dir)
-
         features = convert_examples_to_features(
             examples,
             tokenizer,
@@ -457,29 +426,26 @@ def load_and_cache_examples(args, task, tokenizer, set_type="train"):
             max_length=args.max_seq_length,
             output_mode=output_mode,
             pad_on_left=bool(args.model_type in ["xlnet"]),  # pad on the left for xlnet
-            pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-            pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
+            pad_token=tokenizer.pad_token_id,
+            pad_token_segment_id=tokenizer.pad_token_type_id,
         )
         if args.local_rank in [-1, 0]:
             logger.info("Saving features into cached file %s", cached_features_file)
             torch.save(features, cached_features_file)
 
-    if args.local_rank == 0 and not set_type == "train":
+    if args.local_rank == 0 and mode == 'train':
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     # Convert to Tensors and build dataset
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
     all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+    if output_mode == "classification":
+        all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
+    elif output_mode == "regression":
+        all_labels = torch.tensor([f.label for f in features], dtype=torch.float)
 
-    if set_type == "test":
-        dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids)
-    else:
-        if output_mode == "classification":
-            all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
-        elif output_mode == "regression":
-            all_labels = torch.tensor([f.label for f in features], dtype=torch.float)
-        dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
+    dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
     return dataset
 
 
@@ -500,9 +466,6 @@ def main():
         type=str,
         required=True,
         help="Model type selected in the list: " + ", ".join(MODEL_TYPES),
-    )
-    parser.add_argument(
-        "--tokenizer_type", default=None, type=str, required=False, help="Tokenizer type if different than model_type."
     )
     parser.add_argument(
         "--model_name_or_path",
@@ -551,7 +514,7 @@ def main():
     )
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
-    parser.add_argument("--do_test", action="store_true", help="Whether to get predictions on the test set.")
+    parser.add_argument("--do_predict", action="store_true", help="Whether to produce predictions for the test set.")
     parser.add_argument(
         "--evaluate_during_training", action="store_true", help="Run evaluation during training at each logging step.",
     )
@@ -572,9 +535,6 @@ def main():
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
-    parser.add_argument(
-        "--layerwise_lr_decay", default=None, type=float, help="Decay learning rate from layer to layer."
-    )
     parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
@@ -588,12 +548,6 @@ def main():
         help="If > 0: set total number of training steps to perform. Override num_train_epochs.",
     )
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
-    parser.add_argument(
-        "--warmup_fraction",
-        default=0,
-        type=float,
-        help="Fraction of total steps to use as warmup steps. --warmup_steps takes priority.",
-    )
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
     parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
@@ -692,7 +646,6 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     args.model_type = args.model_type.lower()
-
     config = AutoConfig.from_pretrained(
         args.config_name if args.config_name else args.model_name_or_path,
         num_labels=num_labels,
@@ -720,7 +673,7 @@ def main():
 
     # Training
     if args.do_train:
-        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, set_type="train")
+        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, mode='train')
         global_step, tr_loss = train(args, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
 
@@ -744,17 +697,13 @@ def main():
 
         # Load a trained model and vocabulary that you have fine-tuned
         model = AutoModelForSequenceClassification.from_pretrained(args.output_dir)
-        tokenizer = AutoTokenizer.from_pretrained(
-            args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
-        )
+        tokenizer = AutoTokenizer.from_pretrained(args.output_dir)
         model.to(args.device)
 
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        tokenizer = AutoTokenizer.from_pretrained(
-            args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case
-        )
+        tokenizer = AutoTokenizer.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(
@@ -772,18 +721,17 @@ def main():
             result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
             results.update(result)
 
-    # Testing
-    if args.do_test and args.local_rank in [-1, 0]:
-        tokenizer = AutoTokenizer.from_pretrained(
-            args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case
-        )
+    # Predict on test set
+    results = {}
+    if args.do_predict and args.local_rank in [-1, 0]:
+        tokenizer = AutoTokenizer.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(
                 os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
             )
             logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
-        logger.info("Test the following checkpoints: %s", checkpoints)
+        logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
             prefix = checkpoint.split("/")[-1] if checkpoint.find("checkpoint") != -1 else ""
