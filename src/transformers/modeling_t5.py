@@ -506,7 +506,11 @@ class T5Block(nn.Module):
         if self.is_decoder:
             # the actual query length is unknown for cross attention
             # if using past key value states. Need to inject it here
-            query_length = present_key_value_state[0].shape[2]
+            if present_key_value_state is not None:
+                query_length = present_key_value_state[0].shape[2]
+            else:
+                query_length = None
+
             cross_attention_outputs = self.layer[1](
                 hidden_states,
                 kv=encoder_hidden_states,
@@ -517,7 +521,10 @@ class T5Block(nn.Module):
                 query_length=query_length,
             )
             hidden_states = cross_attention_outputs[0]
-            present_key_value_state = present_key_value_state + cross_attention_outputs[1]
+            # Combine self attn and cross attn key value states
+            if present_key_value_state is not None:
+                present_key_value_state = present_key_value_state + cross_attention_outputs[1]
+
             # Keep cross-attention outputs and relative position weights
             attention_outputs = attention_outputs + cross_attention_outputs[2:]
 

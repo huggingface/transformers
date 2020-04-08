@@ -128,6 +128,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config.output_attentions = True
             config.output_hidden_states = False
+            config.output_past = False
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -144,13 +145,8 @@ class ModelTesterMixin:
             out_len = len(outputs)
 
             if self.is_encoder_decoder:
-                if model.config.output_past:
-                    # decoder_features_or_logits, decoder_past_key_value_states, decoder_attentions, encoder_features, encoder_attentions
-                    correct_outlen = 5
-                    decoder_attention_idx = 2
-                else:
-                    correct_outlen = 4
-                    decoder_attention_idx = 1
+                correct_outlen = 4
+                decoder_attention_idx = 1
 
                 if "lm_labels" in inputs_dict:  # loss will come first
                     correct_outlen += 1  # compute loss
