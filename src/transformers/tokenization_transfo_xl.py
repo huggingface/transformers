@@ -100,13 +100,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             unk_token=unk_token, eos_token=eos_token, additional_special_tokens=additional_special_tokens, **kwargs
         )
 
-        self.max_len_single_sentence = (
-            self.max_len
-        )  # no default special tokens - you can update this value if you add special tokens
-        self.max_len_sentences_pair = (
-            self.max_len
-        )  # no default special tokens - you can update this value if you add special tokens
-
         if never_split is None:
             never_split = self.all_special_tokens
         if special is None:
