@@ -421,7 +421,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
             if args.para_data_file:
-                posids=create_posids(batch)
+                posids=create_posids(batch).to(args.device)
             else:
                 posids=None
             model.train()
