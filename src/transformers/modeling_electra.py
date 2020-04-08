@@ -3,6 +3,7 @@ import os
 
 import torch
 import torch.nn as nn
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from transformers import ElectraConfig, add_start_docstrings
 from transformers.activations import get_activation
@@ -606,15 +607,17 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the token classification loss.
+            Labels for computing the token classification/regression loss.
             Indices should be in ``[0, ..., config.num_labels - 1]``.
+            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+            If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when ``labels`` is provided) :
-            Classification loss.
-        scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
-            Classification scores (before SoftMax).
+            Classification (or regression if config.num_labels==1) loss.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -651,21 +654,27 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         discriminator_sequence_output = self.dropout(discriminator_sequence_output)
         logits = self.classifier(discriminator_sequence_output)
 
-        output = (logits,)
+        outputs = (logits,)
 
         if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
+            if self.num_labels == 1:
+                # We are doing regression
+                loss_fct = MSELoss()
+                logits_view = logits.view(-1)
+            else:
+                # We are doing classification
+                loss_fct = CrossEntropyLoss()
+                logits_view = logits.view(-1, self.num_labels)
             # Only keep active parts of the loss
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1) == 1
-                active_logits = logits.view(-1, self.config.num_labels)[active_loss]
+                active_logits = logits_view[active_loss]
                 active_labels = labels.view(-1)[active_loss]
                 loss = loss_fct(active_logits, active_labels)
             else:
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(logits_view, labels.view(-1))
+            outputs = (loss,) + outputs
 
-            output = (loss,) + output
+        outputs += discriminator_hidden_states[1:]
 
-        output += discriminator_hidden_states[1:]
-
-        return output  # (loss), scores, (hidden_states), (attentions)
+        return outputs  # (loss), logits, (hidden_states), (attentions)
