@@ -343,6 +343,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         if xla_device:
             import torch_xla.core.xla_model as xm
+
             if xm.is_master_ordinal():
                 # Save configuration file
                 model_to_save.config.save_pretrained(save_directory)
@@ -434,7 +435,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
-        xla_device = kwargs.pop('xla_device', False)
+        xla_device = kwargs.pop("xla_device", False)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -641,6 +642,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         if xla_device:
             import torch_xla.core.xla_model as xm
+
             model = xm.send_cpu_data_to_device(model, xm.xla_device())
             model = model.to(xm.xla_device())
 

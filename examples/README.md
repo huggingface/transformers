@@ -67,6 +67,7 @@ and unpack it to some directory `$GLUE_DIR`.
 For running your GLUE task on MNLI dataset you can run something like the following:
 
 ```
+export XRT_TPU_CONFIG="tpu_worker;0;$TPU_IP_ADDRESS:8470"
 export GLUE_DIR=/path/to/glue
 export TASK_NAME=MNLI
 
