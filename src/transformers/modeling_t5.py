@@ -667,7 +667,7 @@ class T5Stack(T5PreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
-        if self.is_decoder and encoder_attention_mask is None:
+        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
             encoder_seq_length = encoder_hidden_states.shape[1]
             encoder_attention_mask = torch.ones(batch_size, encoder_seq_length).to(inputs_embeds.device)
 
@@ -706,7 +706,7 @@ class T5Stack(T5PreTrainedModel):
         extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -1e9
 
-        if self.is_decoder:
+        if self.is_decoder and encoder_attention_mask is not None:
             # If a 2D ou 3D attention mask is provided for the cross-attention
             # we need to make broadcastabe to [batch_size, num_heads, mask_seq_length, mask_seq_length]
             if encoder_attention_mask.dim() == 3:
@@ -887,6 +887,12 @@ class T5Model(T5PreTrainedModel):
         self.decoder.output_past = do_output_past
         self.encoder.output_past = do_output_past
 
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
+
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
             heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
@@ -1008,6 +1014,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
 
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
     def forward(
