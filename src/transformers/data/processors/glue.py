@@ -56,6 +56,8 @@ def glue_convert_examples_to_features(
 
     """
     if is_tf_available() and isinstance(examples, tf.data.Dataset):
+        if task is None:
+            raise ValueError("When calling glue_convert_examples_to_features from TF, the task parameter is required.")
         return _tf_glue_convert_examples_to_features(examples, tokenizer, max_length=max_length, task=task)
     return _glue_convert_examples_to_features(
         examples, tokenizer, max_length=max_length, task=task, label_list=label_list, output_mode=output_mode
