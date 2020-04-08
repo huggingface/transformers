@@ -17,8 +17,10 @@
 
 import logging
 import os
+from typing import List, Optional, Union
 
 from ...file_utils import is_tf_available
+from ...tokenization_utils import PreTrainedTokenizer
 from .utils import DataProcessor, InputExample, InputFeatures
 
 
@@ -29,16 +31,12 @@ logger = logging.getLogger(__name__)
 
 
 def glue_convert_examples_to_features(
-    examples,
-    tokenizer,
-    max_length=512,
+    examples: Union[List[InputExample], "tf.data.Dataset"],
+    tokenizer: PreTrainedTokenizer,
+    max_length: Optional[int] = None,
     task=None,
     label_list=None,
     output_mode=None,
-    pad_on_left=False,
-    pad_token=0,
-    pad_token_segment_id=0,
-    mask_padding_with_zero=True,
 ):
     """
     Loads a data file into a list of ``InputFeatures``
@@ -46,16 +44,10 @@ def glue_convert_examples_to_features(
     Args:
         examples: List of ``InputExamples`` or ``tf.data.Dataset`` containing the examples.
         tokenizer: Instance of a tokenizer that will tokenize the examples
-        max_length: Maximum example length
+        max_length: Maximum example length. Defaults to the tokenizer's max_len
         task: GLUE task
         label_list: List of labels. Can be obtained from the processor using the ``processor.get_labels()`` method
         output_mode: String indicating the output mode. Either ``regression`` or ``classification``
-        pad_on_left: If set to ``True``, the examples will be padded on the left rather than on the right (default)
-        pad_token: Padding token
-        pad_token_segment_id: The segment ID for the padding token (It is usually 0, but can vary such as for XLNet where it is 4)
-        mask_padding_with_zero: If set to ``True``, the attention mask will be filled by ``1`` for actual values
-            and by ``0`` for padded values. If set to ``False``, inverts it (``1`` for padded values, ``0`` for
-            actual values)
 
     Returns:
         If the ``examples`` input is a ``tf.data.Dataset``, will return a ``tf.data.Dataset``
@@ -66,6 +58,9 @@ def glue_convert_examples_to_features(
     is_tf_dataset = False
     if is_tf_available() and isinstance(examples, tf.data.Dataset):
         is_tf_dataset = True
+
+    if max_length is None:
+        max_length = tokenizer.max_len
 
     if task is not None:
         processor = glue_processors[task]()
@@ -79,44 +74,15 @@ def glue_convert_examples_to_features(
     label_map = {label: i for i, label in enumerate(label_list)}
 
     features = []
+    len_examples = tf.data.experimental.cardinality(examples) if is_tf_dataset else len(examples)
     for (ex_index, example) in enumerate(examples):
-        len_examples = 0
         if is_tf_dataset:
             example = processor.get_example_from_tensor_dict(example)
             example = processor.tfds_map(example)
-            len_examples = tf.data.experimental.cardinality(examples)
-        else:
-            len_examples = len(examples)
         if ex_index % 10000 == 0:
             logger.info("Writing example %d/%d" % (ex_index, len_examples))
 
-        inputs = tokenizer.encode_plus(
-            example.text_a, example.text_b, add_special_tokens=True, max_length=max_length, return_token_type_ids=True,
-        )
-        input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
-
-        # The mask has 1 for real tokens and 0 for padding tokens. Only real
-        # tokens are attended to.
-        attention_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
-
-        # Zero-pad up to the sequence length.
-        padding_length = max_length - len(input_ids)
-        if pad_on_left:
-            input_ids = ([pad_token] * padding_length) + input_ids
-            attention_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + attention_mask
-            token_type_ids = ([pad_token_segment_id] * padding_length) + token_type_ids
-        else:
-            input_ids = input_ids + ([pad_token] * padding_length)
-            attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
-            token_type_ids = token_type_ids + ([pad_token_segment_id] * padding_length)
-
-        assert len(input_ids) == max_length, "Error with input length {} vs {}".format(len(input_ids), max_length)
-        assert len(attention_mask) == max_length, "Error with input length {} vs {}".format(
-            len(attention_mask), max_length
-        )
-        assert len(token_type_ids) == max_length, "Error with input length {} vs {}".format(
-            len(token_type_ids), max_length
-        )
+        inputs = tokenizer.encode_plus(example.text_a, example.text_b, max_length=max_length, pad_to_max_length=True)
 
         if output_mode == "classification":
             label = label_map[example.label]
@@ -125,19 +91,15 @@ def glue_convert_examples_to_features(
         else:
             raise KeyError(output_mode)
 
+        feature = InputFeatures(**inputs, label=label)
+
         if ex_index < 5:
             logger.info("*** Example ***")
             logger.info("guid: %s" % (example.guid))
-            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-            logger.info("attention_mask: %s" % " ".join([str(x) for x in attention_mask]))
-            logger.info("token_type_ids: %s" % " ".join([str(x) for x in token_type_ids]))
+            logger.info("inputs: %s" % inputs)
             logger.info("label: %s (id = %d)" % (example.label, label))
 
-        features.append(
-            InputFeatures(
-                input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, label=label
-            )
-        )
+        features.append(feature)
 
     if is_tf_available() and is_tf_dataset:
 
