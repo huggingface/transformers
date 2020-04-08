@@ -761,51 +761,18 @@ class TokenizerTesterMixin:
         first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
         sequence = " ".join(first_ten_tokens)
         encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="pt")
+        batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="pt")
         # This should not fail
         model(**encoded_sequence)
+        model(**batch_encoded_sequence)
 
         if self.test_rust_tokenizer:
             fast_tokenizer = self.get_rust_tokenizer()
             encoded_sequence_fast = fast_tokenizer.encode_plus(sequence, return_tensors="pt")
+            batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus([sequence, sequence], return_tensors="pt")
             # This should not fail
             model(**encoded_sequence_fast)
-
-    @require_torch
-    def test_torch_batch_encode_plus_sent_to_model(self):
-        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
-
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
-
-        tokenizer = self.get_tokenizer()
-
-        if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-            return
-
-        config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
-        config = config_class()
-
-        # Seq2seq models do not handle this right now. Models without a padding token cannot process a batch.
-        if config.is_encoder_decoder or config.pad_token_id is None:
-            return
-
-        model = model_class(config)
-
-        # Make sure the model contains at least the full vocabulary size in its embedding matrix
-        is_using_common_embeddings = hasattr(model.get_input_embeddings(), "weight")
-        assert (model.get_input_embeddings().weight.shape[0] >= len(tokenizer)) if is_using_common_embeddings else True
-
-        # Build sequence
-        first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
-        sequence = " ".join(first_ten_tokens)
-        encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="pt")
-        # This should not fail
-        model(**encoded_sequence)
-
-        if self.test_rust_tokenizer:
-            fast_tokenizer = self.get_rust_tokenizer()
-            encoded_sequence_fast = fast_tokenizer.batch_encode_plus([sequence, sequence], return_tensors="pt")
-            # This should not fail
-            model(**encoded_sequence_fast)
+            model(**batch_encoded_sequence_fast)
 
     @require_tf
     def test_tf_encode_plus_sent_to_model(self):
@@ -833,47 +800,16 @@ class TokenizerTesterMixin:
         first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
         sequence = " ".join(first_ten_tokens)
         encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="tf")
+        batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="tf")
+
         # This should not fail
         model(encoded_sequence)
+        model(batch_encoded_sequence)
 
         if self.test_rust_tokenizer:
             fast_tokenizer = self.get_rust_tokenizer()
             encoded_sequence_fast = fast_tokenizer.encode_plus(sequence, return_tensors="tf")
+            batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus([sequence, sequence], return_tensors="tf")
             # This should not fail
             model(encoded_sequence_fast)
-
-    @require_tf
-    def test_tf_batch_encode_plus_sent_to_model(self):
-        from transformers import TF_MODEL_MAPPING, TOKENIZER_MAPPING
-
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(TF_MODEL_MAPPING, TOKENIZER_MAPPING)
-
-        tokenizer = self.get_tokenizer()
-
-        if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-            return
-
-        config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
-        config = config_class()
-
-        # Seq2seq models do not handle this right now. Models without a padding token cannot process a batch.
-        if config.is_encoder_decoder or config.pad_token_id is None:
-            return
-
-        model = model_class(config)
-
-        # Make sure the model contains at least the full vocabulary size in its embedding matrix
-        assert model.config.vocab_size >= len(tokenizer)
-
-        # Build sequence
-        first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
-        sequence = " ".join(first_ten_tokens)
-        encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="tf")
-        # This should not fail
-        model(encoded_sequence)
-
-        if self.test_rust_tokenizer:
-            fast_tokenizer = self.get_rust_tokenizer()
-            encoded_sequence_fast = fast_tokenizer.batch_encode_plus([sequence, sequence], return_tensors="tf")
-            # This should not fail
-            model(encoded_sequence_fast)
+            model(batch_encoded_sequence_fast)
