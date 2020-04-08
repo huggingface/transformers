@@ -55,65 +55,26 @@ def glue_convert_examples_to_features(
         a list of task-specific ``InputFeatures`` which can be fed to the model.
 
     """
-    is_tf_dataset = False
     if is_tf_available() and isinstance(examples, tf.data.Dataset):
-        is_tf_dataset = True
-
-    if is_tf_dataset:
-        examples = [processor.tfds_map(processor.get_example_from_tensor_dict(example)) for example in examples]
-
-    if max_length is None:
-        max_length = tokenizer.max_len
-
-    if task is not None:
-        processor = glue_processors[task]()
-        if label_list is None:
-            label_list = processor.get_labels()
-            logger.info("Using label list %s for task %s" % (label_list, task))
-        if output_mode is None:
-            output_mode = glue_output_modes[task]
-            logger.info("Using output mode %s for task %s" % (output_mode, task))
-
-    label_map = {label: i for i, label in enumerate(label_list)}
-
-    def label_from_example(example: InputExample) -> Union[int, float]:
-        if output_mode == "classification":
-            return label_map[example.label]
-        elif output_mode == "regression":
-            return float(example.label)
-        raise KeyError(output_mode)
-
-    labels = [label_from_example(example) for example in examples]
-
-    batch_encoding = tokenizer.batch_encode_plus(
-        [(example.text_a, example.text_b) for example in examples],
-        max_length=max_length,
-        pad_to_max_length=True,
+        return _tf_glue_convert_examples_to_features(examples, tokenizer, max_length=max_length, task=task)
+    return _glue_convert_examples_to_features(
+        examples, tokenizer, max_length=max_length, task=task, label_list=label_list, output_mode=output_mode
     )
 
-    features = []
-    all_input_ids: Optional[List] = batch_encoding.data.get("input_ids")
-    all_attention_mask: Optional[List] = batch_encoding.data.get("attention_mask")
-    all_token_type_ids: Optional[List] = batch_encoding.data.get("token_type_ids")
-    for i in range(len(examples)):
-        inputs = {}
-        if all_input_ids is not None:
-            inputs["input_ids"] = all_input_ids[i]
-        if all_attention_mask is not None:
-            inputs["attention_mask"] = all_attention_mask[i]
-        if all_token_type_ids is not None:
-            inputs["token_type_ids"] = all_token_type_ids[i]
 
-        feature = InputFeatures(**inputs, label=labels[i])
-        features.append(feature)
-    
+if is_tf_available():
 
-    for i in range(min(len(examples), 5)):
-        logger.info("*** Example ***")
-        logger.info("guid: %s" % (examples[i].guid))
-        logger.info("features: %s" % features[i])
+    def _tf_glue_convert_examples_to_features(
+        examples: tf.data.Dataset, tokenizer: PreTrainedTokenizer, task=str, max_length: Optional[int] = None,
+    ) -> tf.data.Dataset:
+        """
+        Returns:
+            A ``tf.data.Dataset`` containing the task-specific features.
 
-    if is_tf_dataset:
+        """
+        processor = glue_processors[task]()
+        examples = [processor.tfds_map(processor.get_example_from_tensor_dict(example)) for example in examples]
+        features = glue_convert_examples_to_features(examples, tokenizer, max_length=max_length, task=task)
 
         def gen():
             for ex in features:
@@ -138,6 +99,63 @@ def glue_convert_examples_to_features(
                 tf.TensorShape([]),
             ),
         )
+
+
+def _glue_convert_examples_to_features(
+    examples: List[InputExample],
+    tokenizer: PreTrainedTokenizer,
+    max_length: Optional[int] = None,
+    task=None,
+    label_list=None,
+    output_mode=None,
+):
+    if max_length is None:
+        max_length = tokenizer.max_len
+
+    if task is not None:
+        processor = glue_processors[task]()
+        if label_list is None:
+            label_list = processor.get_labels()
+            logger.info("Using label list %s for task %s" % (label_list, task))
+        if output_mode is None:
+            output_mode = glue_output_modes[task]
+            logger.info("Using output mode %s for task %s" % (output_mode, task))
+
+    label_map = {label: i for i, label in enumerate(label_list)}
+
+    def label_from_example(example: InputExample) -> Union[int, float]:
+        if output_mode == "classification":
+            return label_map[example.label]
+        elif output_mode == "regression":
+            return float(example.label)
+        raise KeyError(output_mode)
+
+    labels = [label_from_example(example) for example in examples]
+
+    batch_encoding = tokenizer.batch_encode_plus(
+        [(example.text_a, example.text_b) for example in examples], max_length=max_length, pad_to_max_length=True,
+    )
+
+    features = []
+    all_input_ids: Optional[List] = batch_encoding.data.get("input_ids")
+    all_attention_mask: Optional[List] = batch_encoding.data.get("attention_mask")
+    all_token_type_ids: Optional[List] = batch_encoding.data.get("token_type_ids")
+    for i in range(len(examples)):
+        inputs = {}
+        if all_input_ids is not None:
+            inputs["input_ids"] = all_input_ids[i]
+        if all_attention_mask is not None:
+            inputs["attention_mask"] = all_attention_mask[i]
+        if all_token_type_ids is not None:
+            inputs["token_type_ids"] = all_token_type_ids[i]
+
+        feature = InputFeatures(**inputs, label=labels[i])
+        features.append(feature)
+
+    for i in range(min(len(examples), 5)):
+        logger.info("*** Example ***")
+        logger.info("guid: %s" % (examples[i].guid))
+        logger.info("features: %s" % features[i])
 
     return features
 
