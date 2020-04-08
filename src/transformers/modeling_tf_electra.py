@@ -7,6 +7,7 @@ from transformers import ElectraConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_utils import get_initializer, shape_list
+from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
@@ -237,7 +238,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             assert len(inputs) <= 6, "Too many inputs."
-        elif isinstance(inputs, dict):
+        elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             token_type_ids = inputs.get("token_type_ids", token_type_ids)
