@@ -193,8 +193,8 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertTrue(torch.all(decoder_past[0][0] == encoder_output))
             # There should be `num_layers` key value embeddings stored in decoder_past[1]
             self.parent.assertEqual(len(decoder_past[1]), config.num_layers)
-            # There should be a key and a value embeddings stored in each decoder_past[1] tuple
-            self.parent.assertEqual(len(decoder_past[1][0]), 2)
+            # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past[1] tuple
+            self.parent.assertEqual(len(decoder_past[1][0]), 4)
 
         def create_and_check_t5_with_lm_head(
             self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,
