@@ -145,7 +145,7 @@ class ModelTesterMixin:
 
             if self.is_encoder_decoder:
                 if model.config.output_past:
-                    # decoder_features_or_logits, decoder_attentions, encoder_features, encoder_attentions
+                    # decoder_features_or_logits, decoder_past_key_value_states, decoder_attentions, encoder_features, encoder_attentions
                     correct_outlen = 5
                     decoder_attention_idx = 2
                 else:
