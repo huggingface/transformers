@@ -77,7 +77,6 @@ python run_glue_tpu.py \
   --task_name $TASK_NAME \
   --do_train \
   --do_eval \
-  --do_lower_case \
   --data_dir $GLUE_DIR/$TASK_NAME \
   --max_seq_length 128 \
   --train_batch_size 32 \
