@@ -59,6 +59,9 @@ def glue_convert_examples_to_features(
     if is_tf_available() and isinstance(examples, tf.data.Dataset):
         is_tf_dataset = True
 
+    if is_tf_dataset:
+        examples = [processor.tfds_map(processor.get_example_from_tensor_dict(example)) for example in examples]
+
     if max_length is None:
         max_length = tokenizer.max_len
 
@@ -73,35 +76,44 @@ def glue_convert_examples_to_features(
 
     label_map = {label: i for i, label in enumerate(label_list)}
 
-    features = []
-    len_examples = tf.data.experimental.cardinality(examples) if is_tf_dataset else len(examples)
-    for (ex_index, example) in enumerate(examples):
-        if is_tf_dataset:
-            example = processor.get_example_from_tensor_dict(example)
-            example = processor.tfds_map(example)
-        if ex_index % 10000 == 0:
-            logger.info("Writing example %d/%d" % (ex_index, len_examples))
-
-        inputs = tokenizer.encode_plus(example.text_a, example.text_b, max_length=max_length, pad_to_max_length=True)
-
+    def label_from_example(example: InputExample) -> Union[int, float]:
         if output_mode == "classification":
-            label = label_map[example.label]
+            return label_map[example.label]
         elif output_mode == "regression":
-            label = float(example.label)
-        else:
-            raise KeyError(output_mode)
+            return float(example.label)
+        raise KeyError(output_mode)
 
-        feature = InputFeatures(**inputs, label=label)
+    labels = [label_from_example(example) for example in examples]
 
-        if ex_index < 5:
-            logger.info("*** Example ***")
-            logger.info("guid: %s" % (example.guid))
-            logger.info("inputs: %s" % inputs)
-            logger.info("label: %s (id = %d)" % (example.label, label))
+    batch_encoding = tokenizer.batch_encode_plus(
+        [(example.text_a, example.text_b) for example in examples],
+        max_length=max_length,
+        pad_to_max_length=True,
+    )
 
+    features = []
+    all_input_ids: Optional[List] = batch_encoding.data.get("input_ids")
+    all_attention_mask: Optional[List] = batch_encoding.data.get("attention_mask")
+    all_token_type_ids: Optional[List] = batch_encoding.data.get("token_type_ids")
+    for i in range(len(examples)):
+        inputs = {}
+        if all_input_ids is not None:
+            inputs["input_ids"] = all_input_ids[i]
+        if all_attention_mask is not None:
+            inputs["attention_mask"] = all_attention_mask[i]
+        if all_token_type_ids is not None:
+            inputs["token_type_ids"] = all_token_type_ids[i]
+
+        feature = InputFeatures(**inputs, label=labels[i])
         features.append(feature)
+    
 
-    if is_tf_available() and is_tf_dataset:
+    for i in range(min(len(examples), 5)):
+        logger.info("*** Example ***")
+        logger.info("guid: %s" % (examples[i].guid))
+        logger.info("features: %s" % features[i])
+
+    if is_tf_dataset:
 
         def gen():
             for ex in features:
