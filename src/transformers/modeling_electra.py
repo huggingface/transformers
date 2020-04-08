@@ -657,14 +657,14 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         outputs = (logits,)
 
         if labels is not None:
-            if self.num_labels == 1:
+            if self.config.num_labels == 1:
                 # We are doing regression
                 loss_fct = MSELoss()
                 logits_view = logits.view(-1)
             else:
                 # We are doing classification
                 loss_fct = CrossEntropyLoss()
-                logits_view = logits.view(-1, self.num_labels)
+                logits_view = logits.view(-1, self.config.num_labels)
             # Only keep active parts of the loss
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1) == 1
