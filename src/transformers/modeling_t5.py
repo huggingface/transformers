@@ -184,7 +184,6 @@ class T5LayerFF(nn.Module):
 
 
 class T5Attention(nn.Module):
-
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -292,22 +291,37 @@ class T5Attention(nn.Module):
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, qlen, klen)
         return values
 
-    def forward(self, input, mask=None, kv=None, position_bias=None, past_key_value_state=None, head_mask=None):
+    def forward(
+        self,
+        input,
+        mask=None,
+        kv=None,
+        position_bias=None,
+        past_key_value_state=None,
+        head_mask=None,
+        query_length=None,
+    ):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
         """
         # Input is (bs, qlen, dim)
         # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
+        # past_key_value_state[0] is (bs, n_heads, q_len - 1, dim_per_head)
         bs, qlen, dim = input.size()
 
         if past_key_value_state is not None:
-            import ipdb
-            ipdb.set_trace()
+            assert self.is_decoder is True, "Encoder cannot cache past key value states"
+            assert (
+                len(past_key_value_state) == 2
+            ), "past_key_value_state should have 2 past states: keys and values. Got {} past states".format(
+                len(past_key_value_state)
+            )
+            real_qlen = qlen + past_key_value_state[0].shape[2] if query_length is None else query_length
+        else:
+            real_qlen = qlen
 
         if kv is None:
-            klen = qlen
-            # TODO(PVP): This might have to change here if cache is not None
-#            klen = qlen if cache is None else cache["slen"] + qlen
+            klen = real_qlen
         else:
             klen = kv.size(1)
 
@@ -320,6 +334,7 @@ class T5Attention(nn.Module):
             return x.transpose(1, 2).contiguous().view(bs, -1, self.inner_dim)
 
         q = shape(self.q(input))  # (bs, n_heads, qlen, dim_per_head)
+
         if kv is None:
             k = shape(self.k(input))  # (bs, n_heads, qlen, dim_per_head)
             v = shape(self.v(input))  # (bs, n_heads, qlen, dim_per_head)
@@ -336,10 +351,8 @@ class T5Attention(nn.Module):
             else:
                 k, v = past_key_value_state
 
-        # TODO(PVP): Note that in cross attention the k, v values are also constantely recalculated
-        # -> that should be cached somewhere as well
         if self.is_decoder and self.output_past:
-            present_key_value_state = (k, v)
+            present_key_value_state = ((k, v),)
         else:
             present_key_value_state = (None,)
 
@@ -349,7 +362,12 @@ class T5Attention(nn.Module):
         if position_bias is None:
             if not self.has_relative_attention_bias:
                 raise ValueError("No position_bias provided and no weights to compute position_bias")
-            position_bias = self.compute_bias(qlen, klen)
+            # the position bias is probably wrong
+            position_bias = self.compute_bias(real_qlen, klen)
+
+            if past_key_value_state is not None:
+                position_bias = position_bias[:, :, -1:, :]
+
             if mask is not None:
                 position_bias = position_bias + mask  # (bs, n_heads, qlen, klen)
 
@@ -369,7 +387,9 @@ class T5Attention(nn.Module):
         outputs = (context,)
 
         if self.output_past is False or self.is_decoder is False:
-            assert present_key_value_state[0] is None, "Key/Value projections should not be stored if {} is no decoder or output_past is False".format(self)
+            assert (
+                present_key_value_state[0] is None
+            ), "Key/Value projections should not be stored if {} is no decoder or output_past is False".format(self)
 
         outputs = outputs + present_key_value_state
 
@@ -387,14 +407,20 @@ class T5LayerSelfAttention(nn.Module):
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    def forward(self, hidden_states, attention_mask=None, position_bias=None, head_mask=None, past_key_value_state=None):
+    def forward(
+        self, hidden_states, attention_mask=None, position_bias=None, head_mask=None, past_key_value_state=None
+    ):
         norm_x = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
-            norm_x, mask=attention_mask, position_bias=position_bias, head_mask=head_mask, past_key_value_state=past_key_value_state
+            norm_x,
+            mask=attention_mask,
+            position_bias=position_bias,
+            head_mask=head_mask,
+            past_key_value_state=past_key_value_state,
         )
-        y, present_key_value_state = attention_output[:2]
+        y = attention_output[0]
         layer_output = hidden_states + self.dropout(y)
-        outputs = (layer_output, present_key_value_state) + attention_output[2:]  # add attentions if we output them
+        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
 
@@ -405,14 +431,29 @@ class T5LayerCrossAttention(nn.Module):
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    def forward(self, hidden_states, kv, attention_mask=None, position_bias=None, head_mask=None):
+    def forward(
+        self,
+        hidden_states,
+        kv,
+        attention_mask=None,
+        position_bias=None,
+        head_mask=None,
+        past_key_value_state=None,
+        query_length=None,
+    ):
         norm_x = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
-            norm_x, mask=attention_mask, kv=kv, position_bias=position_bias, head_mask=head_mask
+            norm_x,
+            mask=attention_mask,
+            kv=kv,
+            position_bias=position_bias,
+            head_mask=head_mask,
+            past_key_value_state=past_key_value_state,
+            query_length=query_length,
         )
-        y, present_key_value_state = attention_output[:2]
+        y = attention_output[0]
         layer_output = hidden_states + self.dropout(y)
-        outputs = (layer_output, present_key_value_state) + attention_output[2:]  # add attentions if we output them
+        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
 
@@ -440,35 +481,51 @@ class T5Block(nn.Module):
         past_key_value_state=None,
     ):
 
+        if self.is_decoder and self.output_past and past_key_value_state is not None:
+            assert (
+                len(past_key_value_state) == 4
+            ), "The should be 4 past states. 2 (past / key) for self attention. 2 (past / key) for cross attention. Got {} past key / value states".format(
+                len(past_key_value_state)
+            )
+            self_attn_past_key_value_state = past_key_value_state[:2]
+            cross_attn_past_key_value_state = past_key_value_state[2:]
+        else:
+            self_attn_past_key_value_state, cross_attn_past_key_value_state = None, None
+
         self_attention_outputs = self.layer[0](
-            hidden_states, attention_mask=attention_mask, position_bias=position_bias, head_mask=head_mask, past_key_value_state=past_key_value_state
+            hidden_states,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            head_mask=head_mask,
+            past_key_value_state=self_attn_past_key_value_state,
         )
-        hidden_states, present_key_value_state = self_attention_outputs[:2]
+        hidden_states = self_attention_outputs[0]
+        present_key_value_state = self_attention_outputs[1]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
         if self.is_decoder:
+            query_length = present_key_value_state[0].shape[2]
             cross_attention_outputs = self.layer[1](
                 hidden_states,
                 kv=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 head_mask=head_mask,
+                past_key_value_state=cross_attn_past_key_value_state,
+                query_length=query_length,
             )
-            # TODO: check what to do here with past key value states
             hidden_states = cross_attention_outputs[0]
-            attention_outputs = (
-                attention_outputs + cross_attention_outputs[2:]
-            )  # Keep cross-attention outputs and relative position weights
+            present_key_value_state = present_key_value_state + cross_attention_outputs[1]
+            # Keep cross-attention outputs and relative position weights
+            attention_outputs = attention_outputs + cross_attention_outputs[2:]
 
         # Apply Feed Forward layer
-        outputs = (self.layer[-1](hidden_states), )
-
-        # Add key value states to speed up decoding
-        outputs = outputs + (present_key_value_state,)
+        hidden_states = self.layer[-1](hidden_states)
+        outputs = (hidden_states,)
 
         # Add attentions if we output them
-        outputs = outputs + attention_outputs
-        return outputs  # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+        outputs = outputs + (present_key_value_state,) + attention_outputs
+        return outputs  # hidden-states, cache, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
 class T5PreTrainedModel(PreTrainedModel):
@@ -600,8 +657,16 @@ class T5Stack(T5PreTrainedModel):
 
         batch_size, seq_length = input_shape
 
+        if past_key_value_states is not None:
+            assert seq_length == 1, "Input shape is {}, but should be {} when using past_key_value_sates".format(
+                input_shape, (batch_size, 1)
+            )
+            mask_seq_length = past_key_value_states[0][0].shape[2] + seq_length
+        else:
+            mask_seq_length = seq_length
+
         if attention_mask is None:
-            attention_mask = torch.ones(batch_size, seq_length).to(inputs_embeds.device)
+            attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None:
             encoder_seq_length = encoder_hidden_states.shape[1]
             encoder_attention_mask = torch.ones(batch_size, encoder_seq_length).to(inputs_embeds.device)
@@ -615,14 +680,16 @@ class T5Stack(T5PreTrainedModel):
         if attention_mask.dim() == 3:
             extended_attention_mask = attention_mask[:, None, :, :]
         elif attention_mask.dim() == 2:
-            # Provided a padding mask of dimensions [batch_size, seq_length]
+            # Provided a padding mask of dimensions [batch_size, mask_seq_length]
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
-            # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
+            # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
             if self.config.is_decoder:
-                seq_ids = torch.arange(seq_length, device=inputs_embeds.device)
-                causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
+                seq_ids = torch.arange(mask_seq_length, device=inputs_embeds.device)
+                causal_mask = seq_ids[None, None, :].repeat(batch_size, mask_seq_length, 1) <= seq_ids[None, :, None]
                 causal_mask = causal_mask.to(attention_mask)
                 extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+                if self.output_past and past_key_value_states[0] is not None:
+                    extended_attention_mask = extended_attention_mask[:, :, -1:, :]
             else:
                 extended_attention_mask = attention_mask[:, None, None, :]
 
@@ -641,7 +708,7 @@ class T5Stack(T5PreTrainedModel):
 
         if self.is_decoder:
             # If a 2D ou 3D attention mask is provided for the cross-attention
-            # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+            # we need to make broadcastabe to [batch_size, num_heads, mask_seq_length, mask_seq_length]
             if encoder_attention_mask.dim() == 3:
                 encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
             if encoder_attention_mask.dim() == 2:
@@ -662,7 +729,7 @@ class T5Stack(T5PreTrainedModel):
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x mask_seq_length x mask_seq_length]
         if head_mask is not None:
             if head_mask.dim() == 1:
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
@@ -684,6 +751,7 @@ class T5Stack(T5PreTrainedModel):
         encoder_decoder_position_bias = None
 
         hidden_states = self.dropout(inputs_embeds)
+
         for i, (layer_module, past_key_value_state) in enumerate(zip(self.block, past_key_value_states)):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -696,7 +764,7 @@ class T5Stack(T5PreTrainedModel):
                 encoder_attention_mask=encoder_extended_attention_mask,
                 encoder_decoder_position_bias=encoder_decoder_position_bias,
                 head_mask=head_mask[i],
-                past_key_value_state=past_key_value_state
+                past_key_value_state=past_key_value_state,
             )
             # layer_outputs is a tuple with:
             # hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
@@ -706,7 +774,7 @@ class T5Stack(T5PreTrainedModel):
                 # layer_outputs = hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
                 position_bias = layer_outputs[3 if self.output_attentions else 2]
                 if self.is_decoder:
-                    encoder_decoder_position_bias = layer_outputs[5 if self.output_attentions else 3]
+                    encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 3]
             present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if self.output_attentions:
@@ -814,6 +882,11 @@ class T5Model(T5PreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    def set_output_past(self, do_output_past: bool):
+        self.config.output_past = do_output_past
+        self.decoder.output_past = do_output_past
+        self.encoder.output_past = do_output_past
+
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
             heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
@@ -872,6 +945,14 @@ class T5Model(T5PreTrainedModel):
 
         hidden_states = encoder_outputs[0]
 
+        # If decoding with past key value states, only the last tokens
+        # should be given as an input
+        if decoder_past_key_value_states is not None and self.decoder.output_past is True:
+            if decoder_input_ids is not None:
+                decoder_input_ids = decoder_input_ids[:, -1:]
+            if decoder_inputs_embeds is not None:
+                decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
+
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -884,7 +965,7 @@ class T5Model(T5PreTrainedModel):
         )
 
         if self.decoder.output_past:
-            past = (encoder_outputs, decoder_outputs[1])
+            past = ((encoder_outputs, decoder_outputs[1]),)
             decoder_outputs = decoder_outputs[:1] + past + decoder_outputs[2:]
 
         return decoder_outputs + encoder_outputs
@@ -911,6 +992,11 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
     def get_input_embeddings(self):
         return self.shared
+
+    def set_output_past(self, do_output_past: bool):
+        self.config.output_past = do_output_past
+        self.decoder.output_past = do_output_past
+        self.encoder.output_past = do_output_past
 
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
@@ -989,6 +1075,17 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             # get decoder inputs from shifting lm labels to the right
             decoder_input_ids = self._shift_right(lm_labels)
 
+        # If decoding with past key value states, only the last tokens
+        # should be given as an input
+        if decoder_past_key_value_states is not None and self.decoder.output_past is True:
+            assert (
+                lm_labels is None
+            ), "Decoder should not use cached key value states when training. Also consider setting model.set_output_past(False) for less memory consumption"
+            if decoder_input_ids is not None:
+                decoder_input_ids = decoder_input_ids[:, -1:]
+            if decoder_inputs_embeds is not None:
+                decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
+
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -1001,7 +1098,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         )
 
         if self.decoder.output_past:
-            past = (encoder_outputs, decoder_outputs[1])
+            past = ((encoder_outputs, decoder_outputs[1]),)
             decoder_outputs = decoder_outputs[:1] + past + decoder_outputs[2:]
 
         sequence_output = decoder_outputs[0]
@@ -1014,8 +1111,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         if lm_labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
             loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), lm_labels.view(-1))
-        # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
-            decoder_outputs = (loss, ) + decoder_outputs
+            # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
+            decoder_outputs = (loss,) + decoder_outputs
 
         return decoder_outputs + encoder_outputs
 
@@ -1027,9 +1124,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             encoder_outputs, decoder_past_key_value_states = past, None
         else:
             encoder_outputs, decoder_past_key_value_states = past[0], past[1]
-
-        import ipdb
-        ipdb.set_trace()
+        #            encoder_outputs, decoder_past_key_value_states = past[0], None
 
         return {
             "decoder_input_ids": input_ids,
@@ -1039,5 +1134,22 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         }
 
     def _reorder_cache(self, past, beam_idx):
-        # past does not have to be re-ordered for T5.
-        return past
+        # if decoder past is not included in output
+        if len(past) < 2:
+            return past
+
+        decoder_past = past[1]
+        past = (past[0],)
+        reordered_decoder_past = ()
+        for layer_past_states in decoder_past:
+            # get the correct batch idx from layer past batch dim
+            # batch dim of `past` and `mems` is at 2nd position
+            reordered_layer_past_states = ()
+            for layer_past_state in layer_past_states:
+                reordered_layer_past_states = reordered_layer_past_states + (
+                    torch.cat([layer_past_state[i].unsqueeze(0).clone() for i in beam_idx], dim=0),
+                )
+            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
+            assert len(reordered_layer_past_states) == len(layer_past_states)
+            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
+        return past + (reordered_decoder_past,)

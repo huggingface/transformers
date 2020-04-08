@@ -167,17 +167,20 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             model = T5Model(config=config)
             model.to(torch_device)
             model.eval()
-            decoder_output, encoder_output = model(
+            decoder_output, decoder_past, encoder_output = model(
                 input_ids=input_ids,
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
             )
-            decoder_output, encoder_output = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+            decoder_output, decoder_past, encoder_output = model(
+                input_ids=input_ids, decoder_input_ids=decoder_input_ids
+            )
 
             result = {
                 "encoder_output": encoder_output,
                 "decoder_output": decoder_output,
+                "decoder_past": decoder_past,
             }
             self.parent.assertListEqual(
                 list(result["encoder_output"].size()), [self.batch_size, self.encoder_seq_length, self.hidden_size]
@@ -185,6 +188,13 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(
                 list(result["decoder_output"].size()), [self.batch_size, self.decoder_seq_length, self.hidden_size]
             )
+            self.parent.assertEqual(len(decoder_past), 2)
+            # decoder_past[0] should correspond to encoder output
+            self.parent.assertTrue(torch.all(decoder_past[0][0] == encoder_output))
+            # There should be `num_layers` key value embeddings stored in decoder_past[1]
+            self.parent.assertEqual(len(decoder_past[1]), config.num_layers)
+            # There should be a key and a value embeddings stored in each decoder_past[1] tuple
+            self.parent.assertEqual(len(decoder_past[1][0]), 2)
 
         def create_and_check_t5_with_lm_head(
             self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,
@@ -198,8 +208,8 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 decoder_attention_mask=decoder_attention_mask,
                 lm_labels=lm_labels,
             )
-            loss, prediction_scores, encoder_features = outputs
-            self.parent.assertEqual(len(outputs), 3)
+            loss, prediction_scores, _, _ = outputs
+            self.parent.assertEqual(len(outputs), 4)
             result = {
                 "loss": loss,
                 "prediction_scores": prediction_scores,
@@ -208,6 +218,21 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 list(result["prediction_scores"].size()), [self.batch_size, self.decoder_seq_length, self.vocab_size]
             )
             self.check_loss_output(result)
+
+        def create_t5_and_check_t5_generate_with_past_key_value_states(
+            self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,
+        ):
+            config.num_layers = 1
+            model = T5ForConditionalGeneration(config=config)
+            model.to(torch_device)
+            model.eval()
+            torch.manual_seed(0)
+            model.set_output_past(False)
+            output_without_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
+            torch.manual_seed(0)
+            model.set_output_past(True)
+            output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
+            self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -246,6 +271,10 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_with_lm_head(*config_and_inputs)
+
+    def test_t5_generate_with_past_key_value_states(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_t5_and_check_t5_generate_with_past_key_value_states(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
