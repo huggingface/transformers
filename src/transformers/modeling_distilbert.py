@@ -25,7 +25,7 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from .activations import gelu
 from .configuration_distilbert import DistilBertConfig
@@ -815,7 +815,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         logits = self.classifier(sequence_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
-        
+
         if labels is not None:
             if self.num_labels == 1:
                 # We are doing regression
