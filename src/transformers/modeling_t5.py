@@ -936,7 +936,7 @@ class T5Model(T5PreTrainedModel):
             Sequence of hidden-states at the output of the last layer of the model.
         past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`, `optional`, returned when ``config.output_past=True``):
             Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `decoder_past_key_value_states` input) to speed up sequential decoding. The token ids which have their past given to this model
+            Can be used (see `decoder_past_key_value_states` input) to speed up sequential decoding.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -1070,7 +1070,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`, `optional`, returned when ``config.output_past=True``):
             Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `decoder_past_key_value_states` input) to speed up sequential decoding. The token ids which have their past given to this model
+            Can be used (see `decoder_past_key_value_states` input) to speed up sequential decoding.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
