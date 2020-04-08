@@ -277,20 +277,11 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             **kwargs,
         )
 
-        self.tokenizer._tokenizer.post_processor = RobertaProcessing(
+        self.backend_tokenizer._tokenizer.post_processor = RobertaProcessing(
             (sep_token, self.sep_token_id), (cls_token, self.cls_token_id)
         )
 
-        self.tokenizer.add_special_tokens([kwargs["mask_token"]])
-
-        # As we override the post_processor post super.__init__ the computed num_added_tokens is wrong in super().
-        # We need to recompute max_len according to the newly register post_processor to get real values.
-        self.max_len_single_sentence = self.max_len - self.num_special_tokens_to_add(
-            False
-        )  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - self.num_special_tokens_to_add(
-            True
-        )  # take into account special tokens
+        self.backend_tokenizer.add_special_tokens([kwargs["mask_token"]])
 
     @PreTrainedTokenizer.mask_token.setter
     def mask_token(self, value):
@@ -298,7 +289,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             value = AddedToken(value, lstrip=True)
 
         self._mask_token = str(value)
-        self.tokenizer.add_special_tokens([value])
+        self._update_if_fast_tokenizer([value])
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]

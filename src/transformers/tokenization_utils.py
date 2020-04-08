@@ -406,7 +406,7 @@ class SpecialTokensMixin:
         return self._additional_special_tokens
 
     def _update_if_fast_tokenizer(self, value):
-        if getattr(self, "_tokenizer", default=None) is not None:
+        if self.is_fast:
             self._tokenizer.add_special_tokens(value)
 
     @bos_token.setter
@@ -619,6 +619,14 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         """
         return self.model_max_length
 
+    @property
+    def max_len_single_sentence(self):
+        return self.model_max_length - self.num_special_tokens_to_add(pair=False)
+
+    @property
+    def max_len_sentences_pair(self):
+        return self.model_max_length - self.num_special_tokens_to_add(pair=True)
+
     def get_vocab(self):
         """ Returns the vocabulary as a dict of {token: index} pairs. `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the vocab. """
         raise NotImplementedError()
@@ -630,10 +638,6 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = model_max_length if model_max_length is not None else kwargs.pop("max_len", None)
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
-
-        # model max length when taking into account special tokens
-        self.max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
-        self.max_len_sentences_pair = self.model_max_length - self.num_special_tokens_to_add(pair=True)
 
         # Padding side is right by default and over-riden in subclasses. If specified in the kwargs, it is changed.
         self.padding_side = kwargs.pop("padding_side", self.padding_side)
@@ -2234,7 +2238,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     ) -> BatchEncoding:
 
         if not isinstance(batch_text_or_text_pairs, list):
-            raise TypeError(
+            raise ValueError(
                 "batch_text_or_text_pairs has to be a list (got {})".format(type(batch_text_or_text_pairs))
             )
 
