@@ -970,7 +970,6 @@ class QuestionAnsweringPipeline(Pipeline):
             )
             for example in examples
         ]
-        min_null_score = 1000000  # large and positive
         all_answers = []
         for features, example in zip(features_list, examples):
             fw_args = self.inputs_for_model([f.__dict__ for f in features])
@@ -988,6 +987,7 @@ class QuestionAnsweringPipeline(Pipeline):
                         start, end = self.model(**fw_args)
                         start, end = start.cpu().numpy(), end.cpu().numpy()
 
+            min_null_score = 1000000  # large and positive
             answers = []
             for (feature, start_, end_) in zip(features, start, end):
                 # Normalize logits and spans to retrieve the answer
