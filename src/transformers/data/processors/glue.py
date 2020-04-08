@@ -137,24 +137,15 @@ def _glue_convert_examples_to_features(
     )
 
     features = []
-    all_input_ids: Optional[List] = batch_encoding.data.get("input_ids")
-    all_attention_mask: Optional[List] = batch_encoding.data.get("attention_mask")
-    all_token_type_ids: Optional[List] = batch_encoding.data.get("token_type_ids")
     for i in range(len(examples)):
-        inputs = {}
-        if all_input_ids is not None:
-            inputs["input_ids"] = all_input_ids[i]
-        if all_attention_mask is not None:
-            inputs["attention_mask"] = all_attention_mask[i]
-        if all_token_type_ids is not None:
-            inputs["token_type_ids"] = all_token_type_ids[i]
+        inputs = {k: batch_encoding[k][i] for k in batch_encoding}
 
         feature = InputFeatures(**inputs, label=labels[i])
         features.append(feature)
 
-    for i in range(min(len(examples), 5)):
+    for i, example in enumerate(examples[:5]):
         logger.info("*** Example ***")
-        logger.info("guid: %s" % (examples[i].guid))
+        logger.info("guid: %s" % (example.guid))
         logger.info("features: %s" % features[i])
 
     return features
