@@ -277,7 +277,7 @@ class FlaxBertModel(JaxPreTrainedModel):
                 token_type_ids = np.ones_like(input_ids)
 
             if position_ids is None:
-                position_ids = np.arange(np.atleast_2d(input_ids.shape[-1]))
+                position_ids = np.arange(np.atleast_2d(input_ids).shape[-1])
 
             if attention_mask is None:
                 attention_mask = np.ones_like(input_ids)
@@ -289,7 +289,7 @@ class FlaxBertModel(JaxPreTrainedModel):
                 jnp.array(attention_mask, dtype='i4')
             )
 
-        return predict(input_ids, token_type_ids, attention_mask)
+        return predict(input_ids, token_type_ids, position_ids, attention_mask)
 
     def save_pretrained(self, folder):
         folder_abs = os.path.abspath(folder)
