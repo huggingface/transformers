@@ -320,13 +320,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def save_pretrained(self, save_directory, xla_device=False):
+    def save_pretrained(self, save_directory):
         """ Save a model and its configuration file to a directory, so that it
             can be re-loaded using the `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
 
             Arguments:
                 save_directory: directory to which to save.
-                xla_device: True if saving after training on TPU/XLA.
         """
         assert os.path.isdir(
             save_directory
@@ -341,7 +340,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
 
-        if xla_device:
+        if hasattr(self.config, "xla_device") and self.config.xla_device:
             import torch_xla.core.xla_model as xm
 
             if xm.is_master_ordinal():
@@ -435,7 +434,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
-        xla_device = kwargs.pop("xla_device", False)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -640,7 +638,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             }
             return model, loading_info
 
-        if xla_device:
+        if hasattr(config, "xla_device") and config.xla_device:
             import torch_xla.core.xla_model as xm
 
             model = xm.send_cpu_data_to_device(model, xm.xla_device())

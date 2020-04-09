@@ -162,7 +162,7 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
                 # Barrier to wait for saving checkpoint.
                 xm.rendezvous("mid_training_checkpoint")
                 # model.save_pretrained needs to be called by all ordinals
-                model.save_pretrained(output_dir, xla_device=True)
+                model.save_pretrained(output_dir)
 
             model.train()
             inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
@@ -416,14 +416,12 @@ def main(args):
         args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
         do_lower_case=args.do_lower_case,
         cache_dir=args.cache_dir if args.cache_dir else None,
-        xla_device=True,
     )
     model = model_class.from_pretrained(
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
         config=config,
         cache_dir=args.cache_dir if args.cache_dir else None,
-        xla_device=True,
     )
 
     if xm.is_master_ordinal():
@@ -457,17 +455,17 @@ def main(args):
 
         xm.rendezvous("post_training_checkpoint")
         # model.save_pretrained needs to be called by all ordinals
-        model.save_pretrained(args.output_dir, xla_device=True)
+        model.save_pretrained(args.output_dir)
 
         # Load a trained model and vocabulary that you have fine-tuned
-        model = model_class.from_pretrained(args.output_dir, xla_device=True)
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, xla_device=True)
+        model = model_class.from_pretrained(args.output_dir)
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir)
         model.to(args.device)
 
     # Evaluation
     results = {}
     if args.do_eval:
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case, xla_device=True)
+        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(
@@ -479,7 +477,7 @@ def main(args):
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
             prefix = checkpoint.split("/")[-1] if checkpoint.find("checkpoint") != -1 else ""
 
-            model = model_class.from_pretrained(checkpoint, xla_device=True)
+            model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
             result = evaluate(args, model, tokenizer, prefix=prefix, disable_logging=disable_logging)
             result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
