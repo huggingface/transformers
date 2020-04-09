@@ -825,7 +825,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             encoder_input_ids = encoder_input_ids if encoder_input_ids is not None else input_ids
             assert encoder_input_ids is not None, "a sequence-to-sequence model needs an encoder input to generate"
             encoder_attention_mask = encoder_attention_mask if encoder_attention_mask is not None else attention_mask
-            bos_token_id = bos_token_id if bos_token_id is not None else decoder_start_token_id
+            bos_token_id = decoder_start_token_id if decoder_start_token_id is not None else bos_token_id
             bos_token_id = bos_token_id if bos_token_id is not None else self.config.decoder_start_token_id
             assert (
                 bos_token_id is not None
