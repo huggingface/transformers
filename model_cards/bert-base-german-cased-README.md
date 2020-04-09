@@ -5,7 +5,9 @@ tags:
 - exbert
 ---
 
-[![ExBERT](https://img.shields.io/badge/Visualize%20Attentions-ExBERT-green)](https://huggingface.co/exbert/?model=bert-base-german-cased)
+<a href="https://huggingface.co/exbert/?model=bert-base-german-cased">
+	<img width="300px" src="https://hf-dinosaur.huggingface.co/exbert/button.png">
+</a>
 
 # German BERT
 ![bert_image](https://static.tildacdn.com/tild6438-3730-4164-b266-613634323466/german_bert.png)
