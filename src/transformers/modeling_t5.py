@@ -853,9 +853,9 @@ T5_INPUTS_DOCSTRING = r"""
             `T5 Training <./t5.html#training>`_ .
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
-        decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used to speed up decoding. If `decoder_past_key_value_states` are used, the user can optionally input only the last `input_ids` of shape :obj:`(batch_size, 1)` instead of all `input_ids` of shape :obj:`(batch_size, sequence_length)`
+        decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            Contains pre-computed key and value hidden-states of the attention blocks.
+            Can be used to speed up decoding. If `decoder_past_key_value_states` are used, the user can optionally input only the last `decoder_input_ids` of shape :obj:`(batch_size, 1)` instead of all `decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
@@ -939,9 +939,9 @@ class T5Model(T5PreTrainedModel):
             Sequence of hidden-states at the output of the last layer of the model.
             If `decoder_past_key_value_states` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
         decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`, `optional`, returned when ``config.output_past=True``):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `decoder_past_key_value_states` input) to speed up sequential decoding.
-            Note that when using `decoder_past_key_value_states`, the model only outputs the last hidden state of the sequence.
+            Contains pre-computed key and value hidden-states of the attention blocks.
+            Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
+            Note that when using `decoder_past_key_value_states`, the model only outputs the last `hidden-state` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -1073,9 +1073,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
             If `past_key_value_states` is used only the last prediction_scores of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
         decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`, `optional`, returned when ``config.output_past=True``):
-            Contains pre-computed hidden-states (key and values in the attention blocks).
-            Can be used (see `decoder_past_key_value_states` input) to speed up sequential decoding.
-            Note that when using `decoder_past_key_value_states`, the model only outputs the last hidden state of the sequence.
+            Contains pre-computed key and value hidden-states of the attention blocks.
+            Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
+            Note that when using `decoder_past_key_value_states`, the model only outputs the last `prediction_score` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
