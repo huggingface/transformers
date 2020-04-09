@@ -713,7 +713,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 Seq2seq model: attention mask for the encoder.  If `None`, uses attention_mask.
 
             decoder_attention_mask (`optional`) obj: `torch.LongTensor` of same shape as `decoder_input_ids`
-                Attention mask for the decoder. 
+                Attention mask for the decoder.
                 Language model: If `None`, uses attention_mask.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
