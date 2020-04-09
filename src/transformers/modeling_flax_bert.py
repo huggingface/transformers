@@ -149,6 +149,7 @@ class BertAttention(nn.Module):
             hidden_state,
             num_heads=num_heads,
             qkv_features=head_size,
+            padding_mask=attention_mask,
             name="self"
         )
 
@@ -272,22 +273,21 @@ class FlaxBertModel(JaxPreTrainedModel):
 
         @jax.jit
         def predict(input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
-
-            if token_type_ids is None:
-                token_type_ids = np.ones_like(input_ids)
-
-            if position_ids is None:
-                position_ids = np.arange(np.atleast_2d(input_ids).shape[-1])
-
-            if attention_mask is None:
-                attention_mask = np.ones_like(input_ids)
-
             return self._bert(
                 jnp.array(input_ids, dtype='i4'),
                 jnp.array(token_type_ids, dtype='i4'),
                 jnp.array(position_ids, dtype='i4'),
                 jnp.array(attention_mask, dtype='i4')
             )
+
+        if token_type_ids is None:
+            token_type_ids = np.ones_like(input_ids)
+
+        if position_ids is None:
+            position_ids = np.arange(np.atleast_2d(input_ids).shape[-1])
+
+        if attention_mask is None:
+            attention_mask = np.ones_like(input_ids)
 
         return predict(input_ids, token_type_ids, position_ids, attention_mask)
 
@@ -311,8 +311,8 @@ if __name__ == '__main__':
     model = FlaxBertModel.from_pretrained(MODEL)
 
     # Inputs
-    flax_input = tokenizer.encode_plus("My name is Morgan")
-    pt_input = tokenizer.encode_plus("My name is Morgan", return_tensors="pt")
+    pt_input = tokenizer.batch_encode_plus(["My name is Morgan", "Test"], return_tensors="pt")
+    flax_input = {k: t.numpy() for k, t in pt_input.items()}
 
     # Forward
     model_pt.eval()
