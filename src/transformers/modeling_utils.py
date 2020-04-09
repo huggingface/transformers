@@ -1419,6 +1419,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     def _reorder_cache(past, beam_idx):
         return tuple(layer_past.index_select(1, beam_idx) for layer_past in past)
 
+
 def calc_banned_ngram_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len):
     # Copied from fairseq for no_repeat_ngram in beam_search"""
     if cur_len + 1 < no_repeat_ngram_size:
