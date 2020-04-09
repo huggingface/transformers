@@ -20,7 +20,6 @@ import logging
 import torch
 import numpy as np
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from .activations import gelu, gelu_new, swish
 from .configuration_reformer import ReformerConfig
@@ -66,7 +65,6 @@ class ReformerEmbeddings(nn.Module):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        # TODO(PVP): check sinusoidal position embeddings -> not 100% the same as done in trax
         if config.sinusoidal_pos_embds:
             create_sinusoidal_embeddings(
                 n_pos=config.max_position_embeddings, dim=config.hidden_size, out=self.position_embeddings.weight
@@ -91,7 +89,7 @@ class ReformerEmbeddings(nn.Module):
 
         position_embeddings = self.position_embeddings(position_ids)
 
-        # TODO(PVP): In https://github.com/google/trax/blob/d947ebc184b94bc48d7e48cc63156a047f00992e/trax/models/reformer/reformer.py#L775 there are two dropouts right after each other as
+        # TODO: In https://github.com/google/trax/blob/d947ebc184b94bc48d7e48cc63156a047f00992e/trax/models/reformer/reformer.py#L775 there are two dropouts right after each other as
         # it is implemented here. Check if this is ok.
 
         embeddings = nn.functional.dropout(inputs_embeds, self.dropout, self.training)
@@ -528,6 +526,12 @@ class ReformerEncoder(nn.Module):
         if self.output_hidden_states:
             all_hidden_states = all_hidden_states + (attention_output, hidden_states)
 
+        trax_2_layer_output_1 = np.load(PATH_TO_SAVE_WEIGHTS + '/encoder_output_1.npy')
+        trax_2_layer_output_2 = np.load(PATH_TO_SAVE_WEIGHTS + '/encoder_output_2.npy')
+
+        import ipdb
+        ipdb.set_trace()
+
         # Concatenate 2 RevNet outputs
         hidden_states = torch.cat([attention_output, hidden_states], dim=-1)
 
@@ -681,23 +685,7 @@ class ReformerModel(ReformerPreTrainedModel):
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
 
 
-class ReformerOnlyLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        # Reformer is using Rev Nets, thus last layer outputs are concatenated and
-        # Layer Norm is done over 2 * hidden_size
-        self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=False)
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
-class ReformerModelWithLMHead(ReformerPreTrainedModel):
+class ReformerWithLMHead(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -707,13 +695,9 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         self.init_weights()
 
     def get_output_embeddings(self):
-        return self.lm_head.decoder
+        return self.lm_head.predictions.decoder
 
-    def tie_weights(self):
-        # TODO(PVP): output and input embeddings are
-        # apparently not tied so skip this step
-        pass
-
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -722,24 +706,39 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         inputs_embeds=None,
         lm_labels=None,
     ):
-        reformer_outputs = self.reformer(
+        outputs = self.reformer(
             input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
         )
 
-        sequence_output = reformer_outputs[0]
-        lm_logits = self.lm_head(sequence_output)
-        outputs = (lm_logits,) + reformer_outputs[1:]
+        sequence_output = outputs[0]
+        prediction_scores = self.cls(sequence_output)
+
+        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
+
+        # Although this may seem awkward, BertForMaskedLM supports two scenarios:
+        # 1. If a tensor that contains the indices of masked labels is provided,
+        #    the cross-entropy is the MLM cross-entropy that measures the likelihood
+        #    of predictions for masked words.
+        # 2. If `lm_labels` is provided we are in a causal scenario where we
+        #    try to predict the next token for each input in the decoder.
+        if masked_lm_labels is not None:
+            loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            outputs = (masked_lm_loss,) + outputs
 
         if lm_labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = lm_labels[..., 1:].contiguous()
-            # Flatten the tokens
+            # we are doing next-token prediction; shift prediction scores and input ids by one
+            prediction_scores = prediction_scores[:, :-1, :].contiguous()
+            lm_labels = lm_labels[:, 1:].contiguous()
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
-            outputs = (loss,) + outputs
+            ltr_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), lm_labels.view(-1))
+            outputs = (ltr_lm_loss,) + outputs
 
-        return outputs  # (lm_loss), lm_logits, (hidden_states), (attentions)
+        return outputs  # (masked_lm_loss), (ltr_lm_loss), prediction_scores, (hidden_states), (attentions)

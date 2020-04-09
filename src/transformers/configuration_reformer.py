@@ -99,24 +99,25 @@ class ReformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=30522,
-        hidden_size=32,
-        num_hidden_layers=12,
+        vocab_size=10,
+        hidden_size=16,
+        num_hidden_layers=3,
         num_attention_heads=2,
-        num_buckets=[2, 2],
+        num_buckets=2,
         num_hashes=2,
         chunk_length=7,
         num_chunks_before=1,
         num_chunks_after=0,
-        intermediate_size=64,
+        intermediate_size=32,
         hidden_act="gelu",
         hidden_dropout_prob=0.3,
         attention_probs_dropout_prob=0.3,
-        max_position_embeddings=512,
+        max_position_embeddings=20,
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        sinusoidal_pos_embds=True,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -129,10 +130,11 @@ class ReformerConfig(PretrainedConfig):
 #        TO CHANGE LATER:
         self.seed = 0
         self.num_attention_chunks = 1
+        self.num_chunks = 0
         self.ff_chunk_size = 0
         self.d_model = hidden_size
         self.d_ff = intermediate_size
-        self.is_decoder = True
+        self.is_decoder = False
 #        self.ff_activation =  # GELU
 
         self.vocab_size = vocab_size
@@ -152,3 +154,4 @@ class ReformerConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.sinusoidal_pos_embds = sinusoidal_pos_embds
