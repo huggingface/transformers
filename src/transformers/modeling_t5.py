@@ -390,7 +390,7 @@ class T5Attention(nn.Module):
         if self.output_past is False or self.is_decoder is False:
             assert (
                 present_key_value_state[0] is None
-            ), "Key/Value projections should not be stored if {} is no decoder or output_past is False".format(self)
+            ), "Key/Value projections should not be stored if {} is not decoder or output_past is False".format(self)
 
         outputs = outputs + present_key_value_state
         if self.output_attentions:
@@ -481,7 +481,8 @@ class T5Block(nn.Module):
         past_key_value_state=None,
     ):
 
-        if self.is_decoder and self.output_past and past_key_value_state is not None:
+        if past_key_value_state is not None:
+            assert self.is_decoder, "Only decoder can use `past_key_value_states`"
             assert (
                 len(past_key_value_state) == 4
             ), "The should be 4 past states. 2 (past / key) for self attention. 2 (past / key) for cross attention. Got {} past key / value states".format(
@@ -499,8 +500,7 @@ class T5Block(nn.Module):
             head_mask=head_mask,
             past_key_value_state=self_attn_past_key_value_state,
         )
-        hidden_states = self_attention_outputs[0]
-        present_key_value_state = self_attention_outputs[1]
+        hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
         if self.is_decoder:
@@ -1181,7 +1181,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             for layer_past_state in layer_past_states:
                 # need to set correct `past` for each of the four key / value states
                 reordered_layer_past_states = reordered_layer_past_states + (
-                    torch.cat([layer_past_state[i].unsqueeze(0).clone() for i in beam_idx], dim=0),
+                    layer_past_state.index_select(0, beam_idx),
                 )
 
             assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
