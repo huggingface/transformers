@@ -51,7 +51,7 @@ def build_tf_to_pytorch_map(model, config):
             }
         )
         for i, (out_l, proj_l, tie_proj) in enumerate(
-                zip(model.crit.out_layers, model.crit.out_projs, config.tie_projs)
+            zip(model.crit.out_layers, model.crit.out_projs, config.tie_projs)
         ):
             layer_str = "transformer/adaptive_softmax/cutoff_%d/" % i
             if config.tie_weight:
@@ -219,20 +219,20 @@ class PositionwiseFF(nn.Module):
 
 class RelPartialLearnableMultiHeadAttn(nn.Module):
     def __init__(
-            self,
-            n_head,
-            d_model,
-            d_head,
-            dropout,
-            dropatt=0,
-            tgt_len=None,
-            ext_len=None,
-            mem_len=None,
-            pre_lnorm=False,
-            r_r_bias=None,
-            r_w_bias=None,
-            output_attentions=False,
-            layer_norm_epsilon=1e-5,
+        self,
+        n_head,
+        d_model,
+        d_head,
+        dropout,
+        dropatt=0,
+        tgt_len=None,
+        ext_len=None,
+        mem_len=None,
+        pre_lnorm=False,
+        r_r_bias=None,
+        r_w_bias=None,
+        output_attentions=False,
+        layer_norm_epsilon=1e-5,
     ):
         super().__init__()
 
@@ -750,8 +750,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             dec_attn_mask = (torch.triu(all_ones, 1 + mlen) + torch.tril(all_ones, -mask_shift_len))[:, :, None]  # -1
         else:
             dec_attn_mask = torch.triu(word_emb.new_ones((qlen, klen), dtype=torch.uint8), diagonal=1 + mlen)[
-                            :, :, None
-                            ]
+                :, :, None
+            ]
 
         hids = []
         attentions = []
@@ -807,7 +807,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         self.sample_softmax = config.sample_softmax
 
         assert (
-                self.sample_softmax <= 0
+            self.sample_softmax <= 0
         ), "Sampling from the softmax is not implemented yet. Please look at issue: #3310: https://github.com/huggingface/transformers/issues/3310"
 
         self.crit = ProjectedAdaptiveLogSoftmax(
@@ -905,7 +905,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             softmax_output = softmax_output.view(bsz, tgt_len, -1)
             outputs = [softmax_output] + outputs
         else:
-            softmax_output = softmax_output.view(bsz, tgt_len-1)
+            softmax_output = softmax_output.view(bsz, tgt_len - 1)
             outputs = [softmax_output, None] + outputs
 
         return outputs  # (loss), logits or None if labels is not None (speed up adaptive softmax), new_mems, (all hidden states), (all attentions)
