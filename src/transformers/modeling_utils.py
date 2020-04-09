@@ -816,6 +816,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             assert (
                 bos_token_id is not None
             ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
+            encoder_input_ids = encoder_input_ids if encoder_input_ids is not None else input_ids
+            encoder_attention_mask = encoder_attention_mask if encoder_attention_mask is not None else attention_mask
         else:
             decoder_input_ids = decoder_input_ids if decoder_input_ids is not None else input_ids
 
@@ -846,12 +848,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             batch_size = decoder_input_ids.shape[0]
         else:
             batch_size = 1
-
-        # TODO (Yacine): this should probably be disallowed
-        if self.config.is_encoder_decoder and input_ids is None:
-            input_ids = torch.full(
-                (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device,
-            )
 
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictly positive integer."
         assert isinstance(min_length, int) and min_length >= 0, "`min_length` should be a positive integer."
@@ -890,6 +886,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             decoder_input_ids = torch.full(
                 (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device,
             )
+            if input_ids is None:
+                input_ids = torch.full(
+                    (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device,
+                )
         else:
             assert decoder_input_ids.dim() == 2, "Input prompt should be of shape (batch_size, sequence length)."
 
