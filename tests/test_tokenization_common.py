@@ -282,7 +282,7 @@ class TokenizerTesterMixin:
 
         # Method is implemented (e.g. not GPT-2)
         if len(attached_sequences) != 2:
-            self.assertEqual(tokenizer.num_added_tokens(pair=True), len(attached_sequences) - len(sequences))
+            self.assertEqual(tokenizer.num_special_tokens_to_add(pair=True), len(attached_sequences) - len(sequences))
 
     def test_maximum_encoding_length_single_input(self):
         tokenizer = self.get_tokenizer()
@@ -291,7 +291,7 @@ class TokenizerTesterMixin:
         stride = 2
 
         sequence = tokenizer.encode(seq_0, add_special_tokens=False)
-        num_added_tokens = tokenizer.num_added_tokens()
+        num_added_tokens = tokenizer.num_special_tokens_to_add()
         total_length = len(sequence) + num_added_tokens
         information = tokenizer.encode_plus(
             seq_0,
