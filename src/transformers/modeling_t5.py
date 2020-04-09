@@ -900,6 +900,10 @@ class T5Model(T5PreTrainedModel):
     def set_output_past(self, do_output_past: bool):
         self.config.output_past = do_output_past
         self.decoder.output_past = do_output_past
+        for block in self.decoder.block:
+            block.output_past = do_output_past
+            block.layer[0].SelfAttention.output_past = do_output_past
+            block.layer[1].EncDecAttention.output_past = do_output_past
         self.encoder.output_past = do_output_past
 
     def get_encoder(self):
