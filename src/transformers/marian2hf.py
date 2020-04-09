@@ -27,7 +27,7 @@ def convert_embeddings_(opus_state) -> dict:
     sd = {}
     for k in EMBED_CONVERTER:
         if k in opus_state:
-            sd[EMBED_CONVERTER[k]] = opus_state[k]
+            sd[EMBED_CONVERTER[k]] = torch.tensor(opus_state[k])
     return sd
 
 
@@ -58,7 +58,7 @@ def convert_to_berts(opus_state: dict):
     bdecoder = BertModel(decoder_cfg)
     load_layers_(bdecoder, opus_state)
     embs_state: dict = convert_embeddings_(opus_state)
-    result = encoder.load_state_dict(embs_state)
+    result = encoder.embeddings.load_state_dict(embs_state, strict=False)
     print(f'Embeddings: {result})')  # TODO(SS): logger
     return encoder, bdecoder
 
@@ -72,9 +72,10 @@ def load_model_yaml(opus_dict):
 
 
 DEFAULT_PATH = '/Users/shleifer/marian/opus_en_fr/opus.bpe32k-bpe32k.transformer.model1.npz.best-perplexity.npz'
-def main(opus_path=DEFAULT_PATH):
+def convert(opus_path=DEFAULT_PATH):
     opus_state = np.load(opus_path)
     enc, dec = convert_to_berts(opus_state)
+    return enc, dec
 
 
 

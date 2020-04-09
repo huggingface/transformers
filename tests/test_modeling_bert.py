@@ -54,6 +54,7 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    all_generative_model_classes = (BertForMaskedLM,) if is_torch_available() else ()
 
     class BertModelTester(object):
         def __init__(
