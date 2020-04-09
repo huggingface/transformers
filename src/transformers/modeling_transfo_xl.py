@@ -18,6 +18,7 @@
     In particular https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
 """
 
+
 import logging
 
 import torch
@@ -28,6 +29,7 @@ from .configuration_transfo_xl import TransfoXLConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 from .modeling_utils import PreTrainedModel
+
 
 logger = logging.getLogger(__name__)
 
@@ -376,6 +378,7 @@ class RelPartialLearnableDecoderLayer(nn.Module):
         )
 
     def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, head_mask=None):
+
         attn_outputs = self.dec_attn(dec_inp, r, attn_mask=dec_attn_mask, mems=mems, head_mask=head_mask)
         ff_output = self.pos_ff(attn_outputs[0])
 
@@ -660,6 +663,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             end_idx = mlen + max(0, qlen - 0 - self.ext_len)
             beg_idx = max(0, end_idx - self.mem_len)
             for i in range(len(hids)):
+                
                 cat = torch.cat([mems[i], hids[i]], dim=0)
                 new_mems.append(cat[beg_idx:end_idx].detach())
 
