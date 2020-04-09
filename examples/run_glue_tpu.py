@@ -31,7 +31,6 @@ import torch_xla.distributed.parallel_loader as pl
 import torch_xla.distributed.xla_multiprocessing as xmp
 from torch.utils.data import DataLoader, RandomSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm, trange
 
 from transformers import (
@@ -58,6 +57,13 @@ from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
 from transformers import glue_output_modes as output_modes
 from transformers import glue_processors as processors
+
+
+try:
+    # Only tensorboardX supports writing directly to gs://
+    from tensorboardX import SummaryWriter
+except ImportError:
+    from torch.utils.tensorboard import SummaryWriter
 
 
 logger = logging.getLogger(__name__)
@@ -95,7 +101,7 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
     """ Train the model """
     if xm.is_master_ordinal():
         # Only master writes to Tensorboard
-        tb_writer = SummaryWriter()
+        tb_writer = SummaryWriter(args.tensorboard_logdir)
 
     train_sampler = get_sampler(train_dataset)
     dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
@@ -215,7 +221,7 @@ def evaluate(args, model, tokenizer, prefix="", disable_logging=False):
     """Evaluate the model"""
     if xm.is_master_ordinal():
         # Only master writes to Tensorboard
-        tb_writer = SummaryWriter()
+        tb_writer = SummaryWriter(args.tensorboard_logdir)
 
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
@@ -580,7 +586,7 @@ def get_args():
         help="If > 0: set total number of training steps to perform. Override num_train_epochs.",
     )
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
-
+    parser.add_argument("--tensorboard_logdir", default="./runs", type=str, help="Where to write tensorboard metrics.")
     parser.add_argument("--logging_steps", type=int, default=50, help="Log every X update steps.")
     parser.add_argument("--only_log_master", action="store_true", help="Whether to log only from each hosts master.")
     parser.add_argument("--save_steps", type=int, default=50, help="Save checkpoint every X update steps.")
