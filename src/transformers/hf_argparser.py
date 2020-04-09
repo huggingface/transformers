@@ -1,27 +1,37 @@
 import dataclasses
 from argparse import ArgumentParser
 from enum import Enum
-from typing import Any, List, NewType, Optional
+from typing import Any, Iterable, NewType, Tuple, Union
 
 
 DataClass = NewType("DataClass", Any)
+DataClassType = NewType("DataClassType", Any)
 
 
-class HfArgparser:
+class HfArgumentParser(ArgumentParser):
     """
-    This helper class uses type hints on dataclasses to
-    generate `argparse` arguments.
+    This subclass of `argparse.ArgumentParser` uses type hints on dataclasses
+    to generate arguments.
     """
 
-    parser: ArgumentParser
+    def __init__(self, obj: Union[None, DataClass, DataClassType] = None):
+        """
+        Args:
+            obj:
+                (Optional) Can be either a dataclass instance, or a dataclass type.
+                Both will work the exact same way.
+        """
+        super().__init__()
+        if obj is not None:
+            self.add_dataclass_arguments(obj)
 
-    def __init__(self, parser: Optional[ArgumentParser] = None):
-        if parser is not None:
-            self.parser = parser
-        else:
-            self.parser = ArgumentParser()
-
-    def add_arguments(self, obj: DataClass) -> ArgumentParser:
+    def add_dataclass_arguments(self, obj: Union[DataClass, DataClassType]):
+        """
+        Args:
+            obj:
+                Can be either a dataclass instance, or a dataclass type.
+                Both will work the exact same way.
+        """
         for field in dataclasses.fields(obj):
             field_name = f"--{field.name}"
             kwargs = field.metadata.copy()
@@ -53,18 +63,48 @@ class HfArgparser:
                     kwargs["default"] = field.default
                 else:
                     kwargs["required"] = True
-            self.parser.add_argument(field_name, **kwargs)
-        return self.parser
+            self.add_argument(field_name, **kwargs)
 
     @classmethod
-    def pipeline(objs: List[DataClass]) -> None:
+    def parse_into_dataclasses(
+        self, types: Iterable[DataClassType], args_to_parse=None, return_remaining=False
+    ) -> Tuple[DataClass, ...]:
         """
-        Pass command-line args into a sequence of `ArgumentParser`s generated
-        from dataclasses, filling each of those dataclasses along the way.
+        Parse command-line args into instances of the specified dataclass types,
+        relying on a shared ArgumentParser generated
+        from the dataclasses' type hints.
+
+        This relies on argparse's `ArgumentParser.parse_known_args`.
+        See the doc at:
+        docs.python.org/3.7/library/argparse.html#argparse.ArgumentParser.parse_args
+
+        Args:
+            types:
+                List of dataclass types for which we will "fill" instances with the parsed args.
+            args_to_parse:
+                List of strings to parse. The default is taken from sys.argv.
+                (same as argparse.ArgumentParser)
+            return_remaining:
+                If true, also return a list of remaining argument strings.
+
+        Returns:
+            Tuple consisting of:
+                - the dataclass instances in the same order as the input
+                - The potential list of remaining argument strings.
+                  (same as argparse.ArgumentParser.parse_known_args)
         """
-        parser = ArgumentParser()
-        remaining_args = None
-        # ^^ we start from the default parameter (i.e. stdin)
-        for obj in objs:
-            parser_step = HfArgparser(parser).add_arguments(obj)
-            _, remaining_args = parser_step.parse_known_args(args=remaining_args, namespace=obj)
+        parser = HfArgumentParser()
+        for dtype in types:
+            parser.add_dataclass_arguments(dtype)
+        # Now let's parse.
+        namespace, remaining_args = parser.parse_known_args(args=args_to_parse)
+        outputs = []
+        for dtype in types:
+            keys = {f.name for f in dataclasses.fields(dtype)}
+            inputs = {k: v for k, v in vars(namespace).items() if k in keys}
+            obj = dtype(**inputs)
+            outputs.append(obj)
+        if return_remaining:
+            return (*outputs, remaining_args)
+        else:
+            return (*outputs,)

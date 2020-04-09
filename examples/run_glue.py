@@ -22,6 +22,8 @@ import json
 import logging
 import os
 import random
+from dataclasses import dataclass, field
+from typing import Optional
 
 import numpy as np
 import torch
@@ -36,8 +38,8 @@ from transformers import (
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    HfArgparser,
-    TrainingArgs,
+    HfArgumentParser,
+    TrainingArguments,
     get_linear_schedule_with_warmup,
 )
 from transformers import glue_compute_metrics as compute_metrics
@@ -385,92 +387,60 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     return dataset
 
 
-def main():
-    parser = argparse.ArgumentParser()
+@dataclass
+class ModelArguments:
+    """
+    Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
+    """
 
-    # Required parameters
-    parser.add_argument(
-        "--data_dir",
-        default=None,
-        type=str,
-        required=True,
-        help="The input data dir. Should contain the .tsv files (or other data files) for the task.",
+    model_name_or_path: str = field(
+        metadata={"help": "Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS)}
     )
-    parser.add_argument(
-        "--model_type",
-        default=None,
-        type=str,
-        required=True,
-        help="Model type selected in the list: " + ", ".join(MODEL_TYPES),
+    model_type: str = field(metadata={"help": "Model type selected in the list: " + ", ".join(MODEL_TYPES)})
+    model_name_or_path: str = field(
+        metadata={"help": "Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS)}
     )
-    parser.add_argument(
-        "--model_name_or_path",
-        default=None,
-        type=str,
-        required=True,
-        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS),
+    config_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
-    parser.add_argument(
-        "--task_name",
-        default=None,
-        type=str,
-        required=True,
-        help="The name of the task to train selected in the list: " + ", ".join(processors.keys()),
+    tokenizer_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
-    parser.add_argument(
-        "--output_dir",
-        default=None,
-        type=str,
-        required=True,
-        help="The output directory where the model predictions and checkpoints will be written.",
+    cache_dir: Optional[str] = field(
+        default=None, metadata={"help": "Where do you want to store the pre-trained models downloaded from s3"}
     )
+    do_lower_case: bool = field(default=False, metadata={"help": "Set this flag if you are using an uncased model."})
+    # ^ I want to remove this one because this should be handled by the tokenizer now.
 
-    # Other parameters
-    parser.add_argument(
-        "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name",
+
+@dataclass
+class DataProcessingArguments:
+    data_dir: str = field(
+        metadata={"help": "The input data dir. Should contain the .tsv files (or other data files) for the task."}
     )
-    parser.add_argument(
-        "--tokenizer_name",
-        default="",
-        type=str,
-        help="Pretrained tokenizer name or path if not the same as model_name",
+    task_name: str = field(
+        metadata={"help": "The name of the task to train selected in the list: " + ", ".join(processors.keys())}
     )
-    parser.add_argument(
-        "--cache_dir",
-        default="",
-        type=str,
-        help="Where do you want to store the pre-trained models downloaded from s3",
-    )
-    parser.add_argument(
-        "--max_seq_length",
+    max_seq_length: int = field(
         default=128,
-        type=int,
-        help="The maximum total input sequence length after tokenization. Sequences longer "
-        "than this will be truncated, sequences shorter will be padded.",
+        metadata={
+            "help": "The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
     )
-    parser.add_argument(
-        "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model.",
-    )
-
-    parser.add_argument(
-        "--overwrite_output_dir", action="store_true", help="Overwrite the content of the output directory",
-    )
-    parser.add_argument(
-        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets",
+    overwrite_cache: bool = field(
+        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
 
-    dataprocessing_args, remaining_args = parser.parse_known_args()
 
-    training_args = TrainingArgs()
-    HfArgparser().add_arguments(training_args).parse_args(remaining_args, namespace=training_args)
+def main():
+    model_args, dataprocessing_args, training_args = HfArgumentParser.parse_into_dataclasses(
+        [ModelArguments, DataProcessingArguments, TrainingArguments]
+    )
 
-    # For now, let's merge the two sets of args into one,
-    # but soon, we'll keep distinct sets of args, with a cleaner separation.
-    args = argparse.Namespace(**vars(dataprocessing_args), **vars(training_args))
-    # Soon, we'll do this instead:
-    # dataprocessing_args = DataprocessingArgs()
-    # training_args = TrainingArgs()
-    # HfArgparser.pipeline([dataprocessing_args, training_args])
+    # For now, let's merge all the sets of args into one,
+    # but soon, we'll keep distinct sets of args, with a cleaner separation of concerns.
+    args = argparse.Namespace(**vars(model_args), **vars(dataprocessing_args), **vars(training_args))
 
     if (
         os.path.exists(args.output_dir)
@@ -479,9 +449,7 @@ def main():
         and not args.overwrite_output_dir
     ):
         raise ValueError(
-            "Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(
-                args.output_dir
-            )
+            f"Output directory ({args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
         )
 
     # Setup CUDA, GPU & distributed training

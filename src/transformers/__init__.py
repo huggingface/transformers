@@ -88,7 +88,7 @@ from .file_utils import (
     is_tf_available,
     is_torch_available,
 )
-from .hf_argparser import HfArgparser
+from .hf_argparser import HfArgumentParser
 
 # Model Cards
 from .modelcard import ModelCard
@@ -142,7 +142,7 @@ from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
-from .training_args import TrainingArgs
+from .training_args import TrainingArguments
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name

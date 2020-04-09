@@ -44,10 +44,10 @@ from transformers import (
     AutoConfig,
     AutoModelWithLMHead,
     AutoTokenizer,
-    HfArgparser,
+    HfArgumentParser,
     PreTrainedModel,
     PreTrainedTokenizer,
-    TrainingArgs,
+    TrainingArguments,
     get_linear_schedule_with_warmup,
 )
 
@@ -544,16 +544,16 @@ def main():
 
     dataprocessing_args, remaining_args = parser.parse_known_args()
 
-    training_args = TrainingArgs()
-    HfArgparser().add_arguments(training_args).parse_args(remaining_args, namespace=training_args)
+    training_args = TrainingArguments()
+    HfArgumentParser().add_dataclass_arguments(training_args).parse_args(remaining_args, namespace=training_args)
 
     # For now, let's merge the two sets of args into one,
     # but soon, we'll keep distinct sets of args, with a cleaner separation.
     args = argparse.Namespace(**vars(dataprocessing_args), **vars(training_args))
     # Soon, we'll do this instead:
     # dataprocessing_args = DataprocessingArgs()
-    # training_args = TrainingArgs()
-    # HfArgparser.pipeline([dataprocessing_args, training_args])
+    # training_args = TrainingArguments()
+    # HfArgumentParser.pipeline([dataprocessing_args, training_args])
 
     if args.model_type in ["bert", "roberta", "distilbert", "camembert"] and not args.mlm:
         raise ValueError(

@@ -2,22 +2,23 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 
-"""
-TrainingArgs is the extraction of the subset of the
-argparse args we use in the example scripts today
-**which relate to the training loop itself**.
-
-Using `HfArgparser` we can turn this class
-into argparse arguments to be able to specify them on
-the command line.
-"""
-
-
 @dataclass
-class TrainingArgs:
+class TrainingArguments:
     """
-    Args for the Trainer.
+    TrainingArguments is the subset of the arguments we use in our example scripts
+    **which relate to the training loop itself**.
+
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
     """
+
+    output_dir: str = field(
+        metadata={"help": "The output directory where the model predictions and checkpoints will be written."}
+    )
+    overwrite_output_dir: bool = field(
+        default=False, metadata={"help": "Overwrite the content of the output directory"}
+    )
 
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
@@ -57,7 +58,7 @@ class TrainingArgs:
             "help": "Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number"
         },
     )
-    no_cuda: bool = field(default=False, metadata={"help": "Avoid using CUDA when available"})
+    no_cuda: bool = field(default=False, metadata={"help": "Avoid using CUDA even if it is available"})
     seed: int = field(default=42, metadata={"help": "random seed for initialization"})
 
     fp16: bool = field(

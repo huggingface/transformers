@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
-from transformers.hf_argparser import HfArgparser
-from transformers.training_args import TrainingArgs
+from transformers.hf_argparser import HfArgumentParser
+from transformers.training_args import TrainingArguments
 
 
 @dataclass
@@ -46,7 +46,7 @@ class OptionalExample:
     baz: Optional[str] = None
 
 
-class HfArgparserTest(unittest.TestCase):
+class HfArgumentParserTest(unittest.TestCase):
     def argparsersEqual(self, a: argparse.ArgumentParser, b: argparse.ArgumentParser) -> bool:
         """
         Small helper to check pseudo-equality of parsed arguments on `ArgumentParser` instances.
@@ -58,8 +58,7 @@ class HfArgparserTest(unittest.TestCase):
             self.assertEqual(xx, yy)
 
     def test_basic(self):
-        parser = argparse.ArgumentParser()
-        HfArgparser(parser).add_arguments(BasicExample)
+        parser = HfArgumentParser(BasicExample)
 
         expected = argparse.ArgumentParser()
         expected.add_argument("--foo", type=int, required=True)
@@ -69,8 +68,7 @@ class HfArgparserTest(unittest.TestCase):
         self.argparsersEqual(parser, expected)
 
     def test_with_default(self):
-        parser = argparse.ArgumentParser()
-        HfArgparser(parser).add_arguments(WithDefaultExample)
+        parser = HfArgumentParser(WithDefaultExample)
 
         expected = argparse.ArgumentParser()
         expected.add_argument("--foo", default=42, type=int)
@@ -78,8 +76,7 @@ class HfArgparserTest(unittest.TestCase):
         self.argparsersEqual(parser, expected)
 
     def test_with_default_bool(self):
-        parser = argparse.ArgumentParser()
-        HfArgparser(parser).add_arguments(WithDefaultBoolExample)
+        parser = HfArgumentParser(WithDefaultBoolExample)
 
         expected = argparse.ArgumentParser()
         expected.add_argument("--foo", action="store_true")
@@ -93,8 +90,7 @@ class HfArgparserTest(unittest.TestCase):
         self.assertEqual(args, Namespace(foo=True, baz=False))
 
     def test_with_enum(self):
-        parser = argparse.ArgumentParser()
-        HfArgparser(parser).add_arguments(EnumExample)
+        parser = HfArgumentParser(EnumExample)
 
         expected = argparse.ArgumentParser()
         expected.add_argument("--foo", default=BasicEnum.toto, choices=list(BasicEnum), type=BasicEnum)
@@ -107,8 +103,7 @@ class HfArgparserTest(unittest.TestCase):
         self.assertEqual(args.foo, BasicEnum.titi)
 
     def test_with_optional(self):
-        parser = argparse.ArgumentParser()
-        HfArgparser(parser).add_arguments(OptionalExample)
+        parser = HfArgumentParser(OptionalExample)
 
         expected = argparse.ArgumentParser()
         expected.add_argument("--foo", default=None, type=int)
@@ -123,5 +118,5 @@ class HfArgparserTest(unittest.TestCase):
         self.assertEqual(args, Namespace(foo=12, bar=3.14, baz="42"))
 
     def test_integration_training_args(self):
-        training_args = TrainingArgs()
-        HfArgparser().add_arguments(training_args)
+        parser = HfArgumentParser(TrainingArguments)
+        self.assertIsNotNone(parser)
