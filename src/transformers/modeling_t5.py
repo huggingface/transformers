@@ -617,10 +617,10 @@ class T5Stack(T5PreTrainedModel):
         super().__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.output_past = config.output_past
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
+        self.output_past = config.output_past and self.is_decoder
 
         self.block = nn.ModuleList(
             [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
@@ -904,7 +904,6 @@ class T5Model(T5PreTrainedModel):
             block.output_past = do_output_past
             block.layer[0].SelfAttention.output_past = do_output_past
             block.layer[1].EncDecAttention.output_past = do_output_past
-        self.encoder.output_past = do_output_past
 
     def get_encoder(self):
         return self.encoder
@@ -1024,7 +1023,10 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     def set_output_past(self, do_output_past: bool):
         self.config.output_past = do_output_past
         self.decoder.output_past = do_output_past
-        self.encoder.output_past = do_output_past
+        for block in self.decoder.block:
+            block.output_past = do_output_past
+            block.layer[0].SelfAttention.output_past = do_output_past
+            block.layer[1].EncDecAttention.output_past = do_output_past
 
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
