@@ -3,6 +3,7 @@ TODO: add dropout where appropriate and a training indicator
 """
 
 import os
+import traceback
 
 import jax
 import jax.numpy as jnp
@@ -14,8 +15,40 @@ from typing import Callable
 import haiku as hk
 from haiku.initializers import Constant
 from jax.random import PRNGKey
+from jax.tree_util import tree_unflatten
+from collections import defaultdict
+from haiku._src.data_structures import frozendict
 
 from transformers import BertModel as PTBertModel, BertTokenizerFast, BertConfig
+from transformers.modeling_jax_utils import JaxPreTrainedModel
+
+
+# Models are loaded from Pytorch checkpoints
+BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
+    "bert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-pytorch_model.bin",
+    "bert-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-pytorch_model.bin",
+    "bert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-pytorch_model.bin",
+    "bert-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-pytorch_model.bin",
+    "bert-base-multilingual-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-pytorch_model.bin",
+    "bert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-pytorch_model.bin",
+    "bert-base-chinese": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-pytorch_model.bin",
+    "bert-base-german-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-cased-pytorch_model.bin",
+    "bert-large-uncased-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-pytorch_model.bin",
+    "bert-large-cased-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-pytorch_model.bin",
+    "bert-large-uncased-whole-word-masking-finetuned-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-pytorch_model.bin",
+    "bert-large-cased-whole-word-masking-finetuned-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-pytorch_model.bin",
+    "bert-base-cased-finetuned-mrpc": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-pytorch_model.bin",
+    "bert-base-german-dbmdz-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-pytorch_model.bin",
+    "bert-base-german-dbmdz-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-pytorch_model.bin",
+    "bert-base-japanese": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-pytorch_model.bin",
+    "bert-base-japanese-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking-pytorch_model.bin",
+    "bert-base-japanese-char": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-pytorch_model.bin",
+    "bert-base-japanese-char-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking-pytorch_model.bin",
+    "bert-base-finnish-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-cased-v1/pytorch_model.bin",
+    "bert-base-finnish-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-uncased-v1/pytorch_model.bin",
+    "bert-base-dutch-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/wietsedv/bert-base-dutch-cased/pytorch_model.bin",
+}
+
 
 
 def gelu(x):
@@ -42,24 +75,18 @@ class PretrainedModule(hk.Module):
 
     def __init__(self, name=None, state=None, **settings):
         super().__init__(name=name)
-        self._state = state or {}
+        if state is None:
+            self.state = {}
+        else:
+            self.state = state
         for setting_key, setting_value in settings.items():
             setattr(self, setting_key, setting_value)
-
-    def state(self, prefix):
-        prefix = prefix + "."
-        matching_states = {}
-        for key in self._state.keys():
-            if key.startswith(prefix):
-                trimmed_key = key[len(prefix) :]
-                matching_states[trimmed_key] = self._state[key]
-        return matching_states
-
+    
     def pretrained(self, key):
         try:
-            return Constant(self._state[key])
+            return Constant(self.state[key])
         except KeyError:
-            print(f"Failed to find {key} in `{self.__class__.__name__}({self.name})` state: {self._state.keys()}")
+            print(f"Failed to find {key} in `{self.__class__.__name__}({self.name})` state: {self.state.keys()}")
             return None
 
 
@@ -103,6 +130,7 @@ class BertLayerNorm(PretrainedModule):
           Normalized inputs (the same shape as inputs).
         """
         return hk.LayerNorm(
+            name="LayerNorm",
             axis=-1,
             eps=self.epsilon,
             create_scale=self.scale,
@@ -134,19 +162,19 @@ class BertEmbeddings(PretrainedModule):
         # Embed
         w_emb = BertEmbedding(
             name="word_embeddings",
-            state=self.state("word_embeddings"),
+            state=self.state["word_embeddings"],
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
         )(jnp.atleast_2d(input_ids.astype("i4")))
         p_emb = BertEmbedding(
             name="position_embeddings",
-            state=self.state("position_embeddings"),
+            state=self.state["position_embeddings"],
             vocab_size=self.max_length,
             hidden_size=self.hidden_size,
         )(jnp.atleast_2d(np.arange(input_ids.shape[-1])))
         t_emb = BertEmbedding(
             name="token_type_embeddings",
-            state=self.state("token_type_embeddings"),
+            state=self.state["token_type_embeddings"],
             vocab_size=self.type_vocab_size,
             hidden_size=self.hidden_size,
         )(jnp.atleast_2d(token_type_ids.astype("i4")))
@@ -155,7 +183,7 @@ class BertEmbeddings(PretrainedModule):
         summed_emb = w_emb + jnp.broadcast_to(p_emb, w_emb.shape) + t_emb
 
         # Layer Norm
-        norm = BertLayerNorm(name="LayerNorm", state=self.state("LayerNorm"))(summed_emb)
+        norm = BertLayerNorm(name="LayerNorm", state=self.state["LayerNorm"])(summed_emb)
         return norm
 
 
@@ -181,9 +209,9 @@ class SelfAttention(PretrainedModule):
         # Shapes are all [batch, sequence_length, hidden_size]
         hidden_size = self.num_heads * self.head_size
 
-        queries = Linear(name="query", state=self.state("query"), output_size=hidden_size)(x)
-        keys = Linear(name="key", state=self.state("key"), output_size=hidden_size)(x)
-        values = Linear(name="value", state=self.state("value"), output_size=hidden_size)(x)
+        queries = Linear(name="query", state=self.state["query"], output_size=hidden_size)(x)
+        keys = Linear(name="key", state=self.state["key"], output_size=hidden_size)(x)
+        values = Linear(name="value", state=self.state["value"], output_size=hidden_size)(x)
 
         # Reshape our hidden state to group into heads
         # New shapes are:
@@ -200,9 +228,11 @@ class SelfAttention(PretrainedModule):
         # h: per-head hidden state
         attention_logits = jnp.einsum("bsnh,btnh->bnst", queries, keys)
         attention_logits /= np.sqrt(queries.shape[-1])
+
         # Add logits of mask tokens with a large negative number
         # to prevent attending to those terms.
         attention_logits += jnp.reshape((1 - mask) * -(2 ** 32), [mask.shape[0], 1, 1, mask.shape[1]])
+        
         attention_weights = jax.nn.softmax(attention_logits, axis=-1)
         per_head_attention_output = jnp.einsum("btnh,bnst->bsnh", values, attention_weights)
         attention_output = self._join_heads(per_head_attention_output)
@@ -213,40 +243,39 @@ class SelfAttention(PretrainedModule):
 class BertAttention(PretrainedModule):
     def __call__(self, hidden_state, attention_mask):
         attention_output = SelfAttention(
-            name="self", state=self.state("self"), num_heads=self.num_heads, head_size=self.head_size,
+            name="self", state=self.state["self"], num_heads=self.num_heads, head_size=self.head_size,
         )(hidden_state, attention_mask)
-        output = Linear(name="dense", state=self.state("output.dense"), output_size=self.num_heads * self.head_size,)(
-            attention_output
+        output = BertOutput(name='output', state=self.state['output'], output_size=self.num_heads * self.head_size)(
+            hidden_state=attention_output, residual=hidden_state
         )
-        output = BertLayerNorm(name="LayerNorm", state=self.state("output.LayerNorm"))(hidden_state + output)
         return output
 
 
 class BertIntermediate(PretrainedModule):
     def __call__(self, hidden_state):
-        h = Linear(name="dense", state=self.state("dense"), output_size=self.intermediate_size)(hidden_state)
+        h = Linear(name="dense", state=self.state["dense"], output_size=self.intermediate_size)(hidden_state)
         return ACT2FN[self.activation_fn](h)
 
 
 class BertOutput(PretrainedModule):
-    def __call__(self, intermediate_output, attention_output):
-        h = Linear(name="dense", state=self.state("dense"), output_size=self.output_size)(intermediate_output)
-        h = BertLayerNorm(name="LayerNorm", state=self.state("LayerNorm"),)(h + attention_output)
+    def __call__(self, hidden_state, residual):
+        h = Linear(name="dense", state=self.state["dense"], output_size=self.output_size)(hidden_state)
+        h = BertLayerNorm(name="LayerNorm", state=self.state["LayerNorm"],)(h + residual)
         return h
 
 
 class BertLayer(PretrainedModule):
     def __call__(self, hidden_state, attention_mask):
         attention = BertAttention(
-            name="attention", state=self.state("attention"), num_heads=self.num_heads, head_size=self.head_size
+            name="attention", state=self.state["attention"], num_heads=self.num_heads, head_size=self.head_size
         )(hidden_state, attention_mask)
         intermediate = BertIntermediate(
             name="intermediate",
-            state=self.state("intermediate"),
+            state=self.state["intermediate"],
             intermediate_size=self.intermediate_size,
             activation_fn=self.activation_fn,
         )(attention)
-        output = BertOutput(name="output", state=self.state("output"), output_size=self.num_heads * self.head_size)(
+        output = BertOutput(name="output", state=self.state["output"], output_size=self.num_heads * self.head_size)(
             intermediate, attention
         )
         return output
@@ -260,7 +289,7 @@ class BertEncoder(PretrainedModule):
             layer_name = "layer_{}".format(i)
             x = BertLayer(
                 name=layer_name,
-                state=self.state(layer_name.replace("_", ".")),
+                state=self.state['layer'][str(i)],
                 num_heads=self.num_heads,
                 head_size=self.head_size,
                 intermediate_size=self.intermediate_size,
@@ -272,17 +301,16 @@ class BertEncoder(PretrainedModule):
 class BertPooler(PretrainedModule):
     def __call__(self, x):
         first_token = x[:, 0]
-        out = Linear(name="dense", state=self.state("dense"), output_size=x.shape[-1])(first_token)
+        out = Linear(name="dense", state=self.state["dense"], output_size=x.shape[-1])(first_token)
         return jax.lax.tanh(out)
 
 
 class BertModel(PretrainedModule):
     def __call__(self, input_ids, token_type_ids, attention_mask):
-
         # Embedding
         embeddings = BertEmbeddings(
             name="embeddings",
-            state=self.state("embeddings"),
+            state=self.state["embeddings"],
             vocab_size=self.vocab_size,
             type_vocab_size=self.type_vocab_size,
             hidden_size=self.hidden_size,
@@ -292,7 +320,7 @@ class BertModel(PretrainedModule):
         # N stacked encoding layers
         encoder = BertEncoder(
             name="encoder",
-            state=self.state("encoder"),
+            state=self.state["encoder"],
             num_layers=self.num_layers,
             num_heads=self.num_heads,
             head_size=self.head_size,
@@ -300,16 +328,19 @@ class BertModel(PretrainedModule):
             activation_fn=self.activation_fn,
         )(embeddings, jnp.atleast_2d(attention_mask))
 
-        pooled = BertPooler(name="pooler", state=self.state("pooler"),)(encoder)
+        pooled = BertPooler(name="pooler", state=self.state["pooler"],)(encoder)
         return encoder, pooled
 
 
-class HaikuBertModel:
+class HaikuBertModel(JaxPreTrainedModel):
     """
     BERT implementation using JAX/Haiku as backend
     """
+    MODEL_CLASS = BertModel
+    config_class = BertConfig
+    pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
-    def __init__(self, config: BertConfig, state: dict, **kwargs):
+    def __init__(self, config: BertConfig, state: dict, *model_args, **model_kwargs):
         self.config = config
         self.rng = PRNGKey(0)
         self.pretrained_state = state
@@ -323,6 +354,7 @@ class HaikuBertModel:
             def predict(input_ids, token_type_ids, attention_mask):
                 model = BertModel(
                     name="bert",
+                    conifg=self.config,
                     state=self.pretrained_state,
                     vocab_size=self.config.vocab_size,
                     hidden_size=self.config.hidden_size,
@@ -345,41 +377,117 @@ class HaikuBertModel:
             self.predict_fn = jax.jit(predict_module.apply)
         return self.predict_fn(self.params, self.rng, input_ids, token_type_ids, attention_mask)
 
-    @staticmethod
-    def from_pretrained(config: BertConfig, state: dict):
-        # TODO: subclass huggingface models properly so this can also
-        # take in models by name
-        state = dict(state)
-        for key, value in dict(state).items():
+    @classmethod
+    def _pytorch_to_jax(cls, pt_state_dict, config):
+        # Translate from flat dictionary to nested dictionary
+        # And translate a few matrices
+        state = dict(pt_state_dict)
+        nested_dict = lambda: defaultdict(nested_dict)
+        jax_state = nested_dict()
+        for key, value in state.items():
+
             value = value.numpy()
             if key.endswith("weight") and not "embeddings" in key:
                 value = value.T
-            del state[key]
-            state[key.replace("bert.", "")] = value
-        return HaikuBertModel(config, state)
+            
+            keys = key.split('.')[1:]
 
-    def save_pretrained(self, folder):
-        # TODO: find an elegant way to convert stored params dictionary into expected format
-        raise NotImplementedError()
+            current_dict = jax_state
+            for k in keys[:-1]:
+                current_dict = current_dict[k]
+            current_dict[keys[-1]] = value
+        
+        return jax_state
+
+    @classmethod
+    def _jax_to_pytorch(cls, state_dict, config):
+        nested_state = dict(state_dict)
+        
+        replacements = {
+            'embed': '',
+            'embeddings': 'weight',
+            'scale': 'gamma',
+            'offset': 'beta',
+            'w': 'weight',
+            'b': 'bias', 
+        }
+
+        def normalize(k):
+            """
+            Get rid of nested namespaces and convert haiku 
+            format w/ slashes to dots
+            """
+            
+            k = k.replace('/', '.').replace('layer_', 'layer.')
+
+            chain = k.split('.')
+            new_chain = [chain[0]]
+            for item in chain[1:]:
+                if item == new_chain[-1]:
+                    continue
+                else:
+                    new_chain.append(item)
+
+            k = ".".join(new_chain)
+            for before, after in replacements.items():
+                if k.endswith(before):
+                    k = k.rpartition(before)[0] + after
+            return k
+
+        def flatten(flat_state, nested_state, prefix=""):
+            for key, value in list(nested_state.items()):
+                normalized_key = normalize(key)
+                new_prefix = ".".join([prefix, normalized_key]).strip(".")
+                if isinstance(value, (dict, frozendict)):
+                    flatten(flat_state, value, new_prefix)
+                else:
+                    if new_prefix.endswith('weight') and not "embeddings" in new_prefix:
+                        value = value.T
+                    flat_state[new_prefix] = torch.tensor(value)
+            return flat_state
+
+        pytorch_state = flatten({}, nested_state, prefix="")
+        return pytorch_state
 
 
 if __name__ == "__main__":
-    tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
-    model_pt = PTBertModel.from_pretrained("bert-base-cased")
+    import numpy as np
+    import tempfile
+    
+    MODEL_NAME = 'bert-base-uncased'
+    tokenizer = BertTokenizerFast.from_pretrained(MODEL_NAME)
+    haiku_input = tokenizer.batch_encode_plus(["Thanks for the PR review Morgan"] * 2)
+    pt_input = tokenizer.encode_plus("Thanks for the PR review Morgan", return_tensors="pt")
 
-    with open("/home/m/Downloads/bert-base-cased-pytorch_model.bin", "rb") as model_f:
-        state = torch.load(model_f)
-        model = HaikuBertModel.from_pretrained(model_pt.config, state)
+    model = HaikuBertModel.from_pretrained(MODEL_NAME)
+    seq_features, pooled_features = model(**haiku_input)
 
-    # Inputs
-    haiku_input = tokenizer.batch_encode_plus(["My name is Morgan"] * 2)
-    pt_input = tokenizer.encode_plus("My name is Morgan", return_tensors="pt")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        model.save_pretrained(tmp_dir)
+        reloaded_model = model.from_pretrained(tmp_dir)
+        reloaded_seq_features, reloaded_pooled_features = reloaded_model(**haiku_input)
+        assert np.allclose(seq_features, reloaded_seq_features, atol=1e-2)
+        assert np.allclose(pooled_features, reloaded_pooled_features, atol=1e-2)
 
-    # Forward
-    model_pt.eval()
-    pt_enc = model_pt(pt_input["input_ids"], pt_input["attention_mask"])
-    pt_seq_features = pt_enc[0].detach().numpy()
-    pt_pooled_features = pt_enc[1].detach().numpy()
-    haiku_seq_features, haiku_pooled_features = model(**haiku_input)
-    assert np.allclose(haiku_seq_features, pt_seq_features, atol=1e-3)
-    assert np.allclose(haiku_pooled_features, pt_pooled_features, atol=1e-3)
+    for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys():
+        print(f"Testing {model_name}...")
+        try:
+            tokenizer = BertTokenizerFast.from_pretrained(model_name)
+            model_pt = PTBertModel.from_pretrained(model_name)
+            model = HaikuBertModel.from_pretrained(model_name)
+            
+            # Inputs
+            haiku_input = tokenizer.batch_encode_plus(["Thanks for the PR review Morgan"] * 2)
+            pt_input = tokenizer.encode_plus("Thanks for the PR review Morgan", return_tensors="pt")
+
+            # Forward
+            model_pt.eval()
+            pt_enc = model_pt(pt_input["input_ids"], pt_input["attention_mask"])
+            pt_seq_features = pt_enc[0].detach().numpy()
+            pt_pooled_features = pt_enc[1].detach().numpy()
+            haiku_seq_features, haiku_pooled_features = model(**haiku_input)
+            assert np.allclose(haiku_seq_features, pt_seq_features, atol=1e-2)
+            assert np.allclose(haiku_pooled_features, pt_pooled_features, atol=1e-2)
+        except:
+            traceback.print_exc()
+            print(f"Failed to load or compare {model_name} JAX version")

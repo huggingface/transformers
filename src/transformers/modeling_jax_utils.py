@@ -1,16 +1,38 @@
 import os
 
+import torch
 from flax.serialization import from_bytes
 
 from transformers import PretrainedConfig, logger, BertConfig
-from transformers.file_utils import hf_bucket_url, cached_path, WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, \
+from transformers.file_utils import (
+    hf_bucket_url, cached_path, WEIGHTS_NAME, CONFIG_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME,
     is_remote_url
-
+)
 
 class JaxPreTrainedModel:
     config_class = None
     pretrained_model_archive_map = {}
     base_model_prefix = ""
+
+    @classmethod
+    def _pytorch_to_jax(cls, pt_state_dict, config):
+        return load_pytorch_weights_in_jax_model(pt_state_dict, config)
+
+    def save_pretrained(self, save_directory):
+        assert os.path.isdir(
+            save_directory
+        ), "Saving path should be a directory where the model and configuration can be saved"
+
+        # Attach architecture to the config
+        self.config.architectures = [self.__class__.__name__]
+
+        # Save configuration file
+        self.config.save_pretrained(save_directory)
+
+        # If we save using the predefined names, we can load using `from_pretrained`
+        output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
+        torch.save(self._jax_to_pytorch(self.params, self.config), output_model_file)
+        logger.info("Model weights saved in {}".format(output_model_file))
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -49,6 +71,8 @@ class JaxPreTrainedModel:
                 archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
+            elif os.path.isdir(pretrained_model_name_or_path):
+                archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
             else:
                 archive_file = hf_bucket_url(pretrained_model_name_or_path, postfix=WEIGHTS_NAME)
 
@@ -89,8 +113,7 @@ class JaxPreTrainedModel:
         with open(resolved_archive_file, 'rb') as state_f:
             import torch
             state = torch.load(state_f)
-            state = load_pytorch_weights_in_jax_model(state, config)
-            # state = from_bytes(cls.MODEL_CLASS, state_data)
+            state = cls._pytorch_to_jax(state, config)
             model = cls(config, state, *model_args, **model_kwargs)
             return model
 
