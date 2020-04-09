@@ -11,6 +11,7 @@ class JaxPreTrainedModel:
     config_class = None
     pretrained_model_archive_map = {}
     base_model_prefix = ""
+    model_class = None
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -87,12 +88,20 @@ class JaxPreTrainedModel:
 
         # Instantiate model.
         with open(resolved_archive_file, 'rb') as state_f:
-            import torch
-            state = torch.load(state_f)
-            state = load_pytorch_weights_in_jax_model(state, config)
-            # state = from_bytes(cls.MODEL_CLASS, state_data)
-            model = cls(config, state, *model_args, **model_kwargs)
-            return model
+            try:
+                from flax.serialization import from_bytes
+                state = from_bytes(cls.model_class, state_f)
+            except:
+                try:
+                    import torch
+                    state = torch.load(state_f)
+                    state = load_pytorch_weights_in_jax_model(state, config)
+                except:
+                    raise EnvironmentError("Unable to convert model {} to Flax deserializable object. "
+                                           "Supported format are PyTorch archive or Flax msgpack"
+                                           .format(archive_file))
+
+        return cls(config, state, *model_args, **model_kwargs)
 
 
 def load_pytorch_weights_in_jax_model(pt_state_dict, config: BertConfig):
