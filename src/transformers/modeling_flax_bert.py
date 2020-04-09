@@ -245,7 +245,7 @@ class FlaxBertModel(JaxPreTrainedModel):
     BERT implementation using JAX/Flax as backend
     """
 
-    MODEL_CLASS = BertModel
+    model_class = BertModel
     config_class = BertConfig
     pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "bert"
@@ -300,23 +300,3 @@ class FlaxBertModel(JaxPreTrainedModel):
         with open(os.path.join(folder_abs, 'model.flax'), 'wb') as f:
             model_bytes = to_bytes(self._bert)
             f.write(model_bytes)
-
-
-if __name__ == '__main__':
-    MODEL = "bert-base-cased"
-    tokenizer = BertTokenizerFast.from_pretrained(MODEL)
-    model_pt = AutoModel.from_pretrained(MODEL)
-    model_pt.eval()
-
-    model = FlaxBertModel.from_pretrained(MODEL)
-
-    # Inputs
-    pt_input = tokenizer.batch_encode_plus(["My name is Morgan", "Test"], return_tensors="pt")
-    flax_input = {k: t.numpy() for k, t in pt_input.items()}
-
-    # Forward
-    model_pt.eval()
-    pt_enc = model_pt(pt_input['input_ids'], pt_input['attention_mask'])
-    flax_enc = model(**flax_input)
-
-    input()
