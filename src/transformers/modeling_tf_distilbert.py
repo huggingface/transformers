@@ -25,6 +25,7 @@ import tensorflow as tf
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, shape_list
+from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
@@ -421,7 +422,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
             inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
             assert len(inputs) <= 4, "Too many inputs."
-        elif isinstance(inputs, dict):
+        elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             head_mask = inputs.get("head_mask", head_mask)

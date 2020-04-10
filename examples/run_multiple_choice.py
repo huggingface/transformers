@@ -361,6 +361,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, test=False):
             args.max_seq_length,
             tokenizer,
             pad_on_left=bool(args.model_type in ["xlnet"]),  # pad on the left for xlnet
+            pad_token=tokenizer.pad_token_id,
             pad_token_segment_id=tokenizer.pad_token_type_id,
         )
         if args.local_rank in [-1, 0]:

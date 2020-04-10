@@ -1417,17 +1417,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        reordered_past = []
-        for layer_past in past:
-            # get the correct batch idx from layer past batch dim
-            # batch dim of `past` and `mems` is at 2nd position
-            reordered_layer_past = [layer_past[:, i].unsqueeze(1).clone().detach() for i in beam_idx]
-            reordered_layer_past = torch.cat(reordered_layer_past, dim=1)
-            # check that shape matches
-            assert reordered_layer_past.shape == layer_past.shape
-            reordered_past.append(reordered_layer_past)
-        past = tuple(reordered_past)
-        return past
+        return tuple(layer_past.index_select(1, beam_idx) for layer_past in past)
 
 
 def calc_banned_ngram_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len):

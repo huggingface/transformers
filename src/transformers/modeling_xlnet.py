@@ -156,7 +156,7 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
             logger.info("Transposing")
             array = np.transpose(array)
         if isinstance(pointer, list):
-            # Here we will split the TF weigths
+            # Here we will split the TF weights
             assert len(pointer) == array.shape[0]
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]
