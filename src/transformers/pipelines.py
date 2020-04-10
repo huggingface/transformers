@@ -949,7 +949,7 @@ class QuestionAnsweringPipeline(Pipeline):
         kwargs.setdefault("max_answer_len", 15)
         kwargs.setdefault("max_seq_len", 384)
         kwargs.setdefault("max_question_len", 64)
-        kwargs.setdefault("version_2_with_negative", False)
+        kwargs.setdefault("handle_impossible_answer", False)
 
         if kwargs["topk"] < 1:
             raise ValueError("topk parameter should be >= 1 (got {})".format(kwargs["topk"]))
@@ -1000,7 +1000,7 @@ class QuestionAnsweringPipeline(Pipeline):
                     end_ * np.abs(np.array(feature.p_mask) - 1),
                 )
 
-                if kwargs["version_2_with_negative"]:
+                if kwargs["handle_impossible_answer"]:
                     min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
 
                 start_[0] = end_[0] = 0
@@ -1021,7 +1021,7 @@ class QuestionAnsweringPipeline(Pipeline):
                     for s, e, score in zip(starts, ends, scores)
                 ]
 
-            if kwargs["version_2_with_negative"]:
+            if kwargs["handle_impossible_answer"]:
                 answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
 
             answers = sorted(answers, key=lambda x: x["score"], reverse=True)[: kwargs["topk"]]
