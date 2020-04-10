@@ -287,7 +287,7 @@ def evaluate(args, model, tokenizer, prefix="", disable_logging=False):
                 for key in sorted(results.keys()):
                     logger.info("  %s = %s", key, str(results[key]))
                     writer.write("%s = %s\n" % (key, str(results[key])))
-                    tb_writer.add_scalar(key, results[key])
+                    tb_writer.add_scalar(f"{eval_task}/{key}", results[key])
 
     if args.metrics_debug:
         # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -528,7 +528,7 @@ def get_args():
     )
 
     # TPU Parameters
-    parser.add_argument("--num_cores", default=8, type=int, help="Number of TPU cores to use.")
+    parser.add_argument("--num_cores", default=8, type=int, help="Number of TPU cores to use (1 or 8).")
     parser.add_argument("--metrics_debug", action="store_true", help="Whether to print debug metrics.")
 
     # Other parameters
