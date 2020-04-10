@@ -243,8 +243,10 @@ class BatchEncoding(UserDict):
         if token_index is not None:
             batch_index = batch_or_token_index
         elif len(self.data) != 1:
-            raise ValueError("Batch is greater than one, you should supply a batch index by calling "
-                             "self.token_to_word(batch_index, token_index)")
+            raise ValueError(
+                "Batch is greater than one, you should supply a batch index by calling "
+                "self.token_to_word(batch_index, token_index)"
+            )
         else:
             batch_index = 0
             token_index = batch_or_token_index
@@ -282,8 +284,10 @@ class BatchEncoding(UserDict):
         if word_index is not None:
             batch_index = batch_or_word_index
         elif len(self.data) != 1:
-            raise ValueError("Batch is greater than one, you should supply a batch index by calling "
-                             "self.word_to_tokens(batch_index, word_index)")
+            raise ValueError(
+                "Batch is greater than one, you should supply a batch index by calling "
+                "self.word_to_tokens(batch_index, word_index)"
+            )
         else:
             batch_index = 0
             word_index = batch_or_word_index
@@ -320,8 +324,10 @@ class BatchEncoding(UserDict):
         if token_index is not None:
             batch_index = batch_or_token_index
         elif len(self.data) != 1:
-            raise ValueError("Batch is greater than one, you should supply a batch index by calling with "
-                             "self.token_to_chars(batch_index, token_index)")
+            raise ValueError(
+                "Batch is greater than one, you should supply a batch index by calling with "
+                "self.token_to_chars(batch_index, token_index)"
+            )
         else:
             batch_index = 0
             token_index = batch_or_token_index
@@ -358,8 +364,10 @@ class BatchEncoding(UserDict):
         if char_index is not None:
             batch_index = batch_or_char_index
         elif len(self.data) != 1:
-            raise ValueError("Batch is greater than one, you should supply a batch index by calling "
-                             "self.char_to_token(batch_index, char_index)")
+            raise ValueError(
+                "Batch is greater than one, you should supply a batch index by calling "
+                "self.char_to_token(batch_index, char_index)"
+            )
         else:
             batch_index = 0
             char_index = batch_or_char_index
