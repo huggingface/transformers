@@ -30,6 +30,7 @@ from .modeling_tf_xlm import (
     get_masks,
     shape_list,
 )
+from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
@@ -141,7 +142,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
             assert len(inputs) <= 9, "Too many inputs."
-        elif isinstance(inputs, dict):
+        elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             langs = inputs.get("langs", langs)

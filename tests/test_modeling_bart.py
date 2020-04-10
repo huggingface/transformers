@@ -56,10 +56,10 @@ class ModelTester:
         self.is_training = True
         self.use_labels = False
         self.vocab_size = 99
-        self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.hidden_size = 16
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
-        self.intermediate_size = 37
+        self.intermediate_size = 4
         self.hidden_act = "gelu"
         self.hidden_dropout_prob = 0.1
         self.attention_probs_dropout_prob = 0.1
@@ -233,10 +233,11 @@ class BartTranslationTests(unittest.TestCase):
         return self._model
 
     def test_tokenizer(self):
-        example_english_phrases = [" UN Chief Says There Is No Military Solution in Syria",
-                                   "I ate lunch twice yesterday"]
-        expected_translations = ["Şeful ONU declară că nu există o soluţie militară în Siria",
-                                 "to be padded"]
+        example_english_phrases = [
+            " UN Chief Says There Is No Military Solution in Syria",
+            "I ate lunch twice yesterday",
+        ]
+        expected_translations = ["Şeful ONU declară că nu există o soluţie militară în Siria", "to be padded"]
         batch: dict = self.tokenizer.prepare_translation_batch(
             example_english_phrases, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translations
         )
@@ -380,6 +381,25 @@ class BartHeadTests(unittest.TestCase):
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
         self.assertIsInstance(loss.item(), float)
+
+    def test_lm_uneven_forward(self):
+        config = BartConfig(
+            vocab_size=self.vocab_size,
+            d_model=14,
+            encoder_layers=2,
+            decoder_layers=2,
+            encoder_attention_heads=2,
+            decoder_attention_heads=2,
+            encoder_ffn_dim=8,
+            decoder_ffn_dim=8,
+            max_position_embeddings=48,
+        )
+        lm_model = BartForConditionalGeneration(config).to(torch_device)
+        context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
+        summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
+        loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, lm_labels=summary)
+        expected_shape = (*summary.shape, config.vocab_size)
+        self.assertEqual(logits.shape, expected_shape)
 
     def test_generate_beam_search(self):
         input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long().to(torch_device)

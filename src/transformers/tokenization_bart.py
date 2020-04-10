@@ -63,6 +63,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         )
 
     """
+
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
