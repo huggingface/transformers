@@ -11,6 +11,10 @@ set, students must make sure not to use the official SQuAD2.0 dev set in any way
 — including the use of models fine-tuned on the official SQuAD2.0, since they
 used the official SQuAD2.0 dev set for model selection.
 
+<a href="https://huggingface.co/exbert/?model=elgeish/cs224n-squad2.0-albert-large-v2">
+	<img width="300px" src="https://hf-dinosaur.huggingface.co/exbert/button.png">
+</a>
+
 ## Results
 ```json
 {
