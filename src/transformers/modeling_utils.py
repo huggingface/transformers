@@ -457,7 +457,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 else:
                     raise EnvironmentError(
                         "Error no file named {} found in directory {} or `from_tf` set to False".format(
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index",],
+                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
                             pretrained_model_name_or_path,
                         )
                     )
@@ -1130,7 +1130,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             # extend attention_mask for new generated input if only decoder
             if self.config.is_encoder_decoder is False:
                 attention_mask = torch.cat(
-                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1)),], dim=-1,
+                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1,
                 )
 
             cur_len = cur_len + 1
@@ -1355,7 +1355,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             # extend attention_mask for new generated input if only decoder
             if self.config.is_encoder_decoder is False:
                 attention_mask = torch.cat(
-                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1)),], dim=-1,
+                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1,
                 )
 
             # update current length
