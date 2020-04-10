@@ -946,15 +946,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         if num_return_sequences > 1 or num_beams > 1:
             input_ids_len = input_ids.shape[-1]
             prefix_ids_len = prefix_ids.shape[-1]  # different in the encoder-decoder setting
-            prefix_ids = prefix_ids.unsqueeze(1).expand(
-                batch_size, effective_batch_mult * num_beams, prefix_ids_len
-            )
+            prefix_ids = prefix_ids.unsqueeze(1).expand(batch_size, effective_batch_mult * num_beams, prefix_ids_len)
             attention_mask = attention_mask.unsqueeze(1).expand(
                 batch_size, effective_batch_mult * num_beams, input_ids_len
             )
 
             prefix_ids = prefix_ids.contiguous().view(
-                effective_batch_size * num_beams, prefix_ids
+                effective_batch_size * num_beams, prefix_ids_len
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
             attention_mask = attention_mask.contiguous().view(
                 effective_batch_size * num_beams, input_ids_len
