@@ -234,6 +234,8 @@ CTRL_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        use_cache (:obj:`bool`):
+            If `use_cache` is True, `past` key value states are returned and can be used to speed up decoding (see `past`). Defaults to `True`.
 """
 
 
@@ -246,7 +248,6 @@ class CTRLModel(CTRLPreTrainedModel):
         super().__init__(config)
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
-        self.output_past = config.output_past
 
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
@@ -289,6 +290,7 @@ class CTRLModel(CTRLPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        use_cache=True
     ):
         r"""
     Return:
@@ -417,7 +419,7 @@ class CTRLModel(CTRLPreTrainedModel):
                 hidden_states, mask, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask[i]
             )
             hidden_states, present = outputs[:2]
-            if self.output_past:
+            if use_cache:
                 presents = presents + (present,)
 
             if self.output_attentions:
@@ -429,7 +431,7 @@ class CTRLModel(CTRLPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.output_past:
+        if use_cache:
             outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
@@ -475,6 +477,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        use_cache=True
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -527,6 +530,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
         )
 
         hidden_states = transformer_outputs[0]

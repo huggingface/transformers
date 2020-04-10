@@ -227,7 +227,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             # first forward pass
-            output, past_key_value_states = model(input_ids)
+            output, past_key_value_states = model(input_ids, use_cache=True)
 
             # create hypothetical next token and extent to next_input_ids
             next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -235,8 +235,8 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             # append to next input_ids and
             next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
-            output_from_no_past, _ = model(next_input_ids)
-            output_from_past, _ = model(next_tokens, past_key_value_states=past_key_value_states)
+            output_from_no_past = model(next_input_ids)[0]
+            output_from_past = model(next_tokens, past_key_value_states=past_key_value_states)[0]
 
             # select random slice
             random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -260,7 +260,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             attn_mask[:, half_seq_length:] = 0
 
             # first forward pass
-            output, past_key_value_states = model(input_ids, attention_mask=attn_mask)
+            output, past_key_value_states = model(input_ids, attention_mask=attn_mask, use_cache=True)
 
             # create hypothetical next token and extent to next_input_ids
             next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -277,10 +277,10 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             )
 
             # get two different outputs
-            output_from_no_past, _ = model(next_input_ids, attention_mask=attn_mask)
-            output_from_past, _ = model(
+            output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]
+            output_from_past = model(
                 next_tokens, past_key_value_states=past_key_value_states, attention_mask=attn_mask
-            )
+            )[0]
 
             # select random slice
             random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -298,10 +298,8 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             torch.manual_seed(0)
-            model.set_output_past(False)
-            output_without_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
+            output_without_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False)
             torch.manual_seed(0)
-            model.set_output_past(True)
             output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
             self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
@@ -321,6 +319,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 "attention_mask": attention_mask,
                 "decoder_input_ids": decoder_input_ids,
                 "decoder_attention_mask": decoder_attention_mask,
+                "use_cache": False
             }
             return config, inputs_dict
 
