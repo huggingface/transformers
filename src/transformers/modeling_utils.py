@@ -957,7 +957,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # Expand decoder input ids and attention if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
             input_ids_len = input_ids.shape[-1]
-            decoder_input_ids_len = decoder_input_ids.shape[-1] # different in the encoder-decoder setting
+            decoder_input_ids_len = decoder_input_ids.shape[-1]   # different in the encoder-decoder setting
             decoder_input_ids = decoder_input_ids.unsqueeze(1).expand(
                 batch_size, effective_batch_mult * num_beams, decoder_input_ids_len
             )
