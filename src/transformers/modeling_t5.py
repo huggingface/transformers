@@ -978,10 +978,10 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         assert past is not None, "past has to be defined for encoder_outputs"
 
         # first step
-        if type(past) is tuple:
-            encoder_outputs = past
+        if type(past[0]) is tuple:
+            encoder_outputs = past[0]
         else:
-            encoder_outputs = (past,)
+            encoder_outputs = (past[0],)
 
         return {
             "decoder_input_ids": input_ids,
