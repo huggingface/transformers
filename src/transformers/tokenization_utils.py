@@ -213,18 +213,25 @@ class BatchEncoding(UserDict):
     def items(self):
         return self.data.items()
 
-    def token_to_word(self, key: Union[int, slice], batch: int = 0) -> Union[int, List[int]]:
-        """ Get the index of the word(s) corresponding (i.e. comprising) to
-            encoded token(s) in a sequence of the batch.
+    def token_to_word(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
+        """ Get the index of the word corresponding (i.e. comprising) to
+            encoded token in a sequence of the batch.
+
+            Can be called as:
+                - self.token_to_word(token_index) if batch size is 1
+                - self.token_to_word(batch_index, token_index) if batch size is greater than 1
 
             This method is particularly suited when the input sequences are provided as
             pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
             to easily associate encoded tokens with provided tokenized words.
 
         Args:
-            key (:obj:`int` or :obj:`slice`): Index of the token or tokens in the sequence
-            batch (:obj:`int`, , `optional`, defaults to :obj:`0`):
-                Index of the sequence in the batch (default to 0, the first sequence)
+            batch_or_token_index (:obj:`int`):
+                Index of the sequence in the batch. If the batch only comprise one sequence,
+                this can be the index of the token in the sequence
+            token_index (:obj:`int`, `optional`):
+                If a batch index is provided in `batch_or_token_index`, this can be the index
+                of the token or tokens in the sequence.
 
         Returns:
             word_index (:obj:`int` or :obj:`List[int]`): index of the associated word or words in the input sequence.
@@ -233,19 +240,34 @@ class BatchEncoding(UserDict):
 
         if not self._encodings:
             raise ValueError("token_to_word() is not available when using Python based tokenizers")
-        return self[batch].words[key]
+        if token_index is not None:
+            batch_index = batch_or_token_index
+        elif len(self.data) != 1:
+            raise ValueError("Batch is greater than one, you should supply a batch index by calling "
+                             "self.token_to_word(batch_index, token_index)")
+        else:
+            batch_index = 0
+            token_index = batch_or_token_index
+        return self[batch_index].words[token_index]
 
-    def word_to_token(self, key: Union[int, slice], batch: int = 0) -> Union[TokenSpan, List[TokenSpan]]:
+    def word_to_tokens(self, batch_or_word_index: int, word_index: Optional[int] = None) -> TokenSpan:
         """ Get the encoded tokens token(s) corresponding to word(s) in the sequence of the batch.
+
+            Can be called as:
+                - self.word_to_tokens(word_index) if batch size is 1
+                - self.word_to_tokens(batch_index, word_index) if batch size is greater than 1
 
             This method is particularly suited when the input sequences are provided as
             pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
             to easily associate encoded tokens with provided tokenized words.
 
         Args:
-            key (:obj:`int` or :obj:`slice`): Index of the word or words in the sequence
-            batch (:obj:`int`, , `optional`, defaults to :obj:`0`):
-                Index of the sequence in the batch (default: 0)
+            batch_or_word_index (:obj:`int`):
+                Index of the sequence in the batch. If the batch only comprise one sequence,
+                this can be the index of the word in the sequence
+            word_index (:obj:`int`, `optional`):
+                If a batch index is provided in `batch_or_token_index`, this can be the index
+                of the word in the sequence.
 
         Returns:
             token_span (:obj:`TokenSpan` or :obj:`List[TokenSpan]`):
@@ -256,24 +278,34 @@ class BatchEncoding(UserDict):
         """
 
         if not self._encodings:
-            raise ValueError("word_to_token() is not available when using Python based tokenizers")
-        if isinstance(key, int):
-            return TokenSpan(*(self[batch].word_to_tokens(key)))
-        elif isinstance(key, slice):
-            return [TokenSpan(*(self[batch].word_to_tokens(i))) for i in key]
+            raise ValueError("word_to_tokens() is not available when using Python based tokenizers")
+        if word_index is not None:
+            batch_index = batch_or_word_index
+        elif len(self.data) != 1:
+            raise ValueError("Batch is greater than one, you should supply a batch index by calling "
+                             "self.word_to_tokens(batch_index, word_index)")
         else:
-            raise ValueError("Key should be an integer or a slice")
+            batch_index = 0
+            word_index = batch_or_word_index
+        return TokenSpan(*(self[batch_index].word_to_tokens(word_index)))
 
-    def token_to_char(self, key: Union[int, slice], batch: int = 0) -> Union[CharSpan, List[CharSpan]]:
+    def token_to_chars(self, batch_or_token_index: int, token_index: Optional[int] = None) -> CharSpan:
         """ Get the character span(s) corresponding to encoded token(s) in a sequence of the batch.
             Character spans are returned as a CharSpan NamedTuple with:
                 start: index of the first character associated to the token in the original string
                 end: index of the character following the last character associated to the token in the original string
 
+            Can be called as:
+                - self.token_to_chars(token_index) if batch size is 1
+                - self.token_to_chars(batch_index, token_index) if batch size is greater than 1
+
         Args:
-            key (:obj:`int` or :obj:`slice`): Index of the token or tokens in the sequence
-            batch (:obj:`int`, , `optional`, defaults to :obj:`0`):
-                Index of the sequence in the batch (default: 0)
+            batch_or_token_index (:obj:`int`):
+                Index of the sequence in the batch. If the batch only comprise one sequence,
+                this can be the index of the token in the sequence
+            token_index (:obj:`int`, `optional`):
+                If a batch index is provided in `batch_or_token_index`, this can be the index
+                of the token or tokens in the sequence.
 
         Returns:
             char_span (:obj:`CharSpan` or :obj:`List[CharSpan]`):
@@ -284,19 +316,37 @@ class BatchEncoding(UserDict):
         """
 
         if not self._encodings:
-            raise ValueError("token_to_word() is not available when using Python based tokenizers")
-        if isinstance(key, int):
-            return CharSpan(*(self[batch].offsets[key]))
-        return [CharSpan(*o) for o in self[batch].offsets[key]]
+            raise ValueError("token_to_chars() is not available when using Python based tokenizers")
+        if token_index is not None:
+            batch_index = batch_or_token_index
+        elif len(self.data) != 1:
+            raise ValueError("Batch is greater than one, you should supply a batch index by calling with "
+                             "self.token_to_chars(batch_index, token_index)")
+        else:
+            batch_index = 0
+            token_index = batch_or_token_index
+        return CharSpan(*(self[batch_index].offsets[token_index]))
 
-    def char_to_token(self, key: Union[int, slice], batch: int = 0) -> Union[int, List[int]]:
+    def char_to_token(self, batch_or_char_index: int, char_index: Optional[int] = None) -> int:
         """ Get the token(s) of the encoded output corresponding to character(s) in the original string of
             a sequence of the batch.
 
+            Can be called as:
+                - self.char_to_token(char_index) if batch size is 1
+                - self.char_to_token(batch_index, char_index) if batch size is greater than 1
+
+            This method is particularly suited when the input sequences are provided as
+            pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
+            to easily associate encoded tokens with provided tokenized words.
+
         Args:
-            key (:obj:`int` or :obj:`slice`): Index of the character or characters in the sequence
-            batch (:obj:`int`, , `optional`, defaults to :obj:`0`):
-                Index of the sequence in the batch (default: 0)
+            batch_or_char_index (:obj:`int`):
+                Index of the sequence in the batch. If the batch only comprise one sequence,
+                this can be the index of the word in the sequence
+            char_index (:obj:`int`, `optional`):
+                If a batch index is provided in `batch_or_token_index`, this can be the index
+                of the word in the sequence.
+
 
         Returns:
             token_index (:obj:`int` or :obj:`List[int]`):
@@ -305,12 +355,15 @@ class BatchEncoding(UserDict):
 
         if not self._encodings:
             raise ValueError("char_to_token() is not available when using Python based tokenizers")
-        if isinstance(key, int):
-            return self[batch].char_to_token(key)
-        elif isinstance(key, slice):
-            return list(self[batch].char_to_token(i) for i in key)
+        if char_index is not None:
+            batch_index = batch_or_char_index
+        elif len(self.data) != 1:
+            raise ValueError("Batch is greater than one, you should supply a batch index by calling "
+                             "self.char_to_token(batch_index, char_index)")
         else:
-            raise ValueError("Key should be an integer or a slice")
+            batch_index = 0
+            char_index = batch_or_char_index
+        return self[batch_index].char_to_token(char_index)
 
 
 class SpecialTokensMixin:
@@ -405,49 +458,49 @@ class SpecialTokensMixin:
             logger.error("Using additional_special_tokens, but it is not set yet.")
         return self._additional_special_tokens
 
-    def _update_if_fast_tokenizer(self, value):
-        if self.is_fast:
-            self._tokenizer.add_special_tokens(value)
+    def _maybe_update_backend(self, value):
+        """ To be overriden by derived class if a backend tokenizer has to be updated. """
+        pass
 
     @bos_token.setter
     def bos_token(self, value):
         self._bos_token = value
-        self._update_if_fast_tokenizer([value])
+        self._maybe_update_backend([value])
 
     @eos_token.setter
     def eos_token(self, value):
         self._eos_token = value
-        self._update_if_fast_tokenizer([value])
+        self._maybe_update_backend([value])
 
     @unk_token.setter
     def unk_token(self, value):
         self._unk_token = value
-        self._update_if_fast_tokenizer([value])
+        self._maybe_update_backend([value])
 
     @sep_token.setter
     def sep_token(self, value):
         self._sep_token = value
-        self._update_if_fast_tokenizer([value])
+        self._maybe_update_backend([value])
 
     @pad_token.setter
     def pad_token(self, value):
         self._pad_token = value
-        self._update_if_fast_tokenizer([value])
+        self._maybe_update_backend([value])
 
     @cls_token.setter
     def cls_token(self, value):
         self._cls_token = value
-        self._update_if_fast_tokenizer([value])
+        self._maybe_update_backend([value])
 
     @mask_token.setter
     def mask_token(self, value):
         self._mask_token = value
-        self._update_if_fast_tokenizer([value])
+        self._maybe_update_backend([value])
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
         self._additional_special_tokens = value
-        self._update_if_fast_tokenizer(value)
+        self._maybe_update_backend(value)
 
     @property
     def bos_token_id(self):
@@ -2098,6 +2151,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     def __len__(self) -> int:
         return self._tokenizer.get_vocab_size(with_added_tokens=True)
+
+    def _maybe_update_backend(self, value):
+        """ Update the backend fast tokenizer.
+            Override method from base class SpecialTokensMixin """
+        self._tokenizer.add_special_tokens(value)
 
     def _convert_encoding(
         self,
