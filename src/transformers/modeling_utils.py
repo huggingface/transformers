@@ -816,8 +816,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             assert (
                 bos_token_id is not None
             ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
-            encoder_input_ids = encoder_input_ids if encoder_input_ids is not None else input_ids
-            encoder_attention_mask = encoder_attention_mask if encoder_attention_mask is not None else attention_mask
         else:
             decoder_input_ids = decoder_input_ids if decoder_input_ids is not None else input_ids
 
@@ -909,15 +907,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         # create attention mask if necessary
         # TODO (PVP): this should later be handled by the forward fn() in each model in the future see PR 3140
-        if (decoder_attention_mask is None) and (pad_token_id is not None) and (pad_token_id in decoder_input_ids):
-            decoder_attention_mask = decoder_input_ids.ne(pad_token_id).long()
-        elif decoder_attention_mask is None:
-            decoder_attention_mask = decoder_input_ids.new_ones(decoder_input_ids.shape)
-        if self.config.is_encoder_decoder:
-            if (encoder_attention_mask is None) and (pad_token_id is not None) and (pad_token_id in encoder_input_ids):
-                encoder_attention_mask = encoder_input_ids.ne(pad_token_id).long()
-            elif encoder_attention_mask is None:
-                encoder_attention_mask = encoder_input_ids.new_ones(encoder_input_ids.shape)
+        if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids):
+            attention_mask = input_ids.ne(pad_token_id).long()
+        elif attention_mask is None:
+            attention_mask = input_ids.new_ones(input_ids.shape)
 
         # set pad_token_id to eos_token_id if not set. Important that this is done after
         # attention_mask is created
@@ -945,7 +938,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
             encoder = self.get_encoder()
             encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
-
 
             assert (
                 batch_size == encoder_outputs[0].shape[0]
@@ -1009,7 +1001,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 num_beams=num_beams,
                 vocab_size=vocab_size,
                 encoder_outputs=encoder_outputs,
-                attention_mask=decoder_attention_mask,
+                attention_mask=attention_mask,
             )
         else:
             output = self._generate_no_beam_search(
@@ -1030,7 +1022,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
                 encoder_outputs=encoder_outputs,
-                attention_mask=decoder_attention_mask,
+                attention_mask=attention_mask,
             )
 
         return output
