@@ -268,6 +268,12 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         else:
             input_ids = inputs
 
+        if past is not None:
+            if input_ids is not None:
+                input_ids = input_ids[:, -1:]
+            if inputs_embeds is not None:
+                inputs_embeds = inputs_embeds[:, -1:]
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
