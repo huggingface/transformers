@@ -658,11 +658,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     def generate(
         self,
         input_ids=None,
-        encoder_input_ids=None,
         decoder_input_ids=None,
         attention_mask=None,
-        encoder_attention_mask=None,
-        decoder_attention_mask=None,
         max_length=None,
         min_length=None,
         do_sample=None,
@@ -693,10 +690,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
                 Language model: alias for decoder_input_ids, the sequence used as a prompt for the generation.
-                Seq2seq model: alias for encoder_input_ids, the sequence input to the encoder model.
-
-            encoder_input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
-                Seq2seq model: the sequence input to the encoder model. If `None`, uses input_ids.
+                Seq2seq model: the sequence input to the encoder model.
 
             decoder_input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
                 The sequence used as a prompt for the generation. If `None` the method initializes
@@ -708,13 +702,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 Mask values selected in ``[0, 1]``:
                 ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
                 Defaults to `None`.
-
-            encoder_attention_mask (`optional`) obj: `torch.LongTensor` of same shape as `encoder_input_ids`
-                Seq2seq model: attention mask for the encoder.  If `None`, uses attention_mask.
-
-            decoder_attention_mask (`optional`) obj: `torch.LongTensor` of same shape as `decoder_input_ids`
-                Attention mask for the decoder.
-                Language model: If `None`, uses attention_mask.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
 
@@ -828,11 +815,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             assert (
                 bos_token_id is not None
             ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
-            encoder_input_ids = encoder_input_ids if encoder_input_ids is not None else input_ids
-            encoder_attention_mask = encoder_attention_mask if encoder_attention_mask is not None else attention_mask
         else:
             decoder_input_ids = decoder_input_ids if decoder_input_ids is not None else input_ids
-            decoder_attention_mask = decoder_attention_mask if decoder_attention_mask is not None else attention_mask
 
         max_length = max_length if max_length is not None else self.config.max_length
         min_length = min_length if min_length is not None else self.config.min_length
@@ -855,15 +839,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
 
-        if decoder_input_ids is not None:
-            batch_size = decoder_input_ids.shape[0]  # overriden by the input batch_size
-        elif encoder_input_ids is not None:
-            batch_size = encoder_input_ids.shape[0]
+        if input_ids is not None:
+            batch_size = input_ids.shape[0]  # overriden by the input batch_size
+        elif decoder_input_ids is not None:
+            batch_size = decoder_input_ids.shape[0]
         else:
             batch_size = 1
 
-        if self.config.is_encoder_decoder and encoder_input_ids is None:
-            encoder_input_ids = torch.full(
+        # TODO (Yacine): this should probably be disallowed
+        if self.config.is_encoder_decoder and input_ids is None:
+            input_ids = torch.full(
                 (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device,
             )
 
@@ -923,15 +908,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         # create attention mask if necessary
         # TODO (PVP): this should later be handled by the forward fn() in each model in the future see PR 3140
-        if (decoder_attention_mask is None) and (pad_token_id is not None) and (pad_token_id in decoder_input_ids):
-            decoder_attention_mask = decoder_input_ids.ne(pad_token_id).long()
-        elif decoder_attention_mask is None:
-            decoder_attention_mask = decoder_input_ids.new_ones(decoder_input_ids.shape)
-        if self.config.is_encoder_decoder:
-            if (encoder_attention_mask is None) and (pad_token_id is not None) and (pad_token_id in encoder_input_ids):
-                encoder_attention_mask = encoder_input_ids.ne(pad_token_id).long()
-            elif encoder_attention_mask is None:
-                encoder_attention_mask = encoder_input_ids.new_ones(encoder_input_ids.shape)
+        if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids):
+            attention_mask = input_ids.ne(pad_token_id).long()
+        elif attention_mask is None:
+            attention_mask = input_ids.new_ones(input_ids.shape)
 
         # set pad_token_id to eos_token_id if not set. Important that this is done after
         # attention_mask is created
@@ -952,29 +932,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             effective_batch_size = batch_size
             effective_batch_mult = 1
 
-        # Expand input ids if num_beams > 1 or num_return_sequences > 1
-        if num_return_sequences > 1 or num_beams > 1:
-            decoder_input_ids_len = decoder_input_ids.shape[-1]
-            decoder_input_ids = decoder_input_ids.unsqueeze(1).expand(
-                batch_size, effective_batch_mult * num_beams, decoder_input_ids_len
-            )
-            decoder_attention_mask = decoder_attention_mask.unsqueeze(1).expand(
-                batch_size, effective_batch_mult * num_beams, decoder_input_ids_len
-            )
-
-            decoder_input_ids = decoder_input_ids.contiguous().view(
-                effective_batch_size * num_beams, decoder_input_ids_len
-            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
-            decoder_attention_mask = decoder_attention_mask.contiguous().view(
-                effective_batch_size * num_beams, decoder_input_ids_len
-            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
-
+        # If encoder-decoder, get encoder outputs before expanding attention mask
         if self.config.is_encoder_decoder:
             # get encoder and store encoder outputs
             assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
             assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
             encoder = self.get_encoder()
-            encoder_outputs = encoder(encoder_input_ids, attention_mask=encoder_attention_mask)
+            encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
 
             assert (
                 batch_size == encoder_outputs[0].shape[0]
@@ -990,6 +954,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             )
             # expand encoder_outputs
             encoder_outputs = (encoder_outputs[0].index_select(0, expanded_batch_idxs), *encoder_outputs[1:])
+
+        # Expand decoder input ids and attention if num_beams > 1 or num_return_sequences > 1
+        if num_return_sequences > 1 or num_beams > 1:
+            input_ids_len = input_ids.shape[-1]
+            decoder_input_ids_len = decoder_input_ids.shape[-1] # different in the encoder-decoder setting
+            decoder_input_ids = decoder_input_ids.unsqueeze(1).expand(
+                batch_size, effective_batch_mult * num_beams, decoder_input_ids_len
+            )
+            attention_mask = attention_mask.unsqueeze(1).expand(
+                batch_size, effective_batch_mult * num_beams, input_ids_len
+            )
+
+            decoder_input_ids = decoder_input_ids.contiguous().view(
+                effective_batch_size * num_beams, decoder_input_ids_len
+            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
+            attention_mask = attention_mask.contiguous().view(
+                effective_batch_size * num_beams, input_ids_len
+            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
 
         else:
             encoder_outputs = None
@@ -1020,7 +1002,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 num_beams=num_beams,
                 vocab_size=vocab_size,
                 encoder_outputs=encoder_outputs,
-                attention_mask=decoder_attention_mask,
+                attention_mask=attention_mask,
             )
         else:
             output = self._generate_no_beam_search(
@@ -1041,7 +1023,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
                 encoder_outputs=encoder_outputs,
-                attention_mask=decoder_attention_mask,
+                attention_mask=attention_mask,
             )
 
         return output
@@ -1074,7 +1056,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         unfinished_sents = input_ids.new(batch_size).fill_(1)
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
 
-        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
+        past = (encoder_outputs, None) if encoder_outputs is not None else None  # defined for encoder-decoder models, None for decoder-only models
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
@@ -1207,7 +1189,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
 
         # cache compute states
-        past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
+        past = (encoder_outputs, None) if encoder_outputs is not None else None  # defined for encoder-decoder models, None for decoder-only models
 
         # done sentences
         done = [False for _ in range(batch_size)]
