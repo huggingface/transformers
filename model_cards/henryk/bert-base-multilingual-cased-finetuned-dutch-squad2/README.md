@@ -28,8 +28,8 @@ Using the `mtranslate` Python module, [**SQuAD2.0**](https://rajpurkar.github.io
 
 | Model                | EM/F1 |HasAns (EM/F1) | NoAns |
 | ---------------------- | ----- | ----- | ----- |
-| [robBERT]()   | 58.04/60.95  | 33.08/40.64 | 73.67 |
-| [dutchBERT]()   | 64.25/68.45 | 45.59/56.49  | 75.94 |
+| [robBERT](https://huggingface.co/pdelobelle/robBERT-base)   | 58.04/60.95  | 33.08/40.64 | 73.67 |
+| [dutchBERT](https://huggingface.co/wietsedv/bert-base-dutch-cased)   | 64.25/68.45 | 45.59/56.49  | 75.94 |
 | [multiBERT](https://huggingface.co/bert-base-multilingual-cased) | **67.38**/**71.36**  | 47.42/57.76 | 79.88 |
 
 ## Model training
