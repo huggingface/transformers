@@ -306,7 +306,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     processor = processors[task]()
     output_mode = output_modes[task]
     cached_features_file = os.path.join(
-        args.data_dir,
+        args.cache_dir,
         "cached_{}_{}_{}_{}".format(
             "dev" if evaluate else "train",
             list(filter(None, args.model_name_or_path.split("/"))).pop(),
@@ -545,7 +545,7 @@ def get_args():
         "--cache_dir",
         default="",
         type=str,
-        help="Where do you want to store the pre-trained models downloaded from s3",
+        help="Where do you want to store the pre-trained models downloaded and features file generated",
     )
     parser.add_argument(
         "--max_seq_length",
