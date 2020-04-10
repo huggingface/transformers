@@ -286,7 +286,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         self.tokenizer.add_special_tokens([kwargs["mask_token"]])
 
         # As we override the post_processor post super.__init__ the computed num_added_tokens is wrong in super().
-        # We need to recompute max_len according to the newly register post_processor to get real values.
+        # We need to recompute max_length according to the newly register post_processor to get real values.
         self.max_len_single_sentence = self.max_len - self.num_special_tokens_to_add(
             False
         )  # take into account special tokens

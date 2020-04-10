@@ -1245,7 +1245,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             # fill with hypothesis and eos_token_id if necessary
             for i, hypo in enumerate(best):
                 assert sent_lengths[i] == shape_list(hypo)[0]
-                # if sent_length is max_len do not pad
+                # if sent_length is max_length do not pad
                 if sent_lengths[i] == sent_max_len:
                     decoded_slice = hypo
                 else:

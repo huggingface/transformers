@@ -232,18 +232,23 @@ class BartTranslationTests(unittest.TestCase):
             self._model = model
         return self._model
 
-    def test_tokenizer(self):
+    def test_mbart_tokenizer(self):
         example_english_phrases = [
             " UN Chief Says There Is No Military Solution in Syria",
             "I ate lunch twice yesterday",
         ]
         expected_translations = ["Şeful ONU declară că nu există o soluţie militară în Siria", "to be padded"]
-        batch: dict = self.tokenizer.prepare_translation_batch(
-            example_english_phrases, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translations
-        )
         expected_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]
-        self.assertEqual((1, 14), batch["input_ids"].shape)
-        self.assertEqual((1, 14), batch["attention_mask"].shape)
+        batch: dict = self.tokenizer.prepare_translation_batch(
+            example_english_phrases,
+            src_lang="en_XX",
+            tgt_lang="ro_RO",
+            tgt_texts=expected_translations,
+            max_length=len(expected_tokens) - 2,
+        )
+
+        self.assertEqual((2, 14), batch["input_ids"].shape)
+        self.assertEqual((2, 14), batch["attention_mask"].shape)
         result = batch["input_ids"].tolist()[0]
         self.assertListEqual(expected_tokens, result)
         self.assertEqual(2, batch["decoder_input_ids"][0, -2])  # EOS

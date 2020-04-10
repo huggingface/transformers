@@ -95,13 +95,13 @@ class MBartTokenizer(XLMRobertaTokenizer):
         "zh_CN": 250025,
     }
 
-    def _encode_with_lang_code(self, raw_text: str, lang_code: str) -> Dict[str, torch.Tensor]:
+    def _encode_with_lang_code(
+        self, raw_text: str, lang_code: str, max_length: int, pad_to_max_length: bool
+    ) -> Dict[str, torch.Tensor]:
         tokenized_text: str = self.tokenize(raw_text)
-        ids: list = self.convert_tokens_to_ids(tokenized_text)[: self.max_len_single_sentence]
+        ids: list = self.convert_tokens_to_ids(tokenized_text)[:max_length]
         lang_id: int = self.lang_code_to_id[lang_code]
-        return self.prepare_for_model(
-            ids + [self.eos_token_id, lang_id], add_special_tokens=False, return_tensors="pt"
-        )
+        return ids + [self.eos_token_id, lang_id]
 
     def prepare_translation_batch(
         self,
@@ -109,7 +109,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         src_lang="en_XX",
         tgt_texts=None,
         tgt_lang="ro_RO",
-        max_len=None,
+        max_length=None,
         pad_to_max_length=True,
     ) -> Dict[str, torch.Tensor]:
         """
@@ -119,32 +119,42 @@ class MBartTokenizer(XLMRobertaTokenizer):
             src_lang: default en_XX (english)
             tgt_texts:
             tgt_lang: default ro_RO (romanian)
-            max_len: (None) defer to config (1024 for mbart-large-en-ro)
+            max_length: (None) defer to config (1024 for mbart-large-en-ro)
             pad_to_max_length: (bool)
 
         Returns:
             dict with keys input_ids, attention_mask, decoder_input_ids, each value is a torch.Tensor.
         """
-        if max_len is None:
-            max_len = self.max_len
+        if max_length is None:
+            max_length = self.max_len_single_sentence
         if isinstance(src_texts, str):
             src_texts = [src_texts]
         if isinstance(tgt_texts, str):
             tgt_texts = [tgt_texts]
-        encoder_inputs = [self._encode_with_lang_code(t, src_lang) for t in src_texts]
+        encoder_ids: list = [
+            self._encode_with_lang_code(t, src_lang, max_length, pad_to_max_length) for t in src_texts
+        ]
+        encoder_inputs = self.batch_encode_plus(
+            encoder_ids,
+            add_special_tokens=False,
+            return_tensors="pt",
+            max_length=max_length + 2,
+            pad_to_max_length=pad_to_max_length,
+        )
 
-        def _batchify(dct, k):
-            return torch.cat([x[k] for x in encoder_inputs], dim=0)
-
-        input_ids = _batchify(encoder_inputs, "input_ids")
-        attention_mask = _batchify(encoder_inputs, "attention_mask")
         if tgt_texts is not None:
-            decoder_inputs = [self._encode_with_lang_code(t, tgt_lang) for t in tgt_texts]
-            decoder_input_ids = _batchify(decoder_inputs, "input_ids")
+            decoder_ids = [self._encode_with_lang_code(t, tgt_lang, max_length, pad_to_max_length) for t in tgt_texts]
+            decoder_inputs = self.batch_encode_plus(
+                decoder_ids,
+                add_special_tokens=False,
+                return_tensors="pt",
+                max_length=max_length + 2,
+                pad_to_max_length=pad_to_max_length,
+            )
         else:
-            decoder_input_ids = None
+            decoder_inputs = {}
         return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "decoder_input_ids": decoder_input_ids,
+            "input_ids": encoder_inputs["input_ids"],
+            "attention_mask": encoder_inputs["attention_mask"],
+            "decoder_input_ids": decoder_inputs.get("input_ids", None),
         }
