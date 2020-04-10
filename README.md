@@ -337,7 +337,6 @@ python ./examples/run_glue.py \
     --task_name $TASK_NAME \
     --do_train \
     --do_eval \
-    --do_lower_case \
     --data_dir $GLUE_DIR/$TASK_NAME \
     --max_seq_length 128 \
     --per_gpu_eval_batch_size=8   \
@@ -391,7 +390,6 @@ python -m torch.distributed.launch --nproc_per_node 8 ./examples/run_glue.py   \
     --task_name MRPC \
     --do_train   \
     --do_eval   \
-    --do_lower_case   \
     --data_dir $GLUE_DIR/MRPC/   \
     --max_seq_length 128   \
     --per_gpu_eval_batch_size=8   \
@@ -424,7 +422,6 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/run_squad.py \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
     --do_eval \
-    --do_lower_case \
     --train_file $SQUAD_DIR/train-v1.1.json \
     --predict_file $SQUAD_DIR/dev-v1.1.json \
     --learning_rate 3e-5 \

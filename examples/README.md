@@ -168,7 +168,6 @@ python run_glue.py \
   --task_name $TASK_NAME \
   --do_train \
   --do_eval \
-  --do_lower_case \
   --data_dir $GLUE_DIR/$TASK_NAME \
   --max_seq_length 128 \
   --per_gpu_train_batch_size 32 \
@@ -209,7 +208,6 @@ python run_glue.py \
   --task_name MRPC \
   --do_train \
   --do_eval \
-  --do_lower_case \
   --data_dir $GLUE_DIR/MRPC/ \
   --max_seq_length 128 \
   --per_gpu_train_batch_size 32 \
@@ -236,7 +234,6 @@ python run_glue.py \
   --task_name MRPC \
   --do_train \
   --do_eval \
-  --do_lower_case \
   --data_dir $GLUE_DIR/MRPC/ \
   --max_seq_length 128 \
   --per_gpu_train_batch_size 32 \
@@ -261,7 +258,6 @@ python -m torch.distributed.launch \
     --task_name MRPC \
     --do_train \
     --do_eval \
-    --do_lower_case \
     --data_dir $GLUE_DIR/MRPC/ \
     --max_seq_length 128 \
     --per_gpu_train_batch_size 8 \
@@ -295,7 +291,6 @@ python -m torch.distributed.launch \
     --task_name mnli \
     --do_train \
     --do_eval \
-    --do_lower_case \
     --data_dir $GLUE_DIR/MNLI/ \
     --max_seq_length 128 \
     --per_gpu_train_batch_size 8 \
@@ -336,7 +331,6 @@ python ./examples/run_multiple_choice.py \
 --model_name_or_path roberta-base \
 --do_train \
 --do_eval \
---do_lower_case \
 --data_dir $SWAG_DIR \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
@@ -382,7 +376,6 @@ python run_squad.py \
   --model_name_or_path bert-base-uncased \
   --do_train \
   --do_eval \
-  --do_lower_case \
   --train_file $SQUAD_DIR/train-v1.1.json \
   --predict_file $SQUAD_DIR/dev-v1.1.json \
   --per_gpu_train_batch_size 12 \
@@ -411,7 +404,6 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/run_squad.py \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
     --do_eval \
-    --do_lower_case \
     --train_file $SQUAD_DIR/train-v1.1.json \
     --predict_file $SQUAD_DIR/dev-v1.1.json \
     --learning_rate 3e-5 \
@@ -447,7 +439,6 @@ python run_squad.py \
     --model_name_or_path xlnet-large-cased \
     --do_train \
     --do_eval \
-    --do_lower_case \
     --train_file $SQUAD_DIR/train-v1.1.json \
     --predict_file $SQUAD_DIR/dev-v1.1.json \
     --learning_rate 3e-5 \
@@ -597,7 +588,6 @@ python examples/hans/test_hans.py \
         --task_name hans \
         --model_type $MODEL_TYPE \
         --do_eval \
-        --do_lower_case \
         --data_dir $HANS_DIR \
         --model_name_or_path $MODEL_PATH \
         --max_seq_length 128 \

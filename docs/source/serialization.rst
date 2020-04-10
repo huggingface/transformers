@@ -58,14 +58,14 @@ where
 
 ``Uncased`` means that the text has been lowercased before WordPiece tokenization, e.g., ``John Smith`` becomes ``john smith``. The Uncased model also strips out any accent markers. ``Cased`` means that the true case and accent markers are preserved. Typically, the Uncased model is better unless you know that case information is important for your task (e.g., Named Entity Recognition or Part-of-Speech tagging). For information about the Multilingual and Chinese model, see the `Multilingual README <https://github.com/google-research/bert/blob/master/multilingual.md>`__ or the original TensorFlow repository.
 
-When using an ``uncased model``\ , make sure to pass ``--do_lower_case`` to the example training scripts (or pass ``do_lower_case=True`` to FullTokenizer if you're using your own script and loading the tokenizer your-self.).
+When using an ``uncased model``\ , make sure your tokenizer has ``do_lower_case=True`` (either in its configuration, or passed as an additional parameter).
 
 Examples:
 
 .. code-block:: python
 
    # BERT
-   tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True, do_basic_tokenize=True)
+   tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_basic_tokenize=True)
    model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
 
    # OpenAI GPT
@@ -140,13 +140,13 @@ Here is the recommended way of saving the model, configuration and vocabulary to
 
    torch.save(model_to_save.state_dict(), output_model_file)
    model_to_save.config.to_json_file(output_config_file)
-   tokenizer.save_vocabulary(output_dir)
+   tokenizer.save_pretrained(output_dir)
 
    # Step 2: Re-load the saved model and vocabulary
 
    # Example for a Bert model
    model = BertForQuestionAnswering.from_pretrained(output_dir)
-   tokenizer = BertTokenizer.from_pretrained(output_dir, do_lower_case=args.do_lower_case)  # Add specific options if needed
+   tokenizer = BertTokenizer.from_pretrained(output_dir)  # Add specific options if needed
    # Example for a GPT model
    model = OpenAIGPTDoubleHeadsModel.from_pretrained(output_dir)
    tokenizer = OpenAIGPTTokenizer.from_pretrained(output_dir)
