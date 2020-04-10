@@ -1344,7 +1344,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             input_ids = input_ids[beam_idx, :]
             input_ids = torch.cat([input_ids, beam_tokens.unsqueeze(1)], dim=-1)
             # re-order internal states
-            if past is not None and self._do_output_past(outputs):
+            if self._do_output_past(outputs):
                 past = self._reorder_cache(past, beam_idx)
 
             # extend attention_mask for new generated input if only decoder
