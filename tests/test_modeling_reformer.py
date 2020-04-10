@@ -304,6 +304,10 @@ class ReformerIntegrationTests(unittest.TestCase):
         # intermediate weighs
         intermediate_weights = weights[2][0][2][2]
 
+        # Chunked Feed Forward
+        if len(intermediate_weights) == 4:
+            intermediate_weights = intermediate_weights[2]
+
         # layernorm 2
         layer_norm_2_weight = np.asarray(intermediate_weights[0][0])
         layer_norm_2_bias = np.asarray(intermediate_weights[0][1])

@@ -58,8 +58,8 @@ class ReformerConfig(PretrainedConfig):
                 TODO (PVP)
             num_chunks_after (:obj:`int`, optional, defaults to ):
                 TODO (PVP)
-            intermediate_size (:obj:`int`, optional, defaults to 3072):
-                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            feed_forward_size (:obj:`int`, optional, defaults to 3072):
+                Dimensionality of the "feed_forward" (i.e., feed-forward) layer in the Transformer encoder.
             hidden_act (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
                 The non-linear activation function (function or string) in the encoder and pooler.
                 If string, "gelu", "relu", "swish" and "gelu_new" are supported.
@@ -108,7 +108,9 @@ class ReformerConfig(PretrainedConfig):
         chunk_length=7,
         num_chunks_before=1,
         num_chunks_after=0,
-        intermediate_size=32,
+        chunk_size_lm_head=1,
+        chunk_size_feed_forward=1,
+        feed_forward_size=32,
         hidden_act="gelu",
         hidden_dropout_prob=0.3,
         attention_probs_dropout_prob=0.3,
@@ -116,11 +118,10 @@ class ReformerConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        pad_token_id=0,
         sinusoidal_pos_embds=True,
         **kwargs
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
 
 #        TODO: not added yet
 #        predict_mem_len=2048
@@ -129,11 +130,11 @@ class ReformerConfig(PretrainedConfig):
 
 #        TO CHANGE LATER:
         self.seed = 0
-        self.num_attention_chunks = 1
-        self.num_chunks = 0
-        self.ff_chunk_size = 0
+        self.num_attention_chunks = 1  # this is not used in LSHSelfAttention
+        self.num_chunks = 1
+        self.ff_chunk_size = chunk_size_feed_forward
         self.d_model = hidden_size
-        self.d_ff = intermediate_size
+        self.d_ff = feed_forward_size
         self.is_decoder = False
 #        self.ff_activation =  # GELU
 
@@ -147,7 +148,7 @@ class ReformerConfig(PretrainedConfig):
         self.num_chunks_after = num_chunks_after
         self.num_chunks_before = num_chunks_before
         self.hidden_act = hidden_act
-        self.intermediate_size = intermediate_size
+        self.feed_forward_size = feed_forward_size
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
@@ -155,3 +156,5 @@ class ReformerConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.sinusoidal_pos_embds = sinusoidal_pos_embds
+        self.chunk_size_lm_head = chunk_size_lm_head
+        self.chunk_size_feed_forward = chunk_size_feed_forward

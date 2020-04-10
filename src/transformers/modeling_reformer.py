@@ -19,12 +19,16 @@ import logging
 
 import torch
 import numpy as np
+import inspect
+
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from .activations import gelu, gelu_new, swish
 from .configuration_reformer import ReformerConfig
 from .modeling_utils import PreTrainedModel
+
+from typing import Callable
 
 # DELETE later
 import numpy
@@ -56,6 +60,45 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
     out.requires_grad = False
+
+
+def apply_chunking_to_forward(chunk_size: int, chunk_dim: int, forward_fn: Callable[..., torch.Tensor], *input_tensors) -> torch.Tensor:
+    """
+    This function chunks the `input_tensors` into smaller input tensor parts of size `chunk_size` over the dimension `chunk_dim`.
+    It then applies a layer `forward_fn` to each chunk independently to save memory.
+    If the `forward_fn` is independent across the `chunk_dim` this function will yield the
+    same result as not applying it.
+
+    Args:
+        chunk_size: int - the chunk size of a chunked tensor. `num_chunks` = `len(input_tensors[0]) / chunk_size`
+        chunk_dim: int - the dimension over which the input_tensors should be chunked
+        forward_fn: fn - the forward fn of the model
+        input_tensors: tuple(torch.Tensor) - the input tensors of `forward_fn` which are chunked
+    Returns:
+        a Tensor with the same shape the foward_fn would have given if applied
+    """
+
+    assert len(input_tensors) > 0, "{} has to be a tuple/list of tensors".format(input_tensors)
+    tensor_shape = input_tensors[0].shape
+    assert all(input_tensor.shape == tensor_shape for input_tensor in input_tensors), "All input tenors have to be of the same shape"
+
+    # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compability
+    num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
+    assert num_args_in_forward_chunk_fn == len(input_tensors), "forward_chunk_fn expects {} arguments, but only {} input tensors are given".format(num_args_in_forward_chunk_fn, len(input_tensors))
+
+    if chunk_size > 0:
+        assert input_tensors[0].shape[chunk_dim] % chunk_size == 0, "The dimension to be chunked {} has to be a multiple of the chunk size {}".format(input_tensors[0][chunk_dim], chunk_size)
+
+        num_chunks = input_tensors[0].shape[chunk_dim] // chunk_size
+
+        # chunk input tensor into tuples
+        input_tensors_chunks = tuple(input_tensor.chunk(num_chunks, dim=chunk_dim) for input_tensor in input_tensors)
+        # apply forward fn to every tuple
+        output_chunks = tuple(forward_fn(*input_tensors_chunk) for input_tensors_chunk in zip(*input_tensors_chunks))
+        # concatenate output at same dimension
+        return torch.cat(output_chunks, dim=chunk_dim)
+
+    return forward_fn(*input_tensors)
 
 
 class ReformerEmbeddings(nn.Module):
@@ -428,7 +471,7 @@ class ReformerAttention(nn.Module):
 class ReformerFeedForwardDense(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.dense = nn.Linear(config.hidden_size, config.feed_forward_size)
         self.dropout = config.hidden_dropout_prob
         if isinstance(config.hidden_act, str):
             self.act_fn = ACT2FN[config.hidden_act]
@@ -445,7 +488,7 @@ class ReformerFeedForwardDense(nn.Module):
 class ReformerFeedForwardOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dense = nn.Linear(config.feed_forward_size, config.hidden_size)
         self.dropout = config.hidden_dropout_prob
 
     def forward(self, hidden_states, input_tensor):
@@ -455,14 +498,20 @@ class ReformerFeedForwardOutput(nn.Module):
         return output
 
 
-class ReformerFeedForward(nn.Module):
+class ChunkReformerFeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.seq_len_dim = 1
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.layer_norm = ReformerLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dense = ReformerFeedForwardDense(config)
         self.output = ReformerFeedForwardOutput(config)
 
+    # TODO(PVP): Does this work with backpropagation?
     def forward(self, attention_output, prev_attention_output):
+        return apply_chunking_to_forward(self.chunk_size_feed_forward, self.seq_len_dim, self.forward_chunk, attention_output, prev_attention_output)
+
+    def forward_chunk(self, attention_output, prev_attention_output):
         norm_attention_output = self.layer_norm(attention_output)
         dense_output = self.dense(norm_attention_output)
         output = self.output(dense_output, prev_attention_output)
@@ -473,7 +522,7 @@ class ReformerLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.attention = ReformerAttention(config)
-        self.feed_forward = ReformerFeedForward(config)
+        self.feed_forward = ChunkReformerFeedForward(config)
 
     def forward(
         self,
@@ -686,6 +735,8 @@ class ReformerOnlyLMHead(nn.Module):
         super().__init__()
         # Reformer is using Rev Nets, thus last layer outputs are concatenated and
         # Layer Norm is done over 2 * hidden_size
+        self.seq_len_dim = 1
+        self.chunk_size_lm_head = config.chunk_size_lm_head
         self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=False)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
@@ -693,6 +744,10 @@ class ReformerOnlyLMHead(nn.Module):
         self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
+        return apply_chunking_to_forward(self.chunk_size_lm_head, self.seq_len_dim, self.forward_chunk, hidden_states)
+
+    # TODO(PVP): Does this work with backpropagation?
+    def forward_chunk(self, hidden_states):
         hidden_states = self.decoder(hidden_states)
         return hidden_states
 
