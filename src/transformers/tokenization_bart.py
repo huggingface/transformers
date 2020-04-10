@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import logging
-from typing import Dict
+from typing import Dict, List, Optional
 
 import torch
 
@@ -95,8 +95,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
         "zh_CN": 250025,
     }
 
-    def _encode_with_lang_code(
-        self, raw_text: str, lang_code: str, max_length: int, pad_to_max_length: bool
+    def _append_special_tokens_and_truncate(
+        self, raw_text: str, lang_code: str, max_length: int,
     ) -> Dict[str, torch.Tensor]:
         tokenized_text: str = self.tokenize(raw_text)
         ids: list = self.convert_tokens_to_ids(tokenized_text)[:max_length]
@@ -105,19 +105,19 @@ class MBartTokenizer(XLMRobertaTokenizer):
 
     def prepare_translation_batch(
         self,
-        src_texts: list,
-        src_lang="en_XX",
-        tgt_texts=None,
-        tgt_lang="ro_RO",
-        max_length=None,
-        pad_to_max_length=True,
+        src_texts: List[str],
+        src_lang: str = "en_XX",
+        tgt_texts: Optional[List[str]] = None,
+        tgt_lang: str = "ro_RO",
+        max_length: Optional[int] = None,
+        pad_to_max_length: bool = True,
+        return_tensors: str='pt',
     ) -> Dict[str, torch.Tensor]:
         """
         Arguments:
-
-            src_texts:
+            src_texts: list of src language texts
             src_lang: default en_XX (english)
-            tgt_texts:
+            tgt_texts: list of tgt language texts
             tgt_lang: default ro_RO (romanian)
             max_length: (None) defer to config (1024 for mbart-large-en-ro)
             pad_to_max_length: (bool)
@@ -126,29 +126,25 @@ class MBartTokenizer(XLMRobertaTokenizer):
             dict with keys input_ids, attention_mask, decoder_input_ids, each value is a torch.Tensor.
         """
         if max_length is None:
-            max_length = self.max_len_single_sentence
-        if isinstance(src_texts, str):
-            src_texts = [src_texts]
-        if isinstance(tgt_texts, str):
-            tgt_texts = [tgt_texts]
+            max_length = self.max_len
         encoder_ids: list = [
-            self._encode_with_lang_code(t, src_lang, max_length, pad_to_max_length) for t in src_texts
+            self._append_special_tokens_and_truncate(t, src_lang, max_length-2) for t in src_texts
         ]
         encoder_inputs = self.batch_encode_plus(
             encoder_ids,
             add_special_tokens=False,
-            return_tensors="pt",
-            max_length=max_length + 2,
+            return_tensors=return_tensors,
+            max_length=max_length,
             pad_to_max_length=pad_to_max_length,
         )
 
         if tgt_texts is not None:
-            decoder_ids = [self._encode_with_lang_code(t, tgt_lang, max_length, pad_to_max_length) for t in tgt_texts]
+            decoder_ids = [self._append_special_tokens_and_truncate(t, tgt_lang, max_length-2) for t in tgt_texts]
             decoder_inputs = self.batch_encode_plus(
                 decoder_ids,
                 add_special_tokens=False,
-                return_tensors="pt",
-                max_length=max_length + 2,
+                return_tensors=return_tensors,
+                max_length=max_length,
                 pad_to_max_length=pad_to_max_length,
             )
         else:

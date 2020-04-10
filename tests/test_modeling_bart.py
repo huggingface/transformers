@@ -244,7 +244,7 @@ class BartTranslationTests(unittest.TestCase):
             src_lang="en_XX",
             tgt_lang="ro_RO",
             tgt_texts=expected_translations,
-            max_length=len(expected_tokens) - 2,
+            max_length=len(expected_tokens),
         )
 
         self.assertEqual((2, 14), batch["input_ids"].shape)
