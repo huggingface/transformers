@@ -397,9 +397,6 @@ class ModelArguments:
         metadata={"help": "Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS)}
     )
     model_type: str = field(metadata={"help": "Model type selected in the list: " + ", ".join(MODEL_TYPES)})
-    model_name_or_path: str = field(
-        metadata={"help": "Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS)}
-    )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
@@ -409,17 +406,15 @@ class ModelArguments:
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pre-trained models downloaded from s3"}
     )
-    do_lower_case: bool = field(default=False, metadata={"help": "Set this flag if you are using an uncased model."})
-    # ^ I want to remove this one because this should be handled by the tokenizer now.
 
 
 @dataclass
 class DataProcessingArguments:
-    data_dir: str = field(
-        metadata={"help": "The input data dir. Should contain the .tsv files (or other data files) for the task."}
-    )
     task_name: str = field(
         metadata={"help": "The name of the task to train selected in the list: " + ", ".join(processors.keys())}
+    )
+    data_dir: str = field(
+        metadata={"help": "The input data dir. Should contain the .tsv files (or other data files) for the task."}
     )
     max_seq_length: int = field(
         default=128,
@@ -434,9 +429,8 @@ class DataProcessingArguments:
 
 
 def main():
-    model_args, dataprocessing_args, training_args = HfArgumentParser.parse_into_dataclasses(
-        [ModelArguments, DataProcessingArguments, TrainingArguments]
-    )
+    parser = HfArgumentParser((ModelArguments, DataProcessingArguments, TrainingArguments))
+    model_args, dataprocessing_args, training_args = parser.parse_args_into_dataclasses()
 
     # For now, let's merge all the sets of args into one,
     # but soon, we'll keep distinct sets of args, with a cleaner separation of concerns.
@@ -499,18 +493,16 @@ def main():
         args.config_name if args.config_name else args.model_name_or_path,
         num_labels=num_labels,
         finetuning_task=args.task_name,
-        cache_dir=args.cache_dir if args.cache_dir else None,
+        cache_dir=args.cache_dir,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
-        do_lower_case=args.do_lower_case,
-        cache_dir=args.cache_dir if args.cache_dir else None,
+        args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, cache_dir=args.cache_dir,
     )
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
         config=config,
-        cache_dir=args.cache_dir if args.cache_dir else None,
+        cache_dir=args.cache_dir,
     )
 
     if args.local_rank == 0:
@@ -552,7 +544,7 @@ def main():
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        tokenizer = AutoTokenizer.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+        tokenizer = AutoTokenizer.from_pretrained(args.output_dir)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
             checkpoints = list(

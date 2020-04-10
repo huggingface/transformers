@@ -12,27 +12,32 @@ class HfArgumentParser(ArgumentParser):
     """
     This subclass of `argparse.ArgumentParser` uses type hints on dataclasses
     to generate arguments.
+
+    The class is designed to play well with the native argparse. In particular,
+    you can add more (non-dataclass backed) arguments to the parser after initialization
+    and you'll get the output back after parsing as an additional namespace.
     """
 
-    def __init__(self, obj: Union[None, DataClass, DataClassType] = None):
-        """
-        Args:
-            obj:
-                (Optional) Can be either a dataclass instance, or a dataclass type.
-                Both will work the exact same way.
-        """
-        super().__init__()
-        if obj is not None:
-            self.add_dataclass_arguments(obj)
+    dataclass_types: Iterable[DataClassType]
 
-    def add_dataclass_arguments(self, obj: Union[DataClass, DataClassType]):
+    def __init__(self, dataclass_types: Union[DataClassType, Iterable[DataClassType]], **kwargs):
         """
         Args:
-            obj:
-                Can be either a dataclass instance, or a dataclass type.
-                Both will work the exact same way.
+            dataclass_types:
+                Dataclass type, or list of dataclass types for which we will "fill" instances
+                with the parsed args.
+            kwargs:
+                (Optional) Passed to `argparse.ArgumentParser()` in the regular way.
         """
-        for field in dataclasses.fields(obj):
+        super().__init__(**kwargs)
+        if dataclasses.is_dataclass(dataclass_types):
+            dataclass_types = [dataclass_types]
+        self.dataclass_types = dataclass_types
+        for dtype in self.dataclass_types:
+            self._add_dataclass_arguments(dtype)
+
+    def _add_dataclass_arguments(self, dtype: DataClassType):
+        for field in dataclasses.fields(dtype):
             field_name = f"--{field.name}"
             kwargs = field.metadata.copy()
             # field.metadata is not used at all by Data Classes,
@@ -65,46 +70,44 @@ class HfArgumentParser(ArgumentParser):
                     kwargs["required"] = True
             self.add_argument(field_name, **kwargs)
 
-    @classmethod
-    def parse_into_dataclasses(
-        self, types: Iterable[DataClassType], args_to_parse=None, return_remaining=False
-    ) -> Tuple[DataClass, ...]:
+    def parse_args_into_dataclasses(self, args=None, return_remaining_strings=False) -> Tuple[DataClass, ...]:
         """
-        Parse command-line args into instances of the specified dataclass types,
-        relying on a shared ArgumentParser generated
-        from the dataclasses' type hints.
+        Parse command-line args into instances of the specified dataclass types.
 
         This relies on argparse's `ArgumentParser.parse_known_args`.
         See the doc at:
         docs.python.org/3.7/library/argparse.html#argparse.ArgumentParser.parse_args
 
         Args:
-            types:
-                List of dataclass types for which we will "fill" instances with the parsed args.
-            args_to_parse:
+            args:
                 List of strings to parse. The default is taken from sys.argv.
                 (same as argparse.ArgumentParser)
-            return_remaining:
+            return_remaining_strings:
                 If true, also return a list of remaining argument strings.
 
         Returns:
             Tuple consisting of:
-                - the dataclass instances in the same order as the input
+                - the dataclass instances in the same order as they
+                  were passed to the initializer.abspath
+                - if applicable, an additional namespace for more
+                  (non-dataclass backed) arguments added to the parser
+                  after initialization.
                 - The potential list of remaining argument strings.
                   (same as argparse.ArgumentParser.parse_known_args)
         """
-        parser = HfArgumentParser()
-        for dtype in types:
-            parser.add_dataclass_arguments(dtype)
-        # Now let's parse.
-        namespace, remaining_args = parser.parse_known_args(args=args_to_parse)
+        namespace, remaining_args = self.parse_known_args(args=args)
         outputs = []
-        for dtype in types:
+        for dtype in self.dataclass_types:
             keys = {f.name for f in dataclasses.fields(dtype)}
             inputs = {k: v for k, v in vars(namespace).items() if k in keys}
+            for k in keys:
+                delattr(namespace, k)
             obj = dtype(**inputs)
             outputs.append(obj)
-        if return_remaining:
+        if len(namespace.__dict__) > 0:
+            # additional namespace.
+            outputs.append(namespace)
+        if return_remaining_strings:
             return (*outputs, remaining_args)
         else:
             return (*outputs,)
