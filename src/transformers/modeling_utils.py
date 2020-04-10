@@ -846,12 +846,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         else:
             batch_size = 1
 
-        # TODO (Yacine): this should probably be disallowed
-        if self.config.is_encoder_decoder and input_ids is None:
-            input_ids = torch.full(
-                (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device,
-            )
-
         assert isinstance(max_length, int) and max_length > 0, "`max_length` should be a strictly positive integer."
         assert isinstance(min_length, int) and min_length >= 0, "`min_length` should be a positive integer."
         assert isinstance(do_sample, bool), "`do_sample` should be a boolean."
@@ -889,6 +883,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             decoder_input_ids = torch.full(
                 (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device,
             )
+            if input_ids is None:
+                input_ids = torch.full(
+                    (batch_size, 1), bos_token_id, dtype=torch.long, device=next(self.parameters()).device,
+                )
         else:
             assert decoder_input_ids.dim() == 2, "Input prompt should be of shape (batch_size, sequence length)."
 
@@ -954,6 +952,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             )
             # expand encoder_outputs
             encoder_outputs = (encoder_outputs[0].index_select(0, expanded_batch_idxs), *encoder_outputs[1:])
+        else:
+            encoder_outputs = None
 
         # Expand decoder input ids and attention if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
@@ -972,9 +972,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             attention_mask = attention_mask.contiguous().view(
                 effective_batch_size * num_beams, input_ids_len
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
-
-        else:
-            encoder_outputs = None
 
         cur_len = decoder_input_ids.shape[-1]
 
@@ -1344,7 +1341,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             input_ids = input_ids[beam_idx, :]
             input_ids = torch.cat([input_ids, beam_tokens.unsqueeze(1)], dim=-1)
             # re-order internal states
-            if past is not None:
+            if self._do_output_past(outputs) and past is not None:
                 past = self._reorder_cache(past, beam_idx)
 
             # extend attention_mask for new generated input if only decoder
