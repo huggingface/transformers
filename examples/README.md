@@ -17,6 +17,7 @@ pip install -r ./examples/requirements.txt
 | Section                    | Description                                                                                                                                                |
 |----------------------------|------------------------------------------------------------------------------------------------------------------------------------------
 | [TensorFlow 2.0 models on GLUE](#TensorFlow-2.0-Bert-models-on-GLUE) | Examples running BERT TensorFlow 2.0 model on the GLUE tasks. |
+| [Running on TPUs](#running-on-tpus) | Examples on running fine-tuning tasks on Google TPUs to accelerate workloads. |
 | [Language Model training](#language-model-training) | Fine-tuning (or training from scratch) the library models for language modeling on a text dataset. Causal language modeling for GPT/GPT-2, masked language modeling for BERT/RoBERTa. |
 | [Language Generation](#language-generation) | Conditional text generation using the auto-regressive models of the library: GPT, GPT-2, Transformer-XL and XLNet. |
 | [GLUE](#glue) | Examples running BERT/XLM/XLNet/RoBERTa on the 9 GLUE tasks. Examples feature distributed training as well as half-precision. |
@@ -48,12 +49,54 @@ Quick benchmarks from the script (no other modifications):
 
 Mixed precision (AMP) reduces the training time considerably for the same hardware and hyper-parameters (same batch size was used).
 
+## Running on TPUs
+
+You can accelerate your workloads on Google's TPUs. For information on how to setup your TPU environment refer to this
+[README](https://github.com/pytorch/xla/blob/master/README.md).
+
+The following are some examples of running the `*_tpu.py` finetuning scripts on TPUs. All steps for data preparation are
+identical to your normal GPU + Huggingface setup.
+
+### GLUE
+
+Before running anyone of these GLUE tasks you should download the
+[GLUE data](https://gluebenchmark.com/tasks) by running
+[this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
+and unpack it to some directory `$GLUE_DIR`.
+
+For running your GLUE task on MNLI dataset you can run something like the following:
+
+```
+export XRT_TPU_CONFIG="tpu_worker;0;$TPU_IP_ADDRESS:8470"
+export GLUE_DIR=/path/to/glue
+export TASK_NAME=MNLI
+
+python run_glue_tpu.py \
+  --model_type bert \
+  --model_name_or_path bert-base-cased \
+  --task_name $TASK_NAME \
+  --do_train \
+  --do_eval \
+  --data_dir $GLUE_DIR/$TASK_NAME \
+  --max_seq_length 128 \
+  --train_batch_size 32 \
+  --learning_rate 3e-5 \
+  --num_train_epochs 3.0 \
+  --output_dir /tmp/$TASK_NAME \
+  --overwrite_output_dir \
+  --logging_steps 50 \
+  --save_steps 200 \
+  --num_cores=8 \
+  --only_log_master
+```
+
+
 ## Language model training
 
 Based on the script [`run_language_modeling.py`](https://github.com/huggingface/transformers/blob/master/examples/run_language_modeling.py).
 
-Fine-tuning (or training from scratch) the library models for language modeling on a text dataset for GPT, GPT-2, BERT and RoBERTa (DistilBERT 
-to be added soon). GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa 
+Fine-tuning (or training from scratch) the library models for language modeling on a text dataset for GPT, GPT-2, BERT and RoBERTa (DistilBERT
+to be added soon). GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa
 are fine-tuned using a masked language modeling (MLM) loss.
 
 Before running the following example, you should get a file that contains text on which the language model will be

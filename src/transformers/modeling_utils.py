@@ -323,6 +323,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     def save_pretrained(self, save_directory):
         """ Save a model and its configuration file to a directory, so that it
             can be re-loaded using the `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
+
+            Arguments:
+                save_directory: directory to which to save.
         """
         assert os.path.isdir(
             save_directory
@@ -334,12 +337,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
-        # Save configuration file
-        model_to_save.config.save_pretrained(save_directory)
-
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
-        torch.save(model_to_save.state_dict(), output_model_file)
+
+        if hasattr(self.config, "xla_device") and self.config.xla_device:
+            import torch_xla.core.xla_model as xm
+
+            if xm.is_master_ordinal():
+                # Save configuration file
+                model_to_save.config.save_pretrained(save_directory)
+            # xm.save takes care of saving only from master
+            xm.save(model_to_save.state_dict(), output_model_file)
+        else:
+            model_to_save.config.save_pretrained(save_directory)
+            torch.save(model_to_save.state_dict(), output_model_file)
+
         logger.info("Model weights saved in {}".format(output_model_file))
 
     @classmethod
@@ -625,6 +637,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 "error_msgs": error_msgs,
             }
             return model, loading_info
+
+        if hasattr(config, "xla_device") and config.xla_device:
+            import torch_xla.core.xla_model as xm
+
+            model = xm.send_cpu_data_to_device(model, xm.xla_device())
+            model = model.to(xm.xla_device())
 
         return model
 
