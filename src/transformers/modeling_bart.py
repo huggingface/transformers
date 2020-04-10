@@ -486,8 +486,9 @@ class BartDecoder(nn.Module):
         all_self_attns = ()
         next_decoder_cache = []
         for idx, decoder_layer in enumerate(self.layers):
-            decoder_layer  # type: DecoderLayer
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
+            if self.output_hidden_states:
+                all_hidden_states += (x,)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
                 continue
@@ -508,12 +509,10 @@ class BartDecoder(nn.Module):
 
             if self.layer_norm and (idx == len(self.layers) - 1):  # last layer of mbart
                 x = self.layer_norm(x)
-            if self.output_hidden_states:
-                all_hidden_states += (x,)
             if self.output_attentions:
                 all_self_attns += (layer_self_attn,)
 
-        # Convert to standart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
+        # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         all_hidden_states = [hidden_state.transpose(0, 1) for hidden_state in all_hidden_states]
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)

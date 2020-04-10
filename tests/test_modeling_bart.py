@@ -56,10 +56,10 @@ class ModelTester:
         self.is_training = True
         self.use_labels = False
         self.vocab_size = 99
-        self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.hidden_size = 16
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
-        self.intermediate_size = 37
+        self.intermediate_size = 4
         self.hidden_act = "gelu"
         self.hidden_dropout_prob = 0.1
         self.attention_probs_dropout_prob = 0.1
