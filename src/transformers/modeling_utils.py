@@ -457,7 +457,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 else:
                     raise EnvironmentError(
                         "Error no file named {} found in directory {} or `from_tf` set to False".format(
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
+                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index",],
                             pretrained_model_name_or_path,
                         )
                     )
@@ -951,14 +951,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 .to(decoder_input_ids.device)
             )
             # expand encoder_outputs
-            encoder_outputs = (encoder_outputs[0].index_select(0, expanded_batch_idxs), *encoder_outputs[1:])
+            encoder_outputs = (
+                encoder_outputs[0].index_select(0, expanded_batch_idxs),
+                *encoder_outputs[1:],
+            )
         else:
             encoder_outputs = None
 
         # Expand decoder input ids and attention if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
             input_ids_len = input_ids.shape[-1]
-            decoder_input_ids_len = decoder_input_ids.shape[-1]   # different in the encoder-decoder setting
+            decoder_input_ids_len = decoder_input_ids.shape[-1]  # different in the encoder-decoder setting
             decoder_input_ids = decoder_input_ids.unsqueeze(1).expand(
                 batch_size, effective_batch_mult * num_beams, decoder_input_ids_len
             )
@@ -1053,7 +1056,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         unfinished_sents = input_ids.new(batch_size).fill_(1)
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
 
-        past = (encoder_outputs, None) if encoder_outputs is not None else None  # defined for encoder-decoder models, None for decoder-only models
+        past = (
+            (encoder_outputs, None) if encoder_outputs is not None else None
+        )  # defined for encoder-decoder models, None for decoder-only models
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
@@ -1124,7 +1129,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             # extend attention_mask for new generated input if only decoder
             if self.config.is_encoder_decoder is False:
                 attention_mask = torch.cat(
-                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1)),], dim=-1,
                 )
 
             cur_len = cur_len + 1
@@ -1186,7 +1191,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         beam_scores = beam_scores.view(-1)  # shape (batch_size * num_beams,)
 
         # cache compute states
-        past = (encoder_outputs, None) if encoder_outputs is not None else None  # defined for encoder-decoder models, None for decoder-only models
+        past = (
+            (encoder_outputs, None) if encoder_outputs is not None else None
+        )  # defined for encoder-decoder models, None for decoder-only models
 
         # done sentences
         done = [False for _ in range(batch_size)]
@@ -1235,7 +1242,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 for i, banned_tokens in enumerate(banned_tokens):
                     scores[i, banned_tokens] = -float("inf")
 
-            assert scores.shape == (batch_size * num_beams, vocab_size), "Shapes of scores: {} != {}".format(
+            assert scores.shape == (batch_size * num_beams, vocab_size,), "Shapes of scores: {} != {}".format(
                 scores.shape, (batch_size * num_beams, vocab_size)
             )
 
@@ -1347,7 +1354,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             # extend attention_mask for new generated input if only decoder
             if self.config.is_encoder_decoder is False:
                 attention_mask = torch.cat(
-                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1)),], dim=-1,
                 )
 
             # update current length
