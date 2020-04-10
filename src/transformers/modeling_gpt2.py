@@ -177,7 +177,7 @@ class Attention(nn.Module):
         else:
             return x.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
 
-    def forward(self, x, layer_past=None, attention_mask=None, head_mask=None):
+    def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
         x = self.c_attn(x)
         query, key, value = x.split(self.split_size, dim=2)
         query = self.split_heads(query)
@@ -187,7 +187,11 @@ class Attention(nn.Module):
             past_key, past_value = layer_past[0].transpose(-2, -1), layer_past[1]  # transpose back cf below
             key = torch.cat((past_key, key), dim=-1)
             value = torch.cat((past_value, value), dim=-2)
-        present = torch.stack((key.transpose(-2, -1), value))  # transpose to have same shapes for stacking
+
+        if use_cache is True:
+            present = torch.stack((key.transpose(-2, -1), value))  # transpose to have same shapes for stacking
+        else:
+            present = ()
 
         attn_outputs = self._attn(query, key, value, attention_mask, head_mask)
         a = attn_outputs[0]
@@ -224,9 +228,9 @@ class Block(nn.Module):
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
 
-    def forward(self, x, layer_past=None, attention_mask=None, head_mask=None):
+    def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
         output_attn = self.attn(
-            self.ln_1(x), layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask
+            self.ln_1(x), layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask, use_cache=use_cache
         )
         a = output_attn[0]  # output_attn: a, present, (attentions)
 
@@ -495,7 +499,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
             outputs = block(
-                hidden_states, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask[i]
+                hidden_states, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask[i], use_cache=use_cache
             )
 
             hidden_states, present = outputs[:2]
