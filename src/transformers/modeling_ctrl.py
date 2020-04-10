@@ -290,7 +290,7 @@ class CTRLModel(CTRLPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True
+        use_cache=True,
     ):
         r"""
     Return:
@@ -477,7 +477,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        use_cache=True
+        use_cache=True,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):

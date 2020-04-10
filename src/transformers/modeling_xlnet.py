@@ -958,7 +958,12 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         )
         target_mapping[0, 0, -1] = 1.0
 
-        inputs = {"input_ids": input_ids, "perm_mask": perm_mask, "target_mapping": target_mapping, "use_cache": use_cache}
+        inputs = {
+            "input_ids": input_ids,
+            "perm_mask": perm_mask,
+            "target_mapping": target_mapping,
+            "use_cache": use_cache,
+        }
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:
@@ -1154,7 +1159,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache
+            use_cache=use_cache,
         )
         output = transformer_outputs[0]
 
@@ -1630,7 +1635,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache
+            use_cache=use_cache,
         )
         hidden_states = transformer_outputs[0]
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)

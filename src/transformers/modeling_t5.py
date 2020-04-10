@@ -402,7 +402,13 @@ class T5LayerSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
-        self, hidden_states, attention_mask=None, position_bias=None, head_mask=None, past_key_value_state=None, use_cache=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        position_bias=None,
+        head_mask=None,
+        past_key_value_state=None,
+        use_cache=False,
     ):
         norm_x = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
@@ -517,7 +523,7 @@ class T5Block(nn.Module):
                 head_mask=head_mask,
                 past_key_value_state=cross_attn_past_key_value_state,
                 query_length=query_length,
-                use_cache=use_cache
+                use_cache=use_cache,
             )
             hidden_states = cross_attention_outputs[0]
             # Combine self attn and cross attn key value states
@@ -1107,9 +1113,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         # If decoding with past key value states, only the last tokens
         # should be given as an input
         if decoder_past_key_value_states is not None:
-            assert (
-                lm_labels is None
-            ), "Decoder should not use cached key value states when training."
+            assert lm_labels is None, "Decoder should not use cached key value states when training."
             if decoder_input_ids is not None:
                 decoder_input_ids = decoder_input_ids[:, -1:]
             if decoder_inputs_embeds is not None:
