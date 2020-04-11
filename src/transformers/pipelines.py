@@ -638,8 +638,8 @@ class GenerationPipeline(Pipeline):
         self.xlm_language = xlm_language
         self.length = length,
         self.temperature = temperature,
-        self.top_k = k,
-        self.top_p = p,
+        self.top_k = top_k,
+        self.top_p = top_p,
         self.repetition_penalty = repetition_penalty,
         self.do_sample = do_sample,
         self.num_return_sequences = num_return_sequences,
@@ -651,10 +651,10 @@ class GenerationPipeline(Pipeline):
             input_ids=inputs,
             max_length=self.length + len(encoded_prompt[0]),
             temperature=self.temperature,
-            top_k=self.k,
-            top_p=self.p,
+            top_k=self.top_k,
+            top_p=self.top_p,
             repetition_penalty=self.repetition_penalty,
-            do_sample=True,
+            do_sample=self.do_sample,
             num_return_sequences=self.num_return_sequences,
             **kwargs
         )
