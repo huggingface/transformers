@@ -180,6 +180,17 @@ class BatchEncoding(UserDict):
             encoding = [encoding]
 
         self._encodings = encoding
+        if not data['input_ids']:
+            self._batch_size = 0
+            self._seq_len = 0
+        elif isinstance(data['input_ids'][0], int):
+            self._batch_size = 1
+            self._seq_len = len(data['input_ids'])
+        elif isinstance(data['input_ids'][0], (list, tuple)):
+            self._batch_size = len(data['input_ids'])
+            self._seq_len = len(data['input_ids'][0])
+        else:  # We have a tensor
+            self._batch_size, self._seq_len = data['input_ids'].shape
 
     def __getitem__(self, item: Union[int, str]) -> EncodingFast:
         """ If the key is a string, get the value of the dict associated to `key` ('input_ids', 'attention_mask'...)
@@ -203,6 +214,18 @@ class BatchEncoding(UserDict):
         Returns: List[EncodingFast] or None if input was tokenized through Python (i.e. not fast) tokenizer
         """
         return self._encodings
+
+    @property
+    def batch_size(self):
+        return self._batch_size
+    
+    @property
+    def seq_len(self):
+        return self._seq_len
+
+    @property
+    def shape(self):
+        return (self._batch_size, self._seq_len)
 
     def keys(self):
         return self.data.keys()
@@ -242,7 +265,7 @@ class BatchEncoding(UserDict):
             raise ValueError("token_to_word() is not available when using Python based tokenizers")
         if token_index is not None:
             batch_index = batch_or_token_index
-        elif len(self.data) != 1:
+        elif self._batch_size != 1:
             raise ValueError(
                 "Batch is greater than one, you should supply a batch index by calling "
                 "self.token_to_word(batch_index, token_index)"
@@ -283,7 +306,7 @@ class BatchEncoding(UserDict):
             raise ValueError("word_to_tokens() is not available when using Python based tokenizers")
         if word_index is not None:
             batch_index = batch_or_word_index
-        elif len(self.data) != 1:
+        elif self._batch_size != 1:
             raise ValueError(
                 "Batch is greater than one, you should supply a batch index by calling "
                 "self.word_to_tokens(batch_index, word_index)"
@@ -323,7 +346,7 @@ class BatchEncoding(UserDict):
             raise ValueError("token_to_chars() is not available when using Python based tokenizers")
         if token_index is not None:
             batch_index = batch_or_token_index
-        elif len(self.data) != 1:
+        elif self._batch_size != 1:
             raise ValueError(
                 "Batch is greater than one, you should supply a batch index by calling with "
                 "self.token_to_chars(batch_index, token_index)"
@@ -363,7 +386,7 @@ class BatchEncoding(UserDict):
             raise ValueError("char_to_token() is not available when using Python based tokenizers")
         if char_index is not None:
             batch_index = batch_or_char_index
-        elif len(self.data) != 1:
+        elif self._batch_size != 1:
             raise ValueError(
                 "Batch is greater than one, you should supply a batch index by calling "
                 "self.char_to_token(batch_index, char_index)"
