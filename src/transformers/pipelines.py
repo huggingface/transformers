@@ -636,18 +636,18 @@ class GenerationPipeline(Pipeline):
         self.stop_token = stop_token
         self.padding_text = padding_text if padding_text else self.PADDING_TEXT
         self.xlm_language = xlm_language
-        self.length = length,
-        self.temperature = temperature,
-        self.top_k = top_k,
-        self.top_p = top_p,
-        self.repetition_penalty = repetition_penalty,
-        self.do_sample = do_sample,
-        self.num_return_sequences = num_return_sequences,
+        self.length = length
+        self.temperature = temperature
+        self.top_k = top_k
+        self.top_p = top_p
+        self.repetition_penalty = repetition_penalty
+        self.do_sample = do_sample
+        self.num_return_sequences = num_return_sequences
         self.model_type = self.model.config.to_dict()["model_type"]
 
     def __call__(self, *texts, **kwargs):
         texts = [self.prepare_input(prompt_text) for prompt_text in texts]
-        inputs = self._parse_and_tokenize(*texts, pad_to_max_length=False, **kwargs)
+        inputs = self._parse_and_tokenize(*texts, pad_to_max_length=False, **kwargs)['input_ids']
         outputs = self.model.generate(
             input_ids=inputs,
             max_length=self.length + len(inputs[0]),
