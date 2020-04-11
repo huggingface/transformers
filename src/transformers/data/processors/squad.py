@@ -251,6 +251,7 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
                 start_position=start_position,
                 end_position=end_position,
                 is_impossible=span_is_impossible,
+                qas_id=example.qas_id,
             )
         )
     return features
@@ -374,6 +375,8 @@ def squad_convert_examples_to_features(
                         "input_ids": ex.input_ids,
                         "attention_mask": ex.attention_mask,
                         "token_type_ids": ex.token_type_ids,
+                        "example_index": ex.example_index,
+                        "qas_id": ex.qas_id,
                     },
                     {
                         "start_position": ex.start_position,
@@ -387,7 +390,13 @@ def squad_convert_examples_to_features(
         return tf.data.Dataset.from_generator(
             gen,
             (
-                {"input_ids": tf.int32, "attention_mask": tf.int32, "token_type_ids": tf.int32},
+                {
+                    "input_ids": tf.int32,
+                    "attention_mask": tf.int32,
+                    "token_type_ids": tf.int32,
+                    "example_index": tf.int64,
+                    "qas_id": tf.string,
+                },
                 {
                     "start_position": tf.int64,
                     "end_position": tf.int64,
@@ -401,6 +410,8 @@ def squad_convert_examples_to_features(
                     "input_ids": tf.TensorShape([None]),
                     "attention_mask": tf.TensorShape([None]),
                     "token_type_ids": tf.TensorShape([None]),
+                    "example_index": tf.TensorShape([]),
+                    "qas_id": tf.TensorShape([]),
                 },
                 {
                     "start_position": tf.TensorShape([]),
@@ -678,6 +689,7 @@ class SquadFeatures(object):
         start_position,
         end_position,
         is_impossible,
+        qas_id: str = None,
     ):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
@@ -695,6 +707,7 @@ class SquadFeatures(object):
         self.start_position = start_position
         self.end_position = end_position
         self.is_impossible = is_impossible
+        self.qas_id = qas_id
 
 
 class SquadResult(object):
