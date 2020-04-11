@@ -112,6 +112,10 @@ class ModuleUtilsMixin:
     def device(self):
         return next(self.parameters()).device
 
+    @property
+    def dtype(self):
+        return next(self.parameters()).dtype
+
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     r""" Base class for all models.

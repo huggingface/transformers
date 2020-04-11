@@ -41,6 +41,7 @@ from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, 
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
+from .configuration_marian import MarianConfig
 from .configuration_mmbt import MMBTConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
@@ -237,6 +238,7 @@ if is_torch_available():
         BartForConditionalGeneration,
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
+    from .modeling_marian import MarianModel
     from .modeling_roberta import (
         RobertaForMaskedLM,
         RobertaModel,
