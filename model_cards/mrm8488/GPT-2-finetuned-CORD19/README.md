@@ -5,15 +5,16 @@ thumbnail:
 
 # GPT-2 + CORD19 dataset : 🦠 ✍ ⚕
 
-**GPT-2** fine-tuned on **biorxiv_medrxiv** and **comm_use_subset files** from [CORD-19](https://www.kaggle.com/allen-institute-for-ai/CORD-19-research-challenge) dataset.
+**GPT-2** fine-tuned on **biorxiv_medrxiv**, **comm_use_subset** and **custom_license** files from [CORD-19](https://www.kaggle.com/allen-institute-for-ai/CORD-19-research-challenge) dataset.
 
 
-## Datasets details:
+## Datasets details
 
 | Dataset                | # Files |
 | ---------------------- | ----- |
 | biorxiv_medrxiv        | 885  |
-| comm_use_subse         | 9K   |
+| comm_use_subset         | 9K   |
+| custom_license         | 20.6K   |
 
 ## Model training
 
@@ -37,7 +38,7 @@ python run_language_modeling.py \
 
 <img alt="training loss" src="https://svgshare.com/i/JTf.svg' title='GTP-2-finetuned-CORDS19-loss" width="600" height="300" />
 
-## Model in action / Example of usage: ✒
+## Model in action / Example of usage ✒
 
 You can get the following script [here](https://github.com/huggingface/transformers/blob/master/examples/run_generation.py)
 
