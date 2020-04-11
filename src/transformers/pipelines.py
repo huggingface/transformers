@@ -687,7 +687,7 @@ class GenerationPipeline(Pipeline):
 
                 # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
                 total_sequence = (
-                    texts[batch_idx] + text[len(self.tokenizer.decode(inputs[0], clean_up_tokenization_spaces=True)) :]
+                    prompt_text + text[len(self.tokenizer.decode(tokens, clean_up_tokenization_spaces=True)) :]
                 )
 
                 generated_sequences += [total_sequence]
