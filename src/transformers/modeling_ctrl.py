@@ -150,7 +150,14 @@ class EncoderLayer(torch.nn.Module):
     def forward(self, x, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
-            normed, normed, normed, mask, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask, use_cache=use_cache
+            normed,
+            normed,
+            normed,
+            mask,
+            layer_past=layer_past,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            use_cache=use_cache,
         )
         attn_output = attn_outputs[0]
         attn_output = self.dropout1(attn_output)
@@ -433,7 +440,12 @@ class CTRLModel(CTRLPreTrainedModel):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
             outputs = h(
-                hidden_states, mask, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask[i], use_cache=use_cache
+                hidden_states,
+                mask,
+                layer_past=layer_past,
+                attention_mask=attention_mask,
+                head_mask=head_mask[i],
+                use_cache=use_cache,
             )
             hidden_states, present = outputs[:2]
             if use_cache is True:
@@ -481,7 +493,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
-        return {"input_ids": input_ids, "past": past, "use_cache": kwargs['use_cache']}
+        return {"input_ids": input_ids, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
     def forward(

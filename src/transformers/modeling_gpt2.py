@@ -230,7 +230,11 @@ class Block(nn.Module):
 
     def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
         output_attn = self.attn(
-            self.ln_1(x), layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask, use_cache=use_cache
+            self.ln_1(x),
+            layer_past=layer_past,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            use_cache=use_cache,
         )
         a = output_attn[0]  # output_attn: a, present, (attentions)
 
@@ -501,7 +505,11 @@ class GPT2Model(GPT2PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
             outputs = block(
-                hidden_states, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask[i], use_cache=use_cache
+                hidden_states,
+                layer_past=layer_past,
+                attention_mask=attention_mask,
+                head_mask=head_mask[i],
+                use_cache=use_cache,
             )
 
             hidden_states, present = outputs[:2]
@@ -552,7 +560,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         if past:
             input_ids = input_ids[:, -1].unsqueeze(-1)
 
-        return {"input_ids": input_ids, "past": past, "use_cache": kwargs['use_cache']}
+        return {"input_ids": input_ids, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
     def forward(

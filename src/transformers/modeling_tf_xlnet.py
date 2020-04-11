@@ -870,7 +870,12 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
         target_mapping_seq_end = tf.ones((effective_batch_size, 1, 1), dtype=tf.float32)
         target_mapping = tf.concat([target_mapping, target_mapping_seq_end], axis=-1)
 
-        inputs = {"inputs": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "use_cache": kwargs["use_cache"]}
+        inputs = {
+            "inputs": inputs,
+            "perm_mask": perm_mask,
+            "target_mapping": target_mapping,
+            "use_cache": kwargs["use_cache"],
+        }
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:
