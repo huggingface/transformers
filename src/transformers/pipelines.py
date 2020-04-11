@@ -645,11 +645,11 @@ class GenerationPipeline(Pipeline):
         self.num_return_sequences = num_return_sequences,
 
     def __call__(self, *texts, **kwargs):
-        texts = [self.prepare_input(self, prompt_text) for prompt_text in texts]
-        inputs = self._parse_and_tokenize(self, *texts, pad_to_max_length=False, **kwargs)
+        texts = [self.prepare_input(prompt_text) for prompt_text in texts]
+        inputs = self._parse_and_tokenize(*texts, pad_to_max_length=False, **kwargs)
         outputs = self.model.generate(
             input_ids=inputs,
-            max_length=self.length + len(encoded_prompt[0]),
+            max_length=self.length + len(inputs[0]),
             temperature=self.temperature,
             top_k=self.top_k,
             top_p=self.top_p,
