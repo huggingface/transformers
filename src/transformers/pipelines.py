@@ -677,7 +677,6 @@ class GenerationPipeline(Pipeline):
             generated_sequences = []
 
             for generated_sequence_idx, generated_sequence in enumerate(output_sequences):
-                batch_idx = int(generated_sequence_idx / batch_size)
                 generated_sequence = generated_sequence.tolist()
 
                 # Decode text
