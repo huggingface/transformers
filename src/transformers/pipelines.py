@@ -648,7 +648,7 @@ class GenerationPipeline(Pipeline):
     def __call__(self, *texts, **kwargs):
         texts = [self.prepare_input(prompt_text) for prompt_text in texts]
         inputs = self._parse_and_tokenize(*texts, pad_to_max_length=False, **kwargs)['input_ids']
-        outputs = self.model.generate(
+        output_sequences = self.model.generate(
             input_ids=inputs,
             max_length=self.length + len(inputs[0]),
             temperature=self.temperature,
@@ -659,7 +659,7 @@ class GenerationPipeline(Pipeline):
             num_return_sequences=self.num_return_sequences,
             **kwargs
         )
-        output_sequences = self.tokenizer(outputs)
+
         # Remove the batch dimension when returning multiple sequences
         if len(output_sequences.shape) > 2:
             output_sequences.squeeze_()
