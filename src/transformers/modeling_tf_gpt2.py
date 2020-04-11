@@ -32,6 +32,7 @@ from .modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
+from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
@@ -255,7 +256,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             head_mask = inputs[5] if len(inputs) > 5 else head_mask
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             assert len(inputs) <= 7, "Too many inputs."
-        elif isinstance(inputs, dict):
+        elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
             attention_mask = inputs.get("attention_mask", attention_mask)

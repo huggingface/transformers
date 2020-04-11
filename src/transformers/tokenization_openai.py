@@ -265,12 +265,10 @@ class _OpenAIGPTCharBPETokenizer(BaseTokenizer):
     ):
         if vocab_file is not None and merges_file is not None:
             tokenizer = Tokenizer(
-                BPE.from_files(
-                    vocab_file, merges_file, dropout=dropout, unk_token=unk_token, end_of_word_suffix=suffix
-                )
+                BPE(vocab_file, merges_file, dropout=dropout, unk_token=unk_token, end_of_word_suffix=suffix)
             )
         else:
-            tokenizer = Tokenizer(BPE.empty())
+            tokenizer = Tokenizer(BPE())
 
         # Check for Unicode normalization first (before everything else)
         normalizers = []

@@ -80,6 +80,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = []
 
     def __init__(
         self,
@@ -361,7 +362,7 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
     ):
 
         try:
-            tokenizer = WordLevel.from_files(vocab_file, unk_token=unk_token)
+            tokenizer = WordLevel(vocab_file, unk_token=unk_token)
             tokenizer = Tokenizer(tokenizer)
         except Exception:
             raise ValueError(
@@ -413,6 +414,7 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES_FAST
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP_FAST
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = []
 
     def __init__(
         self,

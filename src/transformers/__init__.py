@@ -88,6 +88,7 @@ from .file_utils import (
     is_tf_available,
     is_torch_available,
 )
+from .hf_argparser import HfArgumentParser
 
 # Model Cards
 from .modelcard import ModelCard
@@ -122,7 +123,7 @@ from .pipelines import (
 )
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
-from .tokenization_bart import BartTokenizer
+from .tokenization_bart import BartTokenizer, MBartTokenizer
 from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_camembert import CamembertTokenizer
@@ -141,6 +142,7 @@ from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
+from .training_args import TrainingArguments
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
