@@ -20,6 +20,7 @@ import os
 import typing
 
 import torch
+import torch.distributions as dist
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
@@ -672,10 +673,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 else:
                     lprobs[i, previous_token] /= repetition_penalty
 
-    @torch.no_grad()
     def generate(
         self,
         input_ids=None,
+        trace_log_probs=False,
         max_length=None,
         min_length=None,
         do_sample=None,
@@ -875,6 +876,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert (
             bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
         ), "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
+        assert not trace_log_probs and num_beams, "Beam search with log prob trace not supported at this time."
+        torch.set_grad_enabled(trace_log_probs)  # If we want to trace log probs for generation, keep grads on.
 
         if input_ids is None:
             assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
@@ -1018,6 +1021,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 cur_len=cur_len,
                 max_length=max_length,
                 min_length=min_length,
+                trace_log_probs=trace_log_probs,
                 do_sample=do_sample,
                 temperature=temperature,
                 top_k=top_k,
@@ -1034,6 +1038,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 attention_mask=attention_mask,
             )
 
+        torch.set_grad_enabled(True)  # Turn back on gradients to restore original state
+
         return output
 
     def _generate_no_beam_search(
@@ -1042,6 +1048,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         cur_len,
         max_length,
         min_length,
+        trace_log_probs,
         do_sample,
         temperature,
         top_k,
@@ -1058,13 +1065,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         attention_mask,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
-            All returned sequence are generated independantly.
+            All returned sequence are generated independently.
         """
         # length of generated sentences / unfinished sentences
         unfinished_sents = input_ids.new(batch_size).fill_(1)
         sent_lengths = input_ids.new(batch_size).fill_(max_length)
 
         past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
+
+        log_probs = []
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
@@ -1104,9 +1113,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     next_token_logits = next_token_logits / temperature
                 # Top-p/top-k filtering
                 next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=top_k, top_p=top_p)
-                # Sample
-                probs = F.softmax(next_token_logits, dim=-1)
-                next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
+                # Sample and trace log probs
+                catdist = dist.Categorical(logits=next_token_logits)
+                next_token = catdist.sample()
+                # probs = F.softmax(next_token_logits, dim=-1)
+                # next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
+
+                if trace_log_probs:
+                    log_prob = catdist.log_prob(next_token)
+                    log_probs.append(log_prob)
+
             else:
                 # Greedy decoding
                 next_token = torch.argmax(next_token_logits, dim=-1)
@@ -1151,6 +1167,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         for hypo_idx, hypo in enumerate(input_ids):
             decoded[hypo_idx, : sent_lengths[hypo_idx]] = hypo[: sent_lengths[hypo_idx]]
 
+        if trace_log_probs:
+            log_probs = torch.cat(log_probs, dim=-1)  # batch_size x seq_len
+            # For tokens that came after the EOS token, mask their log_prob
+            for idx, ex in enumerate(decoded):
+                if eos_token_id in decoded:
+                    eos_idx = torch.where(ex.eq(eos_token_id))[0].min()
+                    log_probs[idx, eos_idx + 1 :] = -1e5
+            return decoded, log_probs
         return decoded
 
     def _generate_beam_search(
@@ -1508,26 +1532,28 @@ def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf")
         From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
     if top_k > 0:
-        top_k = min(max(top_k, min_tokens_to_keep), logits.size(-1))  # Safety check
-        # Remove all tokens with a probability less than the last token of the top-k
-        indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
+        with torch.no_grad():
+            top_k = min(max(top_k, min_tokens_to_keep), logits.size(-1))  # Safety check
+            # Remove all tokens with a probability less than the last token of the top-k
+            indices_to_remove = logits < torch.topk(logits, top_k)[0][..., -1, None]
         logits[indices_to_remove] = filter_value
 
     if top_p < 1.0:
-        sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+        with torch.no_grad():
+            sorted_logits, sorted_indices = torch.sort(logits, descending=True)
+            cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
 
-        # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
-        sorted_indices_to_remove = cumulative_probs > top_p
-        if min_tokens_to_keep > 1:
-            # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
-            sorted_indices_to_remove[..., :min_tokens_to_keep] = 0
-        # Shift the indices to the right to keep also the first token above the threshold
-        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
-        sorted_indices_to_remove[..., 0] = 0
+            # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
+            sorted_indices_to_remove = cumulative_probs > top_p
+            if min_tokens_to_keep > 1:
+                # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
+                sorted_indices_to_remove[..., :min_tokens_to_keep] = 0
+            # Shift the indices to the right to keep also the first token above the threshold
+            sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+            sorted_indices_to_remove[..., 0] = 0
 
-        # scatter sorted tensors to original indexing
-        indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
+            # scatter sorted tensors to original indexing
+            indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
         logits[indices_to_remove] = filter_value
     return logits
 
