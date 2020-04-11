@@ -648,6 +648,7 @@ class GenerationPipeline(Pipeline):
     def __call__(self, *texts, **kwargs):
         texts = [self.prepare_input(prompt_text) for prompt_text in texts]
         inputs = self._parse_and_tokenize(*texts, pad_to_max_length=False, **kwargs)['input_ids']
+        batch_size = inputs.size()[0]
         output_sequences = self.model.generate(
             input_ids=inputs,
             max_length=self.length + len(inputs[0]),
@@ -667,7 +668,7 @@ class GenerationPipeline(Pipeline):
         generated_sequences = []
 
         for generated_sequence_idx, generated_sequence in enumerate(output_sequences):
-            print("=== GENERATED SEQUENCE {} ===".format(generated_sequence_idx + 1))
+            batch_idx = int(generated_sequence_idx / batch_size)
             generated_sequence = generated_sequence.tolist()
 
             # Decode text
@@ -678,7 +679,7 @@ class GenerationPipeline(Pipeline):
 
             # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
             total_sequence = (
-                prompt_text + text[len(self.tokenizer.decode(encoded_prompt[0], clean_up_tokenization_spaces=True)) :]
+                texts[batch_idx] + text[len(self.tokenizer.decode(inputs[0], clean_up_tokenization_spaces=True)) :]
             )
 
             generated_sequences.append(total_sequence)
