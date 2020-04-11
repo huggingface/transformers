@@ -561,7 +561,7 @@ class GenerationPipeline(Pipeline):
     This feature extraction pipeline can currently be loaded from the :func:`~transformers.pipeline` method using
     the following task identifier(s):
 
-    - "feature-extraction", for extracting features of a sequence.
+    - "generation", for extracting features of a sequence.
 
     All models may be used for this pipeline. See a list of all models, including community-contributed models on
     `huggingface.co/models <https://huggingface.co/models>`__.
@@ -1679,6 +1679,12 @@ SUPPORTED_TASKS = {
             "config": None,
             "tokenizer": ("t5-base", {"use_fast": False}),
         },
+    },
+    "generation": {
+        "impl": GenerationPipeline,
+        "tf": TFGPT2LMHeadModel if is_tf_available() else None,
+        "pt": GPT2LMHeadModel if is_torch_available() else None,
+        "default": {"model": {"pt": "gpt2", "tf": "gpt2"}, "config": None, "tokenizer": "gpt2",},
     },
 }
 
