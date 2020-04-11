@@ -344,7 +344,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
 
-        if hasattr(self.config, "xla_device") and self.config.xla_device:
+        if getattr(self.config, "xla_device", False):
             import torch_xla.core.xla_model as xm
 
             if xm.is_master_ordinal():
@@ -592,13 +592,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             # Make sure we are able to load base models as well as derived models (with heads)
             start_prefix = ""
             model_to_load = model
-            if not hasattr(model, cls.base_model_prefix) and any(
-                s.startswith(cls.base_model_prefix) for s in state_dict.keys()
-            ):
+            has_prefix_module = any(s.startswith(cls.base_model_prefix) for s in state_dict.keys())
+            if not hasattr(model, cls.base_model_prefix) and has_prefix_module:
                 start_prefix = cls.base_model_prefix + "."
-            if hasattr(model, cls.base_model_prefix) and not any(
-                s.startswith(cls.base_model_prefix) for s in state_dict.keys()
-            ):
+            if hasattr(model, cls.base_model_prefix) and not has_prefix_module:
                 model_to_load = getattr(model, cls.base_model_prefix)
 
             load(model_to_load, prefix=start_prefix)
@@ -631,7 +628,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 )
         model.tie_weights()  # make sure token embedding weights are still tied if needed
 
-        # Set model in evaluation mode to desactivate DropOut modules by default
+        # Set model in evaluation mode to deactivate DropOut modules by default
         model.eval()
 
         if output_loading_info:

@@ -67,6 +67,7 @@ import copy
 class MarianModel(PreTrainedModel):
     config_class = MarianConfig
     pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = 'zczcx'  # HACK to avoid start_prefix = '.' in from_pretrained
 
     def _init_weights(self, module):
         self.encoder.init_weights()

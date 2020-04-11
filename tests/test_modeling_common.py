@@ -75,7 +75,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
+                model, loading_info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
                 model.to(torch_device)
                 with torch.no_grad():
                     after_outputs = model(**inputs_dict)
