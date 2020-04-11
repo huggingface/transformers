@@ -553,6 +553,196 @@ class FeatureExtractionPipeline(Pipeline):
         return super().__call__(*args, **kwargs).tolist()
 
 
+class GenerationPipeline(Pipeline):
+    """
+    Language generation pipeline using any LMHeadModel head. This pipeline extracts the hidden states from the base transformer,
+    which can be used as features in a downstream tasks.
+
+    This feature extraction pipeline can currently be loaded from the :func:`~transformers.pipeline` method using
+    the following task identifier(s):
+
+    - "feature-extraction", for extracting features of a sequence.
+
+    All models may be used for this pipeline. See a list of all models, including community-contributed models on
+    `huggingface.co/models <https://huggingface.co/models>`__.
+
+    Arguments:
+        model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
+            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
+            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
+            TensorFlow.
+        tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
+            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
+            :class:`~transformers.PreTrainedTokenizer`.
+        modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`, defaults to :obj:`None`):
+            Model card attributed to the model for this pipeline.
+        framework (:obj:`str`, `optional`, defaults to :obj:`None`):
+            The framework to use, either "pt" for PyTorch or "tf" for TensorFlow. The specified framework must be
+            installed.
+
+            If no framework is specified, will default to the one currently installed. If no framework is specified
+            and both frameworks are installed, will default to PyTorch.
+        args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`, defaults to :obj:`None`):
+            Reference to the object in charge of parsing supplied pipeline parameters.
+        device (:obj:`int`, `optional`, defaults to :obj:`-1`):
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
+            on the associated CUDA device id.
+    """
+
+    # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
+    # in https://github.com/rusiaaman/XLNet-gen#methodology
+    # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
+    PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+    (except for Alexei and Maria) are discovered.
+    The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+    remainder of the story. 1883 Western Siberia,
+    a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+    Rasputin has a vision and denounces one of the men as a horse thief. Although his
+    father initially slaps him for making such an accusation, Rasputin watches as the
+    man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+    the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+    with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
+
+    def __init__(
+        self,
+        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        tokenizer: PreTrainedTokenizer,
+        modelcard: Optional[ModelCard] = None,
+        framework: Optional[str] = None,
+        args_parser: ArgumentHandler = None,
+        device: int = -1,
+        task: str = "",
+        length: int = 20,
+        temperature: float = 1.0,
+        top_k: int = 0,
+        top_p: float = 0.9,
+        repetition_penalty: float = 1.0,
+        do_sample: bool = True,
+        num_return_sequences: int = 1,
+        stop_token: str = None,
+        padding_text: str = "",
+        xlm_language: str = ""
+    ):
+        super().__init__(
+            model=model,
+            tokenizer=tokenizer,
+            modelcard=modelcard,
+            framework=framework,
+            args_parser=args_parser,
+            device=device,
+            binary_output=True,
+            task=task,
+        )
+        self.stop_token = stop_token
+        self.padding_text = padding_text if padding_text else self.PADDING_TEXT
+        self.xlm_language = xlm_language
+        self.length = length,
+        self.temperature = temperature,
+        self.top_k = k,
+        self.top_p = p,
+        self.repetition_penalty = repetition_penalty,
+        self.do_sample = do_sample,
+        self.num_return_sequences = num_return_sequences,
+
+    def __call__(self, *texts, **kwargs):
+        texts = [self.prepare_input(self, prompt_text) for prompt_text in texts]
+        inputs = self._parse_and_tokenize(self, *texts, pad_to_max_length=False, **kwargs)
+        outputs = self.model.generate(
+            input_ids=inputs,
+            max_length=self.length + len(encoded_prompt[0]),
+            temperature=self.temperature,
+            top_k=self.k,
+            top_p=self.p,
+            repetition_penalty=self.repetition_penalty,
+            do_sample=True,
+            num_return_sequences=self.num_return_sequences,
+            **kwargs
+        )
+        output_sequences = self.tokenizer(outputs)
+        # Remove the batch dimension when returning multiple sequences
+        if len(output_sequences.shape) > 2:
+            output_sequences.squeeze_()
+
+        generated_sequences = []
+
+        for generated_sequence_idx, generated_sequence in enumerate(output_sequences):
+            print("=== GENERATED SEQUENCE {} ===".format(generated_sequence_idx + 1))
+            generated_sequence = generated_sequence.tolist()
+
+            # Decode text
+            text = self.tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
+
+            # Remove all text after the stop token
+            text = text[: text.find(self.stop_token) if self.stop_token else None]
+
+            # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
+            total_sequence = (
+                prompt_text + text[len(self.tokenizer.decode(encoded_prompt[0], clean_up_tokenization_spaces=True)) :]
+            )
+
+            generated_sequences.append(total_sequence)
+            print(total_sequence)
+
+        return generated_sequences
+
+    def prepare_ctrl_input(self, prompt_text):
+        if self.temperature > 0.7:
+            logger.info("CTRL typically works better with lower temperatures (and lower top_k).")
+
+        encoded_prompt = self.tokenizer.encode(prompt_text, add_special_tokens=False)
+        if not any(encoded_prompt[0] == x for x in self.tokenizer.control_codes.values()):
+            logger.info("WARNING! You are not starting your generation from a control code so you won't get good results")
+        return prompt_text
+
+
+    def prepare_xlm_input(self, prompt_text):
+        # kwargs = {"language": None, "mask_token_id": None}
+
+        # Set the language
+        use_lang_emb = hasattr(self.model.config, "use_lang_emb") and self.model.config.use_lang_emb
+        if hasattr(self.model.config, "lang2id") and use_lang_emb:
+            available_languages = self.model.config.lang2id.keys()
+            if self.xlm_language in available_languages:
+                language = self.xlm_language
+            else:
+                language = None
+                while language not in available_languages:
+                    language = input("Using XLM. Select language in " + str(list(available_languages)) + " >>> ")
+
+            self.model.config.lang_id = self.model.config.lang2id[language]
+            # kwargs["language"] = tokenizer.lang2id[language]
+
+        # TODO fix mask_token_id setup when configurations will be synchronized between models and tokenizers
+        # XLM masked-language modeling (MLM) models need masked token
+        # is_xlm_mlm = "mlm" in self.model_name_or_path
+        # if is_xlm_mlm:
+        #     kwargs["mask_token_id"] = tokenizer.mask_token_id
+
+        return prompt_text
+
+
+    def prepare_xlnet_input(self, prompt_text):
+        prompt_text = (self.padding_text if self.padding_text else PADDING_TEXT) + prompt_text
+        return prompt_text
+
+
+    def prepare_transfoxl_input(self, prompt_text):
+        prompt_text = (self.padding_text if self.padding_text else PADDING_TEXT) + prompt_text
+        return prompt_text
+
+    def prepare_input(self, prompt_text):
+        if self.model_type == "ctrl":
+            prompt_text = self.prepare_ctrl_input(prompt_text)
+        elif self.model_type == "xlm":
+            prompt_text = self.prepare_xlm_input(prompt_text)
+        elif self.model_type == "xlnet":
+            prompt_text = self.prepare_ctrl_input(prompt_text)
+        elif self.model_type == "transfoxl":
+            prompt_text = self.prepare_ctrl_input(prompt_text)
+
+        return prompt_text
+
+
 class TextClassificationPipeline(Pipeline):
     """
     Text classification pipeline using ModelForSequenceClassification head. See the
