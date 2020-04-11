@@ -695,7 +695,7 @@ class GenerationPipeline(Pipeline):
             all_generated_sequences += [generated_sequences]
 
         if len(all_generated_sequences) == 1:
-            return answers[0]
+            return all_generated_sequences[0]
         return all_generated_sequences
 
     def prepare_ctrl_input(self, prompt_text):
