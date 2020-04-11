@@ -345,9 +345,9 @@ def squad_convert_examples_to_features(
         all_is_impossible = torch.tensor([f.is_impossible for f in features], dtype=torch.float)
 
         if not is_training:
-            all_example_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
+            all_feature_index = torch.arange(all_input_ids.size(0), dtype=torch.long)
             dataset = TensorDataset(
-                all_input_ids, all_attention_masks, all_token_type_ids, all_example_index, all_cls_index, all_p_mask
+                all_input_ids, all_attention_masks, all_token_type_ids, all_feature_index, all_cls_index, all_p_mask
             )
         else:
             all_start_positions = torch.tensor([f.start_position for f in features], dtype=torch.long)
@@ -369,13 +369,13 @@ def squad_convert_examples_to_features(
             raise RuntimeError("TensorFlow must be installed to return a TensorFlow dataset.")
 
         def gen():
-            for ex in features:
+            for i, ex in enumerate(features):
                 yield (
                     {
                         "input_ids": ex.input_ids,
                         "attention_mask": ex.attention_mask,
                         "token_type_ids": ex.token_type_ids,
-                        "example_index": ex.example_index,
+                        "feature_index": i,
                         "qas_id": ex.qas_id,
                     },
                     {
@@ -387,43 +387,44 @@ def squad_convert_examples_to_features(
                     },
                 )
 
-        return tf.data.Dataset.from_generator(
-            gen,
-            (
-                {
-                    "input_ids": tf.int32,
-                    "attention_mask": tf.int32,
-                    "token_type_ids": tf.int32,
-                    "example_index": tf.int64,
-                    "qas_id": tf.string,
-                },
-                {
-                    "start_position": tf.int64,
-                    "end_position": tf.int64,
-                    "cls_index": tf.int64,
-                    "p_mask": tf.int32,
-                    "is_impossible": tf.int32,
-                },
-            ),
-            (
-                {
-                    "input_ids": tf.TensorShape([None]),
-                    "attention_mask": tf.TensorShape([None]),
-                    "token_type_ids": tf.TensorShape([None]),
-                    "example_index": tf.TensorShape([]),
-                    "qas_id": tf.TensorShape([]),
-                },
-                {
-                    "start_position": tf.TensorShape([]),
-                    "end_position": tf.TensorShape([]),
-                    "cls_index": tf.TensorShape([]),
-                    "p_mask": tf.TensorShape([None]),
-                    "is_impossible": tf.TensorShape([]),
-                },
-            ),
+        # Why have we split the batch into a tuple? PyTorch just has a list of tensors.
+        train_types = (
+            {
+                "input_ids": tf.int32,
+                "attention_mask": tf.int32,
+                "token_type_ids": tf.int32,
+                "feature_index": tf.int64,
+                "qas_id": tf.string,
+            },
+            {
+                "start_position": tf.int64,
+                "end_position": tf.int64,
+                "cls_index": tf.int64,
+                "p_mask": tf.int32,
+                "is_impossible": tf.int32,
+            },
         )
 
-    return features
+        train_shapes = (
+            {
+                "input_ids": tf.TensorShape([None]),
+                "attention_mask": tf.TensorShape([None]),
+                "token_type_ids": tf.TensorShape([None]),
+                "feature_index": tf.TensorShape([]),
+                "qas_id": tf.TensorShape([]),
+            },
+            {
+                "start_position": tf.TensorShape([]),
+                "end_position": tf.TensorShape([]),
+                "cls_index": tf.TensorShape([]),
+                "p_mask": tf.TensorShape([None]),
+                "is_impossible": tf.TensorShape([]),
+            },
+        )
+
+        return tf.data.Dataset.from_generator(gen, train_types, train_shapes)
+    else:
+        return features
 
 
 class SquadProcessor(DataProcessor):
