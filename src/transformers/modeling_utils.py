@@ -876,7 +876,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert (
             bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
         ), "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
-        assert not trace_log_probs and num_beams, "Beam search with log prob trace not supported at this time."
+        assert not (trace_log_probs and num_beams > 1), "Beam search with log prob trace not supported at this time."
+        assert not (trace_log_probs and not do_sample), "No point tracing log probs if not doing sampling..."
         torch.set_grad_enabled(trace_log_probs)  # If we want to trace log probs for generation, keep grads on.
 
         if input_ids is None:
@@ -1073,7 +1074,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
 
-        log_probs = []
+        log_probs = [] # if we want to trace log probabilities of the generation
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
@@ -1116,8 +1117,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 # Sample and trace log probs
                 catdist = dist.Categorical(logits=next_token_logits)
                 next_token = catdist.sample()
-                # probs = F.softmax(next_token_logits, dim=-1)
-                # next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
 
                 if trace_log_probs:
                     log_prob = catdist.log_prob(next_token)
@@ -1168,7 +1167,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             decoded[hypo_idx, : sent_lengths[hypo_idx]] = hypo[: sent_lengths[hypo_idx]]
 
         if trace_log_probs:
-            log_probs = torch.cat(log_probs, dim=-1)  # batch_size x seq_len
+            log_probs = torch.stack(log_probs, dim=-1)  # batch_size x seq_len
             # For tokens that came after the EOS token, mask their log_prob
             for idx, ex in enumerate(decoded):
                 if eos_token_id in decoded:
