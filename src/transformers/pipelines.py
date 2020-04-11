@@ -555,16 +555,17 @@ class FeatureExtractionPipeline(Pipeline):
 
 class GenerationPipeline(Pipeline):
     """
-    Language generation pipeline using any LMHeadModel head. This pipeline extracts the hidden states from the base transformer,
-    which can be used as features in a downstream tasks.
+    Language generation pipeline using any ModelWithLMHead head. This pipeline predicts the words that will follow a specified text prompt.
 
-    This feature extraction pipeline can currently be loaded from the :func:`~transformers.pipeline` method using
+    This language generation pipeline can currently be loaded from the :func:`~transformers.pipeline` method using
     the following task identifier(s):
 
-    - "generation", for extracting features of a sequence.
+    - "generation", for generating text from a specified prompt.
 
-    All models may be used for this pipeline. See a list of all models, including community-contributed models on
-    `huggingface.co/models <https://huggingface.co/models>`__.
+    The models that this pipeline can use are models that have been trained with an autoregressive language modeling objective,
+    which includes the uni-directional models in the library (e.g. gpt2).
+    See the list of available community models on
+    `huggingface.co/models <https://huggingface.co/models?search=&filter=lm-head>`__.
 
     Arguments:
         model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
