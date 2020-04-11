@@ -669,6 +669,7 @@ class GenerationPipeline(Pipeline):
                     repetition_penalty=self.repetition_penalty,
                     do_sample=self.do_sample,
                     num_return_sequences=self.num_return_sequences,
+                    **kwargs,
                 )
 
             # Remove the batch dimension when returning multiple sequences
