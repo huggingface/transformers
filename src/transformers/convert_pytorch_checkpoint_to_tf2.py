@@ -25,6 +25,7 @@ from transformers import (
     CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
     OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -39,6 +40,7 @@ from transformers import (
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
+    ElectraConfig,
     FlaubertConfig,
     GPT2Config,
     OpenAIGPTConfig,
@@ -52,6 +54,7 @@ from transformers import (
     TFCTRLLMHeadModel,
     TFDistilBertForMaskedLM,
     TFDistilBertForQuestionAnswering,
+    TFElectraForPreTraining,
     TFFlaubertWithLMHeadModel,
     TFGPT2LMHeadModel,
     TFOpenAIGPTLMHeadModel,
@@ -110,6 +113,8 @@ if is_torch_available():
         ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         T5ForConditionalGeneration,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
+        ElectraForPreTraining,
+        ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 else:
     (
@@ -147,7 +152,11 @@ else:
         ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         T5ForConditionalGeneration,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
+        ElectraForPreTraining,
+        ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     ) = (
+        None,
+        None,
         None,
         None,
         None,
@@ -320,6 +329,13 @@ MODEL_CLASSES = {
         T5ForConditionalGeneration,
         T5_PRETRAINED_MODEL_ARCHIVE_MAP,
         T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
+    "electra": (
+        ElectraConfig,
+        TFElectraForPreTraining,
+        ElectraForPreTraining,
+        ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
 }
 

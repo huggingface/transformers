@@ -20,7 +20,7 @@ def generate_summaries(
     examples: list, out_file: str, model_name: str, batch_size: int = 8, device: str = DEFAULT_DEVICE
 ):
     fout = Path(out_file).open("w")
-    model = BartForConditionalGeneration.from_pretrained(model_name, output_past=True,).to(device)
+    model = BartForConditionalGeneration.from_pretrained(model_name).to(device)
     tokenizer = BartTokenizer.from_pretrained("bart-large")
 
     max_length = 140
