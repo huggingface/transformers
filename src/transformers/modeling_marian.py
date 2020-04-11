@@ -71,8 +71,9 @@ class MarianModel(PreTrainedModel):
     base_model_prefix = 'zczcx'  # HACK to avoid start_prefix = '.' in from_pretrained
 
     def _init_weights(self, module):
-        self.encoder.init_weights()
-        self.decoder.init_weights()
+        pass
+        #self.encoder.init_weights()
+        #self.decoder.init_weights()
 
     @property
     def dummy_inputs(self):
