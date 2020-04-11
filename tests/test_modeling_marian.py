@@ -81,8 +81,10 @@ class Bert2BertModelTest(ModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = all_model_classes
     test_pruning = False
     test_torchscript = False
+    test_head_masking = False
     test_resize_embeddings = False
     is_encoder_decoder = True
+
 
     def setUp(self):
         self.model_tester = ModelTester(self)
@@ -90,3 +92,7 @@ class Bert2BertModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip("Passing inputs_embeds not implemented for Bart.")
+    def test_inputs_embeds(self):
+        pass

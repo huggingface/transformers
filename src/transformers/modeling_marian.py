@@ -28,6 +28,7 @@ from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 from .modeling_bart import _prepare_bart_decoder_inputs, _make_linear_from_emb
 from .modeling_bert import *
 from .configuration_marian import MarianConfig
+from typing import Optional, Dict, List, Tuple
 logger = logging.getLogger(__name__)
 
 
@@ -98,14 +99,14 @@ class MarianModel(PreTrainedModel):
     @add_start_docstrings_to_callable(INPUTS_DOCSTRING)
     def forward(
             self,
-            input_ids,
-            attention_mask=None,
-            encoder_outputs=None,
-            decoder_input_ids=None,
-            decoder_attention_mask=None,
-            decoder_cached_states=None,
-            lm_labels=None,
-            use_cache=False,
+            input_ids:Optional[Tensor]=None,
+            attention_mask:Optional[Tensor]=None,
+            encoder_outputs:Optional[Tuple[Tensor]]=None,
+            decoder_input_ids:Optional[Tensor]=None,
+            decoder_attention_mask:Optional[Tensor]=None,
+            decoder_cached_states:Optional[Tensor]=None,
+            lm_labels:Optional[Tensor]=None,
+            use_cache:Optional[Tensor]=True,
             **unused
     ):
         r"""
@@ -149,12 +150,15 @@ class MarianModel(PreTrainedModel):
         assert decoder_input_ids is not None
         if encoder_outputs is None:
             encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-        assert isinstance(encoder_outputs, tuple)
+        if isinstance(encoder_outputs, tuple):
+            encoder_outputs = encoder_outputs[0]
+
+        assert isinstance(encoder_outputs, torch.Tensor)
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         decoder_outputs = self.decoder.forward(
             input_ids=decoder_input_ids,
             attention_mask=decoder_padding_mask,
-            encoder_hidden_states=encoder_outputs[0],
+            encoder_hidden_states=encoder_outputs,
             encoder_attention_mask=attention_mask,
 
             #decoder_causal_mask=causal_mask,
@@ -163,11 +167,39 @@ class MarianModel(PreTrainedModel):
             lm_labels=lm_labels
         )
         # Attention and hidden_states will be [] or None if they aren't needed
-        outputs = decoder_outputs + encoder_outputs
+        if use_cache:
+            cache = (encoder_outputs,)
+            return (decoder_outputs[0], cache, decoder_outputs[1:])
+        else:
+            return decoder_outputs + encoder_outputs
         return outputs
 
-    def prepare_inputs_for_generation(self, *args, **kwargs):
-        return self.decoder.prepare_inputs_for_generation(*args, **kwargs)
+    def prepare_inputs_for_generation(self, input_ids: Tensor, past: tuple, attention_mask: Tensor, **kwargs) -> Dict:
+        assert past is not None, "past has to be defined for encoder_outputs"
+        assert isinstance(past, tuple)
+
+        # first step
+        if len(past) < 2:
+            encoder_outputs, decoder_past_key_value_states = past, None
+        else:
+            encoder_outputs, decoder_past_key_value_states = past[0], past[1]
+
+        return {
+            "decoder_input_ids": input_ids,
+            "decoder_cached_states": decoder_past_key_value_states,
+            "encoder_outputs": encoder_outputs,
+            "attention_mask": attention_mask,
+        }
+    def _reorder_cache(self, past: Tuple, beam_idx) -> Tuple:
+        encoder_outputs, = past
+        reordered_encoder_outputs = encoder_outputs.index_select(0, beam_idx)
+        return (reordered_encoder_outputs, )
+
+    def _do_output_past(self, *args, **kwargs) -> bool:
+        return True
+
+
+        #return self.decoder.prepare_inputs_for_generation(*args, **kwargs)
 
 
     def get_encoder(self):
