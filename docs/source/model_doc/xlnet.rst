@@ -32,6 +32,8 @@ Tips:
   `target_mapping` inputs to control the attention span and outputs (see examples in `examples/run_generation.py`)
 - XLNet is one of the few models that has no sequence length limit.
 
+The original code can be found `here <https://github.com/zihangdai/xlnet/>`_.
+
 
 XLNetConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

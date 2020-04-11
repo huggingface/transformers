@@ -34,6 +34,8 @@ Tips:
 Hugging Face showcasing the generative capabilities of several models. GPT-2 is one of them and is available in five
 different sizes: small, medium, large, xl and a distilled version of the small checkpoint: distilgpt-2.
 
+The original code can be found `here <https://openai.com/blog/better-language-models/>`_.
+
 
 GPT2Config
 ~~~~~~~~~~~~~~~~~~~~~
