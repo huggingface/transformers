@@ -1074,7 +1074,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         past = encoder_outputs  # defined for encoder-decoder models, None for decoder-only models
 
-        log_probs = [] # if we want to trace log probabilities of the generation
+        log_probs = []  # if we want to trace log probabilities of the generation
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, past=past, attention_mask=attention_mask)
