@@ -687,12 +687,15 @@ class GenerationPipeline(Pipeline):
 
                 # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
                 total_sequence = (
-                    prompt_text + text[len(self.tokenizer.decode(tokens.squeeze(), clean_up_tokenization_spaces=True)) :]
+                    prompt_text
+                    + text[len(self.tokenizer.decode(tokens.squeeze(), clean_up_tokenization_spaces=True)) :]
                 )
 
                 generated_sequences += [total_sequence]
             all_generated_sequences += [generated_sequences]
 
+        if len(all_generated_sequences) == 1:
+            return answers[0]
         return all_generated_sequences
 
     def prepare_ctrl_input(self, prompt_text):
