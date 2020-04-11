@@ -301,7 +301,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 "input_ids": input_ids,
                 "token_type_ids": token_type_ids,
                 "head_mask": head_mask,
-                "use_cache": False
+                "use_cache": False,
             }
 
             return config, inputs_dict
