@@ -621,7 +621,7 @@ class GenerationPipeline(Pipeline):
         num_return_sequences: int = 1,
         stop_token: str = None,
         padding_text: str = "",
-        xlm_language: str = ""
+        xlm_language: str = "",
     ):
         super().__init__(
             model=model,
@@ -644,48 +644,57 @@ class GenerationPipeline(Pipeline):
         self.do_sample = do_sample
         self.num_return_sequences = num_return_sequences
         self.model_type = self.model.config.to_dict()["model_type"]
+        self.preprocessing_functions = {
+            "ctrl": self.prepare_ctrl_input,
+            "xlm": self.prepare_xlm_input,
+            "xlnet": self.prepare_xlnet_input,
+            "transfo-xl": self.prepare_transfoxl_input,
+        }
 
     def __call__(self, *texts, **kwargs):
-        texts = [self.prepare_input(prompt_text) for prompt_text in texts]
-        inputs = self._parse_and_tokenize(*texts, pad_to_max_length=False, **kwargs)['input_ids']
-        batch_size = inputs.size()[0]
-        output_sequences = self.model.generate(
-            input_ids=inputs,
-            max_length=self.length + len(inputs[0]),
-            temperature=self.temperature,
-            top_k=self.top_k,
-            top_p=self.top_p,
-            repetition_penalty=self.repetition_penalty,
-            do_sample=self.do_sample,
-            num_return_sequences=self.num_return_sequences,
-            **kwargs
-        )
+        inputs = self._args_parser(*texts, **kwargs)
 
-        # Remove the batch dimension when returning multiple sequences
-        if len(output_sequences.shape) > 2:
-            output_sequences.squeeze_()
+        all_generated_sequences = []
+        for i, prompt_text in enumerate(inputs):
+            # Manage correct placement of the tensors
+            with self.device_placement():
+                tokens = self.prepare_input(prompt_text)
+                output_sequences = self.model.generate(
+                    input_ids=torch.tensor(tokens).unsqueeze(0),  # BS x SL
+                    max_length=self.length + len(tokens),
+                    temperature=self.temperature,
+                    top_k=self.top_k,
+                    top_p=self.top_p,
+                    repetition_penalty=self.repetition_penalty,
+                    do_sample=self.do_sample,
+                    num_return_sequences=self.num_return_sequences,
+                )
 
-        generated_sequences = []
+            # Remove the batch dimension when returning multiple sequences
+            if len(output_sequences.shape) > 2:
+                output_sequences.squeeze_()
 
-        for generated_sequence_idx, generated_sequence in enumerate(output_sequences):
-            batch_idx = int(generated_sequence_idx / batch_size)
-            generated_sequence = generated_sequence.tolist()
+            generated_sequences = []
 
-            # Decode text
-            text = self.tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
+            for generated_sequence_idx, generated_sequence in enumerate(output_sequences):
+                batch_idx = int(generated_sequence_idx / batch_size)
+                generated_sequence = generated_sequence.tolist()
 
-            # Remove all text after the stop token
-            text = text[: text.find(self.stop_token) if self.stop_token else None]
+                # Decode text
+                text = self.tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
 
-            # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
-            total_sequence = (
-                texts[batch_idx] + text[len(self.tokenizer.decode(inputs[0], clean_up_tokenization_spaces=True)) :]
-            )
+                # Remove all text after the stop token
+                text = text[: text.find(self.stop_token) if self.stop_token else None]
 
-            generated_sequences.append(total_sequence)
-            print(total_sequence)
+                # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
+                total_sequence = (
+                    texts[batch_idx] + text[len(self.tokenizer.decode(inputs[0], clean_up_tokenization_spaces=True)) :]
+                )
 
-        return generated_sequences
+                generated_sequences += [total_sequence]
+            all_generated_sequences += [generated_sequences]
+
+        return all_generated_sequences
 
     def prepare_ctrl_input(self, prompt_text):
         if self.temperature > 0.7:
@@ -693,9 +702,10 @@ class GenerationPipeline(Pipeline):
 
         encoded_prompt = self.tokenizer.encode(prompt_text, add_special_tokens=False)
         if not any(encoded_prompt[0] == x for x in self.tokenizer.control_codes.values()):
-            logger.info("WARNING! You are not starting your generation from a control code so you won't get good results")
+            logger.info(
+                "WARNING! You are not starting your generation from a control code so you won't get good results"
+            )
         return prompt_text
-
 
     def prepare_xlm_input(self, prompt_text):
         # kwargs = {"language": None, "mask_token_id": None}
@@ -722,27 +732,28 @@ class GenerationPipeline(Pipeline):
 
         return prompt_text
 
-
     def prepare_xlnet_input(self, prompt_text):
-        prompt_text = (self.padding_text if self.padding_text else PADDING_TEXT) + prompt_text
+        prompt_text = self.padding_text + prompt_text
         return prompt_text
 
-
     def prepare_transfoxl_input(self, prompt_text):
-        prompt_text = (self.padding_text if self.padding_text else PADDING_TEXT) + prompt_text
+        prompt_text = self.padding_text + prompt_text
         return prompt_text
 
     def prepare_input(self, prompt_text):
-        if self.model_type == "ctrl":
-            prompt_text = self.prepare_ctrl_input(prompt_text)
-        elif self.model_type == "xlm":
-            prompt_text = self.prepare_xlm_input(prompt_text)
-        elif self.model_type == "xlnet":
-            prompt_text = self.prepare_xlnet_input(prompt_text)
-        elif self.model_type == "transfoxl":
-            prompt_text = self.prepare_transfoxl_input(prompt_text)
+        requires_preprocessing = self.model_type in self.preprocessing_functions.keys()
+        if requires_preprocessing:
+            preprocessed_prompt_text = self.preprocessing_functions.get(self.model_type)(prompt_text)
+            encoded_prompt = self.tokenizer.encode(
+                preprocessed_prompt_text,
+                add_special_tokens=False,
+                return_tensors="pt",
+                add_space_before_punct_symbol=True,
+            )
+        else:
+            encoded_prompt = self.tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors="pt")
 
-        return prompt_text
+        return encoded_prompt
 
 
 class TextClassificationPipeline(Pipeline):
