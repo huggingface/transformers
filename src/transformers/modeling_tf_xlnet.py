@@ -358,7 +358,6 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.output_past = config.output_past
 
         self.mem_len = config.mem_len
         self.reuse_len = config.reuse_len
@@ -503,6 +502,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        use_cache=True,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -515,7 +515,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             input_mask = inputs[6] if len(inputs) > 6 else input_mask
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
-            assert len(inputs) <= 9, "Too many inputs."
+            use_cache = inputs[9] if len(inputs) > 9 else use_cache
+            assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -526,7 +527,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             input_mask = inputs.get("input_mask", input_mask)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 9, "Too many inputs."
+            use_cache = inputs.get("use_cache", use_cache)
+            assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -657,7 +659,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         hidden_states = []
         for i, layer_module in enumerate(self.layer):
             # cache new mems
-            if self.mem_len is not None and self.mem_len > 0 and self.output_past:
+            if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
                 new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
             if self.output_hidden_states:
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
@@ -679,7 +681,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         outputs = (tf.transpose(output, perm=(1, 0, 2)),)
 
-        if self.mem_len is not None and self.mem_len > 0 and self.output_past:
+        if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
             outputs = outputs + (new_mems,)
 
         if self.output_hidden_states:
@@ -783,6 +785,8 @@ XLNET_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        use_cache (:obj:`bool`):
+            If `use_cache` is True, `mems` are returned and can be used to speed up decoding (see `mems`). Defaults to `True`.
 """
 
 
@@ -848,7 +852,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_loss.input_embeddings
 
-    def prepare_inputs_for_generation(self, inputs, past, **model_kwargs):
+    def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = inputs.shape[0]
@@ -866,7 +870,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
         target_mapping_seq_end = tf.ones((effective_batch_size, 1, 1), dtype=tf.float32)
         target_mapping = tf.concat([target_mapping, target_mapping_seq_end], axis=-1)
 
-        inputs = {"inputs": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping}
+        inputs = {"inputs": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "use_cache": kwargs["use_cache"]}
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:

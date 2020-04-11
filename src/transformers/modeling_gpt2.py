@@ -191,7 +191,7 @@ class Attention(nn.Module):
         if use_cache is True:
             present = torch.stack((key.transpose(-2, -1), value))  # transpose to have same shapes for stacking
         else:
-            present = ()
+            present = (None,)
 
         attn_outputs = self._attn(query, key, value, attention_mask, head_mask)
         a = attn_outputs[0]
@@ -308,7 +308,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
-            If using `past` as an input make sure that `token_type_ids` correspond to the `input_ids` of the last position.
+            If `past` is used, optionally only the last `token_type_ids` have to be input (see ``past``).
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -414,6 +414,8 @@ class GPT2Model(GPT2PreTrainedModel):
                 input_ids = input_ids[:, -1:]
             if inputs_embeds is not None:
                 inputs_embeds = inputs_embeds[:, -1:]
+            if token_type_ids is not None:
+                token_type_ids = token_type_ids[:, -1:]
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")

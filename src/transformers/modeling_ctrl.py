@@ -98,7 +98,7 @@ class MultiHeadAttention(torch.nn.Module):
         x = x.reshape(batch_size, -1, self.num_heads, self.depth)
         return x.permute([0, 2, 1, 3])
 
-    def forward(self, v, k, q, mask, layer_past=None, attention_mask=None, head_mask=None):
+    def forward(self, v, k, q, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
         batch_size = q.shape[0]
 
         q = self.Wq(q)
@@ -112,7 +112,11 @@ class MultiHeadAttention(torch.nn.Module):
             past_key, past_value = layer_past[0], layer_past[1]
             k = torch.cat((past_key, k), dim=-2)
             v = torch.cat((past_value, v), dim=-2)
-        present = torch.stack((k, v))
+
+        if use_cache is True:
+            present = torch.stack((k, v))
+        else:
+            present = (None,)
 
         output = scaled_dot_product_attention(q, k, v, mask, attention_mask, head_mask)
         scaled_attention = output[0].permute([0, 2, 1, 3])
@@ -143,10 +147,10 @@ class EncoderLayer(torch.nn.Module):
         self.dropout1 = torch.nn.Dropout(rate)
         self.dropout2 = torch.nn.Dropout(rate)
 
-    def forward(self, x, mask, layer_past=None, attention_mask=None, head_mask=None):
+    def forward(self, x, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
-            normed, normed, normed, mask, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask
+            normed, normed, normed, mask, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask, use_cache=use_cache
         )
         attn_output = attn_outputs[0]
         attn_output = self.dropout1(attn_output)
@@ -220,6 +224,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
+            If `past` is used, optionally only the last `token_type_ids` have to be input (see ``past``).
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -336,6 +341,8 @@ class CTRLModel(CTRLPreTrainedModel):
                 input_ids = input_ids[:, -1:]
             if inputs_embeds is not None:
                 inputs_embeds = inputs_embeds[:, -1:]
+            if token_type_ids is not None:
+                token_type_ids = token_type_ids[:, -1:]
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -426,10 +433,10 @@ class CTRLModel(CTRLPreTrainedModel):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
             outputs = h(
-                hidden_states, mask, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask[i]
+                hidden_states, mask, layer_past=layer_past, attention_mask=attention_mask, head_mask=head_mask[i], use_cache=use_cache
             )
             hidden_states, present = outputs[:2]
-            if use_cache:
+            if use_cache is True:
                 presents = presents + (present,)
 
             if self.output_attentions:
@@ -441,7 +448,7 @@ class CTRLModel(CTRLPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if use_cache:
+        if use_cache is True:
             outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)

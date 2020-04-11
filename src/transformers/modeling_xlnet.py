@@ -867,7 +867,7 @@ class XLNetModel(XLNetPreTrainedModel):
         attentions = []
         hidden_states = []
         for i, layer_module in enumerate(self.layer):
-            if self.mem_len is not None and self.mem_len > 0 and use_cache:
+            if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
                 # cache new mems
                 new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
             if self.output_hidden_states:
@@ -897,7 +897,7 @@ class XLNetModel(XLNetPreTrainedModel):
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         outputs = (output.permute(1, 0, 2).contiguous(),)
 
-        if self.mem_len is not None and self.mem_len > 0 and use_cache:
+        if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
             outputs = outputs + (new_mems,)
 
         if self.output_hidden_states:
@@ -938,7 +938,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_loss
 
-    def prepare_inputs_for_generation(self, input_ids, past, use_cache, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
@@ -962,7 +962,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             "input_ids": input_ids,
             "perm_mask": perm_mask,
             "target_mapping": target_mapping,
-            "use_cache": use_cache,
+            "use_cache": kwargs["use_cache"],
         }
 
         # if past is defined in model kwargs then use it for faster decoding

@@ -134,7 +134,7 @@ class TFAttention(tf.keras.layers.Layer):
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
     def call(self, inputs, training=False):
-        x, layer_past, attention_mask, head_mask = inputs
+        x, layer_past, attention_mask, head_mask, use_cache = inputs
 
         x = self.c_attn(x)
         query, key, value = tf.split(x, 3, axis=2)
@@ -145,7 +145,20 @@ class TFAttention(tf.keras.layers.Layer):
             past_key, past_value = tf.unstack(layer_past, axis=0)
             key = tf.concat([past_key, key], axis=-2)
             value = tf.concat([past_value, value], axis=-2)
-        present = tf.stack([key, value], axis=0)
+
+        # to cope with keras serialization
+        # we need to cast `use_cache` to correct bool
+        # if it is a tensor
+        if tf.is_tensor(use_cache):
+            if hasattr(use_cache, "numpy"):
+                use_cache = bool(use_cache.numpy())
+            else:
+                use_cache = True
+
+        if use_cache is True:
+            present = tf.stack([key, value], axis=0)
+        else:
+            present = (None,)
 
         attn_outputs = self._attn([query, key, value, attention_mask, head_mask], training=training)
         a = attn_outputs[0]
@@ -184,10 +197,10 @@ class TFBlock(tf.keras.layers.Layer):
         self.mlp = TFMLP(4 * nx, config, name="mlp")
 
     def call(self, inputs, training=False):
-        x, layer_past, attention_mask, head_mask = inputs
+        x, layer_past, attention_mask, head_mask, use_cache = inputs
 
         a = self.ln_1(x)
-        output_attn = self.attn([a, layer_past, attention_mask, head_mask], training=training)
+        output_attn = self.attn([a, layer_past, attention_mask, head_mask, use_cache], training=training)
         a = output_attn[0]  # output_attn: a, present, (attentions)
         x = x + a
 
@@ -245,6 +258,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        use_cache=True,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -255,7 +269,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             position_ids = inputs[4] if len(inputs) > 4 else position_ids
             head_mask = inputs[5] if len(inputs) > 5 else head_mask
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
-            assert len(inputs) <= 7, "Too many inputs."
+            use_cache = inputs[7] if len(inputs) > 7 else use_cache
+            assert len(inputs) <= 8, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -264,15 +279,20 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             position_ids = inputs.get("position_ids", position_ids)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 7, "Too many inputs."
+            use_cache = inputs.get("use_cache", use_cache)
+            assert len(inputs) <= 8, "Too many inputs."
         else:
             input_ids = inputs
 
+        # If using past key value states, only the last tokens
+        # should be given as an input
         if past is not None:
             if input_ids is not None:
                 input_ids = input_ids[:, -1:]
             if inputs_embeds is not None:
                 inputs_embeds = inputs_embeds[:, -1:]
+            if token_type_ids is not None:
+                token_type_ids = token_type_ids[:, -1:]
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -344,7 +364,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
-            outputs = block([hidden_states, layer_past, attention_mask, head_mask[i]], training=training)
+            outputs = block([hidden_states, layer_past, attention_mask, head_mask[i], use_cache], training=training)
 
             hidden_states, present = outputs[:2]
             presents = presents + (present,)
@@ -359,7 +379,10 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         if self.output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        outputs = (hidden_states, presents)
+        outputs = (hidden_states,)
+
+        if use_cache is True:
+            outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
@@ -410,6 +433,7 @@ GPT2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
+            If `past` is used, optionally only the last `input_ids` have to be input (see ``past``).
 
             Indices can be obtained using :class:`transformers.GPT2Tokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
@@ -430,6 +454,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
+            If `past` is used, optionally only the last `token_type_ids` have to be input (see ``past``).
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -445,6 +470,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+            If `past` is used, optionally only the last `input_embeds` have to be input (see ``past``).
         training (:obj:`boolean`, `optional`, defaults to :obj:`False`):
             Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
             (if set to :obj:`False`) for evaluation.
@@ -517,7 +543,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
         if past:
             inputs = tf.expand_dims(inputs[:, -1], -1)
 
-        return {"inputs": inputs, "past": past}
+        return {"inputs": inputs, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
     def call(self, inputs, **kwargs):
@@ -596,6 +622,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         mc_token_ids=None,
+        use_cache=True,
         training=False,
     ):
         r"""
@@ -662,7 +689,8 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             head_mask = inputs[5] if len(inputs) > 5 else head_mask
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             mc_token_ids = inputs[7] if len(inputs) > 7 else mc_token_ids
-            assert len(inputs) <= 8, "Too many inputs."
+            use_cache = inputs[8] if len(inputs) > 8 else use_cache
+            assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -672,7 +700,8 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             mc_token_ids = inputs.get("mc_token_ids", mc_token_ids)
-            assert len(inputs) <= 8, "Too many inputs."
+            use_cache = inputs.get("use_cache", use_cache)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -696,6 +725,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             flat_position_ids,
             head_mask,
             inputs_embeds,
+            use_cache,
         ]
 
         transformer_outputs = self.transformer(flat_inputs, training=training)
