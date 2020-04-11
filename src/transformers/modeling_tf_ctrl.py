@@ -236,6 +236,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         use_cache=True,
         training=False,
     ):
+
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             past = inputs[1] if len(inputs) > 1 else past
@@ -258,6 +259,16 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             assert len(inputs) <= 8, "Too many inputs."
         else:
             input_ids = inputs
+
+        # If using past key value states, only the last tokens
+        # should be given as an input
+        if past is not None:
+            if input_ids is not None:
+                input_ids = input_ids[:, -1:]
+            if inputs_embeds is not None:
+                inputs_embeds = inputs_embeds[:, -1:]
+            if token_type_ids is not None:
+                token_type_ids = token_type_ids[:, -1:]
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -402,6 +413,7 @@ CTRL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
+            If `past` is used, optionally only the last `input_ids` have to be input (see `past`).
 
             Indices can be obtained using :class:`transformers.CTRLTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
@@ -410,8 +422,10 @@ CTRL_INPUTS_DOCSTRING = r"""
             `What are input IDs? <../glossary.html#input-ids>`__
         past (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
-            (see `past` output below). Can be used to speed up sequential decoding. The token ids which have their past given to this model
-            should not be passed as input ids as they have already been computed.
+            (see `past` output below). Can be used to speed up sequential decoding.
+            If `past` is used, the user can optionally input only the last `input_ids`
+            (those that don't have their past given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all `input_ids` of shape :obj:`(batch_size, sequence_length)`.
         attention_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -422,6 +436,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
+            If `past` is used, optionally only the last `token_type_ids` have to be input (see `past`).
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -437,6 +452,10 @@ CTRL_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+            If `past` is used, optionally only the last `input_embeds` have to be input (see `past`).
+        use_cache (:obj:`bool`):
+            If `use_cache` is True, `past` key value states are returned and
+            can be used to speed up decoding (see `past`). Defaults to `True`.
         training (:obj:`boolean`, `optional`, defaults to :obj:`False`):
             Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
             (if set to :obj:`False`) for evaluation.

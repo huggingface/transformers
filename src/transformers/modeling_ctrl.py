@@ -210,7 +210,7 @@ CTRL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
-            If `past` is used, optionally only the last `input_ids` have to be input (see ``past``).
+            If `past` is used, optionally only the last `input_ids` have to be input (see `past`).
 
             Indices can be obtained using :class:`transformers.CTRLTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
@@ -220,7 +220,9 @@ CTRL_INPUTS_DOCSTRING = r"""
         past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `past` output below). Can be used to speed up sequential decoding.
-            If `past` is used, the user can optionally input only the last `input_ids` (those that don't have their past given to this model) of shape :obj:`(batch_size, 1)` instead of all `input_ids` of shape :obj:`(batch_size, sequence_length)`.
+            If `past` is used, the user can optionally input only the last `input_ids`
+            (those that don't have their past given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all `input_ids` of shape :obj:`(batch_size, sequence_length)`.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -231,7 +233,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
-            If `past` is used, optionally only the last `token_type_ids` have to be input (see ``past``).
+            If `past` is used, optionally only the last `token_type_ids` have to be input (see `past`).
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -247,9 +249,10 @@ CTRL_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-            If `past` is used, optionally only the last `input_embeds` have to be input (see ``past``).
+            If `past` is used, optionally only the last `input_embeds` have to be input (see `past`).
         use_cache (:obj:`bool`):
-            If `use_cache` is True, `past` key value states are returned and can be used to speed up decoding (see `past`). Defaults to `True`.
+            If `use_cache` is True, `past` key value states are returned and
+            can be used to speed up decoding (see `past`). Defaults to `True`.
 """
 
 

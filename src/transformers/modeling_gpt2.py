@@ -289,7 +289,7 @@ GPT2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
-            If `past` is used, optionally only the last `input_ids` have to be input (see ``past``).
+            If `past` is used, optionally only the last `input_ids` have to be input (see `past`).
 
             Indices can be obtained using :class:`transformers.GPT2Tokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
@@ -312,7 +312,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
-            If `past` is used, optionally only the last `token_type_ids` have to be input (see ``past``).
+            If `past` is used, optionally only the last `token_type_ids` have to be input (see `past`).
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -328,7 +328,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-            If `past` is used, optionally only the last `input_embeds` have to be input (see ``past``).
+            If `past` is used, optionally only the last `input_embeds` have to be input (see `past`).
         use_cache (:obj:`bool`):
             If `use_cache` is True, `past` key value states are returned and can be used to speed up decoding (see `past`). Defaults to `True`.
 """
