@@ -1766,6 +1766,9 @@ def pipeline(
         model_url = "https://s3.amazonaws.com/models.huggingface.co/bert/dbmdz/bert-large-cased-finetuned-conll03-english/pytorch_model.bin"
         config_url = "https://s3.amazonaws.com/models.huggingface.co/bert/dbmdz/bert-large-cased-finetuned-conll03-english/config.json"
         pipeline('ner', model=model_url, config=config_url, tokenizer='bert-base-cased')
+
+        # Generation pipeline
+        pipeline('generation')
     """
     # Retrieve the task
     if task not in SUPPORTED_TASKS:
