@@ -1437,8 +1437,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert len(scores.shape) == 2, "scores should be of rank 2 with shape: [batch_size, vocab_size]"
         scores[:, all_but_token_ids_mask] = -float("inf")
 
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
+
+    def _reorder_cache(self, past, beam_idx):
         return tuple(layer_past.index_select(1, beam_idx) for layer_past in past)
 
 

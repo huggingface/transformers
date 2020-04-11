@@ -168,22 +168,6 @@ class MarianModel(PreTrainedModel):
     def prepare_inputs_for_generation(self, *args, **kwargs):
         return self.decoder.prepare_inputs_for_generation(*args, **kwargs)
 
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        ((enc_out, enc_mask), decoder_cached_states) = past
-        reordered_past = []
-        for layer_past in decoder_cached_states:
-            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-            layer_past_new = {
-                attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
-            }
-            reordered_past.append(layer_past_new)
-
-        new_enc_out = enc_out if enc_out is None else enc_out.index_select(0, beam_idx)
-        new_enc_mask = enc_mask if enc_mask is None else enc_mask.index_select(0, beam_idx)
-
-        past = ((new_enc_out, new_enc_mask), reordered_past)
-        return past
 
     def get_encoder(self):
         return self.encoder
