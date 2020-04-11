@@ -643,6 +643,7 @@ class GenerationPipeline(Pipeline):
         self.repetition_penalty = repetition_penalty,
         self.do_sample = do_sample,
         self.num_return_sequences = num_return_sequences,
+        self.model_type = self.model.config.to_dict()["model_type"]
 
     def __call__(self, *texts, **kwargs):
         texts = [self.prepare_input(prompt_text) for prompt_text in texts]
@@ -736,9 +737,9 @@ class GenerationPipeline(Pipeline):
         elif self.model_type == "xlm":
             prompt_text = self.prepare_xlm_input(prompt_text)
         elif self.model_type == "xlnet":
-            prompt_text = self.prepare_ctrl_input(prompt_text)
+            prompt_text = self.prepare_xlnet_input(prompt_text)
         elif self.model_type == "transfoxl":
-            prompt_text = self.prepare_ctrl_input(prompt_text)
+            prompt_text = self.prepare_transfoxl_input(prompt_text)
 
         return prompt_text
 
