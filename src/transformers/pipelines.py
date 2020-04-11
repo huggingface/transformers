@@ -660,7 +660,7 @@ class GenerationPipeline(Pipeline):
             with self.device_placement():
                 tokens = self.prepare_input(prompt_text)
                 output_sequences = self.model.generate(
-                    input_ids=torch.tensor(tokens).unsqueeze(0),  # BS x SL
+                    input_ids=tokens,  # BS x SL
                     max_length=self.length + len(tokens),
                     temperature=self.temperature,
                     top_k=self.top_k,
