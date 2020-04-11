@@ -513,7 +513,7 @@ class GPT2Model(GPT2PreTrainedModel):
             )
 
             hidden_states, present = outputs[:2]
-            if use_cache:
+            if use_cache is True:
                 presents = presents + (present,)
 
             if self.output_attentions:
@@ -527,7 +527,7 @@ class GPT2Model(GPT2PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if use_cache:
+        if use_cache is True:
             outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
