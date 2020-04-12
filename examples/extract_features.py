@@ -269,12 +269,13 @@ def tokenid2wordid(input_ids,tokenizer,examples):
 
         for w in example.split():
             w_ids=tokenizer.encode(w)
-            while w_ids[0]!=input_id[input_start]:
+            while w_ids[0]!=int(input_id[input_start]):
                 input_start+=1
             input_end=input_start+len(w_ids)
             w2token.append((input_start,input_end))
             input_start=input_end
         w2token_batch.append(w2token)
+
     return w2token_batch
 
 
