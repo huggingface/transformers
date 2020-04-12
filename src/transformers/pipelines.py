@@ -768,11 +768,11 @@ class GenerationPipeline(Pipeline):
             encoded_prompt = self.tokenizer.encode(
                 preprocessed_prompt_text,
                 add_special_tokens=False,
-                return_tensors="pt",
+                return_tensors=self.framework,
                 add_space_before_punct_symbol=True,
             )
         else:
-            encoded_prompt = self.tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors="pt")
+            encoded_prompt = self.tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors=self.framework)
 
         return encoded_prompt
 
