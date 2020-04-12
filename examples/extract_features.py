@@ -285,10 +285,10 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
     input_ids=input_ids.to(device)
     model.eval()
     with torch.no_grad():
-        tokenid2wordid(input_ids,tokenizer,examples)
+        w2token_batch=tokenid2wordid(input_ids,tokenizer,examples)
         all_encoder_layers,_=model(input_ids)[-2:]
         average_layer_batch = sum(all_encoder_layers[-args.layers:]) / args.layers
-        wembs_sent_batch=tokenemb2wemb(average_layer_batch)
+        wembs_sent_batch=tokenemb2wemb(average_layer_batch,w2token_batch)
         for i,sent in enumerate(examples):
             sent = sent.replace('.', '$period$')
             sent = sent.replace('/', '$backslash$')
