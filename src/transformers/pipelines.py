@@ -622,7 +622,7 @@ class GenerationPipeline(Pipeline):
         num_return_sequences: int = 1,
         stop_token: str = None,
         padding_text: str = "",
-        xlm_language: str = "",
+        xlm_language: str = "en",
     ):
         super().__init__(
             model=model,
@@ -666,7 +666,7 @@ class GenerationPipeline(Pipeline):
 
                         output_sequences = self.model.generate(
                             input_ids=tokens,  # BS x SL
-                            max_length=self.length + len(tokens.squeeze()), # SL
+                            max_length=self.length + len(tokens.squeeze()),  # SL
                             temperature=self.temperature,
                             top_k=self.top_k,
                             top_p=self.top_p,
@@ -678,7 +678,7 @@ class GenerationPipeline(Pipeline):
                 else:
                     output_sequences = self.model.generate(
                         input_ids=tokens,  # BS x SL
-                        max_length=self.length + len(tokens.squeeze()), # SL
+                        max_length=self.length + len(tokens.squeeze()),  # SL
                         temperature=self.temperature,
                         top_k=self.top_k,
                         top_p=self.top_p,
@@ -736,9 +736,11 @@ class GenerationPipeline(Pipeline):
             if self.xlm_language in available_languages:
                 language = self.xlm_language
             else:
-                language = None
-                while language not in available_languages:
-                    language = input("Using XLM. Select language in " + str(list(available_languages)) + " >>> ")
+                logger.info(
+                    "Setting language to 'en' since language chosen was not found in available languages: "
+                    + str(list(available_languages))
+                )
+                language = "en"
 
             self.model.config.lang_id = self.model.config.lang2id[language]
             # kwargs["language"] = tokenizer.lang2id[language]
