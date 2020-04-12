@@ -289,11 +289,11 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
         all_encoder_layers,_=model(input_ids)[-2:]
         average_layer_batch = sum(all_encoder_layers[-args.layers:]) / args.layers
         wembs_sent_batch=tokenemb2wemb(average_layer_batch.cpu().detach().numpy(),w2token_batch)
-        print (wembs_sent_batch.shape())
         for i,sent in enumerate(examples):
             sent = sent.replace('.', '$period$')
             sent = sent.replace('/', '$backslash$')
             payload=numpy.array(wembs_sent_batch[i])
+            print (payload.shape())
             try:
                 writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
                                       data=payload)
