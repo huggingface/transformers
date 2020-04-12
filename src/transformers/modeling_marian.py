@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch model, ported from the Marian repo."""
+import copy
 import logging
 import random
 from typing import Dict, List, Optional, Tuple
@@ -23,18 +24,17 @@ from torch import Tensor, nn
 
 from .activations import ACT2FN
 from .configuration_bart import BartConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
-from .modeling_bart import _prepare_bart_decoder_inputs, _make_linear_from_emb
-from .modeling_bert import *
 from .configuration_marian import MarianConfig
-from typing import Optional, Dict, List, Tuple
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_bart import _make_linear_from_emb, _prepare_bart_decoder_inputs
+from .modeling_bert import *
+from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
+
+
 logger = logging.getLogger(__name__)
 
 
-PRETRAINED_MODEL_ARCHIVE_MAP = {
-
-}
+PRETRAINED_MODEL_ARCHIVE_MAP = {}
 
 INPUTS_DOCSTRING = r"""
     Args:
@@ -63,17 +63,24 @@ def invert_mask(attention_mask):
     assert attention_mask.dim() == 2
     return attention_mask.eq(0)
 
+def append_dummy_token(input_ids, attention_mask, token_id):
+    effective_batch_size = input_ids.shape[0]
+    dummy_token = torch.full(
+        (effective_batch_size, 1), token_id, dtype=torch.long, device=input_ids.device
+    )
+    input_ids = torch.cat([input_ids, dummy_token], dim=1)
+    attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
+    return input_ids, attention_mask
 
-import copy
 class MarianModel(PreTrainedModel):
     config_class = MarianConfig
     pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
-    base_model_prefix = 'zczcx'  # HACK to avoid start_prefix = '.' in from_pretrained
+    base_model_prefix = "zczcx"  # HACK to avoid start_prefix = '.' in from_pretrained
 
     def _init_weights(self, module):
         pass
-        #self.encoder.init_weights()
-        #self.decoder.init_weights()
+        # self.encoder.init_weights()
+        # self.decoder.init_weights()
 
     @property
     def dummy_inputs(self):
@@ -99,16 +106,16 @@ class MarianModel(PreTrainedModel):
 
     @add_start_docstrings_to_callable(INPUTS_DOCSTRING)
     def forward(
-            self,
-            input_ids:Optional[Tensor]=None,
-            attention_mask:Optional[Tensor]=None,
-            encoder_outputs:Optional[Tuple[Tensor]]=None,
-            decoder_input_ids:Optional[Tensor]=None,
-            decoder_attention_mask:Optional[Tensor]=None,
-            decoder_cached_states:Optional[Tensor]=None,
-            lm_labels:Optional[Tensor]=None,
-            use_cache:Optional[Tensor]=True,
-            **unused
+        self,
+        input_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tensor]] = None,
+        decoder_input_ids: Optional[Tensor] = None,
+        decoder_attention_mask: Optional[Tensor] = None,
+        decoder_cached_states: Optional[Tensor] = None,
+        lm_labels: Optional[Tensor] = None,
+        use_cache: Optional[Tensor] = True,
+        **unused
     ):
         r"""
         masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -161,11 +168,10 @@ class MarianModel(PreTrainedModel):
             attention_mask=decoder_padding_mask,
             encoder_hidden_states=encoder_outputs,
             encoder_attention_mask=attention_mask,
-
-            #decoder_causal_mask=causal_mask,
-            #decoder_cached_states=decoder_cached_states,
-            #use_cache=use_cache,
-            lm_labels=lm_labels
+            # decoder_causal_mask=causal_mask,
+            # decoder_cached_states=decoder_cached_states,
+            # use_cache=use_cache,
+            lm_labels=lm_labels,
         )
         # Attention and hidden_states will be [] or None if they aren't needed
         if use_cache:
@@ -185,23 +191,24 @@ class MarianModel(PreTrainedModel):
         else:
             encoder_outputs, decoder_past_key_value_states = past[0], past[1]
 
+
+
         return {
             "decoder_input_ids": input_ids,
             "decoder_cached_states": decoder_past_key_value_states,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
         }
+
     def _reorder_cache(self, past: Tuple, beam_idx) -> Tuple:
-        encoder_outputs, = past
+        (encoder_outputs,) = past
         reordered_encoder_outputs = encoder_outputs.index_select(0, beam_idx)
-        return (reordered_encoder_outputs, )
+        return (reordered_encoder_outputs,)
 
     def _do_output_past(self, *args, **kwargs) -> bool:
         return True
 
-
-        #return self.decoder.prepare_inputs_for_generation(*args, **kwargs)
-
+        # return self.decoder.prepare_inputs_for_generation(*args, **kwargs)
 
     def get_encoder(self):
         return self.encoder

@@ -17,15 +17,15 @@
 
 
 import logging
-
-from .configuration_utils import PretrainedConfig
-from .configuration_bert import BertConfig
 from copy import deepcopy
+
+from .configuration_bert import BertConfig
+from .configuration_utils import PretrainedConfig
+
 
 logger = logging.getLogger(__name__)
 
-PRETRAINED_CONFIG_ARCHIVE_MAP = {
-}
+PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class MarianConfig(BertConfig):
@@ -89,11 +89,7 @@ class MarianConfig(BertConfig):
     pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "bert2bert"
 
-    def __init__(
-        self,
-        **kwargs
-    ):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.is_encoder_decoder = True
         self.is_decoder = True
-

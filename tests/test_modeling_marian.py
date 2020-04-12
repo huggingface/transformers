@@ -85,7 +85,6 @@ class Bert2BertModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     is_encoder_decoder = True
 
-
     def setUp(self):
         self.model_tester = ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BertConfig, d_model=37)
