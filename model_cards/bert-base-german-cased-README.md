@@ -1,7 +1,13 @@
 ---
 language: german
 thumbnail: https://static.tildacdn.com/tild6438-3730-4164-b266-613634323466/german_bert.png
+tags:
+- exbert
 ---
+
+<a href="https://huggingface.co/exbert/?model=bert-base-german-cased">
+	<img width="300px" src="https://hf-dinosaur.huggingface.co/exbert/button.png">
+</a>
 
 # German BERT
 ![bert_image](https://static.tildacdn.com/tild6438-3730-4164-b266-613634323466/german_bert.png)
@@ -18,6 +24,7 @@ thumbnail: https://static.tildacdn.com/tild6438-3730-4164-b266-613634323466/germ
 - We trained 810k steps with a batch size of 1024 for sequence length 128 and 30k steps with sequence length 512. Training took about 9 days.
 - As training data we used the latest German Wikipedia dump (6GB of raw txt files), the OpenLegalData dump (2.4 GB) and news articles (3.6 GB).
 - We cleaned the data dumps with tailored scripts and segmented sentences with spacy v2.1. To create tensorflow records we used the recommended sentencepiece library for creating the word piece vocabulary and tensorflow scripts to convert the text to data usable by BERT.
+- Update April 3rd, 2020: updated the vocab file on deepset s3 to adjust tokenization of punctuation.
 
 See https://deepset.ai/german-bert for more details
 
