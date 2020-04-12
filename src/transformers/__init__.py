@@ -109,6 +109,7 @@ from .pipelines import (
     CsvPipelineDataFormat,
     FeatureExtractionPipeline,
     FillMaskPipeline,
+    GenerationPipeline,
     JsonPipelineDataFormat,
     NerPipeline,
     PipedPipelineDataFormat,
@@ -118,7 +119,6 @@ from .pipelines import (
     SummarizationPipeline,
     TextClassificationPipeline,
     TokenClassificationPipeline,
-    GenerationPipeline,
     TranslationPipeline,
     pipeline,
 )
