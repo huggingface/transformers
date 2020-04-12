@@ -293,7 +293,7 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
             sent = sent.replace('.', '$period$')
             sent = sent.replace('/', '$backslash$')
             payload=numpy.array(wembs_sent_batch[i])
-            print (payload.shape())
+            print (payload.shape)
             try:
                 writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
                                       data=payload)
