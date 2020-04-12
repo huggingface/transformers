@@ -164,8 +164,9 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 14. **[MMBT](https://github.com/facebookresearch/mmbt/)** (from Facebook), released together with the paper a [Supervised Multimodal Bitransformers for Classifying Images and Text](https://arxiv.org/pdf/1909.02950.pdf) by Douwe Kiela, Suvrat Bhooshan, Hamed Firooz, Davide Testuggine.
 15. **[FlauBERT](https://github.com/getalp/Flaubert)** (from CNRS) released with the paper [FlauBERT: Unsupervised Language Model Pre-training for French](https://arxiv.org/abs/1912.05372) by Hang Le, Loïc Vial, Jibril Frej, Vincent Segonne, Maximin Coavoux, Benjamin Lecouteux, Alexandre Allauzen, Benoît Crabbé, Laurent Besacier, Didier Schwab.
 16. **[BART](https://github.com/pytorch/fairseq/tree/master/examples/bart)** (from Facebook) released with the paper [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension](https://arxiv.org/pdf/1910.13461.pdf) by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov and Luke Zettlemoyer.
-17. **[Other community models](https://huggingface.co/models)**, contributed by the [community](https://huggingface.co/users).
-18. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
+17. **[ELECTRA](https://github.com/google-research/electra)** (from Google Research/Stanford University) released with the paper [ELECTRA: Pre-training text encoders as discriminators rather than generators](https://arxiv.org/abs/2003.10555) by Kevin Clark, Minh-Thang Luong, Quoc V. Le, Christopher D. Manning.
+18. **[Other community models](https://huggingface.co/models)**, contributed by the [community](https://huggingface.co/users).
+19. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
 
 These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
@@ -336,7 +337,6 @@ python ./examples/run_glue.py \
     --task_name $TASK_NAME \
     --do_train \
     --do_eval \
-    --do_lower_case \
     --data_dir $GLUE_DIR/$TASK_NAME \
     --max_seq_length 128 \
     --per_gpu_eval_batch_size=8   \
@@ -390,7 +390,6 @@ python -m torch.distributed.launch --nproc_per_node 8 ./examples/run_glue.py   \
     --task_name MRPC \
     --do_train   \
     --do_eval   \
-    --do_lower_case   \
     --data_dir $GLUE_DIR/MRPC/   \
     --max_seq_length 128   \
     --per_gpu_eval_batch_size=8   \
@@ -423,7 +422,6 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/run_squad.py \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
     --do_eval \
-    --do_lower_case \
     --train_file $SQUAD_DIR/train-v1.1.json \
     --predict_file $SQUAD_DIR/dev-v1.1.json \
     --learning_rate 3e-5 \
@@ -537,6 +535,8 @@ You can create `Pipeline` objects for the following down-stream tasks:
  - `text-classification`: Initialize a `TextClassificationPipeline` directly, or see `sentiment-analysis` for an example.
  - `question-answering`: Provided some context and a question refering to the context, it will extract the answer to the question in the context.
  - `fill-mask`: Takes an input sequence containing a masked token (e.g. `<mask>`) and return list of most probable filled sequences, with their probabilities.
+ - `summarization`
+ - `translation_xx_to_yy`
 
 ```python
 from transformers import pipeline
