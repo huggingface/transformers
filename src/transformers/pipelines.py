@@ -1710,7 +1710,7 @@ SUPPORTED_TASKS = {
         "impl": GenerationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {"model": {"pt": "gpt2", "tf": "gpt2"}, "config": None, "tokenizer": "gpt2",},
+        "default": {"model": {"pt": "gpt2", "tf": "gpt2"}, "config": None, "tokenizer": "gpt2"},
     },
 }
 
