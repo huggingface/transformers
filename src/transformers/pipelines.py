@@ -662,7 +662,7 @@ class GenerationPipeline(Pipeline):
                 tokens = self.prepare_input(prompt_text)
                 output_sequences = self.model.generate(
                     input_ids=tokens,  # BS x SL
-                    max_length=self.length + len(tokens),
+                    max_length=self.length + len(tokens.squeeze()), # SL
                     temperature=self.temperature,
                     top_k=self.top_k,
                     top_p=self.top_p,
