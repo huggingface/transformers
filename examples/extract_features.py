@@ -288,7 +288,8 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
         w2token_batch=tokenid2wordid(input_ids,tokenizer,examples)
         all_encoder_layers,_=model(input_ids)[-2:]
         average_layer_batch = sum(all_encoder_layers[-args.layers:]) / args.layers
-        wembs_sent_batch=tokenemb2wemb(average_layer_batch,w2token_batch)
+        wembs_sent_batch=tokenemb2wemb(average_layer_batch.cpu().detach().numpy(),w2token_batch)
+        print (wembs_sent_batch.shape())
         for i,sent in enumerate(examples):
             sent = sent.replace('.', '$period$')
             sent = sent.replace('/', '$backslash$')
