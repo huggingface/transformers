@@ -397,7 +397,7 @@ def main():
 
     ## Required parameters
     parser.add_argument("--input_file", default=None, type=str, required=True)
-    parser.add_argument("--output_file", default=None, type=str, required=True)
+    parser.add_argument("--output_file", default=None, type=str)
     parser.add_argument("--model", default=None, type=str, required=True,
                         help=" pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
