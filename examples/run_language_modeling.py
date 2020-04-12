@@ -184,7 +184,7 @@ class LineByLineTextDataset(Dataset):
             lines = [(srcline,tgtlines[i]) for i,srcline in enumerate(srclines) if (len(srcline) > 0 and not srcline.isspace() and len(tgtlines[i])>0 and not tgtlines[i].isspace() )]
             srclines,tgtlines=list(zip(*lines))
         src_examples = tokenizer.batch_encode_plus(srclines, add_special_tokens=True, max_length=block_size)["input_ids"]
-        tgt_examples = tokenizer.batch_encode_plus(srclines, add_special_tokens=True, max_length=block_size)["input_ids"]
+        tgt_examples = tokenizer.batch_encode_plus(tgtlines, add_special_tokens=True, max_length=block_size)["input_ids"]
 
         return src_examples,tgt_examples
 
