@@ -772,7 +772,9 @@ class GenerationPipeline(Pipeline):
                 add_space_before_punct_symbol=True,
             )
         else:
-            encoded_prompt = self.tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors=self.framework)
+            encoded_prompt = self.tokenizer.encode(
+                prompt_text, add_special_tokens=False, return_tensors=self.framework
+            )
 
         return encoded_prompt
 
