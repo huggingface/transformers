@@ -295,7 +295,10 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
             payload=numpy.array(wembs_sent_batch[i])
             print (payload.shape)
             try:
-                writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
+                if sent in writer:
+                    print ('already exist',sent)
+                else:
+                    writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
                                       data=payload)
             except OSError as e:
                 print(e, sent)
