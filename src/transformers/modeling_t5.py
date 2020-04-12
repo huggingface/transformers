@@ -356,7 +356,6 @@ class T5Attention(nn.Module):
         else:
             present_key_value_state = (None,)
 
-        # q = q / math.sqrt(dim_per_head)                                     # No scaling in T5
         scores = torch.einsum("bnqd,bnkd->bnqk", q, k)  # (bs, n_heads, qlen, klen)
 
         if position_bias is None:
