@@ -279,14 +279,14 @@ def tokenid2wordid(input_ids,tokenizer,examples):
 
 
 
-def examples2embeds(examples,tokenizer,model,device,writer):
-    input_ids=torch.tensor(tokenizer.batch_encode_plus(examples,add_special_tokens=True,pad_to_max_length='right')['input_ids'])
+def examples2embeds(examples,tokenizer,model,device,writer,args):
+    input_ids=torch.tensor(tokenizer.batch_encode_plus(examples,max_length=args.max_seq_length,add_special_tokens=True,pad_to_max_length='right')['input_ids'])
     input_ids=input_ids.to(device)
     model.eval()
     with torch.no_grad():
         tokenid2wordid(input_ids,tokenizer,examples)
         all_encoder_layers,_=model(input_ids)[-2:]
-        average_layer_batch = sum(all_encoder_layers[-12:]) / 12
+        average_layer_batch = sum(all_encoder_layers[-args.layers:]) / args.layers
         wembs_sent_batch=tokenemb2wemb(average_layer_batch)
         for i,sent in enumerate(examples):
             sent = sent.replace('.', '$period$')
@@ -403,13 +403,11 @@ def main():
                              "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
 
     ## Other parameters
-    parser.add_argument("--do_lower_case", action='store_true', help="Set this flag if you are using an uncased model.")
-    # parser.add_argument("--layers", default="-1,-2,-3,-4", type=str)
-    parser.add_argument("--max_seq_length", default=128, type=int,
+    parser.add_argument("--layers", default=12, type=int,help='sum over top num layers')
+    parser.add_argument("--max_seq_length", default=None, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
                             "than this will be truncated, and sequences shorter than this will be padded.")
     parser.add_argument("--batch_size", default=32, type=int, help="Batch size for predictions.")
-    parser.add_argument('--example_batch', default=100000,type=int, help='batch size for input examples')
     parser.add_argument("--local_rank",
                         type=int,
                         default=-1,
@@ -418,7 +416,6 @@ def main():
                         action='store_true',
                         help="Whether not to use CUDA when available")
     parser.add_argument('--gpu', type=int,help='specify the gpu to use')
-    parser.add_argument('--vocab',action='store_true', default=None,help='whether vocab')
 
     args = parser.parse_args()
 
@@ -448,10 +445,10 @@ def main():
     #    model = torch.nn.DataParallel(model)
        
     example_counter=0
-    for examples in read_examples(args.input_file,args.example_batch):
+    for examples in read_examples(args.input_file,args.batch_size):
         example_counter+=1
-        print ('processed {0} examples'.format (str(args.example_batch*example_counter)))
-        examples2embeds(examples,tokenizer,model,device,writer)
+        print ('processed {0} examples'.format (str(args.batch_size*example_counter)))
+        examples2embeds(examples,tokenizer,model,device,writer,args)
     writer.close()
 
 if __name__ == "__main__":
