@@ -660,6 +660,10 @@ class GenerationPipeline(Pipeline):
             # Manage correct placement of the tensors
             with self.device_placement():
                 tokens = self.prepare_input(prompt_text)
+                if self.framework == "pt":
+                    with torch.no_grad():
+                        tokens = self.ensure_tensor_on_device(**tokens)
+
                 output_sequences = self.model.generate(
                     input_ids=tokens,  # BS x SL
                     max_length=self.length + len(tokens.squeeze()), # SL
