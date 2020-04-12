@@ -662,18 +662,30 @@ class GenerationPipeline(Pipeline):
                 tokens = self.prepare_input(prompt_text)
                 if self.framework == "pt":
                     with torch.no_grad():
-                        tokens = self.ensure_tensor_on_device(**tokens)
+                        tokens = tokens.to(self.device)
 
-                output_sequences = self.model.generate(
-                    input_ids=tokens,  # BS x SL
-                    max_length=self.length + len(tokens.squeeze()), # SL
-                    temperature=self.temperature,
-                    top_k=self.top_k,
-                    top_p=self.top_p,
-                    repetition_penalty=self.repetition_penalty,
-                    do_sample=self.do_sample,
-                    num_return_sequences=self.num_return_sequences,
-                )
+                        output_sequences = self.model.generate(
+                            input_ids=tokens,  # BS x SL
+                            max_length=self.length + len(tokens.squeeze()), # SL
+                            temperature=self.temperature,
+                            top_k=self.top_k,
+                            top_p=self.top_p,
+                            repetition_penalty=self.repetition_penalty,
+                            do_sample=self.do_sample,
+                            num_return_sequences=self.num_return_sequences,
+                        )
+
+                else:
+                    output_sequences = self.model.generate(
+                        input_ids=tokens,  # BS x SL
+                        max_length=self.length + len(tokens.squeeze()), # SL
+                        temperature=self.temperature,
+                        top_k=self.top_k,
+                        top_p=self.top_p,
+                        repetition_penalty=self.repetition_penalty,
+                        do_sample=self.do_sample,
+                        num_return_sequences=self.num_return_sequences,
+                    )
 
             # Remove the batch dimension when returning multiple sequences
             if len(output_sequences.shape) > 2:
