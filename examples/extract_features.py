@@ -257,7 +257,7 @@ def tokenemb2wemb(average_layer_batch,w2token_batch):
         w2token=w2token_batch[sent_i]
         for start,end in w2token:
             sent_embed_out.append(sum(sent_embed[start:end]) / (end-start))
-        wembs_sent_batch.append(sent_embed_out)
+        wembs_sent_batch.append(numpy.array(sent_embed_out))
     return wembs_sent_batch
 
 def tokenid2wordid(input_ids,tokenizer,examples):
