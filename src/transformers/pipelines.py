@@ -829,7 +829,7 @@ class NerPipeline(Pipeline):
                     # If the current entity is different from the previous entity, aggregate the disaggregated entity group
                     else:
                         entity_groups += [self.group_entities(entity_group_disagg)]
-                        entity_group_disagg = []
+                        entity_group_disagg = [entity]
 
                 entities += [entity]
 
