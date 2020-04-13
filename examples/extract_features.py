@@ -28,8 +28,7 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 
-from pytorch_pretrained_bert.tokenization import BertTokenizer
-from pytorch_pretrained_bert.modeling import BertModel
+from transformers import *
 import numpy
 
 logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s', 
@@ -37,6 +36,12 @@ logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(messa
                     level = logging.INFO)
 logger = logging.getLogger(__name__)
 import h5py
+
+BERT_BASE_CASED='bert-base-cased'
+MODELS=[BERT_BASE_CASED]
+
+MODELNAME2MODEL={BERT_BASE_CASED:BertForMaskedLM}
+MODELNAME2TOKENIZERS={BERT_BASE_CASED:BertTokenizer}
 
 class InputExample(object):
 
@@ -194,7 +199,7 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
             tokens_b.pop()
 
 
-def read_examples(input_file,example_batch):
+def read_examples_bk(input_file,example_batch):
     """Read a list of `InputExample`s from an input file."""
     examples = []
     unique_id = 0
@@ -223,73 +228,85 @@ def read_examples(input_file,example_batch):
     if examples!=[]:
         yield examples
 
+def read_examples(input_file,example_batch):
+    examples = []
+    unique_id = 0
+    with open(input_file, "r", encoding='utf-8') as reader:
+        while True:
+            line = reader.readline()
+            if not line:
+                break
+            line = line.strip().split('\t')[0]
+            if line == '':
+                continue
+            examples.append(line)
+    start=0
+    while start <= len(examples):
+        yield examples[start:start+example_batch]
+        start+=example_batch
+
 def get_orig_seq(input_mask_batch):
     seq=[i for i in input_mask_batch if i!=0]
     return seq
 
-def feature_orig_to_tok_map_vocab(average_layer_batch, orig_to_token_map_batch,input_mask_batch):
-    average_layer_batch_out=[]
-    cls_embed_batch_out=[]
+
+def tokenemb2wemb(average_layer_batch,w2token_batch):
+    wembs_sent_batch = []
     for sent_i, sent_embed in enumerate(average_layer_batch):
-        sent_embed_out=[]
-        orig_to_token_map_batch_sent=get_orig_seq(orig_to_token_map_batch[sent_i])
-        seq_len = len(get_orig_seq(input_mask_batch[sent_i]))
+        sent_embed_out = []
+        w2token=w2token_batch[sent_i]
+        for start,end in w2token:
+            sent_embed_out.append(sum(sent_embed[start:end]) / (end-start))
+        wembs_sent_batch.append(numpy.array(sent_embed_out))
+    return wembs_sent_batch
 
-        for i in range(len(orig_to_token_map_batch_sent)):
-            start = orig_to_token_map_batch_sent[i]
-            if i==(len(orig_to_token_map_batch_sent)-1):
-                sent_embed_out.append(sum(sent_embed[start:seq_len]) / (seq_len - start))
-                continue
-            end = orig_to_token_map_batch_sent[i+1]
-            sent_embed_out.append(sum(sent_embed[start:end])/(end-start))
-        try:
-            average_layer_batch_out.append(numpy.array(sent_embed_out))
-        except ValueError as e:
-            print (e,)
-            average_layer_batch_out.append(None)
+def tokenid2wordid(input_ids,tokenizer,examples):
+    w2token_batch=[]
+    for i,example in enumerate(examples):
+        w2token=[]
+        input_id=input_ids[i]
+        input_start=0
 
-        #add cls sentence embed
-        try:
-            cls_embed_batch_out.append(numpy.array([sent_embed[0]]))
-        except ValueError as e:
-            print (e,)
-            cls_embed_batch_out.append(None)
+        for w in example.split():
+            w_ids=tokenizer.encode(w,add_special_tokens=False)
+            while int(w_ids[0])!=int(input_id[input_start]):
+                input_start+=1
+            input_end=input_start+len(w_ids)
+            w2token.append((input_start,input_end))
+            input_start=input_end
+        w2token_batch.append(w2token)
 
-
-    return average_layer_batch_out,cls_embed_batch_out
-
-def feature_orig_to_tok_map(average_layer_batch, orig_to_token_map_batch,input_mask_batch):
-    average_layer_batch_out=[]
-    cls_embed_batch_out=[]
-    for sent_i, sent_embed in enumerate(average_layer_batch):
-        sent_embed_out=[]
-        orig_to_token_map_batch_sent=get_orig_seq(orig_to_token_map_batch[sent_i])
-        seq_len = len(get_orig_seq(input_mask_batch[sent_i]))
-
-        for i in range(len(orig_to_token_map_batch_sent)):
-            start = orig_to_token_map_batch_sent[i]
-            if i==(len(orig_to_token_map_batch_sent)-1):
-                sent_embed_out.append(sum(sent_embed[start:seq_len-1]) / (seq_len-1 - start))
-                continue
-            end = orig_to_token_map_batch_sent[i + 1]
-            sent_embed_out.append(sum(sent_embed[start:end])/(end-start))
-        try:
-            average_layer_batch_out.append(numpy.array(sent_embed_out))
-        except ValueError as e:
-            print (e,)
-            average_layer_batch_out.append(None)
-
-        #add cls sentence embed
-        try:
-            cls_embed_batch_out.append(numpy.array([sent_embed[0]]))
-        except ValueError as e:
-            print (e,)
-            cls_embed_batch_out.append(None)
+    return w2token_batch
 
 
-    return average_layer_batch_out,cls_embed_batch_out
 
 def examples2embeds(examples,tokenizer,model,device,writer,args):
+    input_ids=torch.tensor(tokenizer.batch_encode_plus(examples,max_length=args.max_seq_length,add_special_tokens=True,pad_to_max_length='right')['input_ids'])
+    input_ids=input_ids.to(device)
+    model.eval()
+    with torch.no_grad():
+        w2token_batch=tokenid2wordid(input_ids,tokenizer,examples)
+        all_encoder_layers,_=model(input_ids)[-2:]
+        average_layer_batch = sum(all_encoder_layers[-args.layers:]) / args.layers
+        wembs_sent_batch=tokenemb2wemb(average_layer_batch.cpu().detach().numpy(),w2token_batch)
+        for i,sent in enumerate(examples):
+            sent = sent.replace('.', '$period$')
+            sent = sent.replace('/', '$backslash$')
+            payload=numpy.array(wembs_sent_batch[i])
+            print (payload.shape)
+            try:
+                if sent in writer:
+                    print ('already exist',sent)
+                else:
+                    writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
+                                      data=payload)
+            except OSError as e:
+                print(e, sent)
+
+
+def examples2embeds_bk(examples,tokenizer,model,device,writer,args):
+    input_ids=torch.tensor(tokenizer.batch_encode_plus(examples,add_special_tokens=True,pad_to_max_length='right')['input_ids'])
+
     features = convert_examples_to_features(
         examples=examples, seq_length=args.max_seq_length, tokenizer=tokenizer,args=args)
 
@@ -385,19 +402,17 @@ def main():
 
     ## Required parameters
     parser.add_argument("--input_file", default=None, type=str, required=True)
-    parser.add_argument("--output_file", default=None, type=str, required=True)
-    parser.add_argument("--bert_model", default=None, type=str, required=True,
-                        help="Bert pre-trained model selected in the list: bert-base-uncased, "
+    parser.add_argument("--output_file", default=None, type=str)
+    parser.add_argument("--model", default=None, type=str, required=True,
+                        help=" pre-trained model selected in the list: bert-base-uncased, "
                              "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
 
     ## Other parameters
-    parser.add_argument("--do_lower_case", action='store_true', help="Set this flag if you are using an uncased model.")
-    # parser.add_argument("--layers", default="-1,-2,-3,-4", type=str)
-    parser.add_argument("--max_seq_length", default=128, type=int,
+    parser.add_argument("--layers", default=12, type=int,help='sum over top num layers')
+    parser.add_argument("--max_seq_length", default=None, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. Sequences longer "
                             "than this will be truncated, and sequences shorter than this will be padded.")
     parser.add_argument("--batch_size", default=32, type=int, help="Batch size for predictions.")
-    parser.add_argument('--example_batch', default=100000,type=int, help='batch size for input examples')
     parser.add_argument("--local_rank",
                         type=int,
                         default=-1,
@@ -406,11 +421,13 @@ def main():
                         action='store_true',
                         help="Whether not to use CUDA when available")
     parser.add_argument('--gpu', type=int,help='specify the gpu to use')
-    parser.add_argument('--vocab',action='store_true', default=None,help='whether vocab')
 
     args = parser.parse_args()
 
-    writer= h5py.File(args.output_file, 'w')
+    if args.output_file:
+        writer= h5py.File(args.output_file, 'w')
+    else:
+        writer=h5py.File(args.input_file+'.'+args.model+'.ly-'+str(args.layers)+'.hdf5','w')
 
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda:{0}".format(args.gpu) if torch.cuda.is_available() and not args.no_cuda and args.gpu>=0 else "cpu")
@@ -424,9 +441,9 @@ def main():
     logger.info("device: {} n_gpu: {} distributed training: {}".format(device, n_gpu, bool(args.local_rank != -1)))
 
     # layer_indexes = [int(x) for x in args.layers.split(",")]
-
-    tokenizer = BertTokenizer.from_pretrained(args.bert_model, do_lower_case=args.do_lower_case)
-    model = BertModel.from_pretrained(args.bert_model)
+    assert args.model in MODELS
+    tokenizer = MODELNAME2TOKENIZERS[args.model].from_pretrained(args.model,output_hidden_states=True,output_attentions=True)
+    model = MODELNAME2MODEL[args.model].from_pretrained(args.model,output_hidden_states=True,output_attentions=True)
     model.to(device)
 
     if args.local_rank != -1:
@@ -436,9 +453,9 @@ def main():
     #    model = torch.nn.DataParallel(model)
        
     example_counter=0
-    for examples in read_examples(args.input_file,args.example_batch):
+    for examples in read_examples(args.input_file,args.batch_size):
         example_counter+=1
-        print ('processed {0} examples'.format (str(args.example_batch*example_counter)))
+        print ('processed {0} examples'.format (str(args.batch_size*example_counter)))
         examples2embeds(examples,tokenizer,model,device,writer,args)
     writer.close()
 
