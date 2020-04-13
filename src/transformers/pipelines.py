@@ -925,14 +925,12 @@ class NerPipeline(Pipeline):
 
             for idx, label_idx in filtered_labels_idx:
 
-                entity = [
-                    {
-                        "word": self.tokenizer.convert_ids_to_tokens(int(input_ids[idx])),
-                        "score": score[idx][label_idx].item(),
-                        "entity": self.model.config.id2label[label_idx],
-                        "index": idx,
-                    }
-                ]
+                entity = {
+                    "word": self.tokenizer.convert_ids_to_tokens(int(input_ids[idx])),
+                    "score": score[idx][label_idx].item(),
+                    "entity": self.model.config.id2label[label_idx],
+                    "index": idx,
+                }
                 last_idx, _ = filtered_labels_idx[-1]
                 if self.group:
                     if not entity_group_disagg:
