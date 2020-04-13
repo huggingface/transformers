@@ -95,9 +95,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         "zh_CN": 250025,
     }
 
-    def _append_special_tokens_and_truncate(
-        self, raw_text: str, lang_code: str, max_length: int,
-    ) -> Dict[str, torch.Tensor]:
+    def _append_special_tokens_and_truncate(self, raw_text: str, lang_code: str, max_length: int,) -> List[int]:
         tokenized_text: str = self.tokenize(raw_text)
         ids: list = self.convert_tokens_to_ids(tokenized_text)[:max_length]
         lang_id: int = self.lang_code_to_id[lang_code]
