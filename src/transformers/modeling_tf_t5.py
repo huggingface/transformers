@@ -212,7 +212,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         if kv is None:
             klen = real_qlen
         else:
-            klen = kv.size(1)
+            klen = shape_list(kv)[1]
 
         def shape(x):
             """  projection """
@@ -632,9 +632,9 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             if i == 0:
                 # We share the position biases between the layers - the first layer store them
                 # layer_outputs = hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-                position_bias = layer_outputs[2 if self.output_attentions else 1]
+                position_bias = layer_outputs[3 if self.output_attentions else 2]
                 if self.is_decoder:
-                    encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 2]
+                    encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 3]
             # append next layer key value states
             present_key_value_states = present_key_value_states + (present_key_value_state,)
 
@@ -1040,6 +1040,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
+
         if len(past) < 2:
             logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
             return past
@@ -1047,6 +1048,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         decoder_past = past[1]
         past = (past[0],)
         reordered_decoder_past = ()
+
         for layer_past_states in decoder_past:
             # get the correct batch idx from layer past batch dim
             # batch dim of `past` is at 2nd position
@@ -1054,10 +1056,11 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             for layer_past_state in layer_past_states:
                 # need to set correct `past` for each of the four key / value states
                 reordered_layer_past_states = reordered_layer_past_states + (
-                    layer_past_state.index_select(0, beam_idx),
+                    tf.gather(layer_past_state, beam_idx),
+#                    tf.concat([tf.identity(tf.expand_dims(layer_past_state[i], 0)) for i in beam_idx], axis=0),
                 )
 
-            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
+            assert shape_list(reordered_layer_past_states[0]) == shape_list(layer_past_states[0])
             assert len(reordered_layer_past_states) == len(layer_past_states)
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)

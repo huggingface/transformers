@@ -24,6 +24,7 @@ from .utils import CACHE_DIR, require_tf, slow
 
 
 if is_tf_available():
+    import tensorflow as tf
     from transformers import TFT5Model, TFT5ForConditionalGeneration, T5Tokenizer
 
 
@@ -111,14 +112,14 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
                 "decoder_input_ids": input_ids,
                 "decoder_attention_mask": input_mask,
             }
-            encoder_output, decoder_output = model(inputs)
+            decoder_output, decoder_past, encoder_output = model(inputs)
 
-            encoder_output, decoder_output = model(
+            decoder_output, decoder_past, encoder_output = model(
                 input_ids, decoder_attention_mask=input_mask, decoder_input_ids=input_ids
             )
-
             result = {
                 "encoder_output": encoder_output.numpy(),
+                "decoder_past": decoder_past,
                 "decoder_output": decoder_output.numpy(),
             }
             self.parent.assertListEqual(
@@ -127,6 +128,13 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(
                 list(result["decoder_output"].shape), [self.batch_size, self.seq_length, self.hidden_size]
             )
+            self.parent.assertEqual(len(decoder_past), 2)
+            # decoder_past[0] should correspond to encoder output
+            self.parent.assertTrue(tf.reduce_all(tf.math.equal(decoder_past[0][0], encoder_output)))
+            # There should be `num_layers` key value embeddings stored in decoder_past[1]
+            self.parent.assertEqual(len(decoder_past[1]), config.num_layers)
+            # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past[1] tuple
+            self.parent.assertEqual(len(decoder_past[1][0]), 4)
 
         def create_and_check_t5_with_lm_head(self, config, input_ids, input_mask, token_labels):
             model = TFT5ForConditionalGeneration(config=config)
@@ -136,7 +144,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
                 "decoder_attention_mask": input_mask,
             }
 
-            prediction_scores, decoder_output = model(inputs_dict)
+            prediction_scores, _, _ = model(inputs_dict)
 
             result = {
                 "prediction_scores": prediction_scores.numpy(),
