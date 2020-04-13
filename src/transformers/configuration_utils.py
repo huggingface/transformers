@@ -102,6 +102,9 @@ class PretrainedConfig(object):
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)
 
+        # TPU arguments
+        self.xla_device = kwargs.pop("xla_device", None)
+
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
