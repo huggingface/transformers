@@ -153,9 +153,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
                 list(result["prediction_scores"].shape), [self.batch_size, self.seq_length, self.vocab_size]
             )
 
-        def create_and_check_t5_decoder_model_past(
-            self, config, input_ids, decoder_input_ids, attention_mask
-        ):
+        def create_and_check_t5_decoder_model_past(self, config, input_ids, decoder_input_ids, attention_mask):
             model = TFT5Model(config=config).get_decoder()
 
             input_ids = input_ids[:1, :]
@@ -209,9 +207,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
             # append to next input_ids and attn_mask
             next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-            attn_mask = tf.concat(
-                [attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)], axis=1,
-            )
+            attn_mask = tf.concat([attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)], axis=1,)
 
             # get two different outputs
             output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]
@@ -234,7 +230,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
                 "inputs": input_ids,
                 "decoder_input_ids": input_ids,
                 "decoder_attention_mask": input_mask,
-                "use_cache": tf.convert_to_tensor([False])
+                "use_cache": tf.convert_to_tensor([False]),
             }
             return config, inputs_dict
 

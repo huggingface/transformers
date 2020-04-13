@@ -185,10 +185,17 @@ class TFT5Attention(tf.keras.layers.Layer):
         return values
 
     def call(
-        self, input, mask=None, kv=None, position_bias=None, cache=None, past_key_value_state=None,
+        self,
+        input,
+        mask=None,
+        kv=None,
+        position_bias=None,
+        cache=None,
+        past_key_value_state=None,
         head_mask=None,
         query_length=None,
-        use_cache=False, training=False,
+        use_cache=False,
+        training=False,
     ):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
@@ -301,11 +308,24 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
     def call(
-        self, hidden_states, attention_mask=None, position_bias=None, head_mask=None, past_key_value_state=None, use_cache=False, training=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        position_bias=None,
+        head_mask=None,
+        past_key_value_state=None,
+        use_cache=False,
+        training=False,
     ):
         norm_x = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
-            norm_x, mask=attention_mask, position_bias=position_bias, head_mask=head_mask, past_key_value_state=past_key_value_state, use_cache=use_cache, training=training,
+            norm_x,
+            mask=attention_mask,
+            position_bias=position_bias,
+            head_mask=head_mask,
+            past_key_value_state=past_key_value_state,
+            use_cache=use_cache,
+            training=training,
         )
         y = attention_output[0]
         layer_output = hidden_states + self.dropout(y, training=training)
@@ -323,7 +343,12 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
     def call(
-        self, hidden_states, kv, attention_mask=None, position_bias=None, head_mask=None,
+        self,
+        hidden_states,
+        kv,
+        attention_mask=None,
+        position_bias=None,
+        head_mask=None,
         past_key_value_state=None,
         query_length=None,
         use_cache=False,
@@ -331,7 +356,15 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
     ):
         norm_x = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
-            norm_x, mask=attention_mask, kv=kv, position_bias=position_bias, head_mask=head_mask, past_key_value_state=past_key_value_state, query_length=query_length, use_cache=use_cache, training=training,
+            norm_x,
+            mask=attention_mask,
+            kv=kv,
+            position_bias=position_bias,
+            head_mask=head_mask,
+            past_key_value_state=past_key_value_state,
+            query_length=query_length,
+            use_cache=use_cache,
+            training=training,
         )
         y = attention_output[0]
         layer_output = hidden_states + self.dropout(y, training=training)
@@ -374,10 +407,12 @@ class TFT5Block(tf.keras.layers.Layer):
             assert self.is_decoder, "Only decoder can use `past_key_value_states`"
             expected_num_past_key_value_states = 2 if encoder_hidden_states is None else 4
 
-            error_message = "There should be {} past states. 2 (past / key) for self attention.{} Got {} past key / value states".format(expected_num_past_key_value_states, "2 (past / key) for cross attention" if expected_num_past_key_value_states == 4 else "", len(past_key_value_state))
-            assert (
-                len(past_key_value_state) == expected_num_past_key_value_states
-            ), error_message
+            error_message = "There should be {} past states. 2 (past / key) for self attention.{} Got {} past key / value states".format(
+                expected_num_past_key_value_states,
+                "2 (past / key) for cross attention" if expected_num_past_key_value_states == 4 else "",
+                len(past_key_value_state),
+            )
+            assert len(past_key_value_state) == expected_num_past_key_value_states, error_message
 
             self_attn_past_key_value_state = past_key_value_state[:2]
             cross_attn_past_key_value_state = past_key_value_state[2:]
@@ -1077,9 +1112,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             reordered_layer_past_states = ()
             for layer_past_state in layer_past_states:
                 # need to set correct `past` for each of the four key / value states
-                reordered_layer_past_states = reordered_layer_past_states + (
-                    tf.gather(layer_past_state, beam_idx),
-                )
+                reordered_layer_past_states = reordered_layer_past_states + (tf.gather(layer_past_state, beam_idx),)
 
             assert shape_list(reordered_layer_past_states[0]) == shape_list(layer_past_states[0])
             assert len(reordered_layer_past_states) == len(layer_past_states)

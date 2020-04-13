@@ -487,10 +487,12 @@ class T5Block(nn.Module):
             assert self.is_decoder, "Only decoder can use `past_key_value_states`"
             expected_num_past_key_value_states = 2 if encoder_hidden_states is None else 4
 
-            error_message = "There should be {} past states. 2 (past / key) for self attention.{} Got {} past key / value states".format(expected_num_past_key_value_states, "2 (past / key) for cross attention" if expected_num_past_key_value_states == 4 else "", len(past_key_value_state))
-            assert (
-                len(past_key_value_state) == expected_num_past_key_value_states
-            ), error_message
+            error_message = "There should be {} past states. 2 (past / key) for self attention.{} Got {} past key / value states".format(
+                expected_num_past_key_value_states,
+                "2 (past / key) for cross attention" if expected_num_past_key_value_states == 4 else "",
+                len(past_key_value_state),
+            )
+            assert len(past_key_value_state) == expected_num_past_key_value_states, error_message
 
             self_attn_past_key_value_state = past_key_value_state[:2]
             cross_attn_past_key_value_state = past_key_value_state[2:]
