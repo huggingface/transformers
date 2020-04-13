@@ -703,7 +703,6 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         # Prepare tokenizer initialization kwargs
         # Did we saved some inputs and kwargs to reload ?
         tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
-        print(tokenizer_config_file)
         assert tokenizer_config_file is not None
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
