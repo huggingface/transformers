@@ -42,6 +42,8 @@ from transformers import (
     XLMForSequenceClassification,
     XLMTokenizer,
     get_linear_schedule_with_warmup,
+    XLMRobertaConfig, XLMRobertaForSequenceClassification,XLMRobertaTokenizer,
+
 )
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
 from transformers import xnli_compute_metrics as compute_metrics
@@ -65,6 +67,7 @@ MODEL_CLASSES = {
     "bert": (BertConfig, BertForSequenceClassification, BertTokenizer),
     "xlm": (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
     "distilbert": (DistilBertConfig, DistilBertForSequenceClassification, DistilBertTokenizer),
+    'xlm-r':(XLMRobertaConfig, XLMRobertaForSequenceClassification,XLMRobertaTokenizer),
 }
 
 
