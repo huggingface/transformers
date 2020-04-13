@@ -488,6 +488,12 @@ def load_and_cache_examples(args, tokenizer, evaluate=False, output_examples=Fal
             else:
                 examples = processor.get_train_examples(args.data_dir, filename=args.train_file)
 
+        if isinstance(tokenizer, RobertaTokenizer):
+            _ = lambda text: text if text and text[0].isspace() else " " + text
+            for e in examples:
+                e.question_text = _(e.question_text)
+                e.context_text = _(e.context_text)
+
         features, dataset = squad_convert_examples_to_features(
             examples=examples,
             tokenizer=tokenizer,
@@ -775,9 +781,6 @@ def main():
         do_lower_case=args.do_lower_case,
         cache_dir=args.cache_dir if args.cache_dir else None,
     )
-    if isinstance(tokenizer, RobertaTokenizer):
-        import functools
-        tokenizer.tokenize = functools.partial(tokenizer.tokenize, add_prefix_space=True)
     model = model_class.from_pretrained(
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
