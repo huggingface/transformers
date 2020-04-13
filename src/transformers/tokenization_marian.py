@@ -133,7 +133,7 @@ class MarianSPTokenizer(PreTrainedTokenizer):
         """
         if max_length is None:
             max_length = self.max_len
-        encoder_ids: list = [self._append_special_tokens_and_truncate(t, src_lang, max_length - 2) for t in src_texts]
+        encoder_ids: list = [self._append_special_tokens_and_truncate(t,  max_length - 2) for t in src_texts]
         encoder_inputs = self.batch_encode_plus(
             encoder_ids,
             add_special_tokens=False,
@@ -143,7 +143,7 @@ class MarianSPTokenizer(PreTrainedTokenizer):
         )
 
         if tgt_texts is not None:
-            decoder_ids = [self._append_special_tokens_and_truncate(t, tgt_lang, max_length - 2) for t in tgt_texts]
+            decoder_ids = [self._append_special_tokens_and_truncate(t, max_length - 2) for t in tgt_texts]
             decoder_inputs = self.batch_encode_plus(
                 decoder_ids,
                 add_special_tokens=False,
