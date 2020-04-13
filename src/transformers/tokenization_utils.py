@@ -517,7 +517,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         self.max_len = max_len if max_len is not None else int(1e12)
 
-        # Padding side is right by default and over-riden in subclasses. If specified in the kwargs, it is changed.
+        # Padding side is right by default and overridden in subclasses. If specified in the kwargs, it is changed.
         self.padding_side = kwargs.pop("padding_side", self.padding_side)
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
@@ -703,6 +703,8 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         # Prepare tokenizer initialization kwargs
         # Did we saved some inputs and kwargs to reload ?
         tokenizer_config_file = resolved_vocab_files.pop("tokenizer_config_file", None)
+        print(tokenizer_config_file)
+        assert tokenizer_config_file is not None
         if tokenizer_config_file is not None:
             with open(tokenizer_config_file, encoding="utf-8") as tokenizer_config_handle:
                 init_kwargs = json.load(tokenizer_config_handle)

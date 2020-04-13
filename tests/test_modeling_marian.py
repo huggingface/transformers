@@ -25,7 +25,7 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
-    from transformers import BertConfig, BertModel, MarianModel, MarianConfig
+    from transformers import BertConfig, BertModel, MarianModel, MarianConfig, MarianSPTokenizer
 
 
 class ModelTester:
@@ -95,3 +95,14 @@ class Bert2BertModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip("Passing inputs_embeds not implemented for Bart.")
     def test_inputs_embeds(self):
         pass
+
+LOCAL_PATH = '/Users/shleifer/transformers_fork/en-de/'
+class MarianTokenizerTests(unittest.TestCase):
+
+
+    def test_en_de_local(self):
+        self.tokenizer = MarianSPTokenizer.from_pretrained(LOCAL_PATH)
+        inputs: dict = self.tokenizer.prepare_translation_batch(["What's for dinner?"], ["Was gibt es zum Abendessen"])
+
+
+
