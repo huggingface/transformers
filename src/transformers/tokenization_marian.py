@@ -1,12 +1,13 @@
 #from .tokenization_utils import
 
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
+from .marian_processor import ContentProcessor
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "marian/en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/marian/en-de/spm32k.vocab.yml"
+        "marian/en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/marian/en-de/source.spm"
     }}
-VOCAB_NAME = 'spm32k.vocab.yml'
+VOCAB_NAME = 'source.spm'
 
 
 class MarianSPTokenizer(XLMRobertaTokenizer):
@@ -14,3 +15,7 @@ class MarianSPTokenizer(XLMRobertaTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {m: 512 for m in PRETRAINED_VOCAB_FILES_MAP}
     # TODO(SS): model_input_names = ["attention_mask"]
+
+
+    #def __init__(self, model_dir):
+
