@@ -44,7 +44,7 @@ def glue_convert_examples_to_features(
     Args:
         examples: List of ``InputExamples`` or ``tf.data.Dataset`` containing the examples.
         tokenizer: Instance of a tokenizer that will tokenize the examples
-        max_length: Maximum example length. Defaults to the tokenizer's max_length
+        max_length: Maximum example length. Defaults to the tokenizer's max_len
         task: GLUE task
         label_list: List of labels. Can be obtained from the processor using the ``processor.get_labels()`` method
         output_mode: String indicating the output mode. Either ``regression`` or ``classification``

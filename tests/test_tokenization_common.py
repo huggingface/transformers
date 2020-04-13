@@ -93,12 +93,12 @@ class TokenizerTesterMixin:
         self.assertTrue(hasattr(tokenizer, "additional_special_tokens"))
         self.assertTrue(hasattr(tokenizer, "additional_special_tokens_ids"))
 
-        attributes_list = ["max_length", "init_inputs", "init_kwargs", "added_tokens_encoder", "added_tokens_decoder"]
+        attributes_list = ["max_len", "init_inputs", "init_kwargs", "added_tokens_encoder", "added_tokens_decoder"]
         for attr in attributes_list:
             self.assertTrue(hasattr(tokenizer, attr))
 
     def test_save_and_load_tokenizer(self):
-        # safety check on max_length default value so we are sure the test works
+        # safety check on max_len default value so we are sure the test works
         tokenizer = self.get_tokenizer()
         self.assertNotEqual(tokenizer.max_len, 42)
 
