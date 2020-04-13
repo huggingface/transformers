@@ -4,6 +4,8 @@ from mosestokenizer import MosesTokenizer, MosesDetokenizer, MosesSentenceSplitt
 
 from .apply_bpe import BPE
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
+from typing import Dict, List, Tuple, Optional
+from torch import Tensor
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -38,79 +40,121 @@ class MarianSPTokenizer(PreTrainedTokenizer):
             #mask_token=mask_token,
             #**kwargs,
         )
-        self.vocab = yaml.load(open(vocab), Loader=yaml.BaseLoader)
+        self.vocab: dict = yaml.load(open(vocab), Loader=yaml.BaseLoader)
+        self.unk_token_id = self.vocab[self.unk_token]
+        self.eos_token_id =  self.vocab[self.eos_token]
 
         self.bpe_source = None
         self.bpe_target = None
-        self.sp_processor_source = None
-        self.sp_processor_target = None
+        self.spm_source = None
+        self.spm_target = None
         self.tokenizer = None
         self.detokenizer = None
         self.sentences = []
         # load BPE model for pre-processing
         if source_bpe:
-            # print("load BPE codes from " + source_bpe, flush=True)
             BPEcodes = open(source_bpe, 'r', encoding="utf-8")
             self.bpe_source = BPE(BPEcodes)
-
             self.tokenizer = MosesTokenizer(source_lang)
 
-            self.detokenizer = MosesDetokenizer(target_lang)
         if target_bpe:
-            # print("load BPE codes from " + target_bpe, flush=True)
             BPEcodes = open(target_bpe, 'r', encoding="utf-8")
             self.bpe_target = BPE(BPEcodes)
+            self.detokenizer = MosesDetokenizer(target_lang)
 
         # load SentencePiece model for pre-processing
         if source_spm:
-            # print("load sentence piece model from " + source_spm, flush=True)
-            self.sp_processor_source = sentencepiece.SentencePieceProcessor()
-            self.sp_processor_source.Load(source_spm)
+            self.spm_source = sentencepiece.SentencePieceProcessor()
+            self.spm_source.Load(source_spm)
         if target_spm:
-            # print("load sentence piece model from " + target_spm, flush=True)
-            self.sp_processor_target = sentencepiece.SentencePieceProcessor()
-            self.sp_processor_target.Load(target_spm)
+            self.spm_target = sentencepiece.SentencePieceProcessor()
+            self.spm_target.Load(target_spm)
 
         # pre- and post-processing tools
         self.sentence_splitter = MosesSentenceSplitter(source_lang)
         self.normalizer = MosesPunctuationNormalizer(source_lang)
 
-    def preprocess(self, srctxt):
-        sentSource = self.sentence_splitter([self.normalizer(srctxt)])
-        self.sentences=[]
-        for s in sentSource:
-            if self.tokenizer:
-                # print('raw sentence: ' + s, flush=True)
-                tokenized = ' '.join(self.tokenizer(s))
-                # print('tokenized sentence: ' + tokenized, flush=True)
-                segmented = self.bpe_source.process_line(tokenized)
-            elif self.sp_processor_source:
-                print('raw sentence: ' + s, flush=True)
-                segmented = ' '.join(self.sp_processor_source.EncodeAsPieces(s))
-                # print(segmented, flush=True)
-            self.sentences.append(segmented)
-        return self.sentences
+    @property
+    def has_bpe(self):
+        return self.bpe_source is not None
 
-    def postprocess(self, sentences):
-        sentTranslated = []
+
+    def split_and_segment(self, source_text: str) -> List[str]:
+        sentSource: list = self.sentence_splitter([self.normalizer(source_text)])
+        sentences = []
+        for s in sentSource:
+            if self.has_bpe:
+                tokens = ' '.join(self.tokenizer(s))
+                sentences.append(self.bpe_source.process_line(tokens))
+            else:
+                sentences.append(' '.join(self.spm_source.EncodeAsPieces(s)))
+        return sentences
+
+    def postprocess(self, sentences: List[str]) -> List[str]:
+        processed = []
         for index, s in enumerate(sentences):
             received = s.strip().split(' ||| ')
-            # print(received, flush=True)
-
+            r = received[0]
             # undo segmentation
-            if self.bpe_source:
-                translated = received[0].replace('@@ ','')
-            elif self.sp_processor_target:
-                translated = self.sp_processor_target.DecodePieces(received[0].split(' '))
+            if self.spm_target:
+                translated = self.spm_target.DecodePieces(r.split(' '))
+            elif self.bpe_source:
+                translated = self.detokenizer(r.replace('@@ ', '').split().split())
             else:
-                translated = received[0].replace(' ','').replace('▁',' ').strip()
+                raise NotImplementedError('dont expect to hit this')
+                translated = r.replace(' ','').replace('▁',' ').strip()
+            processed.append(translated)
+        return processed
 
-            # self.parse_alignments(index, received)
+    def _append_special_tokens_and_truncate(self, raw_text: str, max_length: int,) -> List[int]:
+        tokenized_text: str = self.split_and_segment(raw_text)
+        ids: list = self.convert_tokens_to_ids(tokenized_text)[:max_length]
+        return ids + [self.eos_token_id]
 
-            if self.detokenizer:
-                detokenized = self.detokenizer(translated.split())
-            else:
-                detokenized = translated
+    def prepare_translation_batch(
+        self,
+        src_texts: List[str],
+        tgt_texts: Optional[List[str]] = None,
+        max_length: Optional[int] = None,
+        pad_to_max_length: bool = True,
+        return_tensors: str = "pt",
+    ) -> Dict[str, Tensor]:
+        """
+        Arguments:
+            src_texts: list of src language texts
+            src_lang: default en_XX (english)
+            tgt_texts: list of tgt language texts
+            tgt_lang: default ro_RO (romanian)
+            max_length: (None) defer to config (1024 for mbart-large-en-ro)
+            pad_to_max_length: (bool)
 
-            sentTranslated.append(detokenized)
-        return sentTranslated
+        Returns:
+            dict with keys input_ids, attention_mask, decoder_input_ids, each value is a torch.Tensor.
+        """
+        if max_length is None:
+            max_length = self.max_len
+        encoder_ids: list = [self._append_special_tokens_and_truncate(t, src_lang, max_length - 2) for t in src_texts]
+        encoder_inputs = self.batch_encode_plus(
+            encoder_ids,
+            add_special_tokens=False,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            pad_to_max_length=pad_to_max_length,
+        )
+
+        if tgt_texts is not None:
+            decoder_ids = [self._append_special_tokens_and_truncate(t, tgt_lang, max_length - 2) for t in tgt_texts]
+            decoder_inputs = self.batch_encode_plus(
+                decoder_ids,
+                add_special_tokens=False,
+                return_tensors=return_tensors,
+                max_length=max_length,
+                pad_to_max_length=pad_to_max_length,
+            )
+        else:
+            decoder_inputs = {}
+        return {
+            "input_ids": encoder_inputs["input_ids"],
+            "attention_mask": encoder_inputs["attention_mask"],
+            "decoder_input_ids": decoder_inputs.get("input_ids", None),
+        }
