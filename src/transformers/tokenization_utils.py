@@ -638,7 +638,10 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                     "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
                 }
                 # Look for the tokenizer main vocabulary files + the additional tokens files
-                for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
+                files_to_resolve = {**cls.vocab_files_names, **additional_files_names}
+
+                for file_id, file_name in files_to_resolve.items():
+                    if file_id =='vocab': import ipdb; ipdb.set_trace()
                     if os.path.isdir(pretrained_model_name_or_path):
                         full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
                         if not os.path.exists(full_file_name):
