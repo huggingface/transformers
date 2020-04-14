@@ -328,10 +328,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-<<<<<<< HEAD
             If `past` is used, optionally only the last `input_embeds` have to be input (see `past`).
-=======
->>>>>>> remove output_past from pt
         use_cache (:obj:`bool`):
             If `use_cache` is True, `past` key value states are returned and can be used to speed up decoding (see `past`). Defaults to `True`.
 """
