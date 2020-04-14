@@ -17,6 +17,13 @@ def load_yaml(path):
     with open(path) as f:
         return yaml.load(f, Loader=yaml.BaseLoader)
 
+def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
+    start = max(vocab.values()) + 1
+    for tok in special_tokens:
+        if tok in vocab: continue
+        vocab[tok] = start
+        start += 1
+
 class MarianSPTokenizer(PreTrainedTokenizer):
     vocab_files_names = {"source_spm": 'source.spm',  'target_spm': 'target.spm',
                          'vocab': 'opus.spm32k-spm32k.vocab.yml',
@@ -28,7 +35,7 @@ class MarianSPTokenizer(PreTrainedTokenizer):
 
     def __init__(self, vocab=None, source_spm=None, target_spm=None, source_lang=None,
                  target_lang=None, unk_token='<unk>', eos_token='</s>',
-                 pad_token='<pad>',
+                 pad_token="<pad>",
                  max_len=512,
 
                  **kwargs):
@@ -45,6 +52,8 @@ class MarianSPTokenizer(PreTrainedTokenizer):
             #**kwargs,
         )
         self.encoder = {k: int(v) for k, v in load_yaml(vocab).items()}
+        add_to_vocab_(self.encoder, [self.pad_token])
+        assert self.encoder[pad_token] == self.pad_token_id
         self.decoder = {v: k for k, v in self.encoder.items()}
 
         self.source_lang = source_lang
