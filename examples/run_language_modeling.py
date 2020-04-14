@@ -200,11 +200,13 @@ def make_collate(tokenizer, block_size, lazy=False):
         """
         # We need to filter empty strings in examples.
         # LazyLineByLineTextDataset will return empty string if there is an error when reading a line in the data file.
-
         examples = tokenizer.batch_encode_plus(
-            [ex for ex in examples if ex], max_length=block_size, return_tensors="pt", pad_to_max_length=True,
-        )
-        return examples["input_ids"]
+            [ex for ex in examples if ex],
+            max_length=block_size,
+            return_tensors="pt",
+            pad_to_max_length=True,
+            return_attention_mask=True)
+        return examples['input_ids'], examples['attention_mask']
 
     def simple_collate(examples):
         """
@@ -423,10 +425,14 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
                 continue
+            input_ids, attention_mask = batch
+            inputs, labels = mask_tokens(input_ids, tokenizer, args) if args.mlm else (input_ids, input_ids)
 
-            inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else (batch, batch)
+            labels = labels.masked_fill(attention_mask == 0, -100)
+
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
+
             model.train()
             outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
@@ -587,6 +593,11 @@ def main():
         "--lazy_loading",
         action="store_true",
         help="Whether to use lazy data loading. Is necessarily line-by-line as well.",
+    )
+    parser.add_argument(
+        "--force_pad_token",
+        action="store_true",
+        help="Whether to force the addition of a padding token to tokenizer to prevent errors in encoding (e.g. with GPT)",
     )
     parser.add_argument(
         "--should_continue", action="store_true", help="Whether to continue from latest checkpoint in output_dir"
@@ -785,11 +796,21 @@ def main():
         tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name, cache_dir=args.cache_dir)
     elif args.model_name_or_path:
         tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
+
     else:
         raise ValueError(
             "You are instantiating a new {} tokenizer. This is not supported, but you can do it from another script, save it,"
             "and load it from here, using --tokenizer_name".format(tokenizer_class.__name__)
         )
+
+    if tokenizer.pad_token_id is None:
+        if args.force_pad_token:
+            # See PR 3388. Some tokenizers don't had pad tokens which causes errors at the encoding step in the collate_fn.
+            # We give here the option to force the addition of a pad token. The attention mask is used to ignore this token
+            # when feeding to the model.
+            tokenizer.add_special_tokens({'pad_token': '<pad>'})
+        else:
+            logger.warn('Attempting to train a model whose tokenizer has no padding token. This may result in errors in the encoding step. Set the --force_pad_token flag to fix this.')
 
     if args.block_size <= 0:
         args.block_size = tokenizer.max_len
