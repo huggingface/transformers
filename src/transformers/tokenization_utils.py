@@ -1367,14 +1367,15 @@ class PreTrainedTokenizer(SpecialTokensMixin):
               tokens and 1 specifying sequence tokens.
         """
 
-        def get_input_ids(text):
-            if isinstance(text, str):
-                tokens = self.tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
+        def get_input_ids(seq):
+            is_listy = isinstance(seq, (list, tuple)) and len(seq) > 0
+            if isinstance(seq, str):
+                tokens = self.tokenize(seq, add_special_tokens=add_special_tokens, **kwargs)
                 return self.convert_tokens_to_ids(tokens)
-            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
-                return self.convert_tokens_to_ids(text)
-            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
-                return text
+            elif is_listy and isinstance(seq[0], str):
+                return self.convert_tokens_to_ids(seq)
+            elif is_listy and isinstance(seq[0], int):
+                return seq
             else:
                 raise ValueError(
                     "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."

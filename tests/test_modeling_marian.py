@@ -103,7 +103,15 @@ LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
 class MarianTokenizerTests(unittest.TestCase):
     def test_en_de_local(self):
         self.tokenizer = MarianSPTokenizer.from_pretrained(LOCAL_PATH)
-        src, tgt = ["What's for dinner?"], ["Was gibt es zum Abendessen"]
-        # src, tgt = ["What's for dinner?"], ["Was gibt es zum Abendessen"]
         src, tgt = ["What's for dinner?", "life"], ["Was gibt es zum Abendessen", "Leben"]
-        inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
+        model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
+        shapes = {k: v.shape for k, v in model_inputs.items()}
+        desired_keys = {
+            "input_ids",
+            "attention_mask",
+            "token_type_ids",
+            "decoder_input_ids",
+            "decoder_attention_mask",
+            "decoder_token_type_ids",
+        }
+        self.assertSetEqual(desired_keys, set(model_inputs.keys()))

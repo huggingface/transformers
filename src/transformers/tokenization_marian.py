@@ -1,3 +1,4 @@
+import json
 from typing import Dict, List, Optional, Tuple
 
 import sentencepiece
@@ -13,10 +14,12 @@ PRETRAINED_VOCAB_FILES_MAP = {
         # "marian/en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/marian/en-de/source.spm"
     }
 }
-import json
+
+
 def load_json(path):
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         return json.load(f)
+
 
 def load_yaml(path):
     with open(path) as f:
@@ -33,6 +36,7 @@ class MarianSPTokenizer(PreTrainedTokenizer):
 
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {m: 512 for m in PRETRAINED_VOCAB_FILES_MAP}
+    model_input_names = ["token_type_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -59,7 +63,7 @@ class MarianSPTokenizer(PreTrainedTokenizer):
             # mask_token=mask_token,
             # **kwargs,
         )
-        self.encoder = load_json(vocab) # {k: int(v) for k, v in load_json(vocab).items()}
+        self.encoder = load_json(vocab)  # {k: int(v) for k, v in load_json(vocab).items()}
         assert self.pad_token in self.encoder
         self.decoder = {v: k for k, v in self.encoder.items()}
 
@@ -82,25 +86,20 @@ class MarianSPTokenizer(PreTrainedTokenizer):
     def _convert_token_to_id(self, token):
         return self.encoder[token]
 
+    def _tokenize(self, text: str, src=True) -> list:
+        spm = self.spm_source if src else self.spm_target
+        return spm.EncodeAsPieces(text)
+
     def _convert_id_to_token(self, index: int):
         """Converts an index (integer) in a token (str) using the encoder."""
         return self.decoder.get(index, self.unk_token)
 
-    def postprocess(self, sentences: List[str]) -> List[str]:
-        processed = []
-        for index, s in enumerate(sentences):
-            received = s.strip().split(" ||| ")
-            r = received[0]
-            # undo segmentation
-            if self.spm_target:
-                translated = self.spm_target.DecodePieces(r.split(" "))
-            elif self.bpe_source:
-                translated = self.detokenizer(r.replace("@@ ", "").split().split())
-            else:
-                raise NotImplementedError("dont expect to hit this")
-                translated = r.replace(" ", "").replace("▁", " ").strip()
-            processed.append(translated)
-        return processed
+    def convert_tokens_to_string(self, tokens: List[str]):
+        return self.spm_target.DecodePieces(tokens)
+
+    #
+    # def _tokenize(self, text):
+    #     return self.spm_source.EncodeAsPieces(text)
 
     def _append_special_tokens_and_truncate(self, tokens: str, max_length: int,) -> List[int]:
         ids: list = self.convert_tokens_to_ids(tokens)[:max_length]
@@ -138,35 +137,27 @@ class MarianSPTokenizer(PreTrainedTokenizer):
         Returns:
             dict with keys input_ids, attention_mask, decoder_input_ids, each value is a torch.Tensor.
         """
-        if max_length is None:
-            max_length = self.max_len
-        src_texts = [self.spm_source.encode_as_pieces(self.punc_normalizer(t)) for t in src_texts]
-        if tgt_texts is not None:
-            tgt_texts = [self.spm_target.encode_as_pieces(self.punc_normalizer(t)) for t in tgt_texts]
-        encoder_ids: list = [self._append_special_tokens_and_truncate(t, max_length - 1) for t in src_texts]
-        encoder_inputs = self.batch_encode_plus(
-            encoder_ids,
-            add_special_tokens=False,
+        model_inputs = self.batch_encode_plus(
+            src_texts,
+            add_special_tokens=True,
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
+            src=True,
         )
-        model_inputs = {
-            "input_ids": encoder_inputs["input_ids"],
-            "attention_mask": encoder_inputs["attention_mask"],
-        }
+
         if tgt_texts is None:
             return model_inputs
-
-        decoder_ids = [self._append_special_tokens_and_truncate(t, max_length - 1) for t in tgt_texts]
         decoder_inputs = self.batch_encode_plus(
-            decoder_ids,
+            tgt_texts,
             add_special_tokens=False,
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
+            src=False,
         )
+        for k, v in decoder_inputs.items():
+            model_inputs[f"decoder_{k}"] = v
 
-        model_inputs["decoder_input_ids"] = decoder_inputs["input_ids"]
         # model_inputs["decoder_attention_mask"] = decoder_inputs["decoder_attention_mask"]
         return model_inputs

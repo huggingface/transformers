@@ -1,23 +1,23 @@
 import argparse
+import json
+import os
+import shutil
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+from zipfile import ZipFile
 
 import numpy as np
 import torch
+import wget
 import yaml
 
 from durbango import lmap, pickle_save, remove_prefix
 from transformers import BertConfig, BertModel, MarianConfig, MarianModel
 from transformers.marian_constants import BERT_LAYER_CONVERTER, EMBED_CONVERTER
-import json
-import os
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-from zipfile import ZipFile
-
-import wget
-import yaml
-from transformers.tokenization_utils import ADDED_TOKENS_FILE, TOKENIZER_CONFIG_FILE
 from transformers.tokenization_marian import MarianSPTokenizer
+from transformers.tokenization_utils import ADDED_TOKENS_FILE, TOKENIZER_CONFIG_FILE
+
+
 OPUS_MODELS_PATH = "/Users/shleifer/OPUS-MT-train/models"  # git clone git@github.com:Helsinki-NLP/Opus-MT.git
 
 
@@ -97,9 +97,11 @@ def convert_to_berts(opus_path: str):
     # model.decoder.bert.embeddings.load_state_dict(embs_state, strict=False)
     return model
 
+
 def load_yaml(path):
     with open(path) as f:
         return yaml.load(f, Loader=yaml.BaseLoader)
+
 
 def load_model_yaml(opus_dict):
     cfg_str = "".join(lmap(chr, opus_dict[CONFIG_KEY]))
@@ -107,6 +109,7 @@ def load_model_yaml(opus_dict):
     for k in ["dec-depth", "enc-depth", "transformer-heads"]:
         yaml_cfg[k] = int(yaml_cfg[k])
     return yaml_cfg
+
 
 DEFAULT_PATH = "/Users/shleifer/marian/opus_en_fr/opus.bpe32k-bpe32k.transformer.model1.npz.best-perplexity.npz"
 
@@ -122,7 +125,6 @@ def find_model_file(dest_dir):  # this one better
     assert len(model_files) == 1
     model_file = model_files[0]
     return model_file
-
 
 
 def parse_readmes(repo_path=OPUS_MODELS_PATH):
@@ -174,9 +176,11 @@ def save_json(content, path):
     with open(path, "w") as f:
         json.dump(content, f)
 
+
 def load_json(path):
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         return json.load(f)
+
 
 def write_metadata(dest_dir):
     dest = Path(dest_dir)
@@ -197,22 +201,25 @@ def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
         vocab[tok] = start
         start += 1
 
-def add_special_tokens_to_vocab(model_dir: Path = 'en-de'):
-    vocab = yaml.load(open('en-de/opus.spm32k-spm32k.vocab.yml'), Loader=yaml.BaseLoader)
-    vocab = {k: int(v) for k,v in vocab.items()}
-    add_to_vocab_(vocab, ['<pad>'])
-    save_json(vocab, model_dir/'vocab.json')
 
-import shutil
-from pathlib import Path
+def add_special_tokens_to_vocab(model_dir: Path = "en-de"):
+    vocab = yaml.load(open("en-de/opus.spm32k-spm32k.vocab.yml"), Loader=yaml.BaseLoader)
+    vocab = {k: int(v) for k, v in vocab.items()}
+    add_to_vocab_(vocab, ["<pad>"])
+    save_json(vocab, model_dir / "vocab.json")
+
+
+
+
 def save_tokenizer(self, save_directory):
     # FIXME, what if you add tokens?
     dest = Path(save_directory)
-    src_path = Path(self.init_kwargs['source_spm'])
+    src_path = Path(self.init_kwargs["source_spm"])
 
     for dest_name in {"source.spm", "target.spm", "tokenizer_config.json"}:
         shutil.copyfile(src_path.parent / dest_name, dest / dest_name)
-    save_json(tokenizer.encoder, dest/'vocab.json')
+    save_json(tokenizer.encoder, dest / "vocab.json")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -225,10 +232,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     source_dir = Path(args.src)
-    dest_dir = f'converted-{source_dir.name}' if args.dest is None else args.dest
+    dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(exist_ok=True)
-
 
     add_special_tokens_to_vocab(source_dir)
     tokenizer = MarianSPTokenizer.from_pretrained(str(source_dir))
