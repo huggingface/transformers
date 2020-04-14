@@ -107,18 +107,15 @@ def load_yaml(path):
 
 def load_model_yaml(opus_dict):
     cfg_str = "".join(lmap(chr, opus_dict[CONFIG_KEY]))
-    yaml_cfg = yaml.load(cfg_str[:-1],  Loader=yaml.BaseLoader)
+    yaml_cfg = yaml.load(cfg_str[:-1], Loader=yaml.BaseLoader)
     for k in ["dec-depth", "enc-depth", "transformer-heads"]:
         yaml_cfg[k] = int(yaml_cfg[k])
     return yaml_cfg
 
 
-
-
-
 def find_model_file(dest_dir):  # this one better
     model_files = list(Path(dest_dir).glob("*.npz"))
-    assert len(model_files) == 1
+    assert len(model_files) == 1, model_files
     model_file = model_files[0]
     return model_file
 
@@ -185,10 +182,6 @@ def write_metadata(dest_dir):
     save_json(dct, dest_dir / TOKENIZER_CONFIG_FILE)
 
 
-# def write_added_tokens_file(dest_dir, vocab_size):
-#    added_tokens = {''}
-
-
 def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
     start = max(vocab.values()) + 1
     for tok in special_tokens:
@@ -205,8 +198,6 @@ def add_special_tokens_to_vocab(model_dir: Path = "en-de"):
     save_json(vocab, model_dir / "vocab.json")
 
 
-
-
 def save_tokenizer(self, save_directory):
     # FIXME, what if you add tokens?
     dest = Path(save_directory)
@@ -214,21 +205,11 @@ def save_tokenizer(self, save_directory):
 
     for dest_name in {"source.spm", "target.spm", "tokenizer_config.json"}:
         shutil.copyfile(src_path.parent / dest_name, dest / dest_name)
-    save_json(tokenizer.encoder, dest / "vocab.json")
+    save_json(self.encoder, dest / "vocab.json")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    # Required parameters
-    parser.add_argument("--src", type=str, help="path to marian model dir", default='en-de')
-    parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
-    parser.add_argument(
-        "--hf_config", default=None, type=str, help="Which huggingface architecture to use: bart-large-xsum"
-    )
-    args = parser.parse_args()
+def main(source_dir, dest_dir):
 
-    source_dir = Path(args.src)
-    dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(exist_ok=True)
 
@@ -240,6 +221,19 @@ if __name__ == "__main__":
     model = convert_to_berts(model_path)
     model.resize_token_embeddings(tokenizer.vocab_size)  # account for added pad token
     model.config.vocab_size = tokenizer.vocab_size
+    model.config.eos_token_id = tokenizer.eos_token_id
+    model.config.pad_token_id = tokenizer.pad_token_id
     model.save_pretrained(dest_dir)
     model.from_pretrained(dest_dir)  # sanity check
 
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    # Required parameters
+    parser.add_argument("--src", type=str, help="path to marian model dir", default="en-de")
+    parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
+    args = parser.parse_args()
+
+    source_dir = Path(args.src)
+    dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
+    main(source_dir, dest_dir)

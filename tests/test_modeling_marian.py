@@ -14,9 +14,12 @@
 # limitations under the License.
 
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from transformers import is_torch_available
+from transformers.marian2hf import main
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -98,6 +101,7 @@ class Bert2BertModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
+LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
 
 
 class MarianTokenizerTests(unittest.TestCase):
@@ -116,9 +120,8 @@ class MarianTokenizerTests(unittest.TestCase):
         }
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
 
+
 class IntegrationTests(unittest.TestCase):
-
-
     def test_local_en_de(self):
         self.tokenizer = MarianSPTokenizer.from_pretrained(LOCAL_PATH)
         src, tgt = ["What's for dinner?", "life"], ["Was gibt es zum Abendessen", "Leben"]
@@ -136,3 +139,6 @@ class IntegrationTests(unittest.TestCase):
         model = MarianModel.from_pretrained(LOCAL_PATH)
         outputs = model(**model_inputs)
 
+    def test_converter(self):
+        dest_dir = Path(tempfile.gettempdir())
+        main(Path(LOCAL_MARIAN), dest_dir)

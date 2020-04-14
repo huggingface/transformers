@@ -104,7 +104,6 @@ class MarianModel(PreTrainedModel):
         self.decoder = BertModel(config)
         self.init_weights()
 
-
     def output_layer(self, features):
         F.linear(features, self.decoder.get_input_embeddings().weight)
 
@@ -166,7 +165,7 @@ class MarianModel(PreTrainedModel):
         assert decoder_input_ids is not None
         if encoder_outputs is None:
             encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-        if isinstance(encoder_outputs, tuple):  #FIXME(SS):
+        if isinstance(encoder_outputs, tuple):  # FIXME(SS):
             encoder_outputs = encoder_outputs[0]
 
         assert isinstance(encoder_outputs, torch.Tensor)
@@ -179,7 +178,7 @@ class MarianModel(PreTrainedModel):
             # decoder_causal_mask=causal_mask,
             # decoder_cached_states=decoder_cached_states,
             # use_cache=use_cache,
-            lm_labels=lm_labels,
+            # lm_labels=lm_labels,
         )
         # Attention and hidden_states will be [] or None if they aren't needed
         if use_cache:

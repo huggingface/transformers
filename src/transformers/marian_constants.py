@@ -52,5 +52,4 @@ EMBED_CONVERTER = {
     "Wtype": "token_type_embeddings.weight",
     # "encoder_emb_ln_scale_pre" = "bert/embeddings/LayerNorm/gamma:0"
     # "encoder_emb_ln_bias_pre" = "bert/embeddings/LayerNorm/beta:0"
-
 }
