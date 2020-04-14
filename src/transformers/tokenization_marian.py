@@ -161,3 +161,7 @@ class MarianSPTokenizer(PreTrainedTokenizer):
 
         # model_inputs["decoder_attention_mask"] = decoder_inputs["decoder_attention_mask"]
         return model_inputs
+
+    @property
+    def vocab_size(self) -> int:
+        return len(self.encoder)

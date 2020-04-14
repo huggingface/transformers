@@ -912,6 +912,12 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         self.init_weights()
 
+    def get_input_embeddings(self):
+        return self.bert.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.bert.embeddings.word_embeddings = value
+
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 

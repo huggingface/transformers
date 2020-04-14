@@ -101,8 +101,16 @@ class MarianModel(PreTrainedModel):
         enc_config = copy.deepcopy(config)
         enc_config.is_decoder = False
         self.encoder = BertModel(enc_config)
-        self.decoder = BertForMaskedLM(config)
+        self.decoder = BertModel(config)
         self.init_weights()
+
+
+    def output_layer(self, features):
+        F.linear(features, self.decoder.get_input_embeddings().weight)
+
+    def resize_token_embeddings(self, new_num_tokens: int):
+        self.encoder.resize_token_embeddings(new_num_tokens)
+        self.decoder.resize_token_embeddings(new_num_tokens)
 
     @add_start_docstrings_to_callable(INPUTS_DOCSTRING)
     def forward(
@@ -158,7 +166,7 @@ class MarianModel(PreTrainedModel):
         assert decoder_input_ids is not None
         if encoder_outputs is None:
             encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-        if isinstance(encoder_outputs, tuple):
+        if isinstance(encoder_outputs, tuple):  #FIXME(SS):
             encoder_outputs = encoder_outputs[0]
 
         assert isinstance(encoder_outputs, torch.Tensor)

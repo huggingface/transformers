@@ -71,7 +71,7 @@ class OpusState:
         return extra
 
 
-def convert_to_berts(opus_path: str):
+def convert_to_berts(opus_path: str) -> MarianModel:
     opus_state: dict = np.load(opus_path)
     n_keys = len(opus_state)
     marian_cfg: dict = load_model_yaml(opus_state)
@@ -89,10 +89,12 @@ def convert_to_berts(opus_path: str):
     print("loaded empty marian model")
     load_layers_(model.encoder, opus_state)
     print("loaded encoder")
-    load_layers_(model.decoder.bert, opus_state)
+    load_layers_(model.decoder, opus_state)
     embs_state: dict = convert_embeddings_(opus_state)
     result = model.encoder.embeddings.load_state_dict(embs_state, strict=False)
+
     print(f"Embeddings: {result})")  # TODO(SS): logger
+    model.decoder.embeddings.load_state_dict(embs_state, strict=False)
     # TODO(SS): tie weights
     # model.decoder.bert.embeddings.load_state_dict(embs_state, strict=False)
     return model
@@ -105,19 +107,13 @@ def load_yaml(path):
 
 def load_model_yaml(opus_dict):
     cfg_str = "".join(lmap(chr, opus_dict[CONFIG_KEY]))
-    yaml_cfg = load_yaml(cfg_str[:-1])
+    yaml_cfg = yaml.load(cfg_str[:-1],  Loader=yaml.BaseLoader)
     for k in ["dec-depth", "enc-depth", "transformer-heads"]:
         yaml_cfg[k] = int(yaml_cfg[k])
     return yaml_cfg
 
 
-DEFAULT_PATH = "/Users/shleifer/marian/opus_en_fr/opus.bpe32k-bpe32k.transformer.model1.npz.best-perplexity.npz"
 
-
-def convert_model(model_path, save_dir):
-    model = convert_to_berts(model_path)
-    Path(save_dir).mkdir(exist_ok=True)
-    model.save_pretrained(save_dir)
 
 
 def find_model_file(dest_dir):  # this one better
@@ -224,7 +220,7 @@ def save_tokenizer(self, save_directory):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("--src", type=str, help="path to marian model dir", default=DEFAULT_PATH)
+    parser.add_argument("--src", type=str, help="path to marian model dir", default='en-de')
     parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
     parser.add_argument(
         "--hf_config", default=None, type=str, help="Which huggingface architecture to use: bart-large-xsum"
@@ -241,4 +237,9 @@ if __name__ == "__main__":
     save_tokenizer(tokenizer, dest_dir)
 
     model_path = find_model_file(source_dir)
-    convert_model(model_path, dest_dir)
+    model = convert_to_berts(model_path)
+    model.resize_token_embeddings(tokenizer.vocab_size)  # account for added pad token
+    model.config.vocab_size = tokenizer.vocab_size
+    model.save_pretrained(dest_dir)
+    model.from_pretrained(dest_dir)  # sanity check
+
