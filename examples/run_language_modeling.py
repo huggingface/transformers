@@ -205,8 +205,9 @@ def make_collate(tokenizer, block_size, lazy=False):
             max_length=block_size,
             return_tensors="pt",
             pad_to_max_length=True,
-            return_attention_mask=True)
-        return examples['input_ids'], examples['attention_mask']
+            return_attention_mask=True,
+        )
+        return examples["input_ids"], examples["attention_mask"]
 
     def simple_collate(examples):
         """
@@ -808,9 +809,11 @@ def main():
             # See PR 3388. Some tokenizers don't had pad tokens which causes errors at the encoding step in the collate_fn.
             # We give here the option to force the addition of a pad token. The attention mask is used to ignore this token
             # when feeding to the model.
-            tokenizer.add_special_tokens({'pad_token': '<pad>'})
+            tokenizer.add_special_tokens({"pad_token": "<pad>"})
         else:
-            logger.warn('Attempting to train a model whose tokenizer has no padding token. This may result in errors in the encoding step. Set the --force_pad_token flag to fix this.')
+            logger.warn(
+                "Attempting to train a model whose tokenizer has no padding token. This may result in errors in the encoding step. Set the --force_pad_token flag to fix this."
+            )
 
     if args.block_size <= 0:
         args.block_size = tokenizer.max_len
