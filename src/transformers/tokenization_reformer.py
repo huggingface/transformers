@@ -90,7 +90,7 @@ class ReformerTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        additional_special_tokens=None,
+        additional_special_tokens=[],
         **kwargs
     ):
         super().__init__(
