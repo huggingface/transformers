@@ -318,7 +318,7 @@ class LSHSelfAttention(nn.Module):
         num_buckets = 2 * sequence_length // self.chunk_length
 
         # factorize `num_buckets` if `num_buckets` becomes too large
-        num_buckets_limit = max(int((self.max_position_embeddings // self.chunk_length) ** (0.5)), self.chuck_length)
+        num_buckets_limit = max(int((self.max_position_embeddings // self.chunk_length) ** (0.5)), self.chunk_length)
         if num_buckets > 2 * num_buckets_limit:
             num_buckets = [num_buckets_limit, num_buckets // num_buckets_limit + 1]
 
