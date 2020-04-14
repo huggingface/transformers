@@ -96,13 +96,14 @@ class Bert2BertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-LOCAL_PATH = '/Users/shleifer/transformers_fork/en-de/'
-class MarianTokenizerTests(unittest.TestCase):
 
+LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
+
+
+class MarianTokenizerTests(unittest.TestCase):
     def test_en_de_local(self):
         self.tokenizer = MarianSPTokenizer.from_pretrained(LOCAL_PATH)
         src, tgt = ["What's for dinner?"], ["Was gibt es zum Abendessen"]
+        # src, tgt = ["What's for dinner?"], ["Was gibt es zum Abendessen"]
+        src, tgt = ["What's for dinner?", "life"], ["Was gibt es zum Abendessen", "Leben"]
         inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
-
-
-

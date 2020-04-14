@@ -1,65 +1,73 @@
-from .tokenization_utils import PreTrainedTokenizer
+from typing import Dict, List, Optional, Tuple
+
 import sentencepiece
+import yaml
 from mosestokenizer import MosesPunctuationNormalizer
-
-
-from typing import Dict, List, Tuple, Optional
 from torch import Tensor
+
+from .tokenization_utils import PreTrainedTokenizer
+
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab": {
-        #"marian/en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/marian/en-de/source.spm"
+        # "marian/en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/marian/en-de/source.spm"
     }
 }
-import yaml
+import json
+def load_json(path):
+    with open(path, 'r') as f:
+        return json.load(f)
 
 def load_yaml(path):
     with open(path) as f:
         return yaml.load(f, Loader=yaml.BaseLoader)
 
-def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
-    start = max(vocab.values()) + 1
-    for tok in special_tokens:
-        if tok in vocab: continue
-        vocab[tok] = start
-        start += 1
 
 class MarianSPTokenizer(PreTrainedTokenizer):
-    vocab_files_names = {"source_spm": 'source.spm',  'target_spm': 'target.spm',
-                         'vocab': 'opus.spm32k-spm32k.vocab.yml',
-                         'tokenizer_config_file': 'tokenizer_config.json',
-                         }
+    vocab_files_names = {
+        "source_spm": "source.spm",
+        "target_spm": "target.spm",
+        "vocab": "vocab.json",
+        "tokenizer_config_file": "tokenizer_config.json",
+    }
 
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {m: 512 for m in PRETRAINED_VOCAB_FILES_MAP}
 
-    def __init__(self, vocab=None, source_spm=None, target_spm=None, source_lang=None,
-                 target_lang=None, unk_token='<unk>', eos_token='</s>',
-                 pad_token="<pad>",
-                 max_len=512,
-
-                 **kwargs):
+    def __init__(
+        self,
+        vocab=None,
+        source_spm=None,
+        target_spm=None,
+        source_lang=None,
+        target_lang=None,
+        unk_token="<unk>",
+        eos_token="</s>",
+        pad_token="<pad>",
+        max_len=512,
+        **kwargs
+    ):
 
         super().__init__(
-            #bos_token=bos_token,
+            # bos_token=bos_token,
             max_len=max_len,
             eos_token=eos_token,
             unk_token=unk_token,
-            #sep_token=sep_token,
-            #cls_token=cls_token,
+            # sep_token=sep_token,
+            # cls_token=cls_token,
             pad_token=pad_token,
-            #mask_token=mask_token,
-            #**kwargs,
+            # mask_token=mask_token,
+            # **kwargs,
         )
-        self.encoder = {k: int(v) for k, v in load_yaml(vocab).items()}
-        add_to_vocab_(self.encoder, [self.pad_token])
-        assert self.encoder[pad_token] == self.pad_token_id
+        self.encoder = load_json(vocab) # {k: int(v) for k, v in load_json(vocab).items()}
+        assert self.pad_token in self.encoder
         self.decoder = {v: k for k, v in self.encoder.items()}
 
         self.source_lang = source_lang
         self.target_lang = target_lang
 
         # load SentencePiece model for pre-processing
+        self.paths = {}
 
         self.spm_source = sentencepiece.SentencePieceProcessor()
         self.spm_source.Load(source_spm)
@@ -67,14 +75,9 @@ class MarianSPTokenizer(PreTrainedTokenizer):
         self.spm_target = sentencepiece.SentencePieceProcessor()
         self.spm_target.Load(target_spm)
 
-
         # Note(SS): splitter would require lots of book-keeping.
-        #self.sentence_splitter = MosesSentenceSplitter(source_lang)
+        # self.sentence_splitter = MosesSentenceSplitter(source_lang)
         self.punc_normalizer = MosesPunctuationNormalizer(source_lang)
-
-    @property
-    def has_bpe(self):
-        return self.bpe_source is not None
 
     def _convert_token_to_id(self, token):
         return self.encoder[token]
@@ -86,22 +89,34 @@ class MarianSPTokenizer(PreTrainedTokenizer):
     def postprocess(self, sentences: List[str]) -> List[str]:
         processed = []
         for index, s in enumerate(sentences):
-            received = s.strip().split(' ||| ')
+            received = s.strip().split(" ||| ")
             r = received[0]
             # undo segmentation
             if self.spm_target:
-                translated = self.spm_target.DecodePieces(r.split(' '))
+                translated = self.spm_target.DecodePieces(r.split(" "))
             elif self.bpe_source:
-                translated = self.detokenizer(r.replace('@@ ', '').split().split())
+                translated = self.detokenizer(r.replace("@@ ", "").split().split())
             else:
-                raise NotImplementedError('dont expect to hit this')
-                translated = r.replace(' ','').replace('▁',' ').strip()
+                raise NotImplementedError("dont expect to hit this")
+                translated = r.replace(" ", "").replace("▁", " ").strip()
             processed.append(translated)
         return processed
 
-    def _append_special_tokens_and_truncate(self, tokens: str, max_length: int, ) -> List[int]:
+    def _append_special_tokens_and_truncate(self, tokens: str, max_length: int,) -> List[int]:
         ids: list = self.convert_tokens_to_ids(tokens)[:max_length]
         return ids + [self.eos_token_id]
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens.
+        A RoBERTa sequence has the following format:
+            single sequence: <s> X </s>
+            pair of sequences: <s> A </s></s> B </s>
+        """
+        if token_ids_1 is None:
+            return token_ids_0 + [self.eos_token_id]
+        return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
     def prepare_translation_batch(
         self,
@@ -128,7 +143,7 @@ class MarianSPTokenizer(PreTrainedTokenizer):
         src_texts = [self.spm_source.encode_as_pieces(self.punc_normalizer(t)) for t in src_texts]
         if tgt_texts is not None:
             tgt_texts = [self.spm_target.encode_as_pieces(self.punc_normalizer(t)) for t in tgt_texts]
-        encoder_ids: list = [self._append_special_tokens_and_truncate(t,  max_length - 1) for t in src_texts]
+        encoder_ids: list = [self._append_special_tokens_and_truncate(t, max_length - 1) for t in src_texts]
         encoder_inputs = self.batch_encode_plus(
             encoder_ids,
             add_special_tokens=False,
@@ -143,7 +158,6 @@ class MarianSPTokenizer(PreTrainedTokenizer):
         if tgt_texts is None:
             return model_inputs
 
-
         decoder_ids = [self._append_special_tokens_and_truncate(t, max_length - 1) for t in tgt_texts]
         decoder_inputs = self.batch_encode_plus(
             decoder_ids,
@@ -153,6 +167,6 @@ class MarianSPTokenizer(PreTrainedTokenizer):
             pad_to_max_length=pad_to_max_length,
         )
 
-        model_inputs["decoder_input_ids"] =  decoder_inputs["input_ids"]
-        #model_inputs["decoder_attention_mask"] = decoder_inputs["decoder_attention_mask"]
+        model_inputs["decoder_input_ids"] = decoder_inputs["input_ids"]
+        # model_inputs["decoder_attention_mask"] = decoder_inputs["decoder_attention_mask"]
         return model_inputs

@@ -59,19 +59,18 @@ INPUTS_DOCSTRING = r"""
 """
 
 
-
 def invert_mask(attention_mask):
     assert attention_mask.dim() == 2
     return attention_mask.eq(0)
 
+
 def append_dummy_token(input_ids, attention_mask, token_id):
     effective_batch_size = input_ids.shape[0]
-    dummy_token = torch.full(
-        (effective_batch_size, 1), token_id, dtype=torch.long, device=input_ids.device
-    )
+    dummy_token = torch.full((effective_batch_size, 1), token_id, dtype=torch.long, device=input_ids.device)
     input_ids = torch.cat([input_ids, dummy_token], dim=1)
     attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
     return input_ids, attention_mask
+
 
 class MarianModel(PreTrainedModel):
     config_class = MarianConfig
@@ -191,8 +190,6 @@ class MarianModel(PreTrainedModel):
             encoder_outputs, decoder_past_key_value_states = past, None
         else:
             encoder_outputs, decoder_past_key_value_states = past[0], past[1]
-
-
 
         return {
             "decoder_input_ids": input_ids,
