@@ -501,7 +501,6 @@ class GPT2Model(GPT2PreTrainedModel):
             )
 
             hidden_states, present = outputs[:2]
-
             if use_cache is True:
                 presents = presents + (present,)
 

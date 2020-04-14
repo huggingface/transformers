@@ -436,7 +436,6 @@ class CTRLModel(CTRLPreTrainedModel):
                 use_cache=use_cache,
             )
             hidden_states, present = outputs[:2]
-
             if use_cache is True:
                 presents = presents + (present,)
 
@@ -449,7 +448,6 @@ class CTRLModel(CTRLPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-
         if use_cache is True:
             outputs = outputs + (presents,)
         if self.output_hidden_states:
