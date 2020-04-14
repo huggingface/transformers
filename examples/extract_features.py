@@ -43,6 +43,12 @@ MODELS=[BERT_BASE_CASED]
 MODELNAME2MODEL={BERT_BASE_CASED:BertForMaskedLM}
 MODELNAME2TOKENIZERS={BERT_BASE_CASED:BertTokenizer}
 
+def produce_key(sent):
+    sent='\t'.join(sent.split())
+    sent = sent.replace('.', '$period$')
+    sent = sent.replace('/', '$backslash$')
+    return sent
+
 class InputExample(object):
 
     def __init__(self, unique_id, text_a, text_b):
@@ -290,8 +296,8 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
         average_layer_batch = sum(all_encoder_layers[-args.layers:]) / args.layers
         wembs_sent_batch=tokenemb2wemb(average_layer_batch.cpu().detach().numpy(),w2token_batch)
         for i,sent in enumerate(examples):
-            sent = sent.replace('.', '$period$')
-            sent = sent.replace('/', '$backslash$')
+            sent=produce_key(sent)
+
             payload=numpy.array(wembs_sent_batch[i])
             print (payload.shape)
             try:
