@@ -109,7 +109,7 @@ def train(args, train_dataset, model, tokenizer):
     )
 
     # Check if saved optimizer or scheduler states exist
-    if os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt")) and os.path.isfile(
+    if args.should_continue and os.path.isfile(os.path.join(args.model_name_or_path, "optimizer.pt")) and os.path.isfile(
         os.path.join(args.model_name_or_path, "scheduler.pt")
     ):
         # Load in optimizer and scheduler states
@@ -151,7 +151,7 @@ def train(args, train_dataset, model, tokenizer):
     epochs_trained = 0
     steps_trained_in_current_epoch = 0
     # Check if continuing training from a checkpoint
-    if os.path.exists(args.model_name_or_path):
+    if args.should_continue and os.path.exists(args.model_name_or_path):
         # set global_step to gobal_step of last saved checkpoint from model path
         global_step = int(args.model_name_or_path.split("-")[-1].split("/")[0])
         epochs_trained = global_step // (len(train_dataloader) // args.gradient_accumulation_steps)
@@ -386,6 +386,11 @@ def main():
         type=str,
         required=True,
         help="The input data dir. Should contain the .tsv files (or other data files) for the task.",
+    )
+    parser.add_argument(
+        "--should_continue",
+        action='store_true',
+        help="whether to continue from pretrained model"
     )
     parser.add_argument(
         "--model_type",
