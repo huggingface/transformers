@@ -128,7 +128,6 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config.output_attentions = True
             config.output_hidden_states = False
-            config.output_past = False
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -663,10 +662,6 @@ class ModelTesterMixin:
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
-
-        if self.is_encoder_decoder:
-            # needed for Bart beam search
-            config.output_past = True
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
