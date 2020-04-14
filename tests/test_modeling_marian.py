@@ -95,14 +95,13 @@ class Bert2BertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip("Passing inputs_embeds not implemented for Bart.")
     def test_inputs_embeds(self):
         pass
 
 
 LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
 LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
-
+import os
 
 class MarianTokenizerTests(unittest.TestCase):
     def test_en_de_local(self):
@@ -139,6 +138,9 @@ class IntegrationTests(unittest.TestCase):
         model = MarianModel.from_pretrained(LOCAL_PATH)
         outputs = model(**model_inputs)
 
+    @slow
     def test_converter(self):
+        if not os.path.exists(LOCAL_MARIAN):
+            return
         dest_dir = Path(tempfile.gettempdir())
         main(Path(LOCAL_MARIAN), dest_dir)
