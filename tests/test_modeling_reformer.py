@@ -162,7 +162,7 @@ class TraxUtils(object):
                     n_buckets=config.num_buckets,
                     use_reference_code=use_reference_code,
                     hash_seed=config.seed,
-                    path_to_save_weights=path_to_save_weights
+                    path_to_save_weights=path_to_save_weights,
                 )
                 block = tl.Serial(tl.ReversibleSerial([list_of_layers]))
 
@@ -200,8 +200,6 @@ class TraxUtils(object):
         use_reference_code=True,
         share_qk=True,
         ff_use_sru=0,
-        axial_pos_shape=(),
-        d_axial_pos_embs=None,
         mode="eval",
         path_to_save_weights=PATH_TO_SAVE_WEIGHTS,
     ):
@@ -222,8 +220,8 @@ class TraxUtils(object):
                     n_attention_chunks=config.num_attention_chunks,
                     attention_type=tl.LSHSelfAttention,
                     share_qk=share_qk,
-                    axial_pos_shape=axial_pos_shape,
-                    d_axial_pos_embs=d_axial_pos_embs,
+                    axial_pos_shape=config.axial_pos_shape,
+                    d_axial_pos_embs=config.axial_pos_embds_dim,
                     ff_activation=tl.Gelu,
                     ff_use_sru=ff_use_sru,
                     ff_chunk_size=config.ff_chunk_size,
@@ -332,10 +330,6 @@ class ReformerIntegrationTests(unittest.TestCase):
         word_embeddings = np.asarray(weights[1])
         self._set_param(torch_model_reformer.embeddings.word_embeddings, torch.tensor(word_embeddings))
 
-        # pos embeds
-        pos_embeddings = np.asarray(weights[3])
-        self._set_param(torch_model_reformer.embeddings.position_embeddings, torch.tensor(pos_embeddings[0]))
-
         trax_layer_weights = weights[5]
         assert len(torch_model_reformer.encoder.layer) * 4 + 1 == len(trax_layer_weights), "HF and trax model do not have the same number of layers"
         for layer_idx, layer in enumerate(torch_model_reformer.encoder.layer):
@@ -404,7 +398,7 @@ class ReformerIntegrationTests(unittest.TestCase):
     def test_reformer_lm_model(self):
         config = ReformerConfig()
 
-        shape = (2, 7)  # Batch x SeqLen x ModelDimPerHead
+        shape = (2, 14)  # Batch x SeqLen x ModelDimPerHead
         np_input = np.random.randint(0, config.vocab_size, size=shape)
         np_zeros = np.zeros((shape[0], 1), dtype=np.int)
 
