@@ -47,7 +47,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             vocab_size=99,
             n_positions=14,
             hidden_size=32,
-            num_hidden_layers=2,
+            num_hidden_layers=5,
             num_attention_heads=4,
             d_ff=37,
             relative_attention_num_buckets=8,
