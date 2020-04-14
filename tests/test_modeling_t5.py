@@ -298,9 +298,13 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             torch.manual_seed(0)
+<<<<<<< HEAD
             output_without_past_cache = model.generate(
                 input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
             )
+=======
+            output_without_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False)
+>>>>>>> remove output_past from pt
             torch.manual_seed(0)
             output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
             self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
@@ -321,7 +325,11 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 "attention_mask": attention_mask,
                 "decoder_input_ids": decoder_input_ids,
                 "decoder_attention_mask": decoder_attention_mask,
+<<<<<<< HEAD
                 "use_cache": False,
+=======
+                "use_cache": False
+>>>>>>> remove output_past from pt
             }
             return config, inputs_dict
 
