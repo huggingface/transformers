@@ -382,7 +382,7 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
         if lowercase:
             normalizer += [Lowercase()]
 
-        # Strip normalizer at the end
+        # Strip punc_normalizer at the end
         normalizer += [Strip(left=True, right=True)]
 
         if len(normalizer) > 0:

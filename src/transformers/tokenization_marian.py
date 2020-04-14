@@ -1,9 +1,8 @@
 from .tokenization_utils import PreTrainedTokenizer
 import sentencepiece
-from mosestokenizer import MosesTokenizer, MosesDetokenizer, MosesSentenceSplitter, MosesPunctuationNormalizer
+from mosestokenizer import MosesPunctuationNormalizer
 
-from .apply_bpe import BPE
-from .tokenization_xlm_roberta import XLMRobertaTokenizer
+
 from typing import Dict, List, Tuple, Optional
 from torch import Tensor
 
@@ -22,8 +21,6 @@ class MarianSPTokenizer(PreTrainedTokenizer):
     vocab_files_names = {"source_spm": 'source.spm',  'target_spm': 'target.spm',
                          'vocab': 'opus.spm32k-spm32k.vocab.yml',
                          'tokenizer_config_file': 'tokenizer_config.json',
-                         #'source_bpe': 'source.bpe',
-                         #'target_bpe': 'target_bpe'
                          }
 
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
@@ -61,9 +58,10 @@ class MarianSPTokenizer(PreTrainedTokenizer):
         self.spm_target = sentencepiece.SentencePieceProcessor()
         self.spm_target.Load(target_spm)
 
-        # pre- and post-processing tools
-        #self.sentence_splitter = MosesSentenceSplitter(source_lang)  # TODO(SS): this would require lots of book-keeping.
-        self.normalizer = MosesPunctuationNormalizer(source_lang)
+
+        # Note(SS): splitter would require lots of book-keeping.
+        #self.sentence_splitter = MosesSentenceSplitter(source_lang)
+        self.punc_normalizer = MosesPunctuationNormalizer(source_lang)
 
     @property
     def has_bpe(self):
@@ -118,9 +116,9 @@ class MarianSPTokenizer(PreTrainedTokenizer):
         """
         if max_length is None:
             max_length = self.max_len
-        src_texts = [self.spm_source.encode_as_pieces(self.normalizer(t)) for t in src_texts]
+        src_texts = [self.spm_source.encode_as_pieces(self.punc_normalizer(t)) for t in src_texts]
         if tgt_texts is not None:
-            tgt_texts = [self.spm_target.encode_as_pieces(self.normalizer(t)) for t in tgt_texts]
+            tgt_texts = [self.spm_target.encode_as_pieces(self.punc_normalizer(t)) for t in tgt_texts]
         encoder_ids: list = [self._append_special_tokens_and_truncate(t,  max_length - 1) for t in src_texts]
         encoder_inputs = self.batch_encode_plus(
             encoder_ids,
@@ -149,4 +147,3 @@ class MarianSPTokenizer(PreTrainedTokenizer):
         model_inputs["decoder_input_ids"] =  decoder_inputs["input_ids"]
         #model_inputs["decoder_attention_mask"] = decoder_inputs["decoder_attention_mask"]
         return model_inputs
-

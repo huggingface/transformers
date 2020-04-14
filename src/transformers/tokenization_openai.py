@@ -279,7 +279,7 @@ class _OpenAIGPTCharBPETokenizer(BaseTokenizer):
         # OpenAI normalization is the same as Bert
         normalizers += [BertNormalizer()]
 
-        # Create the normalizer structure
+        # Create the punc_normalizer structure
         if len(normalizers) > 0:
             if len(normalizers) > 1:
                 tokenizer.normalizer = Sequence(normalizers)
