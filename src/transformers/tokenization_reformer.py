@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 
+
+# IMPORTANT: This is just a copy-paste from T5 and not compared to the original Reformer
+# Tokenizer yet!!!!
+
+
 ####################################################
 # Mapping from the keyword arguments names of Tokenizer `__init__`
 # to file names for serializing Tokenizer instances
@@ -45,15 +50,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 # Mapping from model shortcut names to max length of inputs
 ####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "t5-small": 512,
-    "t5-base": 512,
-    "t5-large": 512,
-    "t5-3b": 512,
-    "t5-11b": 512,
 }
-
-# IMPORTANT: This is just a copy-paste from T5 and not compared to the original Reformer
-# Tokenizer yet!!!!
 
 
 class ReformerTokenizer(PreTrainedTokenizer):
