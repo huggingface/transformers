@@ -42,6 +42,8 @@ from transformers import (
     XLMForSequenceClassification,
     XLMTokenizer,
     get_linear_schedule_with_warmup,
+    XLMRobertaConfig, XLMRobertaForSequenceClassification,XLMRobertaTokenizer,
+
 )
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
 from transformers import xnli_compute_metrics as compute_metrics
@@ -58,13 +60,14 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, DistilBertConfig, XLMConfig)), ()
+    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, DistilBertConfig, XLMConfig,XLMRobertaConfig)), ()
 )
 
 MODEL_CLASSES = {
     "bert": (BertConfig, BertForSequenceClassification, BertTokenizer),
     "xlm": (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
     "distilbert": (DistilBertConfig, DistilBertForSequenceClassification, DistilBertTokenizer),
+    'xlm-r':(XLMRobertaConfig, XLMRobertaForSequenceClassification,XLMRobertaTokenizer),
 }
 
 
