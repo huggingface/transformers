@@ -429,8 +429,15 @@ def evaluate(args, model, tokenizer, prefix=""):
             tokenizer,
         )
 
+    if output_null_log_odds_file:
+        with open(output_null_log_odds_file, "r") as fin:
+            import json
+            no_answer_probs = json.load(fin)
+    else:
+        no_answer_probs = None
+
     # Compute the F1 and exact scores.
-    results = squad_evaluate(examples, predictions)
+    results = squad_evaluate(examples, predictions, no_answer_probs)
     
     output_eval_file = os.path.join(args.output_dir, prefix, "eval_results.txt")
     with open(output_eval_file, "w") as writer:
