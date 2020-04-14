@@ -361,7 +361,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         # Remove residual connection in ReformerSelfOutput to test this layer only
         # Remove layer norm in ReformerAttention to test this layer only
         config = ReformerConfig()
-        shape = (2, 7, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        shape = (2, 14, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
         trax_utils = TraxUtils(shape)
