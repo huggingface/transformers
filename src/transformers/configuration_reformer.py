@@ -70,8 +70,6 @@ class ReformerConfig(PretrainedConfig):
             max_position_embeddings (:obj:`int`, optional, defaults to 512):
                 The maximum sequence length that this model might ever be used with.
                 Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-            type_vocab_size (:obj:`int`, optional, defaults to 2):
-                The vocabulary size of the `token_type_ids` passed into :class:`~transformers.ReformerModel`.
             initializer_range (:obj:`float`, optional, defaults to 0.02):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
@@ -99,23 +97,22 @@ class ReformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=10,
-        hidden_size=16,
-        num_hidden_layers=3,
+        vocab_size=200,
+        hidden_size=128,
+        num_hidden_layers=2,
         num_attention_heads=2,
         num_buckets=2,
-        num_hashes=2,
+        num_hashes=4,
         chunk_length=7,
         num_chunks_before=1,
         num_chunks_after=0,
-        chunk_size_lm_head=1,
-        chunk_size_feed_forward=1,
-        feed_forward_size=32,
+        chunk_size_lm_head=0,
+        chunk_size_feed_forward=0,
+        feed_forward_size=128,
         hidden_act="gelu",
         hidden_dropout_prob=0.3,
         attention_probs_dropout_prob=0.3,
-        max_position_embeddings=20,
-        type_vocab_size=2,
+        max_position_embeddings=512,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         sinusoidal_pos_embds=True,
@@ -131,7 +128,7 @@ class ReformerConfig(PretrainedConfig):
 #        TO CHANGE LATER:
         self.seed = 0
         self.num_attention_chunks = 1  # this is not used in LSHSelfAttention
-        self.num_chunks = 1
+        self.num_chunks = 0
         self.ff_chunk_size = chunk_size_feed_forward
         self.d_model = hidden_size
         self.d_ff = feed_forward_size
@@ -152,7 +149,6 @@ class ReformerConfig(PretrainedConfig):
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.sinusoidal_pos_embds = sinusoidal_pos_embds
