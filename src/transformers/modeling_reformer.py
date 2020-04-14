@@ -109,6 +109,8 @@ class ReformerEmbeddings(nn.Module):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.max_position_embeddings = config.max_position_embeddings
+
         # TODO(PVP): check sinusoidal position embeddings -> not 100% the same as done in trax
         if config.sinusoidal_pos_embds:
             create_sinusoidal_embeddings(
@@ -118,6 +120,7 @@ class ReformerEmbeddings(nn.Module):
         self.dropout = config.hidden_dropout_prob
 
     def forward(self, input_ids=None, position_ids=None, inputs_embeds=None):
+
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -131,6 +134,8 @@ class ReformerEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
+
+        assert position_ids.shape[-1] <= self.max_position_embeddings, "Sequence Length: {} has to be larger equal than config.max_position_embeddings: {}".format(position_ids.shape[-1], self.max_position_embeddings)
 
         position_embeddings = self.position_embeddings(position_ids)
 
@@ -157,6 +162,7 @@ class LSHSelfAttention(nn.Module):
         self.num_chunks_after = config.num_chunks_after
         self.output_attentions = config.output_attentions
         self.is_decoder = config.is_decoder
+        self.max_position_embeddings = config.max_position_embeddings
 
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -191,6 +197,10 @@ class LSHSelfAttention(nn.Module):
         assert query_key_vectors.shape[-1] == self.attention_head_size
         assert value_vectors.shape[-1] == self.attention_head_size
 
+        if self.num_buckets is None:
+            # set `num_buckets` on the fly
+            self._set_num_buckets_on_the_fly(sequence_length)
+
         # hash query key vectors into buckets
         buckets = self._hash_vectors(query_key_vectors)
         assert int(buckets.shape[-1]) == self.num_hashes * sequence_length
@@ -199,8 +209,6 @@ class LSHSelfAttention(nn.Module):
 
         query_key_vectors = self._gather_by_expansion(query_key_vectors, ticker)
         value_vectors = self._gather_by_expansion(value_vectors, ticker)
-
-        # q_info = ticker
 
         query_key_vectors = self._split_dim_by(query_key_vectors, -1, self.chunk_length)
         value_vectors = self._split_dim_by(value_vectors, -1, self.chunk_length)
@@ -225,6 +233,7 @@ class LSHSelfAttention(nn.Module):
 
         out_vectors = self._transpose_for_output(out_vectors)
         outputs = (out_vectors, attention_probs) if self.output_attentions else (out_vectors,)
+
         return outputs
 
     def _hash_vectors(self, vectors):
@@ -303,6 +312,18 @@ class LSHSelfAttention(nn.Module):
 
         sorted_ticker = (sorted_ticker % sequence_length)
         return sorted_ticker, undo_sorted_ticker
+
+    def _set_num_buckets_on_the_fly(self, sequence_length):
+        # recommended `num_buckets` from paper
+        num_buckets = 2 * sequence_length // self.chunk_length
+
+        # factorize `num_buckets` if `num_buckets` becomes too large
+        num_buckets_limit = max(int((self.max_position_embeddings // self.chunk_length) ** (0.5)), self.chuck_length)
+        if num_buckets > 2 * num_buckets_limit:
+            num_buckets = [num_buckets_limit, num_buckets // num_buckets_limit + 1]
+
+        logger.warning("config.num_buckets is not set. Setting config.num_buckets to {}...".format(num_buckets))
+        self.num_buckets = num_buckets
 
     def _attend(self, query_vectors, key_vectors, value_vectors, ticker, undo_ticker, head_mask):
         key_vectors = self._look_adjacent(key_vectors)
@@ -636,6 +657,7 @@ class ReformerModel(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
+        self.chunk_length = config.chunk_length
 
         self.embeddings = ReformerEmbeddings(config)
         self.encoder = ReformerEncoder(config)
@@ -695,6 +717,8 @@ class ReformerModel(ReformerPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device  # noqa: F841
+
+        assert input_shape[-1] % self.chunk_length == 0, "Sequence Length {} has to be a multiple of config.chunk_length {}. Please consider padding the input to a length of {}.".format(input_shape[-1], self.chunk_length, input_shape[-1] + (self.chunk_length - input_shape[-1] % self.chunk_length))
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -777,6 +801,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         inputs_embeds=None,
         lm_labels=None,
     ):
+
         reformer_outputs = self.reformer(
             input_ids,
             position_ids=position_ids,
