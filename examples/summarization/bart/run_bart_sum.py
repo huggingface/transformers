@@ -25,6 +25,11 @@ class BartSystem(BaseTransformer):
 
     def __init__(self, hparams):
         super().__init__(hparams, num_labels=None, mode=self.mode)
+        self.dataset_kwargs: dict = dict(
+            data_dir=self.hparams.data_dir,
+            max_source_length=self.hparams.max_source_length,
+            max_target_length=self.hparams.max_target_length,
+        )
 
     def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
         return self.model(
@@ -96,14 +101,6 @@ class BartSystem(BaseTransformer):
             t_writer.close()
 
         return self.test_end(outputs)
-
-    @property
-    def dataset_kwargs(self):
-        return dict(
-            data_dir=self.hparams.data_dir,
-            max_source_length=self.hparams.max_source_length,
-            max_target_length=self.hparams.max_target_length,
-        )
 
     def get_dataloader(self, type_path: str, batch_size: int) -> DataLoader:
         dataset = SummarizationDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)

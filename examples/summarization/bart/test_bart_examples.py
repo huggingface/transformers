@@ -46,7 +46,8 @@ DEFAULT_ARGS = {
     "num_train_epochs": 1,
     "train_batch_size": 2,
     "eval_batch_size": 2,
-    "max_seq_length": 12,
+    "max_source_length": 12,
+    "max_target_length": 12,
 }
 
 
@@ -70,6 +71,7 @@ class TestBartExamples(unittest.TestCase):
     def setUpClass(cls):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
+        logging.disable(logging.CRITICAL)  # remove noisy download output from tracebacks
         return cls
 
     def test_bart_cnn_cli(self):
