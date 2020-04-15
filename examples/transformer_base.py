@@ -104,8 +104,8 @@ class BaseTransformer(pl.LightningModule):
         self.lr_scheduler.step()
 
     def get_tqdm_dict(self):
-        tqdm_dict = {"loss": "{:.3f}".format(self.trainer.avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
-
+        avg_loss = getattr(self.trainer, "avg_loss", 0.0)
+        tqdm_dict = {"loss": "{:.3f}".format(avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
         return tqdm_dict
 
     def test_step(self, batch, batch_nb):
