@@ -65,9 +65,13 @@ def make_test_data_dir():
 
 
 class TestBartExamples(unittest.TestCase):
-    def test_bart_cnn_cli(self):
+    @classmethod
+    def setUpClass(cls):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
+        return cls
+
+    def test_bart_cnn_cli(self):
         tmp = Path(tempfile.gettempdir()) / "utest_generations_bart_sum.hypo"
         with tmp.open("w") as f:
             f.write("\n".join(articles))
@@ -79,19 +83,12 @@ class TestBartExamples(unittest.TestCase):
             os.remove(Path(output_file_name))
 
     def test_bart_run_sum_cli(self):
-        n_gpu = 0
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
         args_d: dict = DEFAULT_ARGS.copy()
-
+        tmp_dir = make_test_data_dir()
+        output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
-            data_dir=make_test_data_dir(),
-            model_type="bart",
-            train_batch_size=2,
-            eval_batch_size=2,
-            n_gpu=n_gpu,
-            output_dir="dringus",
+            data_dir=tmp_dir, model_type="bart", train_batch_size=2, eval_batch_size=2, n_gpu=0, output_dir=output_dir,
         )
+
         args = argparse.Namespace(**args_d)
-        os.makedirs(args.output_dir, exist_ok=False)
         main(args)
