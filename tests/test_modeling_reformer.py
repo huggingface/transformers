@@ -83,11 +83,10 @@ class TraxUtils(object):
     ):
 
         with trax_math.use_backend("jax"):
-            hidden_size_per_head = config.hidden_size // config.num_attention_heads
             layer = TraxSelfAttention(
                 n_heads=config.num_attention_heads,
-                d_qk=hidden_size_per_head,
-                d_v=hidden_size_per_head,
+                d_qk=config.attention_head_size,
+                d_v=config.attention_head_size,
                 chunk_len=config.chunk_length,
                 n_chunks_before=config.num_chunks_before,
                 n_chunks_after=config.num_chunks_after,
@@ -109,11 +108,10 @@ class TraxUtils(object):
     ):
 
         with trax_math.use_backend("jax"):
-            hidden_size_per_head = config.hidden_size // config.num_attention_heads
             layer = TraxLSHSelfAttention(
                 n_heads=config.num_attention_heads,
-                d_qk=hidden_size_per_head,
-                d_v=hidden_size_per_head,
+                d_qk=config.attention_head_size,
+                d_v=config.attention_head_size,
                 chunk_len=config.chunk_length,
                 n_chunks_before=config.num_chunks_before,
                 n_chunks_after=config.num_chunks_after,
@@ -165,12 +163,11 @@ class TraxUtils(object):
 
         with trax_math.use_backend("jax"):
             with jax.disable_jit():
-                hidden_size_per_head = config.hidden_size // config.num_attention_heads
                 list_of_layers = TraxLSHAttentionBlock(
                     d_model=config.hidden_size,
                     d_ff=config.feed_forward_size,
-                    d_attention_key=hidden_size_per_head,
-                    d_attention_value=hidden_size_per_head,
+                    d_attention_key=config.attention_head_size,
+                    d_attention_value=config.attention_head_size,
                     n_heads=config.num_attention_heads,
                     n_attention_chunks=None,
                     attention_type=tl.LSHSelfAttention,
@@ -232,13 +229,12 @@ class TraxUtils(object):
     ):
         with trax_math.use_backend("jax"):
             with jax.disable_jit():
-                hidden_size_per_head = config.hidden_size // config.num_attention_heads
                 model = TraxReformer(
                     vocab_size=config.vocab_size,
                     d_model=config.hidden_size,
                     d_ff=config.feed_forward_size,
-                    d_attention_key=hidden_size_per_head,
-                    d_attention_value=hidden_size_per_head,
+                    d_attention_key=config.attention_head_size,
+                    d_attention_value=config.attention_head_size,
                     n_layers=config.num_hidden_layers,
                     n_heads=config.num_attention_heads,
                     dropout=config.hidden_dropout_prob,
@@ -298,10 +294,10 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def _set_param(self, torch_layer, weight, bias=None):
         with torch.no_grad():
-            assert torch_layer.weight.shape == weight.shape, "{} layer.weight does not match".format(torch.layer)
+            assert torch_layer.weight.shape == weight.shape, "{} layer.weight does not match".format(torch_layer)
             torch_layer.weight = torch.nn.Parameter(weight)
             if bias is not None:
-                assert torch_layer.bias.shape == bias.shape, "{} layer.bias does not match".format(torch.layer)
+                assert torch_layer.bias.shape == bias.shape, "{} layer.bias does not match".format(torch_layer)
                 torch_layer.bias = torch.nn.Parameter(bias)
 
     def _set_layer_weights_in_torch_lsh(self, weights, torch_layer, hidden_size):

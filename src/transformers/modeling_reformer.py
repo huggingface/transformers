@@ -245,7 +245,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         super().__init__()
 
         self.num_attention_heads = config.num_attention_heads
-        self.hidden_size = config.hidden_size
         self.hash_seed = config.seed
         self.num_hashes = config.num_hashes
         self.num_buckets = config.num_buckets
@@ -256,14 +255,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.is_decoder = config.is_decoder
         self.max_position_embeddings = config.max_position_embeddings
 
-        self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
+        self.attention_head_size = config.attention_head_size
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
-            )
+        self.hidden_size = config.hidden_size
 
         self.query_key = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
@@ -494,21 +488,15 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         super().__init__()
 
         self.num_attention_heads = config.num_attention_heads
-        self.hidden_size = config.hidden_size
         self.chunk_length = config.chunk_length
         self.num_chunks_before = config.num_chunks_before
         self.num_chunks_after = config.num_chunks_after
         self.output_attentions = config.output_attentions
         self.is_decoder = config.is_decoder
 
-        self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
+        self.attention_head_size = config.attention_head_size
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
-            )
+        self.hidden_size = config.hidden_size
 
         self.query = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.key = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
@@ -594,7 +582,8 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
 class ReformerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        all_head_size = config.num_attention_heads * config.attention_head_size
+        self.dense = nn.Linear(all_head_size, config.hidden_size, bias=False)
         self.dropout = config.hidden_dropout_prob
 
     def forward(self, hidden_states, input_tensor):
@@ -623,6 +612,8 @@ class ReformerAttention(nn.Module):
                 self.self_attention = LocalSelfAttention(config)
             else:
                 self.self_attention = LSHSelfAttention(config)
+        else:
+            raise NotImplementedError("config.attn_type: {} does not exist. Select one of ['lsh', 'local', 'mixed'].".format(config.attn_type))
 
         self.output = ReformerSelfOutput(config)
 
