@@ -116,7 +116,8 @@ class ModuleUtilsMixin:
     def dtype(self):
         return next(self.parameters()).dtype
 
-    def invert_attention_mask(self, encoder_attention_mask: torch.Tensor) -> torch.Tensor:
+    def invert_attention_mask(self, encoder_attention_mask):
+        """type: torch.Tensor -> torch.Tensor"""
         if encoder_attention_mask.dim() == 3:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
         if encoder_attention_mask.dim() == 2:
@@ -130,7 +131,17 @@ class ModuleUtilsMixin:
         encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         return encoder_extended_attention_mask
 
-    def get_extended_attention_mask(self, attention_mask, input_shape, device) -> torch.Tensor:
+    def get_extended_attention_mask(self, attention_mask, input_shape, device):
+        """Makes broadcastable attention mask and causal mask so that future and maked tokens are ignored.
+
+        Arguments:
+            attention_mask: torch.Tensor with 1 indicating tokens to ATTEND to
+            input_shape: tuple, shape of input_ids
+            device: torch.Device, usually self.device
+
+        Returns:
+            torch.Tensor with dtype of attention_mask.dtype
+        """
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         if attention_mask.dim() == 3:
@@ -143,9 +154,8 @@ class ModuleUtilsMixin:
                 batch_size, seq_length = input_shape
                 seq_ids = torch.arange(seq_length, device=device)
                 causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
-                causal_mask = causal_mask.to(
-                    attention_mask.dtype
-                )  # causal and attention masks must have same type with pytorch version < 1.3
+                # causal and attention masks must have same type with pytorch version < 1.3
+                causal_mask = causal_mask.to(attention_mask.dtype)
                 extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
             else:
                 extended_attention_mask = attention_mask[:, None, None, :]
@@ -166,11 +176,17 @@ class ModuleUtilsMixin:
         return extended_attention_mask
 
     def get_head_mask(self, head_mask, num_hidden_layers):
+        """
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        attention_probs has shape bsz x n_heads x N x N
+        Arguments:
+            head_mask: torch.Tensor or None: has shape [num_heads] or [num_hidden_layers x num_heads]
+            num_hidden_layers: int
+        Returns:
+             Tensor of shape shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+             or list with [None] for each layer
+        """
         if head_mask is not None:
             if head_mask.dim() == 1:
                 head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
