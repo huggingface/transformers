@@ -119,8 +119,8 @@ class ReformerConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         sinusoidal_pos_embds=False,
         axial_pos_embds=True,
-        axial_pos_shape=(7, 2),
-        axial_pos_embds_dim=(64, 64),
+        axial_pos_shape=[7, 2],
+        axial_pos_embds_dim=[64, 64],
         attn_type="lsh",
         **kwargs
     ):
@@ -150,8 +150,8 @@ class ReformerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.sinusoidal_pos_embds = sinusoidal_pos_embds
         self.axial_pos_embds = axial_pos_embds
-        self.axial_pos_shape = axial_pos_shape
-        self.axial_pos_embds_dim = axial_pos_embds_dim
+        self.axial_pos_shape = tuple(axial_pos_shape)
+        self.axial_pos_embds_dim = tuple(axial_pos_embds_dim)
         self.axial_norm_std = axial_norm_std
         self.chunk_size_lm_head = chunk_size_lm_head
         self.chunk_size_feed_forward = chunk_size_feed_forward
