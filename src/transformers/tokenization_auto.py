@@ -26,6 +26,7 @@ from .configuration_auto import (
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
+    ElectraConfig,
     FlaubertConfig,
     GPT2Config,
     OpenAIGPTConfig,
@@ -44,6 +45,7 @@ from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
+from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
@@ -67,6 +69,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
         (BartConfig, (BartTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
+        (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
@@ -104,6 +107,7 @@ class AutoTokenizer:
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
             - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
+            - contains `electra`: ElectraTokenizer (Google ELECTRA model)
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -135,6 +139,7 @@ class AutoTokenizer:
             - contains `xlnet`: XLNetTokenizer (XLNet model)
             - contains `xlm`: XLMTokenizer (XLM model)
             - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
+            - contains `electra`: ElectraTokenizer (Google ELECTRA model)
 
         Params:
             pretrained_model_name_or_path: either:

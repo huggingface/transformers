@@ -233,6 +233,9 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
     else:
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
+    model = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
+    model.resize_token_embeddings(len(tokenizer))
+
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
@@ -309,16 +312,17 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
 
     tr_loss, logging_loss = 0.0, 0.0
 
-    model_to_resize = model.module if hasattr(model, "module") else model  # Take care of distributed/parallel training
-    model_to_resize.resize_token_embeddings(len(tokenizer))
-
     model.zero_grad()
     train_iterator = trange(
         epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0]
     )
     set_seed(args)  # Added here for reproducibility
-    for _ in train_iterator:
+    for epoch in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
+
+        if args.local_rank != -1:
+            train_sampler.set_epoch(epoch)
+
         for step, batch in enumerate(epoch_iterator):
 
             # Skip past any already trained steps if resuming training
@@ -624,6 +628,7 @@ def main():
         and os.listdir(args.output_dir)
         and args.do_train
         and not args.overwrite_output_dir
+        and not args.should_continue
     ):
         raise ValueError(
             "Output directory ({}) already exists and is not empty. Use --overwrite_output_dir to overcome.".format(

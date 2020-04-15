@@ -18,8 +18,32 @@ import os
 import pickle
 import shutil
 import tempfile
+from collections import OrderedDict
+from typing import Dict, Tuple, Union
 
 from tests.utils import require_tf, require_torch
+
+
+def merge_model_tokenizer_mappings(
+    model_mapping: Dict["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+    tokenizer_mapping: Dict["PretrainedConfig", Tuple["PreTrainedTokenizer", "PreTrainedTokenizerFast"]],
+) -> Dict[
+    Union["PreTrainedTokenizer", "PreTrainedTokenizerFast"],
+    Tuple["PretrainedConfig", Union["PreTrainedModel", "TFPreTrainedModel"]],
+]:
+    configurations = list(model_mapping.keys())
+    model_tokenizer_mapping = OrderedDict([])
+
+    for configuration in configurations:
+        model = model_mapping[configuration]
+        tokenizer = tokenizer_mapping[configuration][0]
+        tokenizer_fast = tokenizer_mapping[configuration][1]
+
+        model_tokenizer_mapping.update({tokenizer: (configuration, model)})
+        if tokenizer_fast is not None:
+            model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
+
+    return model_tokenizer_mapping
 
 
 class TokenizerTesterMixin:
@@ -282,7 +306,7 @@ class TokenizerTesterMixin:
 
         # Method is implemented (e.g. not GPT-2)
         if len(attached_sequences) != 2:
-            self.assertEqual(tokenizer.num_added_tokens(pair=True), len(attached_sequences) - len(sequences))
+            self.assertEqual(tokenizer.num_special_tokens_to_add(pair=True), len(attached_sequences) - len(sequences))
 
     def test_maximum_encoding_length_single_input(self):
         tokenizer = self.get_tokenizer()
@@ -291,7 +315,7 @@ class TokenizerTesterMixin:
         stride = 2
 
         sequence = tokenizer.encode(seq_0, add_special_tokens=False)
-        num_added_tokens = tokenizer.num_added_tokens()
+        num_added_tokens = tokenizer.num_special_tokens_to_add()
         total_length = len(sequence) + num_added_tokens
         information = tokenizer.encode_plus(
             seq_0,
@@ -712,3 +736,83 @@ class TokenizerTesterMixin:
 
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
+
+    @require_torch
+    def test_torch_encode_plus_sent_to_model(self):
+        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
+
+        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
+
+        tokenizer = self.get_tokenizer()
+
+        if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
+            return
+
+        config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
+        config = config_class()
+
+        if config.is_encoder_decoder or config.pad_token_id is None:
+            return
+
+        model = model_class(config)
+
+        # Make sure the model contains at least the full vocabulary size in its embedding matrix
+        is_using_common_embeddings = hasattr(model.get_input_embeddings(), "weight")
+        assert (model.get_input_embeddings().weight.shape[0] >= len(tokenizer)) if is_using_common_embeddings else True
+
+        # Build sequence
+        first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
+        sequence = " ".join(first_ten_tokens)
+        encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="pt")
+        batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="pt")
+        # This should not fail
+        model(**encoded_sequence)
+        model(**batch_encoded_sequence)
+
+        if self.test_rust_tokenizer:
+            fast_tokenizer = self.get_rust_tokenizer()
+            encoded_sequence_fast = fast_tokenizer.encode_plus(sequence, return_tensors="pt")
+            batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus([sequence, sequence], return_tensors="pt")
+            # This should not fail
+            model(**encoded_sequence_fast)
+            model(**batch_encoded_sequence_fast)
+
+    @require_tf
+    def test_tf_encode_plus_sent_to_model(self):
+        from transformers import TF_MODEL_MAPPING, TOKENIZER_MAPPING
+
+        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(TF_MODEL_MAPPING, TOKENIZER_MAPPING)
+
+        tokenizer = self.get_tokenizer()
+
+        if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
+            return
+
+        config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
+        config = config_class()
+
+        if config.is_encoder_decoder or config.pad_token_id is None:
+            return
+
+        model = model_class(config)
+
+        # Make sure the model contains at least the full vocabulary size in its embedding matrix
+        assert model.config.vocab_size >= len(tokenizer)
+
+        # Build sequence
+        first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
+        sequence = " ".join(first_ten_tokens)
+        encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="tf")
+        batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="tf")
+
+        # This should not fail
+        model(encoded_sequence)
+        model(batch_encoded_sequence)
+
+        if self.test_rust_tokenizer:
+            fast_tokenizer = self.get_rust_tokenizer()
+            encoded_sequence_fast = fast_tokenizer.encode_plus(sequence, return_tensors="tf")
+            batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus([sequence, sequence], return_tensors="tf")
+            # This should not fail
+            model(encoded_sequence_fast)
+            model(batch_encoded_sequence_fast)

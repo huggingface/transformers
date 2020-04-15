@@ -24,13 +24,13 @@ import os
 import pickle
 import re
 from collections import Counter, OrderedDict
-from typing import List, Optional, Tuple, Union
+from typing import Optional
 
 import numpy as np
-from tokenizers import Encoding, Tokenizer
+from tokenizers import Tokenizer
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import WordLevel
-from tokenizers.normalizers import Lowercase, Sequence, unicode_normalizer_from_str
+from tokenizers.normalizers import Lowercase, Sequence, Strip, unicode_normalizer_from_str
 from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
 
@@ -80,6 +80,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = []
 
     def __init__(
         self,
@@ -361,7 +362,7 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
     ):
 
         try:
-            tokenizer = WordLevel.from_files(vocab_file, unk_token=unk_token)
+            tokenizer = WordLevel(vocab_file, unk_token=unk_token)
             tokenizer = Tokenizer(tokenizer)
         except Exception:
             raise ValueError(
@@ -380,6 +381,9 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
         # Include case normalization
         if lowercase:
             normalizer += [Lowercase()]
+
+        # Strip normalizer at the end
+        normalizer += [Strip(left=True, right=True)]
 
         if len(normalizer) > 0:
             tokenizer.normalizer = Sequence(normalizer) if len(normalizer) > 1 else normalizer[0]
@@ -404,20 +408,13 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
 
         super().__init__(tokenizer, parameters)
 
-    def encode_batch(self, sequences: List[Union[str, Tuple[str, str]]]) -> List[Encoding]:
-        return super().encode_batch(
-            [seq.strip() if isinstance(seq, str) else (seq[0].strip(), seq[1].strip()) for seq in sequences]
-        )
-
-    def encode(self, sequence: str, pair: Optional[str] = None) -> Encoding:
-        return super().encode(sequence.strip(), pair.strip() if pair else pair)
-
 
 class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
 
     vocab_files_names = VOCAB_FILES_NAMES_FAST
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP_FAST
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = []
 
     def __init__(
         self,

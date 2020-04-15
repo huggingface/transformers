@@ -35,8 +35,8 @@ from .file_utils import (
 logger = logging.getLogger(__name__)
 
 
-class ModelCard(object):
-    r""" Model Card class.
+class ModelCard:
+    r""" Structured Model Card class.
         Store model card as well as methods for loading/downloading/saving model cards.
 
         Please read the following paper for details and explanation on the sections:
@@ -93,7 +93,7 @@ class ModelCard(object):
 
                 - a string with the `shortcut name` of a pre-trained model card to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a string with the `identifier name` of a pre-trained model card that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing a mode card file saved using the :func:`~transformers.ModelCard.save_pretrained` method, e.g.: ``./my_model_directory/``.
+                - a path to a `directory` containing a model card file saved using the :func:`~transformers.ModelCard.save_pretrained` method, e.g.: ``./my_model_directory/``.
                 - a path or url to a saved model card JSON `file`, e.g.: ``./my_model_directory/modelcard.json``.
 
             cache_dir: (`optional`) string:
@@ -163,33 +163,7 @@ class ModelCard(object):
             # Load model card
             modelcard = cls.from_json_file(resolved_model_card_file)
 
-        except EnvironmentError:
-            if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
-                logger.warning("Couldn't reach server at '{}' to download model card file.".format(model_card_file))
-            else:
-                logger.warning(
-                    "Model name '{}' was not found in model name list ({}). "
-                    "We assumed '{}' was a path or url to a model card file named {} or "
-                    "a directory containing such a file but couldn't find any such file at this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ", ".join(ALL_PRETRAINED_CONFIG_ARCHIVE_MAP.keys()),
-                        model_card_file,
-                        MODEL_CARD_NAME,
-                    )
-                )
-            logger.warning("Creating an empty model card.")
-
-            # We fall back on creating an empty model card
-            modelcard = cls()
-
-        except json.JSONDecodeError:
-            logger.warning(
-                "Couldn't reach server at '{}' to download model card file or "
-                "model card file is not a valid JSON file. "
-                "Please check network or file content here: {}.".format(model_card_file, resolved_model_card_file)
-            )
-            logger.warning("Creating an empty model card.")
-
+        except (EnvironmentError, json.JSONDecodeError):
             # We fall back on creating an empty model card
             modelcard = cls()
 

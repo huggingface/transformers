@@ -59,7 +59,7 @@ class PretrainedConfig(object):
         # Attributes with defaults
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
-        self.output_past = kwargs.pop("output_past", True)  # Not used by all models
+        self.use_cache = kwargs.pop("use_cache", True)  # Not used by all models
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.pruned_heads = kwargs.pop("pruned_heads", {})
@@ -80,6 +80,7 @@ class PretrainedConfig(object):
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
+        self.bad_words_ids = kwargs.pop("bad_words_ids", None)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
 
         # Fine-tuning task arguments
@@ -100,6 +101,9 @@ class PretrainedConfig(object):
 
         # task specific arguments
         self.task_specific_params = kwargs.pop("task_specific_params", None)
+
+        # TPU arguments
+        self.xla_device = kwargs.pop("xla_device", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():

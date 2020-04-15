@@ -136,7 +136,7 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
         if "kernel" in name or "proj" in name:
             array = np.transpose(array)
         if ("r_r_bias" in name or "r_w_bias" in name) and len(pointer) > 1:
-            # Here we will split the TF weigths
+            # Here we will split the TF weights
             assert len(pointer) == array.shape[0]
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]
@@ -859,7 +859,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
 
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when ``labels`` is provided)
+        loss (:obj:`torch.FloatTensor` of shape `(batch_size, sequence_length-1)`, `optional`, returned when ``labels`` is provided)
             Language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -904,12 +904,12 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         pred_hid = last_hidden[:, -tgt_len:]
         outputs = transformer_outputs[1:]
 
-        softmax_output = self.crit(pred_hid.view(-1, pred_hid.size(-1)), labels)
+        softmax_output = self.crit(pred_hid, labels)
         if labels is None:
             softmax_output = softmax_output.view(bsz, tgt_len, -1)
             outputs = [softmax_output] + outputs
         else:
-            softmax_output = softmax_output.view(bsz, tgt_len)
+            softmax_output = softmax_output.view(bsz, tgt_len - 1)
             outputs = [softmax_output, None] + outputs
 
         return outputs  # (loss), logits or None if labels is not None (speed up adaptive softmax), new_mems, (all hidden states), (all attentions)
