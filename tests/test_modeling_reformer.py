@@ -585,18 +585,16 @@ class ReformerIntegrationTests(unittest.TestCase):
         np_zeros = np.zeros((shape[0], 1), dtype=np.int)
 
         trax_utils = TraxUtils(shape)
-        trax_model = self.load_model(trax_model_path, trax_utils.get_input_signature(trax_math.numpy.int32))
+        with trax_math.use_backend("jax"):
+            trax_input = trax_utils.convert_to_jax_array(np_input)
+            trax_input = (trax_input,) * 2
 
-        trax_model = trax_utils.get_model(
-            config, mode="predict", n_buckets=[64, 128], chunk_size_feed_forward=0
-        )
+            input_signature = trax_utils.get_input_signature(dtype=np.int32)
+#            input_signature = (input_signature, input_signature)
 
-        weights, state = trax_model.init(
-            trax_utils.get_input_signature(dtype=trax_math.numpy.int32)
-        )
+            trax_model = self.load_model(trax_model_path, input_signature)
 
-        trax_output = trax_model(np_input)
-
+            trax_output = trax_model(np_input)
         trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
 
         hf_input = torch.cat(
