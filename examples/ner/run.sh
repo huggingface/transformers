@@ -4,7 +4,6 @@ curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-dev.tsv?attre
 | grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > dev.txt.tmp
 curl -L 'https://sites.google.com/site/germeval2014ner/data/NER-de-test.tsv?attredirects=0&d=1' \
 | grep -v "^#" | cut -f 2,3 | tr '\t' ' ' > test.txt.tmp
- wget "https://raw.githubusercontent.com/stefan-it/fine-tuned-berts-seq/master/scripts/preprocess.py"
 export MAX_LENGTH=128
 export BERT_MODEL=bert-base-multilingual-cased
 python3 preprocess.py train.txt.tmp $BERT_MODEL $MAX_LENGTH > train.txt
