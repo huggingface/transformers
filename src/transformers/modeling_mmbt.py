@@ -245,9 +245,8 @@ class MMBTModel(ModuleUtilsMixin):
                 [torch.ones(input_modal_shape, device=device), encoder_attention_mask], dim=1
             )
 
-
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, self.device)
-        encoder_extended_attention_mask = self.invert_attn_mask(encoder_attention_mask)
+        encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         encoder_outputs = self.transformer.encoder(

@@ -116,7 +116,7 @@ class ModuleUtilsMixin:
     def dtype(self):
         return next(self.parameters()).dtype
 
-    def invert_attn_mask(self, encoder_attention_mask: torch.Tensor) -> torch.Tensor:
+    def invert_attention_mask(self, encoder_attention_mask: torch.Tensor) -> torch.Tensor:
         if encoder_attention_mask.dim() == 3:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
         if encoder_attention_mask.dim() == 2:
@@ -161,10 +161,9 @@ class ModuleUtilsMixin:
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
-
 
     def get_head_mask(self, head_mask, num_hidden_layers):
         # Prepare head mask if needed
@@ -180,13 +179,13 @@ class ModuleUtilsMixin:
                 head_mask = (
                     head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
                 )  # We can specify head_mask for each layer
-            head_mask = head_mask.to(
-                dtype=self.dtype
-            )  # switch to fload if need + fp16 compatibility
+            head_mask = head_mask.to(dtype=self.dtype)  # switch to fload if need + fp16 compatibility
         else:
             head_mask = [None] * num_hidden_layers
 
         return head_mask
+
+
 class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     r""" Base class for all models.
 

@@ -182,7 +182,7 @@ class T5LayerFF(nn.Module):
         layer_output = hidden_states + self.dropout(y)
         return layer_output
 
-from transformers.configuration_t5 import T5Config
+
 class T5Attention(nn.Module):
     def __init__(self, config: T5Config, has_relative_attention_bias=False):
         super().__init__()
@@ -693,10 +693,10 @@ class T5Stack(T5PreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask = self.invert_attn_mask(attention_mask)
+        extended_attention_mask = self.invert_attention_mask(attention_mask)
 
         if self.is_decoder and encoder_attention_mask is not None:
-            encoder_extended_attention_mask = self.invert_attn_mask(encoder_attention_mask)
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 
@@ -756,8 +756,6 @@ class T5Stack(T5PreTrainedModel):
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (presents,) (all hidden states), (all attentions)
-
-
 
 
 T5_START_DOCSTRING = r"""    The T5 model was proposed in
