@@ -43,10 +43,7 @@ class GlueDataset(Dataset):
         cached_features_file = os.path.join(
             args.data_dir,
             "cached_{}_{}_{}_{}".format(
-                "dev" if evaluate else "train",
-                tokenizer.__class__.__name__,
-                str(args.max_seq_length),
-                str(args.task_name),
+                "dev" if evaluate else "train", tokenizer.__class__.__name__, str(args.max_seq_length), args.task_name,
             ),
         )
         with torch_distributed_zero_first(local_rank):

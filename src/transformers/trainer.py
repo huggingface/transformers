@@ -1,4 +1,3 @@
-import glob
 import json
 import logging
 import os
@@ -6,6 +5,7 @@ import random
 import re
 import shutil
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
 
 import numpy as np
@@ -398,7 +398,7 @@ class Trainer:
     def _sorted_checkpoints(self, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False) -> List[str]:
         ordering_and_checkpoint_path = []
 
-        glob_checkpoints = glob.glob(os.path.join(self.args.output_dir, "{}-*".format(checkpoint_prefix)))
+        glob_checkpoints = Path(self.args.output_dir).glob(f"{checkpoint_prefix}-*")
 
         for path in glob_checkpoints:
             if use_mtime:
