@@ -120,6 +120,7 @@ class ReformerConfig(PretrainedConfig):
         axial_pos_embds=True,
         axial_pos_shape=(7, 2),
         axial_pos_embds_dim=(64, 64),
+        attn_type="lsh",
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -162,3 +163,4 @@ class ReformerConfig(PretrainedConfig):
         self.axial_norm_std = axial_norm_std
         self.chunk_size_lm_head = chunk_size_lm_head
         self.chunk_size_feed_forward = chunk_size_feed_forward
+        self.attn_type = attn_type

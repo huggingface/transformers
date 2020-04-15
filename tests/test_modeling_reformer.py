@@ -22,6 +22,7 @@ from trax.shapes import ShapeDtype as trax_ShapeDtype
 import jax
 from trax.layers.research.efficient_attention_v2 import (
     LSHSelfAttention as TraxLSHSelfAttention,
+    SelfAttention as TraxSelfAttention
 )
 from trax.models.reformer.reformer import DecoderBlock as TraxLSHAttentionBlock
 from trax.models.reformer.reformer import ReformerLM as TraxReformer
@@ -72,7 +73,33 @@ class TraxUtils(object):
             input_signature = trax_ShapeDtype(shape, dtype)
         return input_signature
 
-    def get_layer(
+    def get_local_layer(
+        self,
+        config,
+        use_reference_code=True,
+        mode="eval",
+        path_to_save_weights="/home/patrick/hugging_face/experiments/reformer/intermediate_weights",
+        **kwargs
+    ):
+
+        with trax_math.use_backend("jax"):
+            hidden_size_per_head = config.hidden_size // config.num_attention_heads
+            layer = TraxSelfAttention(
+                n_heads=config.num_attention_heads,
+                d_qk=hidden_size_per_head,
+                d_v=hidden_size_per_head,
+                chunk_len=config.chunk_length,
+                n_chunks_before=config.num_chunks_before,
+                n_chunks_after=config.num_chunks_after,
+                attention_dropout=config.attention_probs_dropout_prob,
+                output_dropout=config.hidden_dropout_prob,
+                causal=config.is_decoder,
+                use_reference_code=use_reference_code,
+                mode=mode,
+            )
+            return layer
+
+    def get_lsh_layer(
         self,
         config,
         use_reference_code=True,
@@ -100,7 +127,6 @@ class TraxUtils(object):
                 mode=mode,
                 path_to_save_weights=path_to_save_weights
             )
-
         return layer
 
     def forward_layer(
@@ -277,13 +303,26 @@ class ReformerIntegrationTests(unittest.TestCase):
                 assert torch_layer.bias.shape == bias.shape, "{} layer.bias does not match".format(torch.layer)
                 torch_layer.bias = torch.nn.Parameter(bias)
 
-    def _set_layer_weights_in_torch(self, weights, torch_layer, hidden_size):
+    def _set_layer_weights_in_torch_lsh(self, weights, torch_layer, hidden_size):
         # set torch weights for 1-to-1 comparison
         np_query_key = np.asarray(weights[0])
         np_value = np.asarray(weights[1])
         np_dense = np.asarray(weights[2])
 
         self._set_param(torch_layer.self_attention.query_key, torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, hidden_size))
+        self._set_param(torch_layer.self_attention.value, torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size))
+        self._set_param(torch_layer.output.dense, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1))
+
+    def _set_layer_weights_in_torch_local(self, weights, torch_layer, hidden_size):
+        # set torch weights for 1-to-1 comparison
+
+        np_query = np.asarray(weights[0])
+        np_key = np.asarray(weights[1])
+        np_value = np.asarray(weights[2])
+        np_dense = np.asarray(weights[3])
+
+        self._set_param(torch_layer.self_attention.query, torch.tensor(np_query).transpose(1, 2).contiguous().view(-1, hidden_size))
+        self._set_param(torch_layer.self_attention.key, torch.tensor(np_key).transpose(1, 2).contiguous().view(-1, hidden_size))
         self._set_param(torch_layer.self_attention.value, torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size))
         self._set_param(torch_layer.output.dense, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1))
 
@@ -297,7 +336,7 @@ class ReformerIntegrationTests(unittest.TestCase):
 
         # lsh weights + output
         lsh_weights = weights[0][1]
-        self._set_layer_weights_in_torch(lsh_weights, torch_block.attention, hidden_size)
+        self._set_layer_weights_in_torch_lsh(lsh_weights, torch_block.attention, hidden_size)
 
         # intermediate weighs
         intermediate_weights = weights[2][0][2][2]
@@ -359,19 +398,38 @@ class ReformerIntegrationTests(unittest.TestCase):
         pass
 
     def test_lsh_layer(self):
-        # Remove residual connection in ReformerSelfOutput to test this layer only
-        # Remove layer norm in ReformerAttention to test this layer only
         config = ReformerConfig()
         shape = (2, 14, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
         trax_utils = TraxUtils(shape)
-        trax_layer = trax_utils.get_layer(config)
+        trax_layer = trax_utils.get_lsh_layer(config)
         trax_output, trax_weights, trax_state = trax_utils.forward_layer(np_input, layer=trax_layer)
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
         hf_layer = ReformerAttention(config)
-        self._set_layer_weights_in_torch(trax_weights, hf_layer, config.hidden_size)
+        self._set_layer_weights_in_torch_lsh(trax_weights, hf_layer, config.hidden_size)
+        hf_layer.eval()
+
+        hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
+        hf_output = hf_layer.output(hf_attention_all_heads, torch.zeros_like(hf_input))
+
+        trax_torch_output = torch.tensor(np.asarray(trax_output))
+        self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
+
+    def test_local_layer(self):
+        config = ReformerConfig()
+        shape = (2, 14, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        np_input = np.random.rand(*shape)
+
+        trax_utils = TraxUtils(shape)
+        trax_layer = trax_utils.get_local_layer(config)
+        trax_output, trax_weights, trax_state = trax_utils.forward_layer(np_input, layer=trax_layer)
+
+        hf_input = torch.tensor(np_input, dtype=torch.float)
+        config.attn_type = "local"
+        hf_layer = ReformerAttention(config)
+        self._set_layer_weights_in_torch_local(trax_weights, hf_layer, config.hidden_size)
         hf_layer.eval()
 
         hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
