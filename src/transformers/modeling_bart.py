@@ -403,7 +403,7 @@ class DecoderLayer(nn.Module):
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
 
-class BartDecoder(nn.Module):
+class BartDecoder(PretrainedBartModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer
     is a :class:`DecoderLayer`.
@@ -412,8 +412,10 @@ class BartDecoder(nn.Module):
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
+    base_model_prefix = ""
+
     def __init__(self, config: BartConfig, embed_tokens: nn.Embedding):
-        super().__init__()
+        super().__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout

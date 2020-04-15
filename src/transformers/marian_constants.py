@@ -54,8 +54,57 @@ EMBED_CONVERTER = {
     # "encoder_emb_ln_bias_pre" = "bert/embeddings/LayerNorm/beta:0"
 }
 
+EN_DE_CONFIG = {
+    "bert-train-type-embeddings": "true",
+    "bert-type-vocab-size": "2",
 
-BART_CONVERTER ={
+    "dec-cell": "gru",
+    "dec-cell-base-depth": "2",
+    "dec-cell-high-depth": "1",
+    "dec-depth": 6,
+    "dim-emb": "512",
+        "dim-rnn": "1024",  #IGNORE
+    "dim-vocabs": ["58100", "58100"],
+        "enc-cell": "gru", # IGNORE
+    "enc-cell-depth": "1",
+    "enc-depth": 6,
+    "enc-type": "bidirectional",
+        "input-types": [],
+    "layer-normalization": "false",
+    "lemma-dim-emb": "0",
+        "right-left": "false",
+    "skip": "false",
+        "tied-embeddings": "false",
+    "tied-embeddings-all": "true", # "Tie all embedding layers and output layer"
+        "tied-embeddings-src": "false",
+    ## FFN and AAN params identical
+    "transformer-aan-activation": "swish",
+    "transformer-aan-depth": "2",   # What does AAN stand for?
+    "transformer-aan-nogate": "false",
+    "transformer-decoder-autoreg": "self-attention",
+    "transformer-dim-aan": "2048",
+    "transformer-dim-ffn": "2048",
+    "transformer-ffn-activation": "swish",
+    "transformer-ffn-depth": "2",
+
+        "transformer-guided-alignment-layer": "last",
+    "transformer-heads": 8,
+    "transformer-no-projection": "false", # Omit linear projection after multi-head attention (transformer)
+
+    "transformer-postprocess": "dan", #Dropout, add, normalize
+    "transformer-postprocess-emb": "d",# Operation after transformer embedding layer: d = dropout, a = add, n = normalize
+    "transformer-preprocess": "",  # Operation before each transformer layer: d = dropout, a = add, n = normalize
+        "transformer-tied-layers": [],
+    "transformer-train-position-embeddings": "false", # Train positional embeddings instead of using static sinusoidal embeddings
+
+    "type": "transformer",
+    "ulr": "false",
+    "ulr-dim-emb": "0",
+    "ulr-trainable-transformation": "false",
+    "version": "v1.8.2 2111c28 2019-10-16 08:36:48 -0700",
+}
+
+BART_CONVERTER = {
     "self_Wq": "self_attn.q_proj.weight",
     "self_Wk": "self_attn.k_proj.weight",
     "self_Wv": "self_attn.v_proj.weight",
@@ -98,15 +147,17 @@ def convert_config(cfg: BertConfig) -> BartConfig:
     #     intermediate_size = intermediate_shape,
     #     activation_function=hidden_act
 
-    bart_cfg = BartConfig(vocab_size=cfg.vocab_size,
-               decoder_layers=cfg.num_hidden_layers,
-               decoder_attention_heads=cfg.num_attention_heads,
-               decoder_ffn_dim=cfg.intermediate_size,
-               d_model=cfg.hidden_size,
-               pad_token_id=cfg.pad_token_id,
-               eos_token_id=cfg.eos_token_id,
-               bos_token_id=None,
-               max_position_embeddings=cfg.max_position_embeddings,
-               activation_function=cfg.hidden_act,
-               scale_embedding=True)
+    bart_cfg = BartConfig(
+        vocab_size=cfg.vocab_size,
+        decoder_layers=cfg.num_hidden_layers,
+        decoder_attention_heads=cfg.num_attention_heads,
+        decoder_ffn_dim=cfg.intermediate_size,
+        d_model=cfg.hidden_size,
+        pad_token_id=cfg.pad_token_id,
+        eos_token_id=cfg.eos_token_id,
+        bos_token_id=None,
+        max_position_embeddings=cfg.max_position_embeddings,
+        activation_function=cfg.hidden_act,
+        scale_embedding=True,
+    )
     return bart_cfg

@@ -182,7 +182,10 @@ class T5LayerFF(nn.Module):
         layer_output = hidden_states + self.dropout(y)
         return layer_output
 
+
 from transformers.configuration_t5 import T5Config
+
+
 class T5Attention(nn.Module):
     def __init__(self, config: T5Config, has_relative_attention_bias=False):
         super().__init__()
@@ -773,7 +776,6 @@ class T5Stack(T5PreTrainedModel):
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (presents,) (all hidden states), (all attentions)
-
 
     def invert_attn_mask(self, encoder_attention_mask: torch.Tensor) -> torch.Tensor:
         if encoder_attention_mask.dim() == 3:

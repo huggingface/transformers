@@ -21,7 +21,7 @@ from transformers.tokenization_utils import ADDED_TOKENS_FILE, TOKENIZER_CONFIG_
 OPUS_MODELS_PATH = "/Users/shleifer/OPUS-MT-train/models"  # git clone git@github.com:Helsinki-NLP/Opus-MT.git
 
 
-def convert_encoder_layer(opus_dict, layer_prefix:str, converter:dict):
+def convert_encoder_layer(opus_dict, layer_prefix: str, converter: dict):
     sd = {}
     for k in opus_dict:
         if not k.startswith(layer_prefix):
@@ -32,9 +32,9 @@ def convert_encoder_layer(opus_dict, layer_prefix:str, converter:dict):
     return sd
 
 
-def load_layers_(bmodel: BertModel, opus_state: dict, converter=BERT_LAYER_CONVERTER):
-    for i, layer in enumerate(bmodel.encoder.layer):
-        layer_tag = f"decoder_l{i+1}_" if bmodel.config.is_decoder else f"encoder_l{i+1}_"
+def load_layers_(layer_lst: torch.nn.ModuleList, opus_state: dict, converter=BERT_LAYER_CONVERTER, is_decoder=False):
+    for i, layer in enumerate(layer_lst):
+        layer_tag = f"decoder_l{i+1}_" if is_decoder else f"encoder_l{i+1}_"
         sd = convert_encoder_layer(opus_state, layer_tag, converter)
         layer.load_state_dict(sd, strict=True)
 
@@ -48,13 +48,19 @@ def convert_embeddings_(opus_state) -> dict:
 
 
 CONFIG_KEY = "special:model.yml"
-
+import warnings
 
 class OpusState:
     def __init__(self, npz_path):
         self.state_dict = np.load(npz_path)
         self.cfg = load_model_yaml(self.state_dict)
         self.state_keys = list(self.state_dict.keys())
+        self.encoder_l1 = self.sub_keys('encoder_l1')
+        self.decoder_l1 = self.sub_keys('decoder_l1')
+        if len(self.encoder_l1) != 16:
+            warnings.warn(f'Expected 16 keys for each encoder layer, got {len(self.encoder_l1)}')
+        if len(self.decoder_l1) != 26:
+            warnings.warn(f'Expected 26 keys for each decoder layer, got {len(self.decoder_l1)}')
 
     @property
     def extra_keys(self):
@@ -67,10 +73,13 @@ class OpusState:
         return extra
 
 
-def convert_to_berts(opus_path: str) -> MarianModel:
-    opus_state: dict = np.load(opus_path)
-    n_keys = len(opus_state)
-    marian_cfg: dict = load_model_yaml(opus_state)
+
+    def sub_keys(self, layer_prefix):
+        return [remove_prefix(k, layer_prefix) for k in self.state_dict if k.startswith(layer_prefix)]
+
+
+
+def load_marian_model(opus_state, marian_cfg: dict) -> MarianModel:
     vocab_size = opus_state["Wemb"].shape[0]
     hidden_size, intermediate_shape = opus_state["encoder_l1_ffn_W1"].shape
     cfg = MarianConfig(
@@ -83,14 +92,19 @@ def convert_to_berts(opus_path: str) -> MarianModel:
     )
     model = MarianModel(cfg)
     print("loaded empty marian model")
-    load_layers_(model.encoder, opus_state)
+    load_layers_(model.encoder.encoder.layer, opus_state)
     print("loaded encoder")
-    load_layers_(model.decoder, opus_state, converter=BAR)
+    load_layers_(model.decoder.layers, opus_state, converter=BART_CONVERTER, is_decoder=True)
     embs_state: dict = convert_embeddings_(opus_state)
     result = model.encoder.embeddings.load_state_dict(embs_state, strict=False)
 
-    print(f"Embeddings: {result})")  # TODO(SS): logger
-    model.decoder.embeddings.load_state_dict(embs_state, strict=False)
+    model.tie_weights()
+
+    print(f"encoder.embeddings: {result})")  # TODO(SS): logger
+    # result_decoder = model.decoder.embeddings.load_state_dict(embs_state, strict=False)
+    model.shared = model.encoder.embeddings.word_embeddings
+    assert torch.eq(model.decoder.embed_tokens.weight, model.encoder.embeddings.word_embeddings.weight).all()
+    # print(f"decoder.embeddings: {result_decoder})")  # TODO(SS): logger
     # TODO(SS): tie weights
     # model.decoder.bert.embeddings.load_state_dict(embs_state, strict=False)
     return model
@@ -214,7 +228,10 @@ def main(source_dir, dest_dir):
     save_tokenizer(tokenizer, dest_dir)
 
     model_path = find_model_file(source_dir)
-    model = convert_to_berts(model_path)
+    opus_state = OpusState(model_path)  # not actually a dict
+    save_json(opus_state.cfg, dest_dir / "marian_original_config.json")
+    breakpoint()
+    model = load_marian_model(opus_state.state_dict, opus_state.cfg)
     model.resize_token_embeddings(tokenizer.vocab_size)  # account for added pad token
     model.config.vocab_size = tokenizer.vocab_size
     model.config.eos_token_id = tokenizer.eos_token_id

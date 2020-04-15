@@ -213,7 +213,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
     def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
-        """ Tie or clone module weights depending of weither we are using TorchScript or not
+        """ Tie or clone module weights depending of whether we are using TorchScript or not
         """
         if self.config.torchscript:
             output_embeddings.weight = nn.Parameter(input_embeddings.weight.clone())
@@ -323,6 +323,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             self.config.pruned_heads[layer] = list(union_heads)  # Unfortunately we have to store it as list for JSON
 
         self.base_model._prune_heads(heads_to_prune)
+
+
+    def _prune_heads(self, heads_to_prune):
+        raise NotImplementedError()
 
     def save_pretrained(self, save_directory):
         """ Save a model and its configuration file to a directory, so that it

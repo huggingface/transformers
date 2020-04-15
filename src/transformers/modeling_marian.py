@@ -72,17 +72,18 @@ def append_dummy_token(input_ids, attention_mask, token_id):
     attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
     return input_ids, attention_mask
 
-class MarianDecoder(T5Stack):
-    is_decoder = True
 
 from transformers.marian_constants import convert_config
+
+
 class MarianModel(PreTrainedModel):
     config_class = MarianConfig
     pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "zczcx"  # HACK to avoid start_prefix = '.' in from_pretrained
 
     def _init_weights(self, module):
-        pass
+        """training from scratch not implemented."""
+        pass  #
         # self.encoder.init_weights()
         # self.decoder.init_weights()
 
@@ -115,8 +116,9 @@ class MarianModel(PreTrainedModel):
         return F.linear(features, self.decoder.get_input_embeddings().weight)
 
     def resize_token_embeddings(self, new_num_tokens: int):
+        # FIXME
         self.encoder.resize_token_embeddings(new_num_tokens)
-        self.decoder.resize_token_embeddings(new_num_tokens)
+        self.set_input_embeddings(self.encoder.encoder.embeddings.word_embeddings)
 
     @add_start_docstrings_to_callable(INPUTS_DOCSTRING)
     def forward(
@@ -217,23 +219,22 @@ class MarianModel(PreTrainedModel):
         reordered_encoder_outputs = encoder_outputs.index_select(0, beam_idx)
         return (reordered_encoder_outputs,)
 
-    def _do_output_past(self, *args, **kwargs) -> bool:
-        return True
-
         # return self.decoder.prepare_inputs_for_generation(*args, **kwargs)
 
     def get_encoder(self):
         return self.encoder
-
-    def get_output_embeddings(self):
-        return self.decoder.get_output_embeddings()
 
     def _do_output_past(self, *args, **kwargs):
         """ We should always use the cache in generate."""
         return True
 
     def get_input_embeddings(self):
-        return self.encoder.get_input_embeddings()
+        return self.shared
 
     def set_input_embeddings(self, value):
-        self.encoder.set_input_embeddings(value)
+        self.shared = value
+        self.encoder.encoder.embeddings.word_embeddings = self.shared
+        self.decoder.embed_tokens = self.shared
+
+    def get_output_embeddings(self):
+        return _make_linear_from_emb(self.shared)  # make it on the fly

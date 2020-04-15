@@ -103,6 +103,7 @@ LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
 LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
 import os
 
+
 class MarianTokenizerTests(unittest.TestCase):
     def test_en_de_local(self):
         self.tokenizer = MarianSPTokenizer.from_pretrained(LOCAL_PATH)
@@ -138,9 +139,9 @@ class IntegrationTests(unittest.TestCase):
         model = MarianModel.from_pretrained(LOCAL_PATH)
         outputs = model(**model_inputs)
 
-    @slow
+    # @slow
     def test_converter(self):
-        if not os.path.exists(LOCAL_MARIAN):
+        if not os.path.exists("/Users/shleifer"):
             return
         dest_dir = Path(tempfile.gettempdir())
         main(Path(LOCAL_MARIAN), dest_dir)
