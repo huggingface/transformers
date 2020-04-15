@@ -53,19 +53,19 @@ def calculate_bleu_score(output_lns, refs_lns, score_path):
 def run_generate():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "model_size",
+        "--model_size",
         type=str,
         help="T5 model size, either 't5-small', 't5-base', 't5-large', 't5-3b', 't5-11b'. Defaults to 't5-base'.",
         default="t5-base",
     )
     parser.add_argument(
-        "input_path", type=str, help="like wmt/newstest2013.en",
+        "input_path", type=str, help="like wmt/newstest2014.en",
     )
     parser.add_argument(
         "output_path", type=str, help="where to save translation",
     )
     parser.add_argument(
-        "reference_path", type=str, help="like wmt/newstest2013.de",
+        "reference_path", type=str, help="like wmt/newstest2014.de",
     )
     parser.add_argument(
         "score_path", type=str, help="where to save the bleu score",
