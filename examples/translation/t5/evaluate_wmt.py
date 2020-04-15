@@ -15,8 +15,6 @@ def chunks(lst, n):
 
 
 def generate_translations(lns, output_file_path, model_size, batch_size, device):
-    output_file = Path(output_file_path).open("w")
-
     model = T5ForConditionalGeneration.from_pretrained(model_size)
     model.to(device)
 
@@ -27,27 +25,27 @@ def generate_translations(lns, output_file_path, model_size, batch_size, device)
     if task_specific_params is not None:
         model.config.update(task_specific_params.get("translation_en_to_de", {}))
 
-    for batch in tqdm(list(chunks(lns, batch_size))):
-        batch = [model.config.prefix + text for text in batch]
+    with Path(output_file_path).open("w") as output_file:
+        for batch in tqdm(list(chunks(lns, batch_size))):
+            batch = [model.config.prefix + text for text in batch]
 
-        dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="pt", pad_to_max_length=True)
+            dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="pt", pad_to_max_length=True)
 
-        input_ids = dct["input_ids"].to(device)
-        attention_mask = dct["attention_mask"].to(device)
+            input_ids = dct["input_ids"].to(device)
+            attention_mask = dct["attention_mask"].to(device)
 
-        translations = model.generate(input_ids=input_ids, attention_mask=attention_mask)
-        dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in translations]
+            translations = model.generate(input_ids=input_ids, attention_mask=attention_mask)
+            dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in translations]
 
-        for hypothesis in dec:
-            output_file.write(hypothesis + "\n")
-            output_file.flush()
+            for hypothesis in dec:
+                output_file.write(hypothesis + "\n")
 
 
 def calculate_bleu_score(output_lns, refs_lns, score_path):
     bleu = corpus_bleu(output_lns, [refs_lns])
     result = "BLEU score: {}".format(bleu.score)
-    score_file = Path(score_path).open("w")
-    score_file.write(result)
+    with Path(score_path).open("w") as score_file:
+        score_file.write(result)
 
 
 def run_generate():
