@@ -180,7 +180,9 @@ class Trainer:
         Main training entry point.
 
         Args:
-            model_path: local path to model if model to train has been instantiated from a local path
+            model_path:
+                (Optional) Local path to model if model to train has been instantiated from a local path
+                If present, we will try reloading the optimizer/scheduler states from there.
         """
         train_dataloader = self.get_train_dataloader()
 
@@ -225,6 +227,9 @@ class Trainer:
                 output_device=self.args.local_rank,
                 find_unused_parameters=True,
             )
+
+        if self.tb_writer is not None:
+            self.tb_writer.add_text("args", self.args.to_json_string())
 
         # Train!
         logger.info("***** Running training *****")

@@ -16,7 +16,7 @@
 """ Finetuning the library models for sequence classification on GLUE (Bert, XLM, XLNet, RoBERTa, Albert, XLM-RoBERTa)."""
 
 
-import copy
+import dataclasses
 import logging
 import os
 from dataclasses import dataclass, field
@@ -174,8 +174,7 @@ def main():
         # Loop to handle MNLI double evaluation (matched, mis-matched)
         eval_datasets = [eval_dataset]
         if data_args.task_name == "mnli":
-            mnli_mm_data_args = copy.copy(data_args)
-            mnli_mm_data_args.task_name = "mnli-mm"
+            mnli_mm_data_args = dataclasses.replace(data_args, task_name="mnli-mm")
             eval_datasets.append(
                 GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, local_rank=training_args.local_rank, evaluate=True)
             )

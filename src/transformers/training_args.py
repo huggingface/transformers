@@ -1,3 +1,5 @@
+import dataclasses
+import json
 import logging
 from dataclasses import dataclass, field
 from typing import Optional, Tuple
@@ -146,3 +148,9 @@ class TrainingArguments:
     @torch_required
     def n_gpu(self):
         return self._setup_devices[1]
+
+    def to_json_string(self):
+        """
+        Serializes this instance to a JSON string.
+        """
+        return json.dumps(dataclasses.asdict(self), indent=2)
