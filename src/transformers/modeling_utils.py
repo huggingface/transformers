@@ -20,7 +20,7 @@ import os
 import typing
 
 import torch
-from torch import nn
+from torch import Tensor, device, dtype, nn
 from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
@@ -109,14 +109,14 @@ class ModuleUtilsMixin:
             module.mem_rss_pre_forward = 0
 
     @property
-    def device(self):
+    def device(self) -> device:
         return next(self.parameters()).device
 
     @property
-    def dtype(self):
+    def dtype(self) -> dtype:
         return next(self.parameters()).dtype
 
-    def invert_attention_mask(self, encoder_attention_mask):
+    def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """type: torch.Tensor -> torch.Tensor"""
         if encoder_attention_mask.dim() == 3:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
@@ -131,7 +131,7 @@ class ModuleUtilsMixin:
         encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         return encoder_extended_attention_mask
 
-    def get_extended_attention_mask(self, attention_mask, input_shape, device):
+    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: tuple, device: device):
         """Makes broadcastable attention mask and causal mask so that future and maked tokens are ignored.
 
         Arguments:
@@ -188,17 +188,21 @@ class ModuleUtilsMixin:
              or list with [None] for each layer
         """
         if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = (
-                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
-                )  # We can specify head_mask for each layer
-            head_mask = head_mask.to(dtype=self.dtype)  # switch to fload if need + fp16 compatibility
+            head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
         else:
             head_mask = [None] * num_hidden_layers
 
+        return head_mask
+
+    def _convert_head_mask_to_5d(self, head_mask, num_hidden_layers):
+        """-> [num_hidden_layers x batch x num_heads x seq_length x seq_length]"""
+        if head_mask.dim() == 1:
+            head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+            head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
+        elif head_mask.dim() == 2:
+            head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)  # We can specify head_mask for each layer
+        assert head_mask.dim() == 5, f"head_mask.dim != 5, instead {head_mask.dim()}"
+        head_mask = head_mask.to(dtype=self.dtype)  # switch to fload if need + fp16 compatibility
         return head_mask
 
 
