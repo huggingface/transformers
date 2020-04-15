@@ -98,6 +98,7 @@ class ReformerConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=200,
+        attention_head_size=32,
         hidden_size=128,
         num_hidden_layers=2,
         num_attention_heads=2,
@@ -131,6 +132,7 @@ class ReformerConfig(PretrainedConfig):
 
         self.is_decoder = True
         self.vocab_size = vocab_size
+        self.attention_head_size = attention_head_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
