@@ -16,7 +16,7 @@
 import tempfile
 import unittest
 
-import timeout_decorator
+import timeout_decorator  # noqa
 
 from transformers import is_torch_available
 
