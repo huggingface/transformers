@@ -29,7 +29,7 @@ from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bart import _make_linear_from_emb, _prepare_bart_decoder_inputs
 from .modeling_bert import *
 from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
-
+from .modeling_t5 import T5Stack
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +71,8 @@ def append_dummy_token(input_ids, attention_mask, token_id):
     attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
     return input_ids, attention_mask
 
+class MarianDecoder(T5Stack):
+    is_decoder = True
 
 class MarianModel(PreTrainedModel):
     config_class = MarianConfig

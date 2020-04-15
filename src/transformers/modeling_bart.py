@@ -550,12 +550,12 @@ class SelfAttention(nn.Module):
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
 
-        self.encoder_decoder_attention = encoder_decoder_attention
+        self.cross_attention = encoder_decoder_attention
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
+        self.cache_key = "encoder_decoder" if self.cross_attention else "self"
 
     def _shape(self, tensor, dim_0, bsz):
         return tensor.contiguous().view(dim_0, bsz * self.num_heads, self.head_dim).transpose(0, 1)
@@ -570,7 +570,7 @@ class SelfAttention(nn.Module):
         need_weights=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
-        static_kv = self.encoder_decoder_attention  # type: bool
+        static_kv = self.cross_attention  # type: bool
         tgt_len, bsz, embed_dim = query.size()
         assert embed_dim == self.embed_dim
         assert list(query.size()) == [tgt_len, bsz, embed_dim]
@@ -599,7 +599,6 @@ class SelfAttention(nn.Module):
         q = self._shape(q, tgt_len, bsz)
         if k is not None:
             k = self._shape(k, -1, bsz)
-        if v is not None:
             v = self._shape(v, -1, bsz)
 
         if saved_state is not None:
