@@ -31,6 +31,8 @@ from .benchmark_utils import (
     start_memory_tracing,
     stop_memory_tracing,
 )
+
+# Configurations
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
 from .configuration_bart import BartConfig
@@ -46,8 +48,6 @@ from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, Open
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
-
-# Configurations
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
@@ -121,6 +121,8 @@ from .pipelines import (
     TranslationPipeline,
     pipeline,
 )
+
+# Tokenizers
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, MBartTokenizer
@@ -136,13 +138,11 @@ from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
-
-# Tokenizers
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
-from .training_args import TrainingArguments
+from .training_args import DataTrainingArguments, TrainingArguments
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -320,6 +320,10 @@ if is_torch_available():
         get_linear_schedule_with_warmup,
     )
 
+    # Trainer
+    from .trainer import Trainer, set_seed, torch_distributed_zero_first, EvalPrediction
+    from .data.data_collator import DefaultDataCollator, DataCollator, DataCollatorForLanguageModeling
+    from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset
 
 # TensorFlow
 if is_tf_available():
