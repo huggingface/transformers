@@ -424,6 +424,7 @@ if is_tf_available():
         TFRobertaForMaskedLM,
         TFRobertaForSequenceClassification,
         TFRobertaForTokenClassification,
+        TFRobertaForQuestionAnswering,
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
