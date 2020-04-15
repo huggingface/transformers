@@ -2,9 +2,9 @@ import argparse
 from pathlib import Path
 
 import torch
+from sacrebleu import corpus_bleu
 from tqdm import tqdm
 
-from sacrebleu import corpus_bleu
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 
 
@@ -29,13 +29,22 @@ def generate_translations(lns, output_file_path, model_size, batch_size, device)
         for batch in tqdm(list(chunks(lns, batch_size))):
             batch = [model.config.prefix + text for text in batch]
 
-            dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="pt", pad_to_max_length=True)
+            dct = tokenizer.batch_encode_plus(
+                batch, max_length=512, return_tensors="pt", pad_to_max_length=True
+            )
 
             input_ids = dct["input_ids"].to(device)
             attention_mask = dct["attention_mask"].to(device)
 
-            translations = model.generate(input_ids=input_ids, attention_mask=attention_mask)
-            dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in translations]
+            translations = model.generate(
+                input_ids=input_ids, attention_mask=attention_mask
+            )
+            dec = [
+                tokenizer.decode(
+                    g, skip_special_tokens=True, clean_up_tokenization_spaces=False
+                )
+                for g in translations
+            ]
 
             for hypothesis in dec:
                 output_file.write(hypothesis + "\n")
@@ -69,23 +78,40 @@ def run_generate():
         "score_path", type=str, help="where to save the bleu score",
     )
     parser.add_argument(
-        "--batch_size", type=int, default=16, required=False, help="batch size: how many to summarize at a time",
+        "--batch_size",
+        type=int,
+        default=16,
+        required=False,
+        help="batch size: how many to summarize at a time",
     )
     parser.add_argument(
-        "--no_cuda", default=False, type=bool, help="Whether to force the execution on CPU.",
+        "--no_cuda",
+        default=False,
+        type=bool,
+        help="Whether to force the execution on CPU.",
     )
 
     args = parser.parse_args()
-    args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    args.device = torch.device(
+        "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
+    )
 
     dash_pattern = (" ##AT##-##AT## ", "-")
 
-    input_lns = [x.strip().replace(dash_pattern[0], dash_pattern[1]) for x in open(args.input_path).readlines()]
+    input_lns = [
+        x.strip().replace(dash_pattern[0], dash_pattern[1])
+        for x in open(args.input_path).readlines()
+    ]
 
-    generate_translations(input_lns, args.output_path, args.model_size, args.batch_size, args.device)
+    generate_translations(
+        input_lns, args.output_path, args.model_size, args.batch_size, args.device
+    )
 
     output_lns = [x.strip() for x in open(args.output_path).readlines()]
-    refs_lns = [x.strip().replace(dash_pattern[0], dash_pattern[1]) for x in open(args.reference_path).readlines()]
+    refs_lns = [
+        x.strip().replace(dash_pattern[0], dash_pattern[1])
+        for x in open(args.reference_path).readlines()
+    ]
 
     calculate_bleu_score(output_lns, refs_lns, args.score_path)
 
