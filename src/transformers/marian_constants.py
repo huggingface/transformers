@@ -47,9 +47,9 @@ BERT_LAYER_CONVERTER = {
 }
 
 EMBED_CONVERTER = {
-    "Wemb": "word_embeddings.weight",
-    "Wpos": "position_embeddings.weight",
-    "Wtype": "token_type_embeddings.weight",
+    "Wemb": "embed_tokens.weight",
+    "Wpos": "embed_positions.weight",
+    # "Wtype": "token_type_embeddings.weight",
     # "encoder_emb_ln_scale_pre" = "bert/embeddings/LayerNorm/gamma:0"
     # "encoder_emb_ln_bias_pre" = "bert/embeddings/LayerNorm/beta:0"
 }
@@ -161,3 +161,23 @@ def convert_config(cfg: BertConfig) -> BartConfig:
         scale_embedding=True,
     )
     return bart_cfg
+
+
+assume_vals = {
+    "tied-embeddings-all": True,
+    "layer-normalization": False,
+    "right-left": False,
+    "transformer-ffn-depth": 2,
+    "transformer-aan-depth": 2,
+    "transformer-no-projection": False,
+    "transformer-postprocess-emb": "d",
+    "transformer-postprocess": "dan",  # Dropout, add, normalize
+    "transformer-preprocess": "",
+    "type": "transformer",
+    "ulr-dim-emb": 0,
+    "dec-cell-base-depth": 2,
+    "dec-cell-high-depth": 1,
+    "transformer-aan-nogate": False,
+}
+
+

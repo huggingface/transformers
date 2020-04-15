@@ -926,7 +926,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             decoder_cached_states=decoder_cached_states,
             use_cache=use_cache,
         )
-        lm_logits = F.linear(outputs[0], self.model.shared.weight)
+        lm_logits = self.output_layer(outputs[0])
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
         if lm_labels is not None:
             loss_fct = nn.CrossEntropyLoss()
@@ -935,6 +935,9 @@ class BartForConditionalGeneration(PretrainedBartModel):
             outputs = (masked_lm_loss,) + outputs
 
         return outputs
+
+    def output_layer(self, features):
+        return F.linear(features, self.model.shared.weight)
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"

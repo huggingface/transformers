@@ -74,6 +74,8 @@ class BartConfig(PretrainedConfig):
                 config = BartConfig.from_pretrained('bart-large')
                 model = BartModel(config)
         """
+        if 'hidden_size' in common_kwargs:
+            raise ValueError('hidden size is called d_model')
         super().__init__(
             num_labels=num_labels,
             pad_token_id=pad_token_id,
@@ -106,7 +108,7 @@ class BartConfig(PretrainedConfig):
         # 3 Types of Dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.dropout = dropoute
+        self.dropout = dropout
 
         # Classifier stuff
         self.classif_dropout = classifier_dropout
