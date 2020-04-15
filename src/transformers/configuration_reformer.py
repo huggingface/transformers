@@ -125,21 +125,11 @@ class ReformerConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-#        TODO: not added yet
-#        predict_mem_len=2048
-#        predict_drop_len=256
-#        n_parallel_heads=1
 
 #        TO CHANGE LATER:
         self.seed = 0
-        self.num_attention_chunks = 1  # this is not used in LSHSelfAttention
-        self.num_chunks = 0
-        self.ff_chunk_size = chunk_size_feed_forward
-        self.d_model = hidden_size
-        self.d_ff = feed_forward_size
-        self.is_decoder = False
-#        self.ff_activation =  # GELU
 
+        self.is_decoder = True
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
