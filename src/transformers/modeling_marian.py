@@ -105,7 +105,7 @@ class MarianModel(PreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         enc_config = copy.deepcopy(config)
         enc_config.is_decoder = False
-        self.encoder = BertModel(enc_config)
+        self.encoder = BertEncoder(enc_config)
         self.shared = self.encoder.embeddings.word_embeddings
         bart_config = convert_config(config)
         self.decoder = BartDecoder(bart_config, self.shared)

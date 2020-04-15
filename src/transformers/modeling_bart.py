@@ -26,7 +26,7 @@ from .activations import ACT2FN
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
-
+from .sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
 
 logger = logging.getLogger(__name__)
 
@@ -250,8 +250,10 @@ class BartEncoder(nn.Module):
         self.max_source_positions = config.max_position_embeddings
 
         self.embed_tokens = embed_tokens
-
-        self.embed_positions = LearnedPositionalEmbedding(config.max_position_embeddings, embed_dim, self.padding_idx,)
+        if config.static_position_embeddings:
+            self.embed_positions = SinusoidalPositionalEmbedding(embed_dim,  self.padding_idx, config.max_position_embeddings)
+        else:
+            self.embed_positions = LearnedPositionalEmbedding(config.max_position_embeddings, embed_dim, self.padding_idx,)
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = LayerNorm(embed_dim)
         # mbart has one extra layer_norm

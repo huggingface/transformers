@@ -17,6 +17,8 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
     out.requires_grad = False
 
 
+
+
 class SinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length.
 
@@ -28,7 +30,6 @@ class SinusoidalPositionalEmbedding(nn.Module):
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.weights = self.get_embedding(init_size, embedding_dim, padding_idx)
-        self.onnx_trace = False
         self.max_positions = int(1e5)
 
     @staticmethod
@@ -56,30 +57,28 @@ class SinusoidalPositionalEmbedding(nn.Module):
             emb[padding_idx, :] = 0
         return emb
 
+    @torch.no_grad()
     def forward(
         self,
         input,
-        incremental_state: Optional[Any] = None,
-        timestep: Optional[Tensor] = None,
-        positions: Optional[Any] = None,
+        use_cache=False,
+        #timestep: Optional[Tensor] = None,
+        #positions: Optional[Any] = None,
     ):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input.shape[:2]
-        max_pos = self.padding_idx + 1 + seq_len
-        if self.weights is None or max_pos > self.weights.size(0):
-            # recompute/expand embeddings if needed
-            self.weights = self.get_embedding(max_pos, self.embedding_dim, self.padding_idx
-)
-        self.weights = self.weights.to(self._float_tensor)
-
-        if incremental_state is not None:
-            # positions is the same for every token when decoding a single step
-            pos = timestep.view(-1)[0] + 1 if timestep is not None else seq_len
-            return self.weights[self.padding_idx + pos, :].expand(bsz, 1, -1)
-
-        positions = create_position_ids_from_input_ids(
-            input, self.padding_idx,
-        )
+        # max_pos = self.padding_idx + 1 + seq_len
+        #if self.weights is None or max_pos > self.weights.size(0):
+        #    # recompute/expand embeddings if needed
+        #    self.weights = self.get_embedding(max_pos, self.embedding_dim, self.padding_idx
+        #)
+        #self.weights = self.weights.to(self._float_tensor)
+        if use_cache:
+            return self.weights[self.padding_idx + seq_len, :].expand(bsz, 1, -1)
+        else:
+            positions = create_position_ids_from_input_ids(
+                input, self.padding_idx,
+            )
         return (
             self.weights.index_select(0, positions.view(-1))
             .view(bsz, seq_len, -1)

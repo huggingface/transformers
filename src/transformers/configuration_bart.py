@@ -65,6 +65,7 @@ class BartConfig(PretrainedConfig):
         normalize_before=False,
         add_final_layer_norm=False,
         scale_embedding=False,
+        static_position_embeddings=False,
         **common_kwargs
     ):
         r"""
@@ -81,6 +82,7 @@ class BartConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **common_kwargs,
         )
+
         self.vocab_size = vocab_size
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -95,6 +97,7 @@ class BartConfig(PretrainedConfig):
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.static_position_embeddings = static_position_embeddings
 
         # True for mbart, False otherwise
         self.normalize_before = normalize_before  # combo of fairseq's encoder_ and decoder_normalize_before
@@ -103,7 +106,7 @@ class BartConfig(PretrainedConfig):
         # 3 Types of Dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
-        self.dropout = dropout
+        self.dropout = dropoute
 
         # Classifier stuff
         self.classif_dropout = classifier_dropout
