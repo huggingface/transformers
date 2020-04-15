@@ -330,6 +330,13 @@ class ReformerIntegrationTests(unittest.TestCase):
         word_embeddings = np.asarray(weights[1])
         self._set_param(torch_model_reformer.embeddings.word_embeddings, torch.tensor(word_embeddings))
 
+        if isinstance(weights[3], tuple):
+            position_embeddings = torch_model_reformer.embeddings.position_embeddings
+            for emb_idx in range(len(position_embeddings.weights)):
+                emb_weights = np.asarray(weights[3][emb_idx][0])
+                assert position_embeddings.weights[emb_idx].shape == emb_weights.shape, "{} emb does not match".format(position_embeddings[emb_idx])
+                position_embeddings.weights[emb_idx] = torch.nn.Parameter(torch.tensor(emb_weights))
+
         trax_layer_weights = weights[5]
         assert len(torch_model_reformer.encoder.layer) * 4 + 1 == len(trax_layer_weights), "HF and trax model do not have the same number of layers"
         for layer_idx, layer in enumerate(torch_model_reformer.encoder.layer):

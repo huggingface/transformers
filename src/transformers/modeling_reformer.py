@@ -101,6 +101,38 @@ def apply_chunking_to_forward(chunk_size: int, chunk_dim: int, forward_fn: Calla
     return forward_fn(*input_tensors)
 
 
+class AxialEmbeddings(nn.Module):
+
+    def __init__(self, config):
+        super().__init__()
+        self.axial_pos_shape = config.axial_pos_shape
+        self.axial_pos_embds_dim = config.axial_pos_embds_dim
+        self.weights = nn.ParameterList()
+
+        assert sum(self.axial_pos_embds_dim) == config.hidden_size, "Make sure that config.axial_pos_embds factors: {} sum to config.hidden_size: {}".format(self.axial_pos_embds_dim, config.hidden_size)
+
+        # create weights
+        for axis, axial_pos_embd_dim in enumerate(self.axial_pos_embds_dim):
+            # create shape
+            ax_shape = [1] * len(self.axial_pos_shape)
+            ax_shape[axis] = self.axial_pos_shape[axis]
+            ax_shape = tuple(ax_shape) + (axial_pos_embd_dim,)
+
+            # create tenser and init
+            self.weights.append(nn.Parameter(torch.ones(ax_shape, dtype=torch.float32)))
+
+    def forward(self, position_ids):
+        assert np.prod(self.axial_pos_shape) == position_ids.shape[-1], "Make sure that config.axial_pos_shape factors: {} multiply to sequence length: {}".format(self.axial_pos_shape, position_ids.shape[-1])
+        # broadcast weights to correct shape
+        broadcasted_weights = [weight.expand((position_ids.shape[0],) + self.axial_pos_shape + weight.shape[-1:]) for weight in self.weights]
+
+        # TODO (PVP): Add dropout when training
+        # get correct position encodings
+        position_encodings = torch.cat([torch.reshape(weight, position_ids.shape + weight.shape[-1:]) for weight in broadcasted_weights], dim=-1)
+
+        return position_encodings
+
+
 class ReformerEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings.
     """
@@ -111,11 +143,13 @@ class ReformerEmbeddings(nn.Module):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.max_position_embeddings = config.max_position_embeddings
 
-        # TODO(PVP): check sinusoidal position embeddings -> not 100% the same as done in trax
+        assert not (config.sinusoidal_pos_embds and config.axial_pos_embds), "Select either config.sinusoidal_pos_embds or config.axial_pos_embds"
         if config.sinusoidal_pos_embds:
             create_sinusoidal_embeddings(
                 n_pos=config.max_position_embeddings, dim=config.hidden_size, out=self.position_embeddings.weight
             )
+        elif config.axial_pos_embds:
+            self.position_embeddings = AxialEmbeddings(config)
 
         self.dropout = config.hidden_dropout_prob
 
@@ -626,7 +660,10 @@ class ReformerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        if isinstance(module, AxialEmbeddings):
+            for weight in module.weights:
+                torch.nn.init.normal_(weight, std=self.config.axial_norm_std)
+        elif isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             if module.weight.requires_grad:
