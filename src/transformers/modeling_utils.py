@@ -17,7 +17,7 @@
 
 import logging
 import os
-import typing
+from typing import Callable, Tuple
 
 import torch
 from torch import Tensor, device, dtype, nn
@@ -1535,12 +1535,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert len(scores.shape) == 2, "scores should be of rank 2 with shape: [batch_size, vocab_size]"
         scores[:, all_but_token_ids_mask] = -float("inf")
 
-    def _reorder_cache(self, past, beam_idx):
+    @staticmethod
+    def _reorder_cache(past: Tuple, beam_idx: Tensor) -> Tuple[Tensor]:
         return tuple(layer_past.index_select(1, beam_idx) for layer_past in past)
 
 
-def calc_banned_ngram_tokens(prev_input_ids, num_hypos, no_repeat_ngram_size, cur_len):
-    # Copied from fairseq for no_repeat_ngram in beam_search"""
+def calc_banned_ngram_tokens(prev_input_ids: Tensor, num_hypos: int, no_repeat_ngram_size: int, cur_len: int) -> None:
+    """Copied from fairseq for no_repeat_ngram in beam_search"""
     if cur_len + 1 < no_repeat_ngram_size:
         # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
         return [[] for _ in range(num_hypos)]
@@ -1972,9 +1973,7 @@ class SequenceSummary(nn.Module):
             self.summary = nn.Linear(config.hidden_size, num_classes)
 
         activation_string = getattr(config, "summary_activation", None)
-        self.activation = (
-            get_activation(activation_string) if activation_string else Identity()
-        )  # type: typing.Callable
+        self.activation: Callable = (get_activation(activation_string) if activation_string else Identity())
 
         self.first_dropout = Identity()
         if hasattr(config, "summary_first_dropout") and config.summary_first_dropout > 0:
