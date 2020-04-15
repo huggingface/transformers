@@ -774,7 +774,8 @@ class T5Stack(T5PreTrainedModel):
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (presents,) (all hidden states), (all attentions)
 
-    def invert_attn_mask(self, encoder_attention_mask):
+
+    def invert_attn_mask(self, encoder_attention_mask: torch.Tensor) -> torch.Tensor:
         if encoder_attention_mask.dim() == 3:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
         if encoder_attention_mask.dim() == 2:
@@ -784,9 +785,7 @@ class T5Stack(T5PreTrainedModel):
         # /transformer/transformer_layers.py#L270
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
-        encoder_extended_attention_mask = encoder_extended_attention_mask.to(
-            dtype=next(self.parameters()).dtype
-        )  # fp16 compatibility
+        encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
         encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         return encoder_extended_attention_mask
 
