@@ -16,7 +16,7 @@ curl https://nlp.stanford.edu/projects/nmt/data/wmt14.en-de/newstest2014.en > ne
 curl https://nlp.stanford.edu/projects/nmt/data/wmt14.en-de/newstest2014.de > newstest2014.de
 ```
 
-You should have 3000 sentence in each file. You can verify this by running:
+You should have 2737 sentences in each file. You can verify this by running:
 
 ```bash
 wc -l newstest2014.en  # should give 2737
