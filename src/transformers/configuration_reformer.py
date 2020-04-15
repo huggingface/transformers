@@ -114,9 +114,10 @@ class ReformerConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.3,
         max_position_embeddings=512,
         initializer_range=0.02,
+        axial_norm_std=1.0,
         layer_norm_eps=1e-12,
-        sinusoidal_pos_embds=True,
-        axial_pos_embds=False,
+        sinusoidal_pos_embds=False,
+        axial_pos_embds=True,
         axial_pos_shape=(7, 2),
         axial_pos_embds_dim=(64, 64),
         **kwargs
@@ -158,5 +159,6 @@ class ReformerConfig(PretrainedConfig):
         self.axial_pos_embds = axial_pos_embds
         self.axial_pos_shape = axial_pos_shape
         self.axial_pos_embds_dim = axial_pos_embds_dim
+        self.axial_norm_std = axial_norm_std
         self.chunk_size_lm_head = chunk_size_lm_head
         self.chunk_size_feed_forward = chunk_size_feed_forward
