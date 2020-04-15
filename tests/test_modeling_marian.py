@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -31,12 +32,8 @@ if is_torch_available():
     from transformers import BertConfig, BertModel, MarianModel, MarianSPTokenizer, BartConfig
 
 
-
-
-
 LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
 LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
-import os
 
 
 class MarianTokenizerTests(unittest.TestCase):
@@ -57,7 +54,15 @@ class MarianTokenizerTests(unittest.TestCase):
 
 
 class IntegrationTests(unittest.TestCase):
-    def test_local_en_de(self):
+    # def test_local_en_de(self):
+
+    # @slow
+    def test_converter(self):
+        if not os.path.exists("/Users/shleifer"):
+            return
+        dest_dir = Path(tempfile.gettempdir())
+        main(Path(LOCAL_MARIAN), LOCAL_PATH)
+
         self.tokenizer = MarianSPTokenizer.from_pretrained(LOCAL_PATH)
         src, tgt = ["What's for dinner?", "life"], ["Was gibt es zum Abendessen", "Leben"]
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
@@ -73,10 +78,3 @@ class IntegrationTests(unittest.TestCase):
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
         model = MarianModel.from_pretrained(LOCAL_PATH)
         outputs = model(**model_inputs)
-
-    # @slow
-    def test_converter(self):
-        if not os.path.exists("/Users/shleifer"):
-            return
-        dest_dir = Path(tempfile.gettempdir())
-        main(Path(LOCAL_MARIAN), dest_dir)

@@ -1,10 +1,9 @@
 import math
-
-from typing import Optional, Any
+from typing import Any, Optional
 
 import numpy as np
 import torch
-from torch import nn, Tensor
+from torch import Tensor, nn
 
 from transformers.modeling_utils import create_position_ids_from_input_ids
 
@@ -15,8 +14,6 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
     out.requires_grad = False
-
-
 
 
 class SinusoidalPositionalEmbedding(nn.Module):
@@ -33,9 +30,7 @@ class SinusoidalPositionalEmbedding(nn.Module):
         self.max_positions = int(1e5)
 
     @staticmethod
-    def get_embedding(
-        num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None
-    ):
+    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
         """Build sinusoidal embeddings.
 
         This matches the implementation in tensor2tensor, but differs slightly
@@ -44,12 +39,8 @@ class SinusoidalPositionalEmbedding(nn.Module):
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
         emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(
-            1
-        ) * emb.unsqueeze(0)
-        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(
-            num_embeddings, -1
-        )
+        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
         if embedding_dim % 2 == 1:
             # zero pad
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
@@ -62,25 +53,19 @@ class SinusoidalPositionalEmbedding(nn.Module):
         self,
         input,
         use_cache=False,
-        #timestep: Optional[Tensor] = None,
-        #positions: Optional[Any] = None,
+        # timestep: Optional[Tensor] = None,
+        # positions: Optional[Any] = None,
     ):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input.shape[:2]
         # max_pos = self.padding_idx + 1 + seq_len
-        #if self.weights is None or max_pos > self.weights.size(0):
+        # if self.weights is None or max_pos > self.weights.size(0):
         #    # recompute/expand embeddings if needed
         #    self.weights = self.get_embedding(max_pos, self.embedding_dim, self.padding_idx
-        #)
-        #self.weights = self.weights.to(self._float_tensor)
+        # )
+        # self.weights = self.weights.to(self._float_tensor)
         if use_cache:
             return self.weights[self.padding_idx + seq_len, :].expand(bsz, 1, -1)
         else:
-            positions = create_position_ids_from_input_ids(
-                input, self.padding_idx,
-            )
-        return (
-            self.weights.index_select(0, positions.view(-1))
-            .view(bsz, seq_len, -1)
-            .detach()
-        )
+            positions = create_position_ids_from_input_ids(input, self.padding_idx,)
+        return self.weights.index_select(0, positions.view(-1)).view(bsz, seq_len, -1).detach()

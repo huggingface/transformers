@@ -31,6 +31,7 @@ from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, SequenceSummary, SQuADHead, prune_linear_layer
 from .sinusoidal_positional_embeddings import create_sinusoidal_embeddings
 
+
 logger = logging.getLogger(__name__)
 
 XLM_PRETRAINED_MODEL_ARCHIVE_MAP = {

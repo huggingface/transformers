@@ -65,6 +65,7 @@ class BartConfig(PretrainedConfig):
         normalize_before=False,
         add_final_layer_norm=False,
         scale_embedding=False,
+        normalize_embedding=True,
         static_position_embeddings=False,
         **common_kwargs
     ):
@@ -74,8 +75,8 @@ class BartConfig(PretrainedConfig):
                 config = BartConfig.from_pretrained('bart-large')
                 model = BartModel(config)
         """
-        if 'hidden_size' in common_kwargs:
-            raise ValueError('hidden size is called d_model')
+        if "hidden_size" in common_kwargs:
+            raise ValueError("hidden size is called d_model")
         super().__init__(
             num_labels=num_labels,
             pad_token_id=pad_token_id,
@@ -102,6 +103,7 @@ class BartConfig(PretrainedConfig):
         self.static_position_embeddings = static_position_embeddings
 
         # True for mbart, False otherwise
+        self.normalize_embedding = normalize_embedding
         self.normalize_before = normalize_before  # combo of fairseq's encoder_ and decoder_normalize_before
         self.add_final_layer_norm = add_final_layer_norm
 

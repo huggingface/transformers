@@ -324,7 +324,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         self.base_model._prune_heads(heads_to_prune)
 
-
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError()
 

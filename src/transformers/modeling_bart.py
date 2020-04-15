@@ -28,6 +28,7 @@ from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 from .sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -251,11 +252,15 @@ class BartEncoder(nn.Module):
 
         self.embed_tokens = embed_tokens
         if config.static_position_embeddings:
-            self.embed_positions = SinusoidalPositionalEmbedding(embed_dim,  self.padding_idx, config.max_position_embeddings)
+            self.embed_positions = SinusoidalPositionalEmbedding(
+                embed_dim, self.padding_idx, config.max_position_embeddings
+            )
         else:
-            self.embed_positions = LearnedPositionalEmbedding(config.max_position_embeddings, embed_dim, self.padding_idx,)
+            self.embed_positions = LearnedPositionalEmbedding(
+                config.max_position_embeddings, embed_dim, self.padding_idx,
+            )
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = LayerNorm(embed_dim)
+        self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
         # mbart has one extra layer_norm
         self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
@@ -432,7 +437,7 @@ class BartDecoder(PretrainedBartModel):
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]
-        self.layernorm_embedding = LayerNorm(config.d_model)
+        self.layernorm_embedding = LayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
         self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
     def forward(

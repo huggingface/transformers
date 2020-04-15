@@ -14,10 +14,13 @@
 # limitations under the License.
 """PyTorch model, ported from the Marian repo."""
 
-import torch.nn.functional as F
-import torch
 import logging
+
+import torch
+import torch.nn.functional as F
+
 from transformers.modeling_bart import BartForConditionalGeneration
+
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +61,6 @@ def append_dummy_token(input_ids, attention_mask, token_id):
     input_ids = torch.cat([input_ids, dummy_token], dim=1)
     attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
     return input_ids, attention_mask
-
-
 
 
 class MarianModel(BartForConditionalGeneration):
