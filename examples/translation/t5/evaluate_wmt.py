@@ -98,20 +98,31 @@ def run_generate():
 
     dash_pattern = (" ##AT##-##AT## ", "-")
 
-    input_lns = [
-        x.strip().replace(dash_pattern[0], dash_pattern[1])
-        for x in open(args.input_path).readlines()
-    ]
+    input_lns = []
+    output_lns = []
+    refs_lns = []
+
+    # Read input lines into python
+    with open(args.input_path, "r") as input_file:
+        input_lns = [
+            x.strip().replace(dash_pattern[0], dash_pattern[1])
+            for x in input_file.readlines()
+        ]
 
     generate_translations(
         input_lns, args.output_path, args.model_size, args.batch_size, args.device
     )
 
-    output_lns = [x.strip() for x in open(args.output_path).readlines()]
-    refs_lns = [
-        x.strip().replace(dash_pattern[0], dash_pattern[1])
-        for x in open(args.reference_path).readlines()
-    ]
+    # Read generated lines into python
+    with open(args.output_path, "r") as output_file:
+        output_lns = [x.strip() for x in output_file.readlines()]
+
+    # Read reference lines into python
+    with open(args.reference_path, "r") as reference_file:
+        refs_lns = [
+            x.strip().replace(dash_pattern[0], dash_pattern[1])
+            for x in reference_file.readlines()
+        ]
 
     calculate_bleu_score(output_lns, refs_lns, args.score_path)
 

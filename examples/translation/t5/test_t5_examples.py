@@ -41,6 +41,7 @@ class TestT5Examples(unittest.TestCase):
 
         testargs = [
             "evaluate_wmt.py",
+            "--model_size",
             "patrickvonplaten/t5-tiny-random",
             str(tmp_source),
             str(output_file_name),
