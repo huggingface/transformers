@@ -13,7 +13,7 @@ import yaml
 
 from durbango import lmap, pickle_save, remove_prefix
 from transformers import BertConfig, BertModel, MarianConfig, MarianModel
-from transformers.marian_constants import BERT_LAYER_CONVERTER, EMBED_CONVERTER
+from transformers.marian_constants import BERT_LAYER_CONVERTER, EMBED_CONVERTER, BART_CONVERTER
 from transformers.tokenization_marian import MarianSPTokenizer
 from transformers.tokenization_utils import ADDED_TOKENS_FILE, TOKENIZER_CONFIG_FILE
 
@@ -21,21 +21,21 @@ from transformers.tokenization_utils import ADDED_TOKENS_FILE, TOKENIZER_CONFIG_
 OPUS_MODELS_PATH = "/Users/shleifer/OPUS-MT-train/models"  # git clone git@github.com:Helsinki-NLP/Opus-MT.git
 
 
-def convert_encoder_layer(opus_dict, layer_tag):
+def convert_encoder_layer(opus_dict, layer_prefix:str, converter:dict):
     sd = {}
     for k in opus_dict:
-        if not k.startswith(layer_tag):
+        if not k.startswith(layer_prefix):
             continue
-        stripped = remove_prefix(k, layer_tag)
+        stripped = remove_prefix(k, layer_prefix)
         v = opus_dict[k].T  # besides embeddings, everything must be transposed.
-        sd[BERT_LAYER_CONVERTER[stripped]] = torch.tensor(v).squeeze()
+        sd[converter[stripped]] = torch.tensor(v).squeeze()
     return sd
 
 
-def load_layers_(bmodel: BertModel, opus_state: dict):
+def load_layers_(bmodel: BertModel, opus_state: dict, converter=BERT_LAYER_CONVERTER):
     for i, layer in enumerate(bmodel.encoder.layer):
         layer_tag = f"decoder_l{i+1}_" if bmodel.config.is_decoder else f"encoder_l{i+1}_"
-        sd = convert_encoder_layer(opus_state, layer_tag)
+        sd = convert_encoder_layer(opus_state, layer_tag, converter)
         layer.load_state_dict(sd, strict=True)
 
 
@@ -60,11 +60,7 @@ class OpusState:
     def extra_keys(self):
         extra = []
         for k in self.state_keys:
-            if k.startswith("encoder_l"):
-                continue
-            if k.startswith("decoder_l"):
-                continue
-            if k == CONFIG_KEY:
+            if k.startswith("encoder_l") or k.startswith("decoder_l") or k == CONFIG_KEY:
                 continue
             else:
                 extra.append(k)
@@ -89,7 +85,7 @@ def convert_to_berts(opus_path: str) -> MarianModel:
     print("loaded empty marian model")
     load_layers_(model.encoder, opus_state)
     print("loaded encoder")
-    load_layers_(model.decoder, opus_state)
+    load_layers_(model.decoder, opus_state, converter=BAR)
     embs_state: dict = convert_embeddings_(opus_state)
     result = model.encoder.embeddings.load_state_dict(embs_state, strict=False)
 

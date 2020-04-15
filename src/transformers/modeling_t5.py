@@ -182,9 +182,9 @@ class T5LayerFF(nn.Module):
         layer_output = hidden_states + self.dropout(y)
         return layer_output
 
-
+from transformers.configuration_t5 import T5Config
 class T5Attention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
+    def __init__(self, config: T5Config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias

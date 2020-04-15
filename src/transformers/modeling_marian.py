@@ -30,6 +30,7 @@ from .modeling_bart import _make_linear_from_emb, _prepare_bart_decoder_inputs
 from .modeling_bert import *
 from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 from .modeling_t5 import T5Stack
+from .modeling_bart import BartDecoder
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ def append_dummy_token(input_ids, attention_mask, token_id):
 class MarianDecoder(T5Stack):
     is_decoder = True
 
+from transformers.marian_constants import convert_config
 class MarianModel(PreTrainedModel):
     config_class = MarianConfig
     pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
@@ -103,11 +105,14 @@ class MarianModel(PreTrainedModel):
         enc_config = copy.deepcopy(config)
         enc_config.is_decoder = False
         self.encoder = BertModel(enc_config)
-        self.decoder = BertModel(config)
+        self.shared = self.encoder.embeddings.word_embeddings
+        bart_config = convert_config(config)
+        self.decoder = BartDecoder(bart_config, self.shared)
         self.init_weights()
 
     def output_layer(self, features):
-        F.linear(features, self.decoder.get_input_embeddings().weight)
+        # DELETE ME?
+        return F.linear(features, self.decoder.get_input_embeddings().weight)
 
     def resize_token_embeddings(self, new_num_tokens: int):
         self.encoder.resize_token_embeddings(new_num_tokens)

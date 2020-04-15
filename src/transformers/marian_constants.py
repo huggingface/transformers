@@ -53,3 +53,60 @@ EMBED_CONVERTER = {
     # "encoder_emb_ln_scale_pre" = "bert/embeddings/LayerNorm/gamma:0"
     # "encoder_emb_ln_bias_pre" = "bert/embeddings/LayerNorm/beta:0"
 }
+
+
+BART_CONVERTER ={
+    "self_Wq": "self_attn.q_proj.weight",
+    "self_Wk": "self_attn.k_proj.weight",
+    "self_Wv": "self_attn.v_proj.weight",
+    "self_Wo": "self_attn.out_proj.weight",
+    "self_bq": "self_attn.q_proj.bias",
+    "self_bk": "self_attn.k_proj.bias",
+    "self_bv": "self_attn.v_proj.bias",
+    "self_bo": "self_attn.out_proj.bias",
+    "self_Wo_ln_scale": "self_attn_layer_norm.weight",
+    "self_Wo_ln_bias": "self_attn_layer_norm.bias",
+    "ffn_W1": "fc1.weight",
+    "ffn_b1": "fc1.bias",
+    "ffn_W2": "fc2.weight",
+    "ffn_b2": "fc2.bias",
+    "ffn_ffn_ln_scale": "final_layer_norm.weight",
+    "ffn_ffn_ln_bias": "final_layer_norm.bias",
+    # Decoder Cross Attention
+    "context_Wk": "encoder_attn.k_proj.weight",
+    "context_Wo": "encoder_attn.out_proj.weight",
+    "context_Wq": "encoder_attn.q_proj.weight",
+    "context_Wv": "encoder_attn.v_proj.weight",
+    "context_bk": "encoder_attn.k_proj.bias",
+    "context_bo": "encoder_attn.out_proj.bias",
+    "context_bq": "encoder_attn.q_proj.bias",
+    "context_bv": "encoder_attn.v_proj.bias",
+    "context_Wo_ln_bias": "encoder_attn_layer_norm.weight",
+    "context_Wo_ln_scale": "encoder_attn_layer_norm.bias",
+}
+
+from transformers import BertConfig, BartConfig
+
+
+# vocab_size = vocab_size
+def convert_config(cfg: BertConfig) -> BartConfig:
+    # dict(vocab_size=cfg.vocab_size,
+    #      hidden_size = cfg.d_model,
+    #     num_hidden_layers =decoder_layers,
+    #     num_attention_heads = decoder_attention_heads,
+    #     #int(marian_cfg["transformer-heads"]),  # getattr(yaml_cfg, 'transformer-heads', 'swish'),
+    #     intermediate_size = intermediate_shape,
+    #     activation_function=hidden_act
+
+    bart_cfg = BartConfig(vocab_size=cfg.vocab_size,
+               decoder_layers=cfg.num_hidden_layers,
+               decoder_attention_heads=cfg.num_attention_heads,
+               decoder_ffn_dim=cfg.intermediate_size,
+               d_model=cfg.hidden_size,
+               pad_token_id=cfg.pad_token_id,
+               eos_token_id=cfg.eos_token_id,
+               bos_token_id=None,
+               max_position_embeddings=cfg.max_position_embeddings,
+               activation_function=cfg.hidden_act,
+               scale_embedding=True)
+    return bart_cfg
