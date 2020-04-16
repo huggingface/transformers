@@ -83,7 +83,7 @@ class TraxUtils(object):
         self, np_input_data, layer, input_signature=None, random_number_generator=None,
     ):
         with trax_math.use_backend("jax"):
-            input_data = self.convert_to_jax_array(np_input_data)
+            input_data = np_input_data
 
             if input_signature is None:
                 input_signature = self.get_input_signature()
@@ -200,14 +200,15 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def test_lsh_layer(self):
         config = ReformerConfig()
-        shape = (2, 14, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        shape = (2, 192, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
         trax_utils = TraxUtils(shape)
-        trax_layer = self.load_lsh_layer(config)
+        trax_layer = self.load_lsh_layer(config, mode="predict")
         trax_output, trax_weights, trax_state = trax_utils.forward_layer(
             np_input, layer=trax_layer
         )
+        trax_torch_output = torch.tensor(np.asarray(trax_output))
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
         config.attn_type = "lsh"
@@ -218,16 +219,18 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
         hf_output = hf_layer.output(hf_attention_all_heads, torch.zeros_like(hf_input))
 
-        trax_torch_output = torch.tensor(np.asarray(trax_output))
+        import ipdb
+        ipdb.set_trace()
+
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
 
     def test_local_layer(self):
         config = ReformerConfig()
-        shape = (2, 14, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        shape = (1, 64, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
         trax_utils = TraxUtils(shape)
-        trax_layer = self.load_local_layer(config)
+        trax_layer = self.load_local_layer(config, mode="eval")
         trax_output, trax_weights, trax_state = trax_utils.forward_layer(
             np_input, layer=trax_layer
         )
@@ -246,15 +249,16 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_torch_output = torch.tensor(np.asarray(trax_output))
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
 
-    def test_lsh_reformer_lm_model(self):
+    def test_reformer_lm_model(self):
         config = ReformerConfig()
 
-        shape = (2, 14)  # Batch x SeqLen x ModelDimPerHead
+        shape = (1, 64)  # Batch x SeqLen x ModelDimPerHead
         np_input = np.random.randint(0, config.vocab_size, size=shape)
         np_zeros = np.zeros((shape[0], 1), dtype=np.int)
 
         trax_utils = TraxUtils(shape)
-        trax_model = self.load_lsh_reformer_lm_model(config)
+#        trax_model = self.load_reformer_lm_model(config, mode="predict")
+        trax_model = self.load_reformer_lm_model(config)
         trax_output, trax_weights, trax_state = trax_utils.forward_model(
             np_input, model=trax_model
         )
@@ -263,13 +267,15 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_input = torch.cat(
             [torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1
         )
-        config.attn_type = "lsh"
         hf_model = ReformerModelWithLMHead(config)
         self._set_model_weights_in_torch(trax_weights, hf_model, config.hidden_size)
         hf_model.eval()
 
         hf_output = hf_model(hf_input)
         log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
+
+        import ipdb
+        ipdb.set_trace()
 
         self.assertTrue(
             torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3)
@@ -292,8 +298,6 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_input = torch.cat(
             [torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1
         )
-        hf_output = hf_model(hf_input)
-        log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
 
         trax_utils = TraxUtils(shape)
         trax_input = trax_utils.convert_to_jax_array(np_input)
@@ -301,6 +305,10 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_model = self.load_crime_and_punishment_model(
             trax_model_path, input_signature
         )
+
+        hf_output = hf_model(hf_input)
+        log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
+
         trax_output = trax_model(trax_input)
         trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
 
@@ -314,9 +322,9 @@ class ReformerIntegrationTests(unittest.TestCase):
 
             # Parameters for LSHSelfAttention:
             # ==============================================================================
-            LSHSelfAttention.n_heads={}
-            LSHSelfAttention.d_qk={}
-            LSHSelfAttention.d_v={}
+            LSHSelfAttention.n_heads = {}
+            LSHSelfAttention.d_qk = {}
+            LSHSelfAttention.d_v = {}
             LSHSelfAttention.chunk_len = {}
             LSHSelfAttention.n_chunks_before = {}
             LSHSelfAttention.n_chunks_after = {}
@@ -326,6 +334,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             LSHSelfAttention.output_dropout = {}
             LSHSelfAttention.lsh_seed = {}
             LSHSelfAttention.causal= {}
+            LSHSelfAttention.use_reference_code = True
             """.format(
             config.num_attention_heads,
             config.attention_head_size,
@@ -350,15 +359,16 @@ class ReformerIntegrationTests(unittest.TestCase):
 
             # Parameters for SelfAttention:
             # ==============================================================================
-            SelfAttention.n_heads={}
-            SelfAttention.d_qk={}
-            SelfAttention.d_v={}
+            SelfAttention.n_heads = {}
+            SelfAttention.d_qk = {}
+            SelfAttention.d_v = {}
             SelfAttention.chunk_len = {}
             SelfAttention.n_chunks_before = {}
             SelfAttention.n_chunks_after = {}
             SelfAttention.attention_dropout = {}
             SelfAttention.output_dropout = {}
-            SelfAttention.causal= {}
+            SelfAttention.causal = {}
+            SelfAttention.use_reference_code = True
             """.format(
             config.num_attention_heads,
             config.attention_head_size,
@@ -374,7 +384,20 @@ class ReformerIntegrationTests(unittest.TestCase):
         layer = trax.layers.SelfAttention(mode=mode)
         return layer
 
-    def load_lsh_reformer_lm_model(self, config, mode="eval"):
+    def load_reformer_lm_model(self, config, mode="eval"):
+        if config.hidden_act == "gelu":
+            hidden_act = "Gelu"
+        elif config.hidden_act == "relu":
+            hidden_act = "Relu"
+        else:
+            raise ValueError()
+        if config.attn_type == "lsh":
+            attn_type = "LSHSelfAttention"
+        elif config.attn_type == "local":
+            attn_type = "SelfAttention"
+        else:
+            raise ValueError()
+
         gin_config = """
             import trax.layers
             import trax.models
@@ -388,6 +411,15 @@ class ReformerIntegrationTests(unittest.TestCase):
             LSHSelfAttention.n_buckets = {}
             LSHSelfAttention.lsh_seed = {}
             LSHSelfAttention.causal= {}
+            LSHSelfAttention.use_reference_code = True
+
+            # Parameters for SelfAttention:
+            # ==============================================================================
+            SelfAttention.chunk_len = {}
+            SelfAttention.n_chunks_before = {}
+            SelfAttention.n_chunks_after = {}
+            SelfAttention.causal= {}
+            SelfAttention.use_reference_code = True
 
             # Parameters for ReformerLM:
             # ==============================================================================
@@ -402,13 +434,13 @@ class ReformerIntegrationTests(unittest.TestCase):
             ReformerLM.axial_pos_shape = {}
             ReformerLM.d_axial_pos_embs = {}
             ReformerLM.ff_chunk_size = {}
+            ReformerLM.ff_activation = @trax.layers.{}
+            ReformerLM.attention_type = @trax.layers.{}
 
             ReformerLM.n_chunks = 0
             ReformerLM.n_attention_chunks = None
             ReformerLM.share_qk = False
             ReformerLM.ff_use_sru = 0
-            ReformerLM.attention_type = @trax.layers.LSHSelfAttention
-            ReformerLM.ff_activation = @trax.layers.Gelu
             """.format(
             config.chunk_length,
             config.num_chunks_before,
@@ -416,6 +448,10 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.num_hashes,
             config.num_buckets,
             config.seed,
+            config.is_decoder,
+            config.chunk_length,
+            config.num_chunks_before,
+            config.num_chunks_after,
             config.is_decoder,
             config.vocab_size,
             config.hidden_size,
@@ -428,6 +464,8 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.axial_pos_shape,
             config.axial_pos_embds_dim,
             config.chunk_size_feed_forward,
+            hidden_act,
+            attn_type
         )
         gin.parse_config(gin_config)
         model = trax.models.ReformerLM(mode=mode)
@@ -462,30 +500,14 @@ class ReformerIntegrationTests(unittest.TestCase):
             dropout = 0.05
             n_tokens = 524288
 
-            # Parameters for MultifactorSchedule:
-            # ==============================================================================
-            MultifactorSchedule.constant = 0.01
-            MultifactorSchedule.factors = 'constant * linear_warmup * cosine_decay'
-            MultifactorSchedule.warmup_steps = 100
-            MultifactorSchedule.steps_per_cycle = 900
-
-            # Parameters for Adam:
-            # ==============================================================================
-            Adam.weight_decay_rate=0.0
-            Adam.b1 = 0.86
-            Adam.b2 = 0.92
-            Adam.eps = 1e-9
-
             # Parameters for SelfAttention:
             # ==============================================================================
-            SelfAttention.attention_dropout = 0.05
             SelfAttention.chunk_len = 64
             SelfAttention.n_chunks_before = 1
             SelfAttention.n_parallel_heads = 1
 
             # Parameters for LSHSelfAttention:
             # ==============================================================================
-            LSHSelfAttention.attention_dropout = 0.0
             LSHSelfAttention.chunk_len = 64
             LSHSelfAttention.n_buckets = [64, 128]
             LSHSelfAttention.n_chunks_after = 0
@@ -590,10 +612,15 @@ class ReformerIntegrationTests(unittest.TestCase):
         )
 
         # lsh weights + output
-        lsh_weights = weights[0][1]
-        self._set_layer_weights_in_torch_lsh(
-            lsh_weights, torch_block.attention, hidden_size
-        )
+        attn_weights = weights[0][1]
+        if len(attn_weights) < 4:
+            self._set_layer_weights_in_torch_lsh(
+                attn_weights, torch_block.attention, hidden_size
+            )
+        else:
+            self._set_layer_weights_in_torch_local(
+                attn_weights, torch_block.attention, hidden_size
+            )
 
         # intermediate weighs
         intermediate_weights = weights[2][0][2][2]

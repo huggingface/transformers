@@ -100,11 +100,11 @@ class ReformerConfig(PretrainedConfig):
         vocab_size=200,
         attention_head_size=32,
         hidden_size=128,
-        num_hidden_layers=2,
-        num_attention_heads=2,
+        num_hidden_layers=1,
+        num_attention_heads=1,
         num_buckets=2,
         num_hashes=4,
-        chunk_length=7,
+        chunk_length=64,
         num_chunks_before=1,
         num_chunks_after=0,
         chunk_size_lm_head=0,
@@ -119,12 +119,13 @@ class ReformerConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         sinusoidal_pos_embds=False,
         axial_pos_embds=True,
-        axial_pos_shape=[7, 2],
+        axial_pos_shape=[32, 2],
         axial_pos_embds_dim=[64, 64],
-        attn_type="lsh",
+        attn_type="local",
+        pad_token_id=0,
         **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
 
 
 #        TO CHANGE LATER:
@@ -137,7 +138,7 @@ class ReformerConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_hashes = num_hashes
-        self.num_buckets = num_buckets
+        self.num_buckets = tuple(num_buckets) if isinstance(num_buckets, list) else num_buckets
         self.chunk_length = chunk_length
         self.num_chunks_after = num_chunks_after
         self.num_chunks_before = num_chunks_before

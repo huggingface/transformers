@@ -130,13 +130,14 @@ class AxialEmbeddings(nn.Module):
         broadcasted_weights = [weight.expand((batch_size,) + self.axial_pos_shape + weight.shape[-1:]) for weight in self.weights]
 
         if self.training is True:
-            assert np.prod(self.axial_pos_shape) == sequence_length, "Make sure that config.axial_pos_shape factors: {} multiply to sequence length: {}".format(self.axial_pos_shape, sequence_length)
+            assert int(np.prod(self.axial_pos_shape)) == sequence_length, "Make sure that config.axial_pos_shape factors: {} multiply to sequence length: {}".format(self.axial_pos_shape, sequence_length)
 
             # TODO (PVP): Add dropout when training
             # get correct position encodings
             position_encodings = torch.cat([torch.reshape(weight, (batch_size, sequence_length) + weight.shape[-1:]) for weight in broadcasted_weights], dim=-1)
 
         else:
+            assert sequence_length >= int(np.prod(self.axial_pos_shape)), "Make sure that config.axial_pos_shape factors: {} multiply at least to max(sequence_length, config.chunk_length): {}".format(self.axial_pos_shape, sequence_length)
             # reshape axial encodings and use only until sequence_length
             position_encodings = torch.cat(broadcasted_weights, dim=-1)
             position_encodings = position_encodings.view(batch_size, -1, position_encodings.shape[-1])[:, :sequence_length]
@@ -503,6 +504,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         self.num_chunks_after = config.num_chunks_after
         self.output_attentions = config.output_attentions
         self.is_decoder = config.is_decoder
+        self.pad_token_id = config.pad_token_id
 
         self.attention_head_size = config.attention_head_size
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -522,6 +524,17 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         # get SeqLen and BatchSize
         sequence_length = hidden_states.shape[1]
         batch_size = hidden_states.shape[0]
+
+        # needs padding
+#        if sequence_length % self.chunk_length != -1:
+#            assert not self.training, "In training, the sequnece length: {} has to be a multiple of config.chunk_length: {}".format(sequence_length, self.chunk_length)
+            # This should be done before
+#            assert self.is_decoder
+#            padding_length = self.chunk_length - sequence_length % self.chunk_length
+            # TODO: need to fix with attention mask here
+            # TODO: only allow for casaul masking or for all masking?
+#            hidden_states = torch.cat([hidden_states, torch.full((batch_size, padding_length, hidden_states.shape[-1]), 0, device=hidden_states.device)], dim=1)
+#            sequence_length = hidden_states.shape[1]
 
         mixed_query_vectors = self.query(hidden_states)
         mixed_key_vectors = self.key(hidden_states)
@@ -585,6 +598,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
 
         out_vectors = self._transpose_for_output(out_vectors, self.num_attention_heads, self.attention_head_size)
         outputs = (out_vectors, attention_probs) if self.output_attentions else (out_vectors,)
+#        outputs = (out_vectors, attention_probs) if self.output_attentions else (out_vectors[:, :3, :],)
 
         return outputs
 
@@ -817,7 +831,6 @@ class ReformerModel(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self.chunk_length = config.chunk_length
 
         self.embeddings = ReformerEmbeddings(config)
         self.encoder = ReformerEncoder(config)
@@ -877,8 +890,22 @@ class ReformerModel(ReformerPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device  # noqa: F841
+        real_sequence_length = input_shape[-1]
 
-        assert input_shape[-1] % self.chunk_length == 0, "Sequence Length {} has to be a multiple of config.chunk_length {}. Please consider padding the input to a length of {}.".format(input_shape[-1], self.chunk_length, input_shape[-1] + (self.chunk_length - input_shape[-1] % self.chunk_length))
+        # if needs padding
+        if input_shape[-1] % self.config.chunk_length != 0:
+            # TODO: should also allow this when self.is_decoder is False?
+            # TODO: need to improve attn mask input possibility here
+            assert self.training is False and self.config.is_decoder is True, "Sequence Length {} has to be a multiple of config.chunk_length {} if {}. Please consider padding the input to a length of {}.".format(input_shape[-2], self.config.chunk_length, "training" if self.training is True else "config.is_decoder = True", input_shape[-1] + (self.config.chunk_length - input_shape[-1] % self.config.chunk_length))
+
+            if input_ids is None:
+                raise NotImplementedError("Currently only supported for `input_ids`")
+
+            padding_length = self.config.chunk_length - input_shape[-1] % self.config.chunk_length
+
+            # Extend `input_ids` with padding to match self.chunk_len
+            input_ids = torch.cat([input_ids, torch.full((input_shape[0], padding_length), self.config.pad_token_id, device=input_ids.device, dtype=torch.long)], dim=-1)
+            input_shape = input_ids.size()
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -908,6 +935,10 @@ class ReformerModel(ReformerPreTrainedModel):
             head_mask=head_mask,
         )
         sequence_output = encoder_outputs[0]
+
+        # if padding was applied
+        if real_sequence_length < input_shape[-1]:
+            sequence_output = sequence_output[:, :real_sequence_length]
 
         # add hidden_states and attentions if they are here
         outputs = (sequence_output,) + encoder_outputs[1:]
