@@ -961,6 +961,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 kwargs["doc_stride"],
                 kwargs["max_question_len"],
                 False,
+                tqdm_enabled=False,
             )
             for example in examples
         ]
