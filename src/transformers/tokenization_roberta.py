@@ -260,6 +260,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=True,
+        trim_offsets=True,
         **kwargs
     ):
         kwargs.setdefault("pad_token", pad_token)
@@ -278,7 +279,9 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         )
 
         self.backend_tokenizer._tokenizer.post_processor = RobertaProcessing(
-            (sep_token, self.sep_token_id), (cls_token, self.cls_token_id)
+            sep=(sep_token, self.sep_token_id),
+            cls=(cls_token, self.cls_token_id),
+            trim_offsets=trim_offsets
         )
 
         self.backend_tokenizer.add_special_tokens([kwargs["mask_token"]])
