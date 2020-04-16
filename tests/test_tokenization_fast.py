@@ -125,8 +125,6 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assertEqual(max(batch_encoding.words(last_batch_index)), last_word_index)
         self.assertEqual(min(batch_encoding.words(last_batch_index)), 0)
         self.assertEqual(len(encoding.tokens(0)), num_tokens)
-        self.assertEqual(encoding.tokens(0), tokenizer_r.convert_ids_to_tokens(encoding["input_ids"]))
-        self.assertEqual(batch_encoding.tokens(last_batch_index), tokenizer_r.convert_ids_to_tokens(encoding["input_ids"]))
 
         # Assert token_to_word
         self.assertEqual(encoding.token_to_word(0), 0)
