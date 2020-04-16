@@ -14,7 +14,7 @@ mkdir -p $OUTPUT_DIR
 
 # Add parent directory to python path to access transformer_base.py and utils.py
 export PYTHONPATH="../../":"${PYTHONPATH}"
-python run_bart_sum.py \
+python finetune.py \
 --data_dir=cnn_tiny/ \
 --model_type=bart \
 --model_name_or_path=sshleifer/bart-tiny-random \
