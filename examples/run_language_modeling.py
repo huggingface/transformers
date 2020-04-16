@@ -40,7 +40,6 @@ from transformers import (
     Trainer,
     TrainingArguments,
     set_seed,
-    torch_distributed_zero_first,
 )
 
 
@@ -172,40 +171,41 @@ def main():
     set_seed(training_args.seed)
 
     # Load pretrained model and tokenizer
+    #
+    # Distributed training:
+    # The .from_pretrained methods guarantee that only one local process can concurrently
+    # download model & vocab.
 
-    with torch_distributed_zero_first(training_args.local_rank):
-        # Make sure only the first process in distributed training will download model & vocab
+    if model_args.config_name:
+        config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
+    elif model_args.model_name_or_path:
+        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+    else:
+        config = CONFIG_MAPPING[model_args.model_type]()
+        logger.warning("You are instantiating a new config instance from scratch.")
 
-        if model_args.config_name:
-            config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
-        elif model_args.model_name_or_path:
-            config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
-        else:
-            config = CONFIG_MAPPING[model_args.model_type]()
-            logger.warning("You are instantiating a new config instance from scratch.")
+    if model_args.tokenizer_name:
+        tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, cache_dir=model_args.cache_dir)
+    elif model_args.model_name_or_path:
+        tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+    else:
+        raise ValueError(
+            "You are instantiating a new tokenizer from scratch. This is not supported, but you can do it from another script, save it,"
+            "and load it from here, using --tokenizer_name"
+        )
 
-        if model_args.tokenizer_name:
-            tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, cache_dir=model_args.cache_dir)
-        elif model_args.model_name_or_path:
-            tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
-        else:
-            raise ValueError(
-                "You are instantiating a new tokenizer from scratch. This is not supported, but you can do it from another script, save it,"
-                "and load it from here, using --tokenizer_name"
-            )
+    if model_args.model_name_or_path:
+        model = AutoModelWithLMHead.from_pretrained(
+            model_args.model_name_or_path,
+            from_tf=bool(".ckpt" in model_args.model_name_or_path),
+            config=config,
+            cache_dir=model_args.cache_dir,
+        )
+    else:
+        logger.info("Training new model from scratch")
+        model = AutoModelWithLMHead.from_config(config)
 
-        if model_args.model_name_or_path:
-            model = AutoModelWithLMHead.from_pretrained(
-                model_args.model_name_or_path,
-                from_tf=bool(".ckpt" in model_args.model_name_or_path),
-                config=config,
-                cache_dir=model_args.cache_dir,
-            )
-        else:
-            logger.info("Training new model from scratch")
-            model = AutoModelWithLMHead.from_config(config)
-
-        model.resize_token_embeddings(len(tokenizer))
+    model.resize_token_embeddings(len(tokenizer))
 
     if config.model_type in ["bert", "roberta", "distilbert", "camembert"] and not data_args.mlm:
         raise ValueError(

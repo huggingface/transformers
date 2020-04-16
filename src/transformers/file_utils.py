@@ -456,6 +456,11 @@ def get_from_cache(
     lock_path = cache_path + ".lock"
     with FileLock(lock_path):
 
+        # If the download just completed while the lock was activated.
+        if os.path.exists(cache_path) and not force_download:
+            # Even if returning early like here, the lock will be released.
+            return cache_path
+
         if resume_download:
             incomplete_path = cache_path + ".incomplete"
 
