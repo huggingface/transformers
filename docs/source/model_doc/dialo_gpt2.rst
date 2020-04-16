@@ -24,6 +24,6 @@ Tips:
 - DialoGPT enables the user to create a chat bot in just 10 lines of code as shown on `DialoGPT's model card <https://huggingface.co/microsoft/DialoGPT-medium>`_.
  
 
-DialoGPT's architecutre is based on the GPT2 model, so one can refer to GPT2's `docstring <https://huggingface.co/transformers/model_doc/gpt2.html>`_.
+DialoGPT's architecture is based on the GPT2 model, so one can refer to GPT2's `docstring <https://huggingface.co/transformers/model_doc/gpt2.html>`_.
 
 The original code can be found `here <https://github.com/microsoft/DialoGPT>`_.
