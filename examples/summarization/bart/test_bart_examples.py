@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from transformers import BartTokenizer
 
 from .evaluate_cnn import run_generate
-from .run_bart_sum import main
+from .finetune import main
 from .utils import SummarizationDataset
 
 

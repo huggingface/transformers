@@ -8,7 +8,7 @@ mkdir -p $OUTPUT_DIR
 # Add parent directory to python path to access transformer_base.py
 export PYTHONPATH="../../":"${PYTHONPATH}"
 
-python run_bart_sum.py \
+python finetune.py \
 --data_dir=./cnn-dailymail/cnn_dm \
 --model_type=bart \
 --model_name_or_path=bart-large \
