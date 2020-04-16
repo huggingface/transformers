@@ -180,17 +180,17 @@ class BatchEncoding(UserDict):
             encoding = [encoding]
 
         self._encodings = encoding
-        if not data['input_ids']:
+        if not data["input_ids"]:
             self._batch_size = 0
             self._seq_len = 0
-        elif isinstance(data['input_ids'][0], int):
+        elif isinstance(data["input_ids"][0], int):
             self._batch_size = 1
-            self._seq_len = len(data['input_ids'])
-        elif isinstance(data['input_ids'][0], (list, tuple)):
-            self._batch_size = len(data['input_ids'])
-            self._seq_len = len(data['input_ids'][0])
+            self._seq_len = len(data["input_ids"])
+        elif isinstance(data["input_ids"][0], (list, tuple)):
+            self._batch_size = len(data["input_ids"])
+            self._seq_len = len(data["input_ids"][0])
         else:  # We have a tensor
-            self._batch_size, self._seq_len = data['input_ids'].shape
+            self._batch_size, self._seq_len = data["input_ids"].shape
 
     def __getitem__(self, item: Union[int, str]) -> EncodingFast:
         """ If the key is a string, get the value of the dict associated to `key` ('input_ids', 'attention_mask'...)
@@ -201,24 +201,16 @@ class BatchEncoding(UserDict):
         elif self._encodings is not None:
             return self._encodings[item]
         else:
-            raise KeyError("int index is supported only on {} from a Rust tokenizer".format(type(self).__name__))
+            raise KeyError("Indexing with integers (to access backend Encoding for a given batch index) "
+                           "is not available when using Python based tokenizers")
 
     def __getattr__(self, item: str):
         return self.data[item]
 
     @property
-    def encodings(self) -> Optional[List[EncodingFast]]:
-        """
-        Return the list all encoding from the tokenization process
-
-        Returns: List[EncodingFast] or None if input was tokenized through Python (i.e. not fast) tokenizer
-        """
-        return self._encodings
-
-    @property
     def batch_size(self):
         return self._batch_size
-    
+
     @property
     def seq_len(self):
         return self._seq_len
@@ -236,9 +228,32 @@ class BatchEncoding(UserDict):
     def items(self):
         return self.data.items()
 
+    # After this point:
+    # Extended properties and methods only available for fast (Rust-based) tokenizers
+    # provided by HuggingFace tokenizers library.
+
+    @property
+    def encodings(self) -> Optional[List[EncodingFast]]:
+        """
+        Return the list all encoding from the tokenization process
+
+        Returns: List[EncodingFast] or None if input was tokenized through Python (i.e. not fast) tokenizer
+        """
+        return self._encodings
+
+    def tokens(self, batch_index: int = 0) -> List[int]:
+        if not self._encodings:
+            raise ValueError("tokens() is not available when using Python based tokenizers")
+        return self._encodings[batch_index].tokens
+
+    def words(self, batch_index: int = 0) -> List[Optional[int]]:
+        if not self._encodings:
+            raise ValueError("words() is not available when using Python based tokenizers")
+        return self._encodings[batch_index].words
+
     def token_to_word(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
-        """ Get the index of the word corresponding (i.e. comprising) to
-            encoded token in a sequence of the batch.
+        """ Get the index of the word corresponding (i.e. comprising) to an encoded token
+            in a sequence of the batch.
 
             Can be called as:
                 - self.token_to_word(token_index) if batch size is 1
@@ -254,10 +269,11 @@ class BatchEncoding(UserDict):
                 this can be the index of the token in the sequence
             token_index (:obj:`int`, `optional`):
                 If a batch index is provided in `batch_or_token_index`, this can be the index
-                of the token or tokens in the sequence.
+                of the token in the sequence.
 
         Returns:
-            word_index (:obj:`int` or :obj:`List[int]`): index of the associated word or words in the input sequence.
+            word_index (:obj:`int`):
+                index of the word in the input sequence.
 
         """
 
@@ -273,14 +289,22 @@ class BatchEncoding(UserDict):
         else:
             batch_index = 0
             token_index = batch_or_token_index
-        return self[batch_index].words[token_index]
+        if batch_index < 0:
+            batch_index = self._batch_size + batch_index 
+        if token_index < 0:
+            token_index = self._seq_len + token_index 
+        return self._encodings[batch_index].token_to_word(token_index)
 
     def word_to_tokens(self, batch_or_word_index: int, word_index: Optional[int] = None) -> TokenSpan:
-        """ Get the encoded tokens token(s) corresponding to word(s) in the sequence of the batch.
+        """ Get the encoded token span corresponding to a word in the sequence of the batch.
+
+            Token spans are returned as a TokenSpan NamedTuple with:
+                start: index of the first token
+                end: index of the token following the last token
 
             Can be called as:
                 - self.word_to_tokens(word_index) if batch size is 1
-                - self.word_to_tokens(batch_index, word_index) if batch size is greater than 1
+                - self.word_to_tokens(batch_index, word_index) if batch size is greater or equal to 1
 
             This method is particularly suited when the input sequences are provided as
             pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
@@ -288,15 +312,16 @@ class BatchEncoding(UserDict):
 
         Args:
             batch_or_word_index (:obj:`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence,
+                Index of the sequence in the batch. If the batch only comprises one sequence,
                 this can be the index of the word in the sequence
             word_index (:obj:`int`, `optional`):
                 If a batch index is provided in `batch_or_token_index`, this can be the index
                 of the word in the sequence.
 
         Returns:
-            token_span (:obj:`TokenSpan` or :obj:`List[TokenSpan]`):
-                Span of the associate token or tokens in the encoded sequence.
+            token_span (:obj:`TokenSpan`):
+                Span of tokens in the encoded sequence.
+
                 TokenSpan are NamedTuple with:
                     start: index of the first token
                     end: index of the token following the last token
@@ -314,17 +339,22 @@ class BatchEncoding(UserDict):
         else:
             batch_index = 0
             word_index = batch_or_word_index
-        return TokenSpan(*(self[batch_index].word_to_tokens(word_index)))
+        if batch_index < 0:
+            batch_index = self._batch_size + batch_index 
+        if word_index < 0:
+            word_index = self._seq_len + word_index 
+        return TokenSpan(*(self._encodings[batch_index].word_to_tokens(word_index)))
 
     def token_to_chars(self, batch_or_token_index: int, token_index: Optional[int] = None) -> CharSpan:
-        """ Get the character span(s) corresponding to encoded token(s) in a sequence of the batch.
+        """ Get the character span corresponding to an encoded token in a sequence of the batch.
+            
             Character spans are returned as a CharSpan NamedTuple with:
-                start: index of the first character associated to the token in the original string
-                end: index of the character following the last character associated to the token in the original string
+                start: index of the first character in the original string associated to the token
+                end: index of the character following the last character in the original string associated to the token
 
             Can be called as:
                 - self.token_to_chars(token_index) if batch size is 1
-                - self.token_to_chars(batch_index, token_index) if batch size is greater than 1
+                - self.token_to_chars(batch_index, token_index) if batch size is greater or equal to 1
 
         Args:
             batch_or_token_index (:obj:`int`):
@@ -335,11 +365,12 @@ class BatchEncoding(UserDict):
                 of the token or tokens in the sequence.
 
         Returns:
-            char_span (:obj:`CharSpan` or :obj:`List[CharSpan]`):
-                Span(s) of the associated character or characters in the string.
+            char_span (:obj:`CharSpan`):
+                Span of characters in the original string.
+
                 CharSpan are NamedTuple with:
-                    start: index of the first character associated to the token in the original string
-                    end: index of the character following the last character associated to the token in the original string
+                    start: index of the first character in the original string
+                    end: index of the character following the last character in the original string
         """
 
         if not self._encodings:
@@ -354,15 +385,15 @@ class BatchEncoding(UserDict):
         else:
             batch_index = 0
             token_index = batch_or_token_index
-        return CharSpan(*(self[batch_index].offsets[token_index]))
+        return CharSpan(*(self._encodings[batch_index].token_to_chars(token_index)))
 
     def char_to_token(self, batch_or_char_index: int, char_index: Optional[int] = None) -> int:
-        """ Get the token(s) of the encoded output corresponding to character(s) in the original string of
-            a sequence of the batch.
+        """ Get the index of the token in the encoded output comprising a character
+            in the original string for a sequence of the batch.
 
             Can be called as:
                 - self.char_to_token(char_index) if batch size is 1
-                - self.char_to_token(batch_index, char_index) if batch size is greater than 1
+                - self.char_to_token(batch_index, char_index) if batch size is greater or equal to 1
 
             This method is particularly suited when the input sequences are provided as
             pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
@@ -378,8 +409,8 @@ class BatchEncoding(UserDict):
 
 
         Returns:
-            token_index (:obj:`int` or :obj:`List[int]`):
-                Index or indices of the associated encoded token(s).
+            token_index (:obj:`int`):
+                Index of the token.
         """
 
         if not self._encodings:
@@ -394,8 +425,89 @@ class BatchEncoding(UserDict):
         else:
             batch_index = 0
             char_index = batch_or_char_index
-        return self[batch_index].char_to_token(char_index)
+        return self._encodings[batch_index].char_to_token(char_index)
 
+    def word_to_chars(self, batch_or_word_index: int, word_index: Optional[int] = None) -> CharSpan:
+        """ Get the character span in the original string corresponding to given word in a sequence
+            of the batch.
+
+            Character spans are returned as a CharSpan NamedTuple with:
+                start: index of the first character in the original string
+                end: index of the character following the last character in the original string
+
+            Can be called as:
+                - self.word_to_chars(word_index) if batch size is 1
+                - self.word_to_chars(batch_index, word_index) if batch size is greater or equal to 1
+
+        Args:
+            batch_or_word_index (:obj:`int`):
+                Index of the sequence in the batch. If the batch only comprise one sequence,
+                this can be the index of the word in the sequence
+            word_index (:obj:`int`, `optional`):
+                If a batch index is provided in `batch_or_token_index`, this can be the index
+                of the word in the sequence.
+
+        Returns:
+            char_span (:obj:`CharSpan` or :obj:`List[CharSpan]`):
+                Span(s) of the associated character or characters in the string.
+                CharSpan are NamedTuple with:
+                    start: index of the first character associated to the token in the original string
+                    end: index of the character following the last character associated to the token in the original string
+        """
+
+        if not self._encodings:
+            raise ValueError("word_to_chars() is not available when using Python based tokenizers")
+        if word_index is not None:
+            batch_index = batch_or_word_index
+        elif self._batch_size != 1:
+            raise ValueError(
+                "Batch is greater than one, you should supply a batch index by calling with "
+                "self.word_to_chars(batch_index, word_index)"
+            )
+        else:
+            batch_index = 0
+            word_index = batch_or_word_index
+        return CharSpan(*(self._encodings[batch_index].word_to_chars(word_index)))
+
+    def char_to_word(self, batch_or_char_index: int, char_index: Optional[int] = None) -> int:
+        """ Get the word in the original string corresponding to a character in the original string of
+            a sequence of the batch.
+
+            Can be called as:
+                - self.char_to_word(char_index) if batch size is 1
+                - self.char_to_word(batch_index, char_index) if batch size is greater than 1
+
+            This method is particularly suited when the input sequences are provided as
+            pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
+            to easily associate encoded tokens with provided tokenized words.
+
+        Args:
+            batch_or_char_index (:obj:`int`):
+                Index of the sequence in the batch. If the batch only comprise one sequence,
+                this can be the index of the character in the orginal string.
+            char_index (:obj:`int`, `optional`):
+                If a batch index is provided in `batch_or_token_index`, this can be the index
+                of the character in the orginal string.
+
+
+        Returns:
+            token_index (:obj:`int` or :obj:`List[int]`):
+                Index or indices of the associated encoded token(s).
+        """
+
+        if not self._encodings:
+            raise ValueError("char_to_word() is not available when using Python based tokenizers")
+        if char_index is not None:
+            batch_index = batch_or_char_index
+        elif self._batch_size != 1:
+            raise ValueError(
+                "Batch is greater than one, you should supply a batch index by calling "
+                "self.char_to_word(batch_index, char_index)"
+            )
+        else:
+            batch_index = 0
+            char_index = batch_or_char_index
+        return self._encodings[batch_index].char_to_word(char_index)
 
 class SpecialTokensMixin:
     SPECIAL_TOKENS_ATTRIBUTES = [
