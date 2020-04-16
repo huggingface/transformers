@@ -35,7 +35,7 @@ ACT2FN = {
     "relu": F.relu,
     "swish": swish,
     "gelu": gelu,
-    "tanh": F.tanh,
+    "tanh": torch.tanh,
     "gelu_new": gelu_new,
 }
 
