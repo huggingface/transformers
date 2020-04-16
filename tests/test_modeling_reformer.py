@@ -289,21 +289,20 @@ class ReformerIntegrationTests(unittest.TestCase):
         np_input = np.random.randint(0, config.vocab_size, size=shape)
         np_zeros = np.zeros((shape[0], 1), dtype=np.int)
 
-        trax_utils = TraxUtils(shape)
-        trax_input = trax_utils.convert_to_jax_array(np_input)
-        input_signature = trax_utils.get_input_signature(dtype=np.int32)
-
-        trax_model = self.load_crime_and_punishment_model(
-            trax_model_path, input_signature
-        )
-        trax_output = trax_model(trax_input)
-        trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
-
         hf_input = torch.cat(
             [torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1
         )
         hf_output = hf_model(hf_input)
         log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
+
+        trax_utils = TraxUtils(shape)
+        trax_input = trax_utils.convert_to_jax_array(np_input)
+        input_signature = trax_utils.get_input_signature(dtype=np.int32)
+        trax_model = self.load_crime_and_punishment_model(
+            trax_model_path, input_signature
+        )
+        trax_output = trax_model(trax_input)
+        trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
 
         self.assertTrue(
             torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3)
