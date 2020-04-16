@@ -35,9 +35,6 @@ else:
     gelu = F.gelu
 
 
-gelu = _gelu_python
-
-
 ACT2FN = {
     "relu": F.relu,
     "swish": swish,

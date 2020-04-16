@@ -123,13 +123,23 @@ class AxialEmbeddings(nn.Module):
             self.weights.append(nn.Parameter(torch.ones(ax_shape, dtype=torch.float32)))
 
     def forward(self, position_ids):
-        assert np.prod(self.axial_pos_shape) == position_ids.shape[-1], "Make sure that config.axial_pos_shape factors: {} multiply to sequence length: {}".format(self.axial_pos_shape, position_ids.shape[-1])
         # broadcast weights to correct shape
-        broadcasted_weights = [weight.expand((position_ids.shape[0],) + self.axial_pos_shape + weight.shape[-1:]) for weight in self.weights]
+        batch_size = position_ids.shape[0]
+        sequence_length = position_ids.shape[1]
 
-        # TODO (PVP): Add dropout when training
-        # get correct position encodings
-        position_encodings = torch.cat([torch.reshape(weight, position_ids.shape + weight.shape[-1:]) for weight in broadcasted_weights], dim=-1)
+        broadcasted_weights = [weight.expand((batch_size,) + self.axial_pos_shape + weight.shape[-1:]) for weight in self.weights]
+
+        if self.training is True:
+            assert np.prod(self.axial_pos_shape) == sequence_length, "Make sure that config.axial_pos_shape factors: {} multiply to sequence length: {}".format(self.axial_pos_shape, sequence_length)
+
+            # TODO (PVP): Add dropout when training
+            # get correct position encodings
+            position_encodings = torch.cat([torch.reshape(weight, (batch_size, sequence_length) + weight.shape[-1:]) for weight in broadcasted_weights], dim=-1)
+
+        else:
+            # reshape axial encodings and use only until sequence_length
+            position_encodings = torch.cat(broadcasted_weights, dim=-1)
+            position_encodings = position_encodings.view(batch_size, -1, position_encodings.shape[-1])[:, :sequence_length]
 
         return position_encodings
 
