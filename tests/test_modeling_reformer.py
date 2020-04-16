@@ -18,18 +18,12 @@ import numpy as np
 
 # trax imports - to be deleted later
 import trax
-from trax import math as trax_math
 from trax.shapes import ShapeDtype as trax_ShapeDtype
-
 import gin
 
-import jax
-from trax.models.reformer.reformer import DecoderBlock as TraxLSHAttentionBlock
-from trax import layers as tl
 
 from transformers import (
     ReformerAttention,
-    ReformerLayer,
     ReformerConfig,
     ReformerModelWithLMHead,
 )
@@ -48,153 +42,6 @@ PATH_TO_SAVE_WEIGHTS = (
 )
 
 
-class TraxUtils(object):
-    """ class that will help for testing in the beginning
-        should be deleted step-by-step
-
-        README (HOW-TO-INSTALL TRAX):
-        1) git clone https://github.com/patrickvonplaten/trax.git
-
-           - I had to do one tiny change to make the imports work,
-             see: https://github.com/patrickvonplaten/trax/commit/6c23e88afe7f1c57b0c38eeaa4d450e5f912590c)
-        2) link your PYTHON_PATH to ~/trax/trax
-        3) pip install all the missing packages HINT: the package gin is installed
-
-           - HINT: the package gin is installed with pip install gin-config==0.1.4
-                   and not pip install gin.
-           - The other packages can just be installed with pip install <package> form
-             error message "<package> missing"
-    """
-
-    def __init__(self, shape):
-        self._shape = shape
-
-    def convert_to_jax_array(self, np_array):
-        return jax.numpy.asarray(np_array)
-
-    def get_input_signature(self, shape=None, dtype=trax_math.numpy.float32):
-        with trax_math.use_backend("jax"):
-            if shape is None:
-                shape = self._shape
-            input_signature = trax_ShapeDtype(shape, dtype)
-        return input_signature
-
-    def forward_layer(
-        self, np_input_data, layer, input_signature=None, random_number_generator=None,
-    ):
-        with trax_math.use_backend("jax"):
-            input_data = np_input_data
-
-            if input_signature is None:
-                input_signature = self.get_input_signature()
-
-            weights, state = layer.init(input_signature)
-
-            if random_number_generator is None:
-                random_number_generator = layer.new_rngs(1)[0]
-
-            output = layer(
-                input_data, weights=weights, state=state, rng=random_number_generator
-            )
-
-        return output, weights, state
-
-    def forward_model(
-        self,
-        np_input_data,
-        model,
-        input_signature=None,
-        random_number_generator=None,
-        weights=None,
-        state=None,
-        only_init=False,
-    ):
-        with trax_math.use_backend("jax"):
-            input_data = self.convert_to_jax_array(np_input_data)
-            input_data = (input_data,) * 2
-
-            if input_signature is None:
-                input_signature = self.get_input_signature(dtype=trax_math.numpy.int32)
-                input_signature = (input_signature, input_signature)
-
-            if weights is None and state is None:
-                weights, state = model.init(input_signature)
-
-            if only_init is True:
-                return
-
-            if random_number_generator is None:
-                random_number_generator = model.new_rngs(1)[0]
-
-            output = model(
-                input_data, weights=weights, state=state, rng=random_number_generator
-            )
-
-        return output, weights, state
-
-    def get_block(
-        self,
-        config,
-        use_reference_code=True,
-        share_qk=True,
-        ff_use_sru=0,
-        mode="eval",
-        path_to_save_weights=PATH_TO_SAVE_WEIGHTS,
-    ):
-        # only works on old master branch
-        with trax_math.use_backend("jax"):
-            with jax.disable_jit():
-                list_of_layers = TraxLSHAttentionBlock(
-                    d_model=config.hidden_size,
-                    d_ff=config.feed_forward_size,
-                    d_attention_key=config.attention_head_size,
-                    d_attention_value=config.attention_head_size,
-                    n_heads=config.num_attention_heads,
-                    n_attention_chunks=None,
-                    attention_type=tl.LSHSelfAttention,
-                    dropout=config.hidden_dropout_prob,
-                    share_qk=share_qk,
-                    ff_activation=tl.Gelu,
-                    ff_use_sru=ff_use_sru,
-                    ff_chunk_size=config.chunk_size_feed_forward,
-                    mode=mode,
-                    causal=config.is_decoder,
-                    chunk_len=config.chunk_length,
-                    n_chunks_before=config.num_chunks_before,
-                    n_chunks_after=config.num_chunks_after,
-                    n_hashes=config.num_hashes,
-                    n_buckets=config.num_buckets,
-                    use_reference_code=use_reference_code,
-                    hash_seed=config.seed,
-                    path_to_save_weights=path_to_save_weights,
-                )
-                block = tl.Serial(tl.ReversibleSerial([list_of_layers]))
-
-        return block
-
-    def forward_block(
-        self, np_input_data, block, input_signature=None, random_number_generator=None,
-    ):
-        with trax_math.use_backend("jax"):
-            input_data = self.convert_to_jax_array(np_input_data)
-            input_data = (input_data,) * 2
-
-            if input_signature is None:
-                input_signature = self.get_input_signature()
-                input_signature = (input_signature, input_signature)
-
-            weights, state = block.init(input_signature)
-
-            if random_number_generator is None:
-                random_number_generator = block.new_rngs(1)[0]
-
-            output = block(
-                input_data, weights=weights, state=state, rng=random_number_generator
-            )
-
-        return output, weights, state
-
-
 @require_torch
 class ReformerIntegrationTests(unittest.TestCase):
 
@@ -203,11 +50,12 @@ class ReformerIntegrationTests(unittest.TestCase):
         shape = (2, 192, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
-        trax_utils = TraxUtils(shape)
         trax_layer = self.load_lsh_layer(config)
-        trax_output, trax_weights, trax_state = trax_utils.forward_layer(
-            np_input, layer=trax_layer
-        )
+        input_signature = trax_ShapeDtype(shape, np.float32)
+        trax_weights, trax_state = trax_layer.init(input_signature)
+
+        trax_output = trax_layer(np_input, weights=trax_weights, state=trax_state)
+
         trax_torch_output = torch.tensor(np.asarray(trax_output))
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
@@ -226,11 +74,10 @@ class ReformerIntegrationTests(unittest.TestCase):
         shape = (1, 64, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
-        trax_utils = TraxUtils(shape)
-        trax_layer = self.load_local_layer(config, mode="eval")
-        trax_output, trax_weights, trax_state = trax_utils.forward_layer(
-            np_input, layer=trax_layer
-        )
+        trax_layer = self.load_local_layer(config)
+        input_signature = trax_ShapeDtype(shape, np.float32)
+        trax_weights, trax_state = trax_layer.init(input_signature)
+        trax_output = trax_layer(np_input, weights=trax_weights, state=trax_state)
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
         config.attn_type = "local"
@@ -249,18 +96,17 @@ class ReformerIntegrationTests(unittest.TestCase):
     def test_reformer_lm_model(self):
         config = ReformerConfig()
 
-        shape = (1, 4)  # Batch x SeqLen x ModelDimPerHead
+        shape = (1, 192)  # Batch x SeqLen x ModelDimPerHead
         np_input = np.random.randint(0, config.vocab_size, size=shape)
         np_zeros = np.zeros((shape[0], 1), dtype=np.int)
-
-        trax_utils = TraxUtils(shape)
 
         mode = "predict"
         trax_model = self.load_reformer_lm_model(config, mode=mode)
 
-        trax_output, trax_weights, trax_state = trax_utils.forward_model(
-            np_input, model=trax_model
-        )
+        input_signature = trax_ShapeDtype(shape, np.int32)
+        trax_weights, trax_state = trax_model.init(input_signature)
+        trax_output = trax_model(np_input, weights=trax_weights, state=trax_state)
+
         trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
 
         if mode != "predict":
@@ -291,14 +137,12 @@ class ReformerIntegrationTests(unittest.TestCase):
             "/home/patrick/hugging_face/models/trained_reformer_colab/model.pkl"
         )
 
-        shape = (1, 192)
+        shape = (1, 128)
         np_input = np.random.randint(0, config.vocab_size, size=shape)
 
         hf_input = torch.tensor(np_input)
 
-        trax_utils = TraxUtils(shape)
-        trax_input = trax_utils.convert_to_jax_array(np_input)
-        input_signature = trax_utils.get_input_signature(dtype=np.int32)
+        input_signature = trax_ShapeDtype(shape, np.int32)
         trax_model = self.load_crime_and_punishment_model(
             trax_model_path, input_signature
         )
@@ -306,7 +150,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_output = hf_model(hf_input)
         log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
 
-        trax_output = trax_model(trax_input)
+        trax_output = trax_model(np_input)
         trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
 
         self.assertTrue(
@@ -707,30 +551,3 @@ class ReformerIntegrationTests(unittest.TestCase):
             torch.tensor(output_embed_weights).transpose(0, 1).contiguous(),
             torch.tensor(output_embed_bias),
         )
-
-        pass
-
-    def test_lsh_block(self):
-        # depreciated
-        config = ReformerConfig()
-
-        shape = (2, 7, config.hidden_size)  # Batch x SeqLen x ModelDimPerHead
-        np_input = np.random.rand(*shape)
-
-        trax_utils = TraxUtils(shape)
-        trax_block = trax_utils.get_block(config)
-        trax_output, trax_weights, trax_state = trax_utils.forward_block(
-            np_input, block=trax_block
-        )
-        trax_torch_output_1 = torch.tensor(np.asarray(trax_output[0]))
-        trax_torch_output_2 = torch.tensor(np.asarray(trax_output[1]))
-
-        hf_input = torch.tensor(np_input, dtype=torch.float)
-        hf_block = ReformerLayer(config)
-        self._set_block_weights_in_torch(trax_weights[0], hf_block, config.hidden_size)
-        hf_block.eval()
-
-        hf_output_1, hf_output_2 = hf_block(hf_input, hf_input)[:2]
-
-        self.assertTrue(torch.allclose(hf_output_1, trax_torch_output_1, atol=1e-3))
-        self.assertTrue(torch.allclose(hf_output_2, trax_torch_output_2, atol=1e-3))

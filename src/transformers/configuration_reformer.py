@@ -119,7 +119,7 @@ class ReformerConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         sinusoidal_pos_embds=False,
         axial_pos_embds=True,
-        axial_pos_shape=[32, 2],
+        axial_pos_shape=[64, 3],
         axial_pos_embds_dim=[64, 64],
         attn_type="lsh",
         pad_token_id=0,
