@@ -76,6 +76,18 @@ used the official SQuAD2.0 dev set for model selection.
 }
 ```
 
+## How to Cite
+```BibTeX
+@misc{elgeish2020gestalt,
+  title={Gestalt: a Stacking Ensemble for SQuAD2.0},
+  author={Mohamed El-Geish},
+  journal={arXiv e-prints},
+  archivePrefix={arXiv},
+  eprint={2004.07067},
+  year={2020},
+}
+```
+
 ## Related Models
 * [elgeish/cs224n-squad2.0-albert-large-v2](https://huggingface.co/elgeish/cs224n-squad2.0-albert-large-v2)
 * [elgeish/cs224n-squad2.0-albert-xxlarge-v1](https://huggingface.co/elgeish/cs224n-squad2.0-albert-xxlarge-v1)
