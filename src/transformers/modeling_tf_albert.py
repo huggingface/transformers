@@ -721,7 +721,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
 @add_start_docstrings("""Albert Model with a `language modeling` head on top. """, ALBERT_START_DOCSTRING)
 class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
-        super(TFAlbertForMaskedLM, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.albert = TFAlbertMainLayer(config, name="albert")
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
@@ -777,7 +777,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
 )
 class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
-        super(TFAlbertForSequenceClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertMainLayer(config, name="albert")
@@ -834,7 +834,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
 )
 class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
-        super(TFAlbertForQuestionAnswering, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertMainLayer(config, name="albert")
