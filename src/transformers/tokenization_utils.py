@@ -180,7 +180,7 @@ class BatchEncoding(UserDict):
             encoding = [encoding]
 
         self._encodings = encoding
-        if not data["input_ids"]:
+        if len(data["input_ids"]) == 0:
             self._batch_size = 0
             self._seq_len = 0
         elif isinstance(data["input_ids"][0], int):
