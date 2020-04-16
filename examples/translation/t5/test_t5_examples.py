@@ -8,12 +8,8 @@ from unittest.mock import patch
 from .evaluate_wmt import run_generate
 
 
-text = [
-    "When Liana Barrientos was 23 years old, she got married in Westchester County."
-]
-translation = [
-    "Als Liana Barrientos 23 Jahre alt war, heiratete sie in Westchester County."
-]
+text = ["When Liana Barrientos was 23 years old, she got married in Westchester County."]
+translation = ["Als Liana Barrientos 23 Jahre alt war, heiratete sie in Westchester County."]
 
 output_file_name = "output_t5_trans.txt"
 score_file_name = "score_t5_trans.txt"
@@ -41,7 +37,6 @@ class TestT5Examples(unittest.TestCase):
 
         testargs = [
             "evaluate_wmt.py",
-            "--model_size",
             "patrickvonplaten/t5-tiny-random",
             str(tmp_source),
             str(output_file_name),
