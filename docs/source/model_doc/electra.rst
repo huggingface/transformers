@@ -44,6 +44,8 @@ Tips:
   and the generator may be loaded in the `ElectraForPreTraining` model (the classification head will be randomly
   initialized as it doesn't exist in the generator).
 
+The original code can be found `here <https://github.com/google-research/electra>`_.
+
 
 ElectraConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

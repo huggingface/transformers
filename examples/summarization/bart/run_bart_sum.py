@@ -8,7 +8,12 @@ import torch
 from torch.utils.data import DataLoader
 
 from transformer_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
-from utils import SummarizationDataset
+
+
+try:
+    from .utils import SummarizationDataset
+except ImportError:
+    from utils import SummarizationDataset
 
 
 logger = logging.getLogger(__name__)
@@ -20,6 +25,11 @@ class BartSystem(BaseTransformer):
 
     def __init__(self, hparams):
         super().__init__(hparams, num_labels=None, mode=self.mode)
+        self.dataset_kwargs: dict = dict(
+            data_dir=self.hparams.data_dir,
+            max_source_length=self.hparams.max_source_length,
+            max_target_length=self.hparams.max_target_length,
+        )
 
     def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
         return self.model(
@@ -92,14 +102,6 @@ class BartSystem(BaseTransformer):
 
         return self.test_end(outputs)
 
-    @property
-    def dataset_kwargs(self):
-        return dict(
-            data_dir=self.hparams.data_dir,
-            max_source_length=self.hparams.max_source_length,
-            max_target_length=self.hparams.max_target_length,
-        )
-
     def get_dataloader(self, type_path: str, batch_size: int) -> DataLoader:
         dataset = SummarizationDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)
         dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn)
@@ -153,17 +155,12 @@ class BartSystem(BaseTransformer):
         return parser
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    add_generic_args(parser, os.getcwd())
-    parser = BartSystem.add_model_specific_args(parser, os.getcwd())
-    args = parser.parse_args()
+def main(args):
 
     # If output_dir not provided, a folder will be generated in pwd
     if not args.output_dir:
         args.output_dir = os.path.join("./results", f"{args.task}_{args.model_type}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
-
     model = BartSystem(args)
     trainer = generic_train(model, args)
 
@@ -172,3 +169,12 @@ if __name__ == "__main__":
         checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
         BartSystem.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    add_generic_args(parser, os.getcwd())
+    parser = BartSystem.add_model_specific_args(parser, os.getcwd())
+    args = parser.parse_args()
+
+    main(args)
