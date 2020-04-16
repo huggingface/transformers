@@ -304,8 +304,8 @@ class BartEncoder(nn.Module):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 attn = None
             else:
-                new_x, attn = encoder_layer(x, attention_mask)
-                x = x + new_x
+                x, attn = encoder_layer(x, attention_mask)
+                #x = x + new_x
 
             if self.output_attentions:
                 all_attentions.append(attn)
@@ -507,7 +507,7 @@ class BartDecoder(PretrainedBartModel):
 
             layer_state = decoder_cached_states[idx] if decoder_cached_states is not None else None
 
-            new_x, layer_self_attn, layer_past = decoder_layer(
+            x, layer_self_attn, layer_past = decoder_layer(
                 x,
                 encoder_hidden_states,
                 encoder_attn_mask=encoder_padding_mask,
@@ -515,7 +515,7 @@ class BartDecoder(PretrainedBartModel):
                 layer_state=layer_state,
                 causal_mask=decoder_causal_mask,
             )
-            x  = x+ new_x
+            #x  = x+ new_x
 
             if use_cache:
                 next_decoder_cache.append(layer_past.copy())
