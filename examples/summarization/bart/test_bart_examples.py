@@ -92,9 +92,9 @@ class TestBartExamples(unittest.TestCase):
         args_d.update(
             data_dir=tmp_dir, model_type="bart", train_batch_size=2, eval_batch_size=2, n_gpu=0, output_dir=output_dir,
         )
-
-        args = argparse.Namespace(**args_d)
-        main(args)
+        main(argparse.Namespace(**args_d))
+        args_d.update({"do_train": False, "do_predict": True})
+        main(argparse.Namespace(**args_d))
 
     def test_bart_summarization_dataset(self):
         tmp_dir = Path(tempfile.gettempdir())
