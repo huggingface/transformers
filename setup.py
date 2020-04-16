@@ -96,7 +96,7 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.7.0rc6",
+        "tokenizers == 0.7.0rc7",
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
         # accessing files from S3 directly
