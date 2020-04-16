@@ -1,5 +1,5 @@
-import unittest
 import logging
+import unittest
 from collections import namedtuple
 from itertools import takewhile
 
@@ -20,6 +20,7 @@ from transformers.tokenization_distilbert import DistilBertTokenizerFast
 from transformers.tokenization_openai import OpenAIGPTTokenizerFast
 from transformers.tokenization_roberta import RobertaTokenizerFast
 from transformers.tokenization_transfo_xl import TransfoXLTokenizerFast
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -91,16 +92,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
 
     def assert_alignement_methods(self, tokenizer_r):
         words = ["Wonderful", "no", "inspiration", "example", "with", "subtoken"]
-        text = ' '.join(words)
+        text = " ".join(words)
         batch_size = 3
 
-        encoding = tokenizer_r.encode_plus(
-            text, add_special_tokens=False
-        )
+        encoding = tokenizer_r.encode_plus(text, add_special_tokens=False)
 
-        batch_encoding = tokenizer_r.batch_encode_plus(
-            [text] * batch_size, add_special_tokens=False
-        )
+        batch_encoding = tokenizer_r.batch_encode_plus([text] * batch_size, add_special_tokens=False)
         num_tokens = len(encoding["input_ids"])
 
         last_word_index = len(words) - 1

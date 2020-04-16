@@ -201,8 +201,10 @@ class BatchEncoding(UserDict):
         elif self._encodings is not None:
             return self._encodings[item]
         else:
-            raise KeyError("Indexing with integers (to access backend Encoding for a given batch index) "
-                           "is not available when using Python based tokenizers")
+            raise KeyError(
+                "Indexing with integers (to access backend Encoding for a given batch index) "
+                "is not available when using Python based tokenizers"
+            )
 
     def __getattr__(self, item: str):
         return self.data[item]
@@ -290,9 +292,9 @@ class BatchEncoding(UserDict):
             batch_index = 0
             token_index = batch_or_token_index
         if batch_index < 0:
-            batch_index = self._batch_size + batch_index 
+            batch_index = self._batch_size + batch_index
         if token_index < 0:
-            token_index = self._seq_len + token_index 
+            token_index = self._seq_len + token_index
         return self._encodings[batch_index].token_to_word(token_index)
 
     def word_to_tokens(self, batch_or_word_index: int, word_index: Optional[int] = None) -> TokenSpan:
@@ -340,14 +342,14 @@ class BatchEncoding(UserDict):
             batch_index = 0
             word_index = batch_or_word_index
         if batch_index < 0:
-            batch_index = self._batch_size + batch_index 
+            batch_index = self._batch_size + batch_index
         if word_index < 0:
-            word_index = self._seq_len + word_index 
+            word_index = self._seq_len + word_index
         return TokenSpan(*(self._encodings[batch_index].word_to_tokens(word_index)))
 
     def token_to_chars(self, batch_or_token_index: int, token_index: Optional[int] = None) -> CharSpan:
         """ Get the character span corresponding to an encoded token in a sequence of the batch.
-            
+
             Character spans are returned as a CharSpan NamedTuple with:
                 start: index of the first character in the original string associated to the token
                 end: index of the character following the last character in the original string associated to the token
@@ -508,6 +510,7 @@ class BatchEncoding(UserDict):
             batch_index = 0
             char_index = batch_or_char_index
         return self._encodings[batch_index].char_to_word(char_index)
+
 
 class SpecialTokensMixin:
     SPECIAL_TOKENS_ATTRIBUTES = [

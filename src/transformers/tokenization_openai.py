@@ -19,7 +19,6 @@ import json
 import logging
 import os
 import re
-from typing import List, Optional, Union
 
 from tokenizers import CharBPETokenizer
 
@@ -244,8 +243,6 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
         kwargs.setdefault("unk_token", unk_token)
         super().__init__(
-            CharBPETokenizer(vocab_file=vocab_file,
-                             merges_file=merges_file,
-                             unk_token=unk_token,
-                             lowercase=True), **kwargs
+            CharBPETokenizer(vocab_file=vocab_file, merges_file=merges_file, unk_token=unk_token, lowercase=True),
+            **kwargs,
         )

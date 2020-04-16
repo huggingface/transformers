@@ -294,7 +294,12 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         **kwargs
     ):
         super().__init__(
-            ByteLevelBPETokenizer(vocab_file=vocab_file, merges_file=merges_file, add_prefix_space=add_prefix_space, trim_offsets=trim_offsets),
+            ByteLevelBPETokenizer(
+                vocab_file=vocab_file,
+                merges_file=merges_file,
+                add_prefix_space=add_prefix_space,
+                trim_offsets=trim_offsets,
+            ),
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,

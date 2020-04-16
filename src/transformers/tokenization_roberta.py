@@ -279,9 +279,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         )
 
         self.backend_tokenizer._tokenizer.post_processor = RobertaProcessing(
-            sep=(sep_token, self.sep_token_id),
-            cls=(cls_token, self.cls_token_id),
-            trim_offsets=trim_offsets
+            sep=(sep_token, self.sep_token_id), cls=(cls_token, self.cls_token_id), trim_offsets=trim_offsets
         )
 
         self.backend_tokenizer.add_special_tokens([kwargs["mask_token"]])
