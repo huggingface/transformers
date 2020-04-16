@@ -19,7 +19,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class BartSystem(BaseTransformer):
+class SummarizationTrainer(BaseTransformer):
 
     mode = "language-modeling"
 
@@ -161,20 +161,20 @@ def main(args):
     if not args.output_dir:
         args.output_dir = os.path.join("./results", f"{args.task}_{args.model_type}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
-    model = BartSystem(args)
+    model = SummarizationTrainer(args)
     trainer = generic_train(model, args)
 
     # Optionally, predict on dev set and write to output_dir
     if args.do_predict:
         checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
-        BartSystem.load_from_checkpoint(checkpoints[-1])
+        SummarizationTrainer.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
-    parser = BartSystem.add_model_specific_args(parser, os.getcwd())
+    parser = SummarizationTrainer.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
     main(args)
