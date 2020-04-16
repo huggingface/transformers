@@ -27,6 +27,8 @@ Tips:
 - DistilBert doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just separate your segments with the separation token `tokenizer.sep_token` (or `[SEP]`)
 - DistilBert doesn't have options to select the input positions (`position_ids` input). This could be added if necessary though, just let's us know if you need this option.
 
+The original code can be found `here <https://github.com/huggingface/transformers/tree/master/examples/distillation>`_.
+
 
 DistilBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

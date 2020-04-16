@@ -27,6 +27,9 @@ export CURRENT_DIR=${PWD}
 export OUTPUT_DIR=${CURRENT_DIR}/${OUTPUT_DIR_NAME}
 mkdir -p $OUTPUT_DIR
 
+# Add parent directory to python path to access transformer_base.py
+export PYTHONPATH="../":"${PYTHONPATH}"
+
 python3 run_pl_ner.py --data_dir ./ \
 --model_type bert \
 --labels ./labels.txt \
@@ -34,7 +37,7 @@ python3 run_pl_ner.py --data_dir ./ \
 --output_dir $OUTPUT_DIR \
 --max_seq_length  $MAX_LENGTH \
 --num_train_epochs $NUM_EPOCHS \
---train_batch_size 32 \
+--train_batch_size $BATCH_SIZE \
 --seed $SEED \
 --do_train \
 --do_predict

@@ -26,6 +26,8 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json",
     "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",
     "bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
+    "bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
+    "mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
 }
 
 
@@ -39,10 +41,8 @@ class BartConfig(PretrainedConfig):
     def __init__(
         self,
         activation_dropout=0.0,
+        activation_function="gelu",
         vocab_size=50265,
-        bos_token_id=0,
-        pad_token_id=1,
-        eos_token_ids=[2],
         d_model=1024,
         encoder_ffn_dim=4096,
         encoder_layers=12,
@@ -57,9 +57,14 @@ class BartConfig(PretrainedConfig):
         max_position_embeddings=1024,
         init_std=0.02,
         classifier_dropout=0.0,
-        output_past=False,
         num_labels=3,
         is_encoder_decoder=True,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
+        normalize_before=False,
+        add_final_layer_norm=False,
+        scale_embedding=False,
         **common_kwargs
     ):
         r"""
@@ -70,10 +75,9 @@ class BartConfig(PretrainedConfig):
         """
         super().__init__(
             num_labels=num_labels,
-            output_past=output_past,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
-            eos_token_ids=eos_token_ids,
+            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             **common_kwargs,
         )
@@ -89,6 +93,12 @@ class BartConfig(PretrainedConfig):
         self.decoder_attention_heads = decoder_attention_heads
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
+        self.activation_function = activation_function
+        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+
+        # True for mbart, False otherwise
+        self.normalize_before = normalize_before  # combo of fairseq's encoder_ and decoder_normalize_before
+        self.add_final_layer_norm = add_final_layer_norm
 
         # 3 Types of Dropout
         self.attention_dropout = attention_dropout
@@ -99,9 +109,17 @@ class BartConfig(PretrainedConfig):
         self.classif_dropout = classifier_dropout
 
     @property
-    def num_attention_heads(self):
+    def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
 
     @property
-    def hidden_size(self):
+    def hidden_size(self) -> int:
         return self.d_model
+
+    def is_valid_mbart(self) -> bool:
+        """Is the configuration aligned with the MBART paper."""
+        if self.normalize_before and self.add_final_layer_norm and self.scale_embedding:
+            return True
+        if self.normalize_before or self.add_final_layer_norm or self.scale_embedding:
+            logger.info("This configuration is a mixture of MBART and BART settings")
+        return False

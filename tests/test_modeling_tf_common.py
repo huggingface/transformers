@@ -30,7 +30,7 @@ if is_tf_available():
     import tensorflow as tf
     import numpy as np
 
-    from transformers import tf_top_k_top_p_filtering
+    from transformers import tf_top_k_top_p_filtering, TFAdaptiveEmbedding
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
@@ -148,10 +148,12 @@ class TFModelTesterMixin:
             pt_model_class = getattr(transformers, pt_model_class_name)
 
             config.output_hidden_states = True
+
             tf_model = model_class(config)
             pt_model = pt_model_class(config)
 
             # Check we can load pt model in tf and vice-versa with model => model functions
+
             tf_model = transformers.load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=inputs_dict)
             pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
 
@@ -160,6 +162,10 @@ class TFModelTesterMixin:
             pt_inputs_dict = dict(
                 (name, torch.from_numpy(key.numpy()).to(torch.long)) for name, key in inputs_dict.items()
             )
+            # need to rename encoder-decoder "inputs" for PyTorch
+            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
+                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
             tfo = tf_model(inputs_dict, training=False)
@@ -199,6 +205,10 @@ class TFModelTesterMixin:
             pt_inputs_dict = dict(
                 (name, torch.from_numpy(key.numpy()).to(torch.long)) for name, key in inputs_dict.items()
             )
+            # need to rename encoder-decoder "inputs" for PyTorch
+            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
+                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+
             with torch.no_grad():
                 pto = pt_model(**pt_inputs_dict)
             tfo = tf_model(inputs_dict)
@@ -221,7 +231,7 @@ class TFModelTesterMixin:
         if self.is_encoder_decoder:
             input_ids = {
                 "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
-                "encoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="encoder_input_ids", dtype="int32"),
+                "inputs": tf.keras.Input(batch_shape=(2, 2000), name="inputs", dtype="int32"),
             }
         else:
             input_ids = tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32")
@@ -257,7 +267,7 @@ class TFModelTesterMixin:
             outputs_dict = model(inputs_dict)
 
             inputs_keywords = copy.deepcopy(inputs_dict)
-            input_ids = inputs_keywords.pop("input_ids" if not self.is_encoder_decoder else "decoder_input_ids", None,)
+            input_ids = inputs_keywords.pop("input_ids" if not self.is_encoder_decoder else "inputs", None,)
             outputs_keywords = model(input_ids, **inputs_keywords)
 
             output_dict = outputs_dict[0].numpy()
@@ -348,7 +358,7 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            assert isinstance(model.get_input_embeddings(), (tf.keras.layers.Layer, TFAdaptiveEmbedding))
             x = model.get_output_embeddings()
             assert x is None or isinstance(x, tf.keras.layers.Layer)
 
@@ -393,9 +403,9 @@ class TFModelTesterMixin:
             input_ids = inputs_dict["input_ids"]
             del inputs_dict["input_ids"]
         else:
-            encoder_input_ids = inputs_dict["encoder_input_ids"]
+            encoder_input_ids = inputs_dict["inputs"]
             decoder_input_ids = inputs_dict["decoder_input_ids"]
-            del inputs_dict["encoder_input_ids"]
+            del inputs_dict["inputs"]
             del inputs_dict["decoder_input_ids"]
 
         for model_class in self.all_model_classes:
@@ -405,59 +415,114 @@ class TFModelTesterMixin:
             if not self.is_encoder_decoder:
                 inputs_dict["inputs_embeds"] = self._get_embeds(wte, input_ids)
             else:
-                inputs_dict["encoder_inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
+                inputs_dict["inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
                 inputs_dict["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
 
             model(inputs_dict)
 
-    def test_lm_head_model_random_generate(self):
-
+    def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict.get(
-            "input_ids", None
-        )  # TODO (PVP): ugly workaround to make code work for t5 for the moment - has to changed when t5 is fixed.
+        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
+
+        # iterate over all generative models
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+
+            if config.bos_token_id is None:
+                # if bos token id is not defined mobel needs input_ids
+                with self.assertRaises(AssertionError):
+                    model.generate(do_sample=True, max_length=5)
+                # num_return_sequences = 1
+                self._check_generated_ids(model.generate(input_ids, do_sample=True))
+            else:
+                # num_return_sequences = 1
+                self._check_generated_ids(model.generate(do_sample=True, max_length=5))
+
+            with self.assertRaises(AssertionError):
+                # generating multiple sequences when no beam search generation
+                # is not allowed as it would always generate the same sequences
+                model.generate(input_ids, do_sample=False, num_return_sequences=2)
+
+            # num_return_sequences > 1, sample
+            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_return_sequences=2))
+
+            # check bad words tokens language generation
+            # create list of 1-seq bad token and list of 2-seq of bad tokens
+            bad_words_ids = [self._generate_random_bad_tokens(1, model), self._generate_random_bad_tokens(2, model)]
+            output_tokens = model.generate(
+                input_ids, do_sample=True, bad_words_ids=bad_words_ids, num_return_sequences=2
+            )
+            # only count generated tokens
+            generated_ids = output_tokens[:, input_ids.shape[-1] :]
+            self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
+
+    def test_lm_head_model_random_beam_search_generate(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
 
             if config.bos_token_id is None:
-                with self.assertRaises(AssertionError):
-                    model.generate(max_length=5)
-                # batch_size = 1
-                self._check_generated_tokens(model.generate(input_ids))
-                # batch_size = 1, num_beams > 1
-                self._check_generated_tokens(model.generate(input_ids, num_beams=3))
+                # if bos token id is not defined mobel needs input_ids, num_return_sequences = 1
+                self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2))
             else:
-                # batch_size = 1
-                self._check_generated_tokens(model.generate(max_length=5))
-                # batch_size = 1, num_beams > 1
-                self._check_generated_tokens(model.generate(max_length=5, num_beams=3))
-
-            with self.assertRaises(AssertionError):
-                # generating multiple sequences when greedy no beam generation
-                # is not allowed as it would always generate the same sequences
-                model.generate(input_ids, do_sample=False, num_return_sequences=2)
+                # num_return_sequences = 1
+                self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=2))
 
             with self.assertRaises(AssertionError):
                 # generating more sequences than having beams leads is not possible
                 model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 
-            # batch_size > 1, sample
-            self._check_generated_tokens(model.generate(input_ids, num_return_sequences=3))
-            # batch_size > 1, greedy
-            self._check_generated_tokens(model.generate(input_ids, do_sample=False))
+            # num_return_sequences > 1, sample
+            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2, num_return_sequences=2,))
+            # num_return_sequences > 1, greedy
+            self._check_generated_ids(model.generate(input_ids, do_sample=False, num_beams=2, num_return_sequences=2))
 
-            # batch_size > 1, num_beams > 1, sample
-            self._check_generated_tokens(model.generate(input_ids, num_beams=3, num_return_sequences=3,))
-            # batch_size > 1, num_beams > 1, greedy
-            self._check_generated_tokens(
-                model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3)
+            # check bad words tokens language generation
+            # create list of 1-seq bad token and list of 2-seq of bad tokens
+            bad_words_ids = [self._generate_random_bad_tokens(1, model), self._generate_random_bad_tokens(2, model)]
+            output_tokens = model.generate(
+                input_ids, do_sample=False, bad_words_ids=bad_words_ids, num_beams=2, num_return_sequences=2
             )
+            # only count generated tokens
+            generated_ids = output_tokens[:, input_ids.shape[-1] :]
+            self.assertFalse(self._check_match_tokens(generated_ids.numpy().tolist(), bad_words_ids))
 
-    def _check_generated_tokens(self, output_ids):
+    def _generate_random_bad_tokens(self, num_bad_tokens, model):
+        # special tokens cannot be bad tokens
+        special_tokens = []
+        if model.config.bos_token_id is not None:
+            special_tokens.append(model.config.bos_token_id)
+        if model.config.pad_token_id is not None:
+            special_tokens.append(model.config.pad_token_id)
+        if model.config.eos_token_id is not None:
+            special_tokens.append(model.config.eos_token_id)
+
+        # create random bad tokens that are not special tokens
+        bad_tokens = []
+        while len(bad_tokens) < num_bad_tokens:
+            token = tf.squeeze(ids_tensor((1, 1), self.model_tester.vocab_size), 0).numpy()[0]
+            if token not in special_tokens:
+                bad_tokens.append(token)
+        return bad_tokens
+
+    def _check_generated_ids(self, output_ids):
         for token_id in output_ids[0].numpy().tolist():
             self.assertGreaterEqual(token_id, 0)
             self.assertLess(token_id, self.model_tester.vocab_size)
+
+    def _check_match_tokens(self, generated_ids, bad_words_ids):
+        # for all bad word tokens
+        for bad_word_ids in bad_words_ids:
+            # for all slices in batch
+            for generated_ids_slice in generated_ids:
+                # for all word idx
+                for i in range(len(bad_word_ids), len(generated_ids_slice)):
+                    # if tokens match
+                    if generated_ids_slice[i - len(bad_word_ids) : i] == bad_word_ids:
+                        return True
+        return False
 
 
 def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):

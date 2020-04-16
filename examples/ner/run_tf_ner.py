@@ -13,16 +13,11 @@ from seqeval import metrics
 
 from transformers import (
     TF2_WEIGHTS_NAME,
-    BertConfig,
-    BertTokenizer,
-    DistilBertConfig,
-    DistilBertTokenizer,
+    TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+    AutoConfig,
+    AutoTokenizer,
     GradientAccumulator,
-    RobertaConfig,
-    RobertaTokenizer,
-    TFBertForTokenClassification,
-    TFDistilBertForTokenClassification,
-    TFRobertaForTokenClassification,
+    TFAutoModelForTokenClassification,
     create_optimizer,
 )
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
@@ -34,22 +29,17 @@ except ImportError:
     from fastprogress.fastprogress import master_bar, progress_bar
 
 
-ALL_MODELS = sum(
-    (tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, RobertaConfig, DistilBertConfig)), ()
-)
+MODEL_CONFIG_CLASSES = list(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())
+MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
-MODEL_CLASSES = {
-    "bert": (BertConfig, TFBertForTokenClassification, BertTokenizer),
-    "roberta": (RobertaConfig, TFRobertaForTokenClassification, RobertaTokenizer),
-    "distilbert": (DistilBertConfig, TFDistilBertForTokenClassification, DistilBertTokenizer),
-}
+ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in MODEL_CONFIG_CLASSES), (),)
 
 
 flags.DEFINE_string(
     "data_dir", None, "The input data dir. Should contain the .conll files (or other data files) " "for the task."
 )
 
-flags.DEFINE_string("model_type", None, "Model type selected in the list: " + ", ".join(MODEL_CLASSES.keys()))
+flags.DEFINE_string("model_type", None, "Model type selected in the list: " + ", ".join(MODEL_TYPES))
 
 flags.DEFINE_string(
     "model_name_or_path",
@@ -167,7 +157,9 @@ def train(
     writer = tf.summary.create_file_writer("/tmp/mylogs")
 
     with strategy.scope():
-        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(reduction=tf.keras.losses.Reduction.NONE)
+        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
         optimizer = create_optimizer(args["learning_rate"], num_train_steps, args["warmup_steps"])
 
         if args["fp16"]:
@@ -215,11 +207,9 @@ def train(
 
             with tf.GradientTape() as tape:
                 logits = model(train_features["input_ids"], **inputs)[0]
-                logits = tf.reshape(logits, (-1, len(labels) + 1))
-                active_loss = tf.reshape(train_features["input_mask"], (-1,))
-                active_logits = tf.boolean_mask(logits, active_loss)
-                train_labels = tf.reshape(train_labels, (-1,))
-                active_labels = tf.boolean_mask(train_labels, active_loss)
+                active_loss = tf.reshape(train_labels, (-1,)) != pad_token_label_id
+                active_logits = tf.boolean_mask(tf.reshape(logits, (-1, len(labels))), active_loss)
+                active_labels = tf.boolean_mask(tf.reshape(train_labels, (-1,)), active_loss)
                 cross_entropy = loss_fct(active_labels, active_logits)
                 loss = tf.reduce_sum(cross_entropy) * (1.0 / train_batch_size)
                 grads = tape.gradient(loss, model.trainable_variables)
@@ -339,11 +329,9 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
 
         with strategy.scope():
             logits = model(eval_features["input_ids"], **inputs)[0]
-            tmp_logits = tf.reshape(logits, (-1, len(labels) + 1))
-            active_loss = tf.reshape(eval_features["input_mask"], (-1,))
-            active_logits = tf.boolean_mask(tmp_logits, active_loss)
-            tmp_eval_labels = tf.reshape(eval_labels, (-1,))
-            active_labels = tf.boolean_mask(tmp_eval_labels, active_loss)
+            active_loss = tf.reshape(eval_labels, (-1,)) != pad_token_label_id
+            active_logits = tf.boolean_mask(tf.reshape(logits, (-1, len(labels))), active_loss)
+            active_labels = tf.boolean_mask(tf.reshape(eval_labels, (-1,)), active_loss)
             cross_entropy = loss_fct(active_labels, active_logits)
             loss += tf.reduce_sum(cross_entropy) * (1.0 / eval_batch_size)
 
@@ -446,8 +434,8 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, batch_s
             # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
             pad_on_left=bool(args["model_type"] in ["xlnet"]),
             # pad on the left for xlnet
-            pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-            pad_token_segment_id=4 if args["model_type"] in ["xlnet"] else 0,
+            pad_token=tokenizer.pad_token_id,
+            pad_token_segment_id=tokenizer.pad_token_type_id,
             pad_token_label_id=pad_token_label_id,
         )
         logging.info("Saving features into cached file %s", cached_features_file)
@@ -507,10 +495,9 @@ def main(_):
     )
 
     labels = get_labels(args["labels"])
-    num_labels = len(labels) + 1
-    pad_token_label_id = 0
-    config_class, model_class, tokenizer_class = MODEL_CLASSES[args["model_type"]]
-    config = config_class.from_pretrained(
+    num_labels = len(labels)
+    pad_token_label_id = -1
+    config = AutoConfig.from_pretrained(
         args["config_name"] if args["config_name"] else args["model_name_or_path"],
         num_labels=num_labels,
         cache_dir=args["cache_dir"] if args["cache_dir"] else None,
@@ -520,20 +507,19 @@ def main(_):
 
     # Training
     if args["do_train"]:
-        tokenizer = tokenizer_class.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
             args["tokenizer_name"] if args["tokenizer_name"] else args["model_name_or_path"],
             do_lower_case=args["do_lower_case"],
             cache_dir=args["cache_dir"] if args["cache_dir"] else None,
         )
 
         with strategy.scope():
-            model = model_class.from_pretrained(
+            model = TFAutoModelForTokenClassification.from_pretrained(
                 args["model_name_or_path"],
                 from_pt=bool(".bin" in args["model_name_or_path"]),
                 config=config,
                 cache_dir=args["cache_dir"] if args["cache_dir"] else None,
             )
-            model.layers[-1].activation = tf.keras.activations.softmax
 
         train_batch_size = args["per_device_train_batch_size"] * args["n_device"]
         train_dataset, num_train_examples = load_and_cache_examples(
@@ -562,7 +548,7 @@ def main(_):
 
     # Evaluation
     if args["do_eval"]:
-        tokenizer = tokenizer_class.from_pretrained(args["output_dir"], do_lower_case=args["do_lower_case"])
+        tokenizer = AutoTokenizer.from_pretrained(args["output_dir"], do_lower_case=args["do_lower_case"])
         checkpoints = []
         results = []
 
@@ -584,7 +570,7 @@ def main(_):
             global_step = checkpoint.split("-")[-1] if re.match(".*checkpoint-[0-9]", checkpoint) else "final"
 
             with strategy.scope():
-                model = model_class.from_pretrained(checkpoint)
+                model = TFAutoModelForTokenClassification.from_pretrained(checkpoint)
 
             y_true, y_pred, eval_loss = evaluate(
                 args, strategy, model, tokenizer, labels, pad_token_label_id, mode="dev"
@@ -611,8 +597,8 @@ def main(_):
                         writer.write("\n")
 
     if args["do_predict"]:
-        tokenizer = tokenizer_class.from_pretrained(args["output_dir"], do_lower_case=args["do_lower_case"])
-        model = model_class.from_pretrained(args["output_dir"])
+        tokenizer = AutoTokenizer.from_pretrained(args["output_dir"], do_lower_case=args["do_lower_case"])
+        model = TFAutoModelForTokenClassification.from_pretrained(args["output_dir"])
         eval_batch_size = args["per_device_eval_batch_size"] * args["n_device"]
         predict_dataset, _ = load_and_cache_examples(
             args, tokenizer, labels, pad_token_label_id, eval_batch_size, mode="test"

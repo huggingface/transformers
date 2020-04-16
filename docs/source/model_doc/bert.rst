@@ -35,6 +35,8 @@ Tips:
   prediction rather than a token prediction. However, averaging over the sequence may yield better results than using
   the [CLS] token.
 
+The original code can be found `here <https://github.com/google-research/bert>`_.
+
 BertConfig
 ~~~~~~~~~~~~~~~~~~~~~
 

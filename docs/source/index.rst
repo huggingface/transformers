@@ -103,3 +103,6 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     model_doc/xlmroberta
     model_doc/flaubert
     model_doc/bart
+    model_doc/t5
+    model_doc/electra
+    model_doc/dialogpt

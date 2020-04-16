@@ -592,8 +592,6 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         self,
         vocab_file,
         do_lower_case=True,
-        do_basic_tokenize=True,
-        never_split=None,
         unk_token="[UNK]",
         sep_token="[SEP]",
         pad_token="[PAD]",
@@ -601,7 +599,6 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         mask_token="[MASK]",
         clean_text=True,
         tokenize_chinese_chars=True,
-        add_special_tokens=True,
         strip_accents=True,
         wordpieces_prefix="##",
         **kwargs
@@ -609,7 +606,6 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         super().__init__(
             BertWordPieceTokenizer(
                 vocab_file=vocab_file,
-                add_special_tokens=add_special_tokens,
                 unk_token=unk_token,
                 sep_token=sep_token,
                 cls_token=cls_token,

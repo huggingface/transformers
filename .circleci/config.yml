@@ -3,7 +3,7 @@ jobs:
     run_tests_torch_and_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.6
         environment:
             OMP_NUM_THREADS: 1
         resource_class: xlarge
@@ -46,7 +46,7 @@ jobs:
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.6
         environment:
             RUN_CUSTOM_TOKENIZERS: yes
         steps:
@@ -56,7 +56,7 @@ jobs:
     run_examples_torch:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.6
         environment:
             OMP_NUM_THREADS: 1
         resource_class: xlarge
@@ -69,7 +69,7 @@ jobs:
     deploy_doc:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.6
         steps:
             - add_ssh_keys:
                 fingerprints:
@@ -94,7 +94,7 @@ jobs:
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.6
         resource_class: small
         parallelism: 1
         steps:

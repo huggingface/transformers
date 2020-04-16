@@ -59,7 +59,7 @@ class PretrainedConfig(object):
         # Attributes with defaults
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
-        self.output_past = kwargs.pop("output_past", True)  # Not used by all models
+        self.use_cache = kwargs.pop("use_cache", True)  # Not used by all models
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.pruned_heads = kwargs.pop("pruned_heads", {})
@@ -78,11 +78,9 @@ class PretrainedConfig(object):
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
-        self.bos_token_id = kwargs.pop("bos_token_id", None)
-        self.pad_token_id = kwargs.pop("pad_token_id", None)
-        self.eos_token_ids = kwargs.pop("eos_token_ids", None)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
+        self.bad_words_ids = kwargs.pop("bad_words_ids", None)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
 
         # Fine-tuning task arguments
@@ -93,6 +91,19 @@ class PretrainedConfig(object):
         self.id2label = dict((int(key), value) for key, value in self.id2label.items())
         self.label2id = kwargs.pop("label2id", dict(zip(self.id2label.values(), self.id2label.keys())))
         self.label2id = dict((key, int(value)) for key, value in self.label2id.items())
+
+        # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
+        self.prefix = kwargs.pop("prefix", None)
+        self.bos_token_id = kwargs.pop("bos_token_id", None)
+        self.pad_token_id = kwargs.pop("pad_token_id", None)
+        self.eos_token_id = kwargs.pop("eos_token_id", None)
+        self.decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
+
+        # task specific arguments
+        self.task_specific_params = kwargs.pop("task_specific_params", None)
+
+        # TPU arguments
+        self.xla_device = kwargs.pop("xla_device", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -251,14 +262,10 @@ class PretrainedConfig(object):
             else:
                 msg = (
                     "Can't load '{}'. Make sure that:\n\n"
-                    "- '{}' is either a correct model identifier of a community model from 'https://huggingface.co/models' which has a '{}' file\n\n"
-                    "- or '{}' is a model name in {}\n\n"
-                    "- or '{}' is the correct path to a directory containing a '{}' file".format(
+                    "- '{}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    "- or '{}' is the correct path to a directory containing a '{}' file\n\n".format(
                         pretrained_model_name_or_path,
                         pretrained_model_name_or_path,
-                        CONFIG_NAME,
-                        pretrained_model_name_or_path,
-                        list(pretrained_config_archive_map.keys()),
                         pretrained_model_name_or_path,
                         CONFIG_NAME,
                     )
@@ -377,3 +384,14 @@ class PretrainedConfig(object):
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string())
+
+    def update(self, config_dict: Dict):
+        """
+        Updates attributes of this class
+        with attributes from `config_dict`.
+
+        Args:
+            :obj:`Dict[str, any]`: Dictionary of attributes that shall be updated for this class.
+        """
+        for key, value in config_dict.items():
+            setattr(self, key, value)
