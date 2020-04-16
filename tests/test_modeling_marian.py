@@ -74,6 +74,7 @@ class IntegrationTests(unittest.TestCase):
         """Should produce a good translation."""
         src, tgt = ["What's for dinner?", "life"], ["Was gibt es zum Abendessen", "Leben"]
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src)
-        result_ids = self.model.generate(**model_inputs, num_beams=6, decoder_start_token_id=self.eos_token_id)
-        predicted_de_text = [self.tokenizer.decode(r) for r in result_ids][0]
+        result_ids = self.model.generate(**model_inputs, num_beams=6, decoder_start_token_id=self.eos_token_id, no_repeat_ngram_size=3)
+        print(result_ids)
+        predicted_de_text = [self.tokenizer.decode(r) for r in result_ids]
         self.assertListEqual(predicted_de_text, tgt)

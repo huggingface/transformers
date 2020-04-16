@@ -304,7 +304,8 @@ class BartEncoder(nn.Module):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 attn = None
             else:
-                x, attn = encoder_layer(x, attention_mask)
+                new_x, attn = encoder_layer(x, attention_mask)
+                x = x + new_x
 
             if self.output_attentions:
                 all_attentions.append(attn)
@@ -480,6 +481,8 @@ class BartDecoder(PretrainedBartModel):
             input_ids = input_ids[:, -1:]
             positions = positions[:, -1:]  # happens after we embed them
             assert input_ids.ne(self.padding_idx).any()
+            print(f'input_ids after slice: {input_ids.shape}')
+            #print(positions)
 
         x = self.embed_tokens(input_ids) * self.embed_scale
         x += positions
@@ -504,7 +507,7 @@ class BartDecoder(PretrainedBartModel):
 
             layer_state = decoder_cached_states[idx] if decoder_cached_states is not None else None
 
-            x, layer_self_attn, layer_past = decoder_layer(
+            new_x, layer_self_attn, layer_past = decoder_layer(
                 x,
                 encoder_hidden_states,
                 encoder_attn_mask=encoder_padding_mask,
@@ -512,6 +515,7 @@ class BartDecoder(PretrainedBartModel):
                 layer_state=layer_state,
                 causal_mask=decoder_causal_mask,
             )
+            x  = x+ new_x
 
             if use_cache:
                 next_decoder_cache.append(layer_past.copy())
@@ -933,7 +937,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             use_cache=use_cache,
         )
         lm_logits = self.output_layer(outputs[0])
-        outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
+        outputs = (lm_logits,) + outputs[1:]  # Add cache, hidden states and attention if they are here
         if lm_labels is not None:
             loss_fct = nn.CrossEntropyLoss()
             # TODO(SS): do we need to ignore pad tokens in lm_labels?
@@ -961,7 +965,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             "decoder_cached_states": decoder_cached_states,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
+            "use_cache": True,  # change this to avoid caching (presumably for debugging)
         }
 
     def prepare_scores_for_generation(self, scores, cur_len, max_length):
