@@ -24,12 +24,7 @@ from trax.shapes import ShapeDtype as trax_ShapeDtype
 import gin
 
 import jax
-from trax.layers.research.efficient_attention_v2 import (
-    LSHSelfAttention as TraxLSHSelfAttention,
-    SelfAttention as TraxSelfAttention,
-)
 from trax.models.reformer.reformer import DecoderBlock as TraxLSHAttentionBlock
-from trax.models.reformer.reformer import ReformerLM as TraxReformer
 from trax import layers as tl
 
 from transformers import (
@@ -84,60 +79,6 @@ class TraxUtils(object):
             input_signature = trax_ShapeDtype(shape, dtype)
         return input_signature
 
-    def get_local_layer(
-        self,
-        config,
-        use_reference_code=True,
-        mode="eval",
-        path_to_save_weights="/home/patrick/hugging_face/experiments/reformer/intermediate_weights",
-        **kwargs
-    ):
-
-        with trax_math.use_backend("jax"):
-            layer = TraxSelfAttention(
-                n_heads=config.num_attention_heads,
-                d_qk=config.attention_head_size,
-                d_v=config.attention_head_size,
-                chunk_len=config.chunk_length,
-                n_chunks_before=config.num_chunks_before,
-                n_chunks_after=config.num_chunks_after,
-                attention_dropout=config.attention_probs_dropout_prob,
-                output_dropout=config.hidden_dropout_prob,
-                causal=config.is_decoder,
-                use_reference_code=use_reference_code,
-                mode=mode,
-            )
-            return layer
-
-    def get_lsh_layer(
-        self,
-        config,
-        use_reference_code=True,
-        mode="eval",
-        path_to_save_weights="/home/patrick/hugging_face/experiments/reformer/intermediate_weights",
-        **kwargs
-    ):
-
-        with trax_math.use_backend("jax"):
-            layer = TraxLSHSelfAttention(
-                n_heads=config.num_attention_heads,
-                d_qk=config.attention_head_size,
-                d_v=config.attention_head_size,
-                chunk_len=config.chunk_length,
-                n_chunks_before=config.num_chunks_before,
-                n_chunks_after=config.num_chunks_after,
-                n_hashes=config.num_hashes,
-                n_buckets=config.num_buckets,
-                attention_dropout=config.attention_probs_dropout_prob,
-                output_dropout=config.hidden_dropout_prob,
-                hash_seed=config.seed,
-                causal=config.is_decoder,
-                use_reference_code=use_reference_code,
-                mode=mode,
-                path_to_save_weights=path_to_save_weights,
-            )
-        return layer
-
     def forward_layer(
         self, np_input_data, layer, input_signature=None, random_number_generator=None,
     ):
@@ -158,6 +99,39 @@ class TraxUtils(object):
 
         return output, weights, state
 
+    def forward_model(
+        self,
+        np_input_data,
+        model,
+        input_signature=None,
+        random_number_generator=None,
+        weights=None,
+        state=None,
+        only_init=False,
+    ):
+        with trax_math.use_backend("jax"):
+            input_data = self.convert_to_jax_array(np_input_data)
+            input_data = (input_data,) * 2
+
+            if input_signature is None:
+                input_signature = self.get_input_signature(dtype=trax_math.numpy.int32)
+                input_signature = (input_signature, input_signature)
+
+            if weights is None and state is None:
+                weights, state = model.init(input_signature)
+
+            if only_init is True:
+                return
+
+            if random_number_generator is None:
+                random_number_generator = model.new_rngs(1)[0]
+
+            output = model(
+                input_data, weights=weights, state=state, rng=random_number_generator
+            )
+
+        return output, weights, state
+
     def get_block(
         self,
         config,
@@ -167,7 +141,7 @@ class TraxUtils(object):
         mode="eval",
         path_to_save_weights=PATH_TO_SAVE_WEIGHTS,
     ):
-
+        # only works on old master branch
         with trax_math.use_backend("jax"):
             with jax.disable_jit():
                 list_of_layers = TraxLSHAttentionBlock(
@@ -220,95 +194,333 @@ class TraxUtils(object):
 
         return output, weights, state
 
-    def get_model(
-        self,
-        config,
-        use_reference_code=True,
-        share_qk=False,
-        ff_use_sru=0,
-        mode="eval",
-        num_chunks=0,
-        n_buckets=None,
-        chunk_size_feed_forward=None,
-        path_to_save_weights=PATH_TO_SAVE_WEIGHTS,
-    ):
-        n_buckets = n_buckets if n_buckets is not None else config.num_buckets
-        chunk_size_feed_forward = (
-            chunk_size_feed_forward
-            if chunk_size_feed_forward
-            else config.chunk_size_feed_forward
-        )
-        with trax_math.use_backend("jax"):
-            with jax.disable_jit():
-                model = TraxReformer(
-                    vocab_size=config.vocab_size,
-                    d_model=config.hidden_size,
-                    d_ff=config.feed_forward_size,
-                    d_attention_key=config.attention_head_size,
-                    d_attention_value=config.attention_head_size,
-                    n_layers=config.num_hidden_layers,
-                    n_heads=config.num_attention_heads,
-                    dropout=config.hidden_dropout_prob,
-                    max_len=config.max_position_embeddings,
-                    n_chunks=num_chunks,
-                    n_attention_chunks=None,
-                    attention_type=tl.LSHSelfAttention,
-                    share_qk=share_qk,
-                    axial_pos_shape=config.axial_pos_shape,
-                    d_axial_pos_embs=config.axial_pos_embds_dim,
-                    ff_activation=tl.Gelu,
-                    ff_use_sru=ff_use_sru,
-                    ff_chunk_size=chunk_size_feed_forward,
-                    mode=mode,
-                    causal=config.is_decoder,
-                    chunk_len=config.chunk_length,
-                    n_chunks_before=config.num_chunks_before,
-                    n_chunks_after=config.num_chunks_after,
-                    n_hashes=config.num_hashes,
-                    n_buckets=n_buckets,
-                    use_reference_code=use_reference_code,
-                    hash_seed=config.seed,
-                    path_to_save_weights=path_to_save_weights,
-                )
-
-                return model
-
-    def forward_model(
-        self,
-        np_input_data,
-        model,
-        input_signature=None,
-        random_number_generator=None,
-        weights=None,
-        state=None,
-        only_init=False,
-    ):
-        with trax_math.use_backend("jax"):
-            input_data = self.convert_to_jax_array(np_input_data)
-            input_data = (input_data,) * 2
-
-            if input_signature is None:
-                input_signature = self.get_input_signature(dtype=trax_math.numpy.int32)
-                input_signature = (input_signature, input_signature)
-
-            if weights is None and state is None:
-                weights, state = model.init(input_signature)
-
-            if only_init is True:
-                return
-
-            if random_number_generator is None:
-                random_number_generator = model.new_rngs(1)[0]
-
-            output = model(
-                input_data, weights=weights, state=state, rng=random_number_generator
-            )
-
-        return output, weights, state
-
 
 @require_torch
 class ReformerIntegrationTests(unittest.TestCase):
+
+    def test_lsh_layer(self):
+        config = ReformerConfig()
+        shape = (2, 14, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        np_input = np.random.rand(*shape)
+
+        trax_utils = TraxUtils(shape)
+        trax_layer = self.load_lsh_layer(config)
+        trax_output, trax_weights, trax_state = trax_utils.forward_layer(
+            np_input, layer=trax_layer
+        )
+
+        hf_input = torch.tensor(np_input, dtype=torch.float)
+        config.attn_type = "lsh"
+        hf_layer = ReformerAttention(config)
+        self._set_layer_weights_in_torch_lsh(trax_weights, hf_layer, config.hidden_size)
+        hf_layer.eval()
+
+        hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
+        hf_output = hf_layer.output(hf_attention_all_heads, torch.zeros_like(hf_input))
+
+        trax_torch_output = torch.tensor(np.asarray(trax_output))
+        self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
+
+    def test_local_layer(self):
+        config = ReformerConfig()
+        shape = (2, 14, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        np_input = np.random.rand(*shape)
+
+        trax_utils = TraxUtils(shape)
+        trax_layer = self.load_local_layer(config)
+        trax_output, trax_weights, trax_state = trax_utils.forward_layer(
+            np_input, layer=trax_layer
+        )
+
+        hf_input = torch.tensor(np_input, dtype=torch.float)
+        config.attn_type = "local"
+        hf_layer = ReformerAttention(config)
+        self._set_layer_weights_in_torch_local(
+            trax_weights, hf_layer, config.hidden_size
+        )
+        hf_layer.eval()
+
+        hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
+        hf_output = hf_layer.output(hf_attention_all_heads, torch.zeros_like(hf_input))
+
+        trax_torch_output = torch.tensor(np.asarray(trax_output))
+        self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
+
+    def test_lsh_reformer_lm_model(self):
+        config = ReformerConfig()
+
+        shape = (2, 14)  # Batch x SeqLen x ModelDimPerHead
+        np_input = np.random.randint(0, config.vocab_size, size=shape)
+        np_zeros = np.zeros((shape[0], 1), dtype=np.int)
+
+        trax_utils = TraxUtils(shape)
+        trax_model = self.load_lsh_reformer_lm_model(config)
+        trax_output, trax_weights, trax_state = trax_utils.forward_model(
+            np_input, model=trax_model
+        )
+        trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
+
+        hf_input = torch.cat(
+            [torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1
+        )
+        config.attn_type = "lsh"
+        hf_model = ReformerModelWithLMHead(config)
+        self._set_model_weights_in_torch(trax_weights, hf_model, config.hidden_size)
+        hf_model.eval()
+
+        hf_output = hf_model(hf_input)
+        log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
+
+        self.assertTrue(
+            torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3)
+        )
+
+    def test_pretrained_crime_and_punishment_lm_model(self):
+        hf_model = ReformerModelWithLMHead.from_pretrained(
+            "patrickvonplaten/reformer-crime-and-punish"
+        )
+        config = hf_model.config
+
+        trax_model_path = (
+            "/home/patrick/hugging_face/models/trained_reformer_colab/model.pkl"
+        )
+
+        shape = (1, 192)
+        np_input = np.random.randint(0, config.vocab_size, size=shape)
+        np_zeros = np.zeros((shape[0], 1), dtype=np.int)
+
+        trax_utils = TraxUtils(shape)
+        trax_input = trax_utils.convert_to_jax_array(np_input)
+        input_signature = trax_utils.get_input_signature(dtype=np.int32)
+
+        trax_model = self.load_crime_and_punishment_model(
+            trax_model_path, input_signature
+        )
+        trax_output = trax_model(trax_input)
+        trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
+
+        hf_input = torch.cat(
+            [torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1
+        )
+        hf_output = hf_model(hf_input)
+        log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
+
+        self.assertTrue(
+            torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3)
+        )
+
+    def load_lsh_layer(self, config, mode="eval"):
+        gin_config = """
+            import trax.layers
+
+            # Parameters for LSHSelfAttention:
+            # ==============================================================================
+            LSHSelfAttention.n_heads={}
+            LSHSelfAttention.d_qk={}
+            LSHSelfAttention.d_v={}
+            LSHSelfAttention.chunk_len = {}
+            LSHSelfAttention.n_chunks_before = {}
+            LSHSelfAttention.n_chunks_after = {}
+            LSHSelfAttention.n_hashes = {}
+            LSHSelfAttention.n_buckets = {}
+            LSHSelfAttention.attention_dropout = {}
+            LSHSelfAttention.output_dropout = {}
+            LSHSelfAttention.lsh_seed = {}
+            LSHSelfAttention.causal= {}
+            """.format(
+            config.num_attention_heads,
+            config.attention_head_size,
+            config.attention_head_size,
+            config.chunk_length,
+            config.num_chunks_before,
+            config.num_chunks_after,
+            config.num_hashes,
+            config.num_buckets,
+            config.attention_probs_dropout_prob,
+            config.hidden_dropout_prob,
+            config.seed,
+            config.is_decoder,
+        )
+        gin.parse_config(gin_config)
+        layer = trax.layers.LSHSelfAttention(mode=mode)
+        return layer
+
+    def load_local_layer(self, config, mode="eval"):
+        gin_config = """
+            import trax.layers
+
+            # Parameters for SelfAttention:
+            # ==============================================================================
+            SelfAttention.n_heads={}
+            SelfAttention.d_qk={}
+            SelfAttention.d_v={}
+            SelfAttention.chunk_len = {}
+            SelfAttention.n_chunks_before = {}
+            SelfAttention.n_chunks_after = {}
+            SelfAttention.attention_dropout = {}
+            SelfAttention.output_dropout = {}
+            SelfAttention.causal= {}
+            """.format(
+            config.num_attention_heads,
+            config.attention_head_size,
+            config.attention_head_size,
+            config.chunk_length,
+            config.num_chunks_before,
+            config.num_chunks_after,
+            config.attention_probs_dropout_prob,
+            config.hidden_dropout_prob,
+            config.is_decoder,
+        )
+        gin.parse_config(gin_config)
+        layer = trax.layers.SelfAttention(mode=mode)
+        return layer
+
+    def load_lsh_reformer_lm_model(self, config, mode="eval"):
+        gin_config = """
+            import trax.layers
+            import trax.models
+
+            # Parameters for LSHSelfAttention:
+            # ==============================================================================
+            LSHSelfAttention.chunk_len = {}
+            LSHSelfAttention.n_chunks_before = {}
+            LSHSelfAttention.n_chunks_after = {}
+            LSHSelfAttention.n_hashes = {}
+            LSHSelfAttention.n_buckets = {}
+            LSHSelfAttention.lsh_seed = {}
+            LSHSelfAttention.causal= {}
+
+            # Parameters for ReformerLM:
+            # ==============================================================================
+            ReformerLM.vocab_size = {}
+            ReformerLM.d_model = {}
+            ReformerLM.d_ff = {}
+            ReformerLM.d_attention_key = {}
+            ReformerLM.d_attention_value = {}
+            ReformerLM.n_layers = {}
+            ReformerLM.n_heads = {}
+            ReformerLM.max_len = {}
+            ReformerLM.axial_pos_shape = {}
+            ReformerLM.d_axial_pos_embs = {}
+            ReformerLM.ff_chunk_size = {}
+
+            ReformerLM.n_chunks = 0
+            ReformerLM.n_attention_chunks = None
+            ReformerLM.share_qk = False
+            ReformerLM.ff_use_sru = 0
+            ReformerLM.attention_type = @trax.layers.LSHSelfAttention
+            ReformerLM.ff_activation = @trax.layers.Gelu
+            """.format(
+            config.chunk_length,
+            config.num_chunks_before,
+            config.num_chunks_after,
+            config.num_hashes,
+            config.num_buckets,
+            config.seed,
+            config.is_decoder,
+            config.vocab_size,
+            config.hidden_size,
+            config.feed_forward_size,
+            config.attention_head_size,
+            config.attention_head_size,
+            config.num_hidden_layers,
+            config.num_attention_heads,
+            config.max_position_embeddings,
+            config.axial_pos_shape,
+            config.axial_pos_embds_dim,
+            config.chunk_size_feed_forward,
+        )
+        gin.parse_config(gin_config)
+        model = trax.models.ReformerLM(mode=mode)
+        return model
+
+    def load_crime_and_punishment_model(self, trax_model_path, input_signature, mode="predict"):
+        gin.parse_config(
+            """
+            import trax.layers
+            import trax.models
+            import trax.optimizers
+            import trax.supervised.inputs
+            import trax.supervised.trainer_lib
+
+            # Parameters that will vary between experiments:
+            # ==============================================================================
+            train.model = @trax.models.ReformerLM
+            # Our model will have 6 layers, alternating between the LSH attention proposed
+            # in the Reformer paper and local attention within a certain context window.
+            n_layers = 6
+            attn_type = [
+              @SelfAttention,
+              @LSHSelfAttention,
+              @SelfAttention,
+              @LSHSelfAttention,
+              @SelfAttention,
+              @LSHSelfAttention,
+              ]
+            share_qk = False  # LSH attention ignores this flag and always shares q & k
+            n_heads = 2
+            attn_kv = 64
+            dropout = 0.05
+            n_tokens = 524288
+
+            # Parameters for MultifactorSchedule:
+            # ==============================================================================
+            MultifactorSchedule.constant = 0.01
+            MultifactorSchedule.factors = 'constant * linear_warmup * cosine_decay'
+            MultifactorSchedule.warmup_steps = 100
+            MultifactorSchedule.steps_per_cycle = 900
+
+            # Parameters for Adam:
+            # ==============================================================================
+            Adam.weight_decay_rate=0.0
+            Adam.b1 = 0.86
+            Adam.b2 = 0.92
+            Adam.eps = 1e-9
+
+            # Parameters for SelfAttention:
+            # ==============================================================================
+            SelfAttention.attention_dropout = 0.05
+            SelfAttention.chunk_len = 64
+            SelfAttention.n_chunks_before = 1
+            SelfAttention.n_parallel_heads = 1
+
+            # Parameters for LSHSelfAttention:
+            # ==============================================================================
+            LSHSelfAttention.attention_dropout = 0.0
+            LSHSelfAttention.chunk_len = 64
+            LSHSelfAttention.n_buckets = [64, 128]
+            LSHSelfAttention.n_chunks_after = 0
+            LSHSelfAttention.n_chunks_before = 1
+            LSHSelfAttention.n_hashes = 1
+            LSHSelfAttention.n_parallel_heads = 1
+            LSHSelfAttention.predict_drop_len = 128
+            LSHSelfAttention.predict_mem_len = 1024
+            LSHSelfAttention.lsh_seed = 0
+
+            # Parameters for ReformerLM:
+            # ==============================================================================
+            ReformerLM.attention_type = %attn_type
+            ReformerLM.d_attention_key = %attn_kv
+            ReformerLM.d_attention_value = %attn_kv
+            ReformerLM.d_model = 256
+            ReformerLM.d_ff = 512
+            ReformerLM.dropout = %dropout
+            ReformerLM.ff_activation = @trax.layers.Relu
+            ReformerLM.max_len = %n_tokens
+            ReformerLM.mode = 'train'
+            ReformerLM.n_heads = %n_heads
+            ReformerLM.n_layers = %n_layers
+            ReformerLM.vocab_size = 320
+            ReformerLM.share_qk = %share_qk
+            ReformerLM.axial_pos_shape = (512, 1024)
+            ReformerLM.d_axial_pos_embs= (64, 192)
+            """
+        )
+        trax_model = trax.models.ReformerLM(mode=mode)
+        trax_model.init(input_signature)
+        trax_model.init_from_file(trax_model_path, weights_only=True)
+        return trax_model
+
     def _set_param(self, torch_layer, weight, bias=None):
         with torch.no_grad():
             assert (
@@ -471,54 +683,8 @@ class ReformerIntegrationTests(unittest.TestCase):
 
         pass
 
-    def test_lsh_layer(self):
-        config = ReformerConfig()
-        shape = (2, 14, config.hidden_size)  # Batch x SeqLen x hiddenSize
-        np_input = np.random.rand(*shape)
-
-        trax_utils = TraxUtils(shape)
-        trax_layer = trax_utils.get_lsh_layer(config)
-        trax_output, trax_weights, trax_state = trax_utils.forward_layer(
-            np_input, layer=trax_layer
-        )
-
-        hf_input = torch.tensor(np_input, dtype=torch.float)
-        hf_layer = ReformerAttention(config)
-        self._set_layer_weights_in_torch_lsh(trax_weights, hf_layer, config.hidden_size)
-        hf_layer.eval()
-
-        hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
-        hf_output = hf_layer.output(hf_attention_all_heads, torch.zeros_like(hf_input))
-
-        trax_torch_output = torch.tensor(np.asarray(trax_output))
-        self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
-
-    def test_local_layer(self):
-        config = ReformerConfig()
-        shape = (2, 14, config.hidden_size)  # Batch x SeqLen x hiddenSize
-        np_input = np.random.rand(*shape)
-
-        trax_utils = TraxUtils(shape)
-        trax_layer = trax_utils.get_local_layer(config)
-        trax_output, trax_weights, trax_state = trax_utils.forward_layer(
-            np_input, layer=trax_layer
-        )
-
-        hf_input = torch.tensor(np_input, dtype=torch.float)
-        config.attn_type = "local"
-        hf_layer = ReformerAttention(config)
-        self._set_layer_weights_in_torch_local(
-            trax_weights, hf_layer, config.hidden_size
-        )
-        hf_layer.eval()
-
-        hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
-        hf_output = hf_layer.output(hf_attention_all_heads, torch.zeros_like(hf_input))
-
-        trax_torch_output = torch.tensor(np.asarray(trax_output))
-        self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
-
     def test_lsh_block(self):
+        # depreciated
         config = ReformerConfig()
 
         shape = (2, 7, config.hidden_size)  # Batch x SeqLen x ModelDimPerHead
@@ -541,154 +707,3 @@ class ReformerIntegrationTests(unittest.TestCase):
 
         self.assertTrue(torch.allclose(hf_output_1, trax_torch_output_1, atol=1e-3))
         self.assertTrue(torch.allclose(hf_output_2, trax_torch_output_2, atol=1e-3))
-
-    def test_reformer_lm_model(self):
-        config = ReformerConfig()
-
-        shape = (2, 14)  # Batch x SeqLen x ModelDimPerHead
-        np_input = np.random.randint(0, config.vocab_size, size=shape)
-        np_zeros = np.zeros((shape[0], 1), dtype=np.int)
-
-        trax_utils = TraxUtils(shape)
-        trax_model = trax_utils.get_model(config)
-        trax_output, trax_weights, trax_state = trax_utils.forward_model(
-            np_input, model=trax_model
-        )
-        trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
-
-        hf_input = torch.cat(
-            [torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1
-        )
-        hf_model = ReformerModelWithLMHead(config)
-        self._set_model_weights_in_torch(trax_weights, hf_model, config.hidden_size)
-        hf_model.eval()
-
-        hf_output = hf_model(hf_input)
-        log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
-
-        self.assertTrue(
-            torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3)
-        )
-
-    def test_pretrained_crime_and_punishment_lm_model(self):
-        hf_model = ReformerModelWithLMHead.from_pretrained(
-            "patrickvonplaten/reformer-crime-and-punish"
-        )
-        config = hf_model.config
-
-        trax_model_path = (
-            "/home/patrick/hugging_face/models/trained_reformer_colab/model.pkl"
-        )
-
-        shape = (3, 1024)
-        np_input = np.random.randint(0, config.vocab_size, size=shape)
-        np_zeros = np.zeros((shape[0], 1), dtype=np.int)
-
-        trax_utils = TraxUtils(shape)
-        with trax_math.use_backend("jax"):
-            trax_input = trax_utils.convert_to_jax_array(np_input)
-            trax_input = (trax_input,) * 2
-
-            input_signature = trax_utils.get_input_signature(dtype=np.int32)
-#            input_signature = (input_signature, input_signature)
-
-            trax_model = self.load_model(trax_model_path, input_signature)
-
-            trax_output = trax_model(np_input)
-        trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
-
-        hf_input = torch.cat(
-            [torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1
-        )
-        hf_output = hf_model(hf_input)
-        log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
-
-        self.assertTrue(
-            torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3)
-        )
-
-    def load_model(self, trax_model_path, input_signature):
-        gin.parse_config(
-            """
-            import trax.layers
-            import trax.models
-            import trax.optimizers
-            import trax.supervised.inputs
-            import trax.supervised.trainer_lib
-
-            # Parameters that will vary between experiments:
-            # ==============================================================================
-            train.model = @trax.models.ReformerLM
-            # Our model will have 6 layers, alternating between the LSH attention proposed
-            # in the Reformer paper and local attention within a certain context window.
-            n_layers = 6
-            attn_type = [
-              @SelfAttention,
-              @LSHSelfAttention,
-              @SelfAttention,
-              @LSHSelfAttention,
-              @SelfAttention,
-              @LSHSelfAttention,
-              ]
-            share_qk = False  # LSH attention ignores this flag and always shares q & k
-            n_heads = 2
-            attn_kv = 64
-            dropout = 0.05
-            n_tokens = 524288
-
-            # Parameters for MultifactorSchedule:
-            # ==============================================================================
-            MultifactorSchedule.constant = 0.01
-            MultifactorSchedule.factors = 'constant * linear_warmup * cosine_decay'
-            MultifactorSchedule.warmup_steps = 100
-            MultifactorSchedule.steps_per_cycle = 900
-
-            # Parameters for Adam:
-            # ==============================================================================
-            Adam.weight_decay_rate=0.0
-            Adam.b1 = 0.86
-            Adam.b2 = 0.92
-            Adam.eps = 1e-9
-
-            # Parameters for SelfAttention:
-            # ==============================================================================
-            SelfAttention.attention_dropout = 0.05
-            SelfAttention.chunk_len = 64
-            SelfAttention.n_chunks_before = 1
-            SelfAttention.n_parallel_heads = 1
-
-            # Parameters for LSHSelfAttention:
-            # ==============================================================================
-            LSHSelfAttention.attention_dropout = 0.0
-            LSHSelfAttention.chunk_len = 64
-            LSHSelfAttention.n_buckets = [64, 128]
-            LSHSelfAttention.n_chunks_after = 0
-            LSHSelfAttention.n_chunks_before = 1
-            LSHSelfAttention.n_hashes = 1
-            LSHSelfAttention.n_parallel_heads = 1
-            LSHSelfAttention.predict_drop_len = 128
-            LSHSelfAttention.predict_mem_len = 1024
-
-            # Parameters for ReformerLM:
-            # ==============================================================================
-            ReformerLM.attention_type = %attn_type
-            ReformerLM.d_attention_key = %attn_kv
-            ReformerLM.d_attention_value = %attn_kv
-            ReformerLM.d_model = 256
-            ReformerLM.d_ff = 512
-            ReformerLM.dropout = %dropout
-            ReformerLM.ff_activation = @trax.layers.Relu
-            ReformerLM.max_len = %n_tokens
-            ReformerLM.mode = 'train'
-            ReformerLM.n_heads = %n_heads
-            ReformerLM.n_layers = %n_layers
-            ReformerLM.vocab_size = 320
-            ReformerLM.share_qk = %share_qk
-            ReformerLM.axial_pos_shape = (512, 1024)
-            ReformerLM.d_axial_pos_embs= (64, 192)
-            """
-        )
-        trax_model = trax.models.ReformerLM(mode="predict")
-        trax_model.init(input_signature)
-        trax_model.init_from_file(trax_model_path)
-        return trax_model
