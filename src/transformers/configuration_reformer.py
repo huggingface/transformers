@@ -100,8 +100,8 @@ class ReformerConfig(PretrainedConfig):
         vocab_size=200,
         attention_head_size=32,
         hidden_size=128,
-        num_hidden_layers=1,
-        num_attention_heads=1,
+        num_hidden_layers=4,
+        num_attention_heads=2,
         num_buckets=2,
         num_hashes=4,
         chunk_length=64,
@@ -121,7 +121,7 @@ class ReformerConfig(PretrainedConfig):
         axial_pos_embds=True,
         axial_pos_shape=[32, 2],
         axial_pos_embds_dim=[64, 64],
-        attn_type="local",
+        attn_type="lsh",
         pad_token_id=0,
         **kwargs
     ):

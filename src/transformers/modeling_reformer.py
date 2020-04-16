@@ -189,6 +189,7 @@ class ReformerEmbeddings(nn.Module):
         # it is implemented here. Check if this is ok.
 
         embeddings = nn.functional.dropout(inputs_embeds, self.dropout, self.training)
+
         embeddings = embeddings + position_embeddings
         embeddings = nn.functional.dropout(embeddings, self.dropout, self.training)
         return embeddings
@@ -521,20 +522,10 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         hidden_states,
         head_mask=None,
     ):
+
         # get SeqLen and BatchSize
         sequence_length = hidden_states.shape[1]
         batch_size = hidden_states.shape[0]
-
-        # needs padding
-#        if sequence_length % self.chunk_length != -1:
-#            assert not self.training, "In training, the sequnece length: {} has to be a multiple of config.chunk_length: {}".format(sequence_length, self.chunk_length)
-            # This should be done before
-#            assert self.is_decoder
-#            padding_length = self.chunk_length - sequence_length % self.chunk_length
-            # TODO: need to fix with attention mask here
-            # TODO: only allow for casaul masking or for all masking?
-#            hidden_states = torch.cat([hidden_states, torch.full((batch_size, padding_length, hidden_states.shape[-1]), 0, device=hidden_states.device)], dim=1)
-#            sequence_length = hidden_states.shape[1]
 
         mixed_query_vectors = self.query(hidden_states)
         mixed_key_vectors = self.key(hidden_states)

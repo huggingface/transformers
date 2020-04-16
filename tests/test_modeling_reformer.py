@@ -204,7 +204,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         np_input = np.random.rand(*shape)
 
         trax_utils = TraxUtils(shape)
-        trax_layer = self.load_lsh_layer(config, mode="predict")
+        trax_layer = self.load_lsh_layer(config)
         trax_output, trax_weights, trax_state = trax_utils.forward_layer(
             np_input, layer=trax_layer
         )
@@ -218,9 +218,6 @@ class ReformerIntegrationTests(unittest.TestCase):
 
         hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
         hf_output = hf_layer.output(hf_attention_all_heads, torch.zeros_like(hf_input))
-
-        import ipdb
-        ipdb.set_trace()
 
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
 
@@ -252,30 +249,33 @@ class ReformerIntegrationTests(unittest.TestCase):
     def test_reformer_lm_model(self):
         config = ReformerConfig()
 
-        shape = (1, 64)  # Batch x SeqLen x ModelDimPerHead
+        shape = (1, 4)  # Batch x SeqLen x ModelDimPerHead
         np_input = np.random.randint(0, config.vocab_size, size=shape)
         np_zeros = np.zeros((shape[0], 1), dtype=np.int)
 
         trax_utils = TraxUtils(shape)
-#        trax_model = self.load_reformer_lm_model(config, mode="predict")
-        trax_model = self.load_reformer_lm_model(config)
+
+        mode = "predict"
+        trax_model = self.load_reformer_lm_model(config, mode=mode)
+
         trax_output, trax_weights, trax_state = trax_utils.forward_model(
             np_input, model=trax_model
         )
         trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
 
-        hf_input = torch.cat(
-            [torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1
-        )
+        if mode != "predict":
+            hf_input = torch.cat(
+                [torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1
+            )
+        else:
+            hf_input = torch.tensor(np_input)
+
         hf_model = ReformerModelWithLMHead(config)
         self._set_model_weights_in_torch(trax_weights, hf_model, config.hidden_size)
         hf_model.eval()
 
         hf_output = hf_model(hf_input)
         log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
-
-        import ipdb
-        ipdb.set_trace()
 
         self.assertTrue(
             torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3)
@@ -293,11 +293,8 @@ class ReformerIntegrationTests(unittest.TestCase):
 
         shape = (1, 192)
         np_input = np.random.randint(0, config.vocab_size, size=shape)
-        np_zeros = np.zeros((shape[0], 1), dtype=np.int)
 
-        hf_input = torch.cat(
-            [torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1
-        )
+        hf_input = torch.tensor(np_input)
 
         trax_utils = TraxUtils(shape)
         trax_input = trax_utils.convert_to_jax_array(np_input)
@@ -405,6 +402,8 @@ class ReformerIntegrationTests(unittest.TestCase):
             # Parameters for LSHSelfAttention:
             # ==============================================================================
             LSHSelfAttention.chunk_len = {}
+            LSHSelfAttention.predict_mem_len = {}
+            LSHSelfAttention.predict_drop_len = {}
             LSHSelfAttention.n_chunks_before = {}
             LSHSelfAttention.n_chunks_after = {}
             LSHSelfAttention.n_hashes = {}
@@ -443,6 +442,8 @@ class ReformerIntegrationTests(unittest.TestCase):
             ReformerLM.ff_use_sru = 0
             """.format(
             config.chunk_length,
+            config.chunk_length,
+            config.chunk_length // 2,
             config.num_chunks_before,
             config.num_chunks_after,
             config.num_hashes,
@@ -514,8 +515,8 @@ class ReformerIntegrationTests(unittest.TestCase):
             LSHSelfAttention.n_chunks_before = 1
             LSHSelfAttention.n_hashes = 1
             LSHSelfAttention.n_parallel_heads = 1
-            LSHSelfAttention.predict_drop_len = 128
-            LSHSelfAttention.predict_mem_len = 1024
+            LSHSelfAttention.predict_drop_len = 32 # different from original to make code equal
+            LSHSelfAttention.predict_mem_len = 64 # different from original to make code equal
             LSHSelfAttention.lsh_seed = 0
 
             # Parameters for ReformerLM:
