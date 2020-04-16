@@ -36,8 +36,7 @@ class MarianSPTokenizer(PreTrainedTokenizer):
 
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {m: 512 for m in PRETRAINED_VOCAB_FILES_MAP}
-    model_input_names = ["token_type_ids", "attention_mask"]
-
+    model_input_names = ["attention_mask"]  # really attention_mask, decoder_attention_mask
     def __init__(
         self,
         vocab=None,
@@ -135,7 +134,8 @@ class MarianSPTokenizer(PreTrainedTokenizer):
             pad_to_max_length: (bool)
 
         Returns:
-            dict with keys input_ids, attention_mask, decoder_input_ids, each value is a torch.Tensor.
+            dict with keys  [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]
+            all shaped bs, seq_len.
         """
         model_inputs = self.batch_encode_plus(
             src_texts,

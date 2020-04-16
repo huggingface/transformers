@@ -67,6 +67,7 @@ class BartConfig(PretrainedConfig):
         scale_embedding=False,
         normalize_embedding=True,
         static_position_embeddings=False,
+        add_bias_logits=False,
         **common_kwargs
     ):
         r"""
@@ -99,13 +100,16 @@ class BartConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.static_position_embeddings = static_position_embeddings
 
-        # True for mbart, False otherwise
-        self.normalize_embedding = normalize_embedding
+        # Params introduced for Mbart
+        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.normalize_embedding = normalize_embedding  # True for mbart, False otherwise
         self.normalize_before = normalize_before  # combo of fairseq's encoder_ and decoder_normalize_before
         self.add_final_layer_norm = add_final_layer_norm
+
+        # Params introduced for Marian
+        self.add_bias_logits = add_bias_logits
+        self.static_position_embeddings = static_position_embeddings
 
         # 3 Types of Dropout
         self.attention_dropout = attention_dropout

@@ -36,45 +36,44 @@ LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
 LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
 
 
-class MarianTokenizerTests(unittest.TestCase):
-    def test_en_de_local(self):
-        self.tokenizer = MarianSPTokenizer.from_pretrained(LOCAL_PATH)
-        src, tgt = ["What's for dinner?", "life"], ["Was gibt es zum Abendessen", "Leben"]
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
-        shapes = {k: v.shape for k, v in model_inputs.items()}
-        desired_keys = {
-            "input_ids",
-            "attention_mask",
-            "token_type_ids",
-            "decoder_input_ids",
-            "decoder_attention_mask",
-            "decoder_token_type_ids",
-        }
-        self.assertSetEqual(desired_keys, set(model_inputs.keys()))
-
 
 class IntegrationTests(unittest.TestCase):
-    # def test_local_en_de(self):
 
-    # @slow
-    def test_converter(self):
-        if not os.path.exists("/Users/shleifer"):
-            return
-        dest_dir = Path(tempfile.gettempdir())
-        main(Path(LOCAL_MARIAN), LOCAL_PATH)
+    @classmethod
+    def setUpClass(cls) -> None:
+        dest_dir = Path('utest-converted-en-de')
+        dest_dir.mkdir(exist_ok=True)
+        main(Path(LOCAL_MARIAN), dest_dir)
+        cls.tokenizer = MarianSPTokenizer.from_pretrained(dest_dir.name)
+        cls.model = MarianModel.from_pretrained(dest_dir.name)
+        cls.dest_dir = dest_dir
+        cls.eos_token_id = cls.model.config.eos_token_id
+        return cls
 
-        self.tokenizer = MarianSPTokenizer.from_pretrained(LOCAL_PATH)
+    @classmethod
+    def tearDownClass(cls) -> None:
+        import shutil
+        shutil.rmtree(cls.dest_dir)
+
+    def test_forward(self):
         src, tgt = ["What's for dinner?", "life"], ["Was gibt es zum Abendessen", "Leben"]
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
         shapes = {k: v.shape for k, v in model_inputs.items()}
         desired_keys = {
             "input_ids",
             "attention_mask",
-            "token_type_ids",
+            #"token_type_ids",
             "decoder_input_ids",
             "decoder_attention_mask",
-            "decoder_token_type_ids",
+            #"decoder_token_type_ids",
         }
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
-        model = MarianModel.from_pretrained(LOCAL_PATH)
-        outputs = model(**model_inputs)
+        outputs = self.model(**model_inputs)
+
+    def test_generate(self):
+        """Should produce a good translation."""
+        src, tgt = ["What's for dinner?", "life"], ["Was gibt es zum Abendessen", "Leben"]
+        model_inputs: dict = self.tokenizer.prepare_translation_batch(src)
+        result_ids = self.model.generate(**model_inputs, num_beams=6, decoder_start_token_id=self.eos_token_id)
+        predicted_de_text = [self.tokenizer.decode(r) for r in result_ids][0]
+        self.assertListEqual(predicted_de_text, tgt)

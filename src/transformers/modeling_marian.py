@@ -67,5 +67,8 @@ class MarianModel(BartForConditionalGeneration):
 
     pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
 
-    def output_layer(self, features):
-        return F.linear(features, self.model.shared.weight)
+    def prepare_scores_for_generation(self, scores, **kwargs):
+        return scores
+
+    def _force_token_ids_generation(self, scores, token_ids) -> None:
+        pass

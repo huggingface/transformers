@@ -44,10 +44,14 @@ def load_layers_(layer_lst: torch.nn.ModuleList, opus_state: dict, converter=BER
 CONFIG_KEY = "special:model.yml"
 
 
-def add_emb_entries(wemb, n_special_tokens=1):
+def add_emb_entries(wemb, final_bias, n_special_tokens=1):
     vsize, d_model = wemb.shape
-    new_shit = np.zeros((n_special_tokens, d_model))
-    return np.concatenate([wemb, new_shit])
+    embs_to_add = np.zeros((n_special_tokens, d_model))
+    new_embs =  np.concatenate([wemb, embs_to_add])
+    bias_to_add = np.zeros((n_special_tokens, 1))
+    new_bias = np.concatenate((final_bias, bias_to_add), axis=1)
+    return new_embs, new_bias
+
 
 
 
@@ -180,7 +184,7 @@ def check_equal(marian_cfg, k1, k2):
     assert v1 == v2, f"hparams {k1},{k2} differ: {v1} != {v2}"
 
 
-def convert_v2(marian_cfg, pad_token_id, eos_token_id, bos_token_id):
+def convert_v2(marian_cfg, pad_token_id, eos_token_id, bos_token_id) -> BartConfig:
     for k, v in assume_vals.items():
         actual = marian_cfg[k]
         assert actual == v, f"Unexpected config value for {k} expected {v} got {actual}"
@@ -209,22 +213,29 @@ def convert_v2(marian_cfg, pad_token_id, eos_token_id, bos_token_id):
     )
     return bart_cfg
 
-
+BIAS_KEY = 'decoder_ff_logit_out_b'
 class OpusState:
     def __init__(self, npz_path):
         self.state_dict = np.load(npz_path)
         cfg = load_config_from_state_dict(self.state_dict)
+        assert cfg["dim-vocabs"][0] == cfg["dim-vocabs"][1]
         self.state_dict = dict(self.state_dict)
-        self.state_dict["Wemb"] = add_emb_entries(self.state_dict["Wemb"], 1)
-        pad_token_id = bos_token_id = self.state_dict["Wemb"].shape[0] - 1
+        self.wemb, self.final_bias = add_emb_entries(
+            self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
+        pad_token_id = bos_token_id = self.wemb.shape[0] - 1
 
         # self.cfg['vocab_size'] = cfg['dim-vocabs'][0]
-        assert cfg["dim-vocabs"][0] == cfg["dim-vocabs"][1]
+
         cfg["vocab_size"] = pad_token_id + 1
         # self.state_dict['Wemb'].sha
         self.state_keys = list(self.state_dict.keys())
         if "Wtype" in self.state_dict:
             raise ValueError("found Wtype key")
+        self.check_layer_entries()
+
+        self.cfg = cfg
+
+    def check_layer_entries(self):
         self.encoder_l1 = self.sub_keys("encoder_l1")
         self.decoder_l1 = self.sub_keys("decoder_l1")
         self.decoder_l2 = self.sub_keys("decoder_l2")
@@ -232,17 +243,14 @@ class OpusState:
             warnings.warn(f"Expected 16 keys for each encoder layer, got {len(self.encoder_l1)}")
         if len(self.decoder_l1) != 26:
             warnings.warn(f"Expected 26 keys for each decoder layer, got {len(self.decoder_l1)}")
-
         if len(self.decoder_l2) != 26:
             warnings.warn(f"Expected 26 keys for each decoder layer, got {len(self.decoder_l1)}")
-
-        self.cfg = cfg
 
     @property
     def extra_keys(self):
         extra = []
         for k in self.state_keys:
-            if k.startswith("encoder_l") or k.startswith("decoder_l") or k in [CONFIG_KEY, "Wemb", "Wpos"]:
+            if k.startswith("encoder_l") or k.startswith("decoder_l") or k in [CONFIG_KEY, "Wemb", "Wpos", 'decoder_ff_logit_out_b']:
                 continue
             else:
                 extra.append(k)
@@ -267,9 +275,12 @@ class OpusState:
         load_layers_(model.model.decoder.layers, state_dict, converter=BART_CONVERTER, is_decoder=True)
 
         # embs_state: dict = convert_embeddings_(state_dict)
-        wemb_tensor = torch.nn.Parameter(torch.FloatTensor(state_dict["Wemb"]))
+        wemb_tensor = torch.nn.Parameter(torch.FloatTensor(self.wemb))
+        bias_tensor = torch.nn.Parameter(torch.FloatTensor(self.final_bias))
         model.model.shared.weight = wemb_tensor
         model.model.encoder.embed_tokens = model.model.decoder.embed_tokens = model.model.shared
+
+        model.final_bias = bias_tensor
 
         if "Wpos" in state_dict:
             wpos_tensor = torch.tensor(state_dict["Wpos"])

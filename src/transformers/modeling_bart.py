@@ -867,6 +867,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         super().__init__(config)
         base_model = BartModel(config)
         self.model = base_model
+        self.register_buffer('final_logits_bias', torch.zeros((1, self.model.shared.num_embeddings)))
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def forward(
@@ -942,7 +943,9 @@ class BartForConditionalGeneration(PretrainedBartModel):
         return outputs
 
     def output_layer(self, features):
-        return F.linear(features, self.model.shared.weight)
+        bias = self.final_logits_bias if self.config.add_bias_logits else None
+        return F.linear(features, self.model.shared.weight, bias=bias)
+
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
