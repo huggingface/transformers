@@ -108,6 +108,7 @@ class AxialEmbeddings(nn.Module):
         super().__init__()
         self.axial_pos_shape = config.axial_pos_shape
         self.axial_pos_embds_dim = config.axial_pos_embds_dim
+        self.chunk_length = config.chunk_length
         self.weights = nn.ParameterList()
 
         assert sum(self.axial_pos_embds_dim) == config.hidden_size, "Make sure that config.axial_pos_embds factors: {} sum to config.hidden_size: {}".format(self.axial_pos_embds_dim, config.hidden_size)
@@ -137,7 +138,7 @@ class AxialEmbeddings(nn.Module):
             position_encodings = torch.cat([torch.reshape(weight, (batch_size, sequence_length) + weight.shape[-1:]) for weight in broadcasted_weights], dim=-1)
 
         else:
-            assert sequence_length >= int(np.prod(self.axial_pos_shape)), "Make sure that config.axial_pos_shape factors: {} multiply at least to max(sequence_length, config.chunk_length): {}".format(self.axial_pos_shape, sequence_length)
+            assert int(np.prod(self.axial_pos_shape)) >= sequence_length, "Make sure that config.axial_pos_shape factors: {} multiply at least to max(sequence_length, config.chunk_length): max({}, {})".format(self.axial_pos_shape, sequence_length, self.chunk_length)
             # reshape axial encodings and use only until sequence_length
             position_encodings = torch.cat(broadcasted_weights, dim=-1)
             position_encodings = position_encodings.view(batch_size, -1, position_encodings.shape[-1])[:, :sequence_length]
