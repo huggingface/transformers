@@ -96,18 +96,23 @@ class TestBartExamples(unittest.TestCase):
         args_d.update({"do_train": False, "do_predict": True})
         main(argparse.Namespace(**args_d))
 
-
     def test_t5_run_sum_cli(self):
         args_d: dict = DEFAULT_ARGS.copy()
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
-            data_dir=tmp_dir, model_type="t5", model_name_or_path="patrickvonplaten/t5-tiny-random",
-            train_batch_size=2, eval_batch_size=2, n_gpu=0, output_dir=output_dir, do_predict=True,
+            data_dir=tmp_dir,
+            model_type="t5",
+            model_name_or_path="patrickvonplaten/t5-tiny-random",
+            train_batch_size=2,
+            eval_batch_size=2,
+            n_gpu=0,
+            output_dir=output_dir,
+            do_predict=True,
         )
         main(argparse.Namespace(**args_d))
-        #args_d.update({"do_train": False, "do_predict": True})
-        #main(argparse.Namespace(**args_d))
+        # args_d.update({"do_train": False, "do_predict": True})
+        # main(argparse.Namespace(**args_d))
 
     def test_bart_summarization_dataset(self):
         tmp_dir = Path(tempfile.gettempdir())
