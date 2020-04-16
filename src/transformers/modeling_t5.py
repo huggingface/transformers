@@ -351,12 +351,11 @@ class T5Attention(nn.Module):
             else:
                 k, v = past_key_value_state
 
-        if self.is_decoder and use_cache:
+        if self.is_decoder and use_cache is True:
             present_key_value_state = ((k, v),)
         else:
             present_key_value_state = (None,)
 
-        # q = q / math.sqrt(dim_per_head)                                     # No scaling in T5
         scores = torch.einsum("bnqd,bnkd->bnqk", q, k)  # (bs, n_heads, qlen, klen)
 
         if position_bias is None:
@@ -486,11 +485,15 @@ class T5Block(nn.Module):
 
         if past_key_value_state is not None:
             assert self.is_decoder, "Only decoder can use `past_key_value_states`"
-            assert (
-                len(past_key_value_state) == 4
-            ), "The should be 4 past states. 2 (past / key) for self attention. 2 (past / key) for cross attention. Got {} past key / value states".format(
-                len(past_key_value_state)
+            expected_num_past_key_value_states = 2 if encoder_hidden_states is None else 4
+
+            error_message = "There should be {} past states. 2 (past / key) for self attention.{} Got {} past key / value states".format(
+                expected_num_past_key_value_states,
+                "2 (past / key) for cross attention" if expected_num_past_key_value_states == 4 else "",
+                len(past_key_value_state),
             )
+            assert len(past_key_value_state) == expected_num_past_key_value_states, error_message
+
             self_attn_past_key_value_state = past_key_value_state[:2]
             cross_attn_past_key_value_state = past_key_value_state[2:]
         else:
@@ -507,7 +510,7 @@ class T5Block(nn.Module):
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
-        if self.is_decoder:
+        if self.is_decoder and encoder_hidden_states is not None:
             # the actual query length is unknown for cross attention
             # if using past key value states. Need to inject it here
             if present_key_value_state is not None:
@@ -691,7 +694,6 @@ class T5Stack(T5PreTrainedModel):
         if past_key_value_states is None:
             past_key_value_states = [None] * len(self.block)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, self.device)
 
@@ -732,7 +734,7 @@ class T5Stack(T5PreTrainedModel):
                 # We share the position biases between the layers - the first layer store them
                 # layer_outputs = hidden-states, key-value-states (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
                 position_bias = layer_outputs[3 if self.output_attentions else 2]
-                if self.is_decoder:
+                if self.is_decoder and encoder_hidden_states is not None:
                     encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 3]
             # append next layer key value states
             present_key_value_states = present_key_value_states + (present_key_value_state,)
