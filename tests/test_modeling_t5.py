@@ -167,17 +167,20 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             model = T5Model(config=config)
             model.to(torch_device)
             model.eval()
-            decoder_output, encoder_output = model(
+            decoder_output, decoder_past, encoder_output = model(
                 input_ids=input_ids,
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
             )
-            decoder_output, encoder_output = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+            decoder_output, decoder_past, encoder_output = model(
+                input_ids=input_ids, decoder_input_ids=decoder_input_ids
+            )
 
             result = {
                 "encoder_output": encoder_output,
                 "decoder_output": decoder_output,
+                "decoder_past": decoder_past,
             }
             self.parent.assertListEqual(
                 list(result["encoder_output"].size()), [self.batch_size, self.encoder_seq_length, self.hidden_size]
@@ -185,6 +188,13 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(
                 list(result["decoder_output"].size()), [self.batch_size, self.decoder_seq_length, self.hidden_size]
             )
+            self.parent.assertEqual(len(decoder_past), 2)
+            # decoder_past[0] should correspond to encoder output
+            self.parent.assertTrue(torch.all(decoder_past[0][0] == encoder_output))
+            # There should be `num_layers` key value embeddings stored in decoder_past[1]
+            self.parent.assertEqual(len(decoder_past[1]), config.num_layers)
+            # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past[1] tuple
+            self.parent.assertEqual(len(decoder_past[1][0]), 4)
 
         def create_and_check_t5_with_lm_head(
             self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,
@@ -198,8 +208,8 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 decoder_attention_mask=decoder_attention_mask,
                 lm_labels=lm_labels,
             )
-            loss, prediction_scores, encoder_features = outputs
-            self.parent.assertEqual(len(outputs), 3)
+            loss, prediction_scores, _, _ = outputs
+            self.parent.assertEqual(len(outputs), 4)
             result = {
                 "loss": loss,
                 "prediction_scores": prediction_scores,
@@ -208,6 +218,91 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 list(result["prediction_scores"].size()), [self.batch_size, self.decoder_seq_length, self.vocab_size]
             )
             self.check_loss_output(result)
+
+        def create_and_check_t5_decoder_model_past(
+            self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,
+        ):
+            model = T5Model(config=config).get_decoder()
+            model.to(torch_device)
+            model.eval()
+
+            # first forward pass
+            output, past_key_value_states = model(input_ids, use_cache=True)
+
+            # create hypothetical next token and extent to next_input_ids
+            next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+            # append to next input_ids and
+            next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+
+            output_from_no_past = model(next_input_ids)[0]
+            output_from_past = model(next_tokens, past_key_value_states=past_key_value_states)[0]
+
+            # select random slice
+            random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+            output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+            output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+            # test that outputs are equal for slice
+            self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-6))
+
+        def create_and_check_t5_decoder_model_attention_mask_past(
+            self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,
+        ):
+            model = T5Model(config=config).get_decoder()
+            model.to(torch_device)
+            model.eval()
+
+            # create attention mask
+            attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+
+            half_seq_length = input_ids.shape[-1] // 2
+            attn_mask[:, half_seq_length:] = 0
+
+            # first forward pass
+            output, past_key_value_states = model(input_ids, attention_mask=attn_mask, use_cache=True)
+
+            # create hypothetical next token and extent to next_input_ids
+            next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+            # change a random masked slice from input_ids
+            random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
+            random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+            input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
+
+            # append to next input_ids and attn_mask
+            next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+            attn_mask = torch.cat(
+                [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1,
+            )
+
+            # get two different outputs
+            output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]
+            output_from_past = model(
+                next_tokens, past_key_value_states=past_key_value_states, attention_mask=attn_mask
+            )[0]
+
+            # select random slice
+            random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+            output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+            output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+            # test that outputs are equal for slice
+            self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+        def create_t5_and_check_t5_generate_with_past_key_value_states(
+            self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,
+        ):
+            model = T5ForConditionalGeneration(config=config)
+            model.to(torch_device)
+            model.eval()
+            torch.manual_seed(0)
+            output_without_past_cache = model.generate(
+                input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
+            )
+            torch.manual_seed(0)
+            output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
+            self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -225,6 +320,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 "attention_mask": attention_mask,
                 "decoder_input_ids": decoder_input_ids,
                 "decoder_attention_mask": decoder_attention_mask,
+                "use_cache": False,
             }
             return config, inputs_dict
 
@@ -246,6 +342,18 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_with_lm_head(*config_and_inputs)
+
+    def test_t5_decoder_model_past(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_t5_decoder_model_past(*config_and_inputs)
+
+    def test_t5_decoder_model_past_with_attn_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_t5_decoder_model_attention_mask_past(*config_and_inputs)
+
+    def test_t5_generate_with_past_key_value_states(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_t5_and_check_t5_generate_with_past_key_value_states(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

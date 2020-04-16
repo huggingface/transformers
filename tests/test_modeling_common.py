@@ -144,10 +144,9 @@ class ModelTesterMixin:
             out_len = len(outputs)
 
             if self.is_encoder_decoder:
-                correct_outlen = (
-                    4  # decoder_features_or_logits, decoder_attentions, encoder_features, encoder_attentions
-                )
+                correct_outlen = 4
                 decoder_attention_idx = 1
+
                 if "lm_labels" in inputs_dict:  # loss will come first
                     correct_outlen += 1  # compute loss
                     decoder_attention_idx += 1
@@ -663,10 +662,6 @@ class ModelTesterMixin:
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
-
-        if self.is_encoder_decoder:
-            # needed for Bart beam search
-            config.output_past = True
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)

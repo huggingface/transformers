@@ -89,6 +89,3 @@
         description: Run evaluation during training at each logging step.
         type: flag
         default: true
-      - name: do_lower_case
-        description: Set this flag if you are using an uncased model.
-        type: flag
