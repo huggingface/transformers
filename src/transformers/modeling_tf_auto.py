@@ -36,6 +36,7 @@ from .configuration_utils import PretrainedConfig
 from .modeling_tf_albert import (
     TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFAlbertForMaskedLM,
+    TFAlbertForQuestionAnswering,
     TFAlbertForSequenceClassification,
     TFAlbertModel,
 )
@@ -62,6 +63,7 @@ from .modeling_tf_openai import TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, TFOp
 from .modeling_tf_roberta import (
     TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFRobertaForMaskedLM,
+    TFRobertaForQuestionAnswering,
     TFRobertaForSequenceClassification,
     TFRobertaForTokenClassification,
     TFRobertaModel,
@@ -172,6 +174,8 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         (DistilBertConfig, TFDistilBertForQuestionAnswering),
+        (AlbertConfig, TFAlbertForQuestionAnswering),
+        (RobertaConfig, TFRobertaForQuestionAnswering),
         (BertConfig, TFBertForQuestionAnswering),
         (XLNetConfig, TFXLNetForQuestionAnsweringSimple),
         (XLMConfig, TFXLMForQuestionAnsweringSimple),
@@ -827,6 +831,8 @@ class TFAutoModelForQuestionAnswering(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
+            - contains `albert`: TFAlbertForQuestionAnswering (ALBERT model)
+            - contains `roberta`: TFRobertaForQuestionAnswering (RoBERTa model)
             - contains `bert`: TFBertForQuestionAnswering (Bert model)
             - contains `xlnet`: TFXLNetForQuestionAnswering (XLNet model)
             - contains `xlm`: TFXLMForQuestionAnswering (XLM model)
@@ -849,6 +855,8 @@ class TFAutoModelForQuestionAnswering(object):
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
+                    - isInstance of `albert` configuration class: AlbertModel (ALBERT model)
+                    - isInstance of `roberta` configuration class: RobertaModel (RoBERTa model)
                     - isInstance of `bert` configuration class: BertModel (Bert model)
                     - isInstance of `xlnet` configuration class: XLNetModel (XLNet model)
                     - isInstance of `xlm` configuration class: XLMModel (XLM model)
@@ -856,7 +864,7 @@ class TFAutoModelForQuestionAnswering(object):
         Examples::
 
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            model = AutoModelForSequenceClassification.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = TFAutoModelForQuestionAnswering.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
             if isinstance(config, config_class):
@@ -882,6 +890,8 @@ class TFAutoModelForQuestionAnswering(object):
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `distilbert`: TFDistilBertForQuestionAnswering (DistilBERT model)
+            - contains `albert`: TFAlbertForQuestionAnswering (ALBERT model)
+            - contains `roberta`: TFRobertaForQuestionAnswering (RoBERTa model)
             - contains `bert`: TFBertForQuestionAnswering (Bert model)
             - contains `xlnet`: TFXLNetForQuestionAnswering (XLNet model)
             - contains `xlm`: TFXLMForQuestionAnswering (XLM model)
