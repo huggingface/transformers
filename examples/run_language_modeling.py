@@ -241,13 +241,17 @@ def main():
         data_collator=data_collator,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
+        prediction_loss_only=True,
     )
 
     # Training
     if training_args.do_train:
-        trainer.train(
-            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
+        model_path = (
+            model_args.model_name_or_path
+            if model_args.model_name_or_path is not None and os.path.isdir(model_args.model_name_or_path)
+            else None
         )
+        trainer.train(model_path=model_path)
         trainer.save_model()
 
     # Evaluation
@@ -255,7 +259,7 @@ def main():
     if training_args.do_eval and training_args.local_rank in [-1, 0]:
         logger.info("*** Evaluate ***")
 
-        eval_output = trainer.evaluate(return_loss_only=True)
+        eval_output = trainer.evaluate()
 
         perplexity = math.exp(eval_output["loss"])
         result = {"perplexity": perplexity}

@@ -132,7 +132,7 @@ def main():
 
     # Get datasets
     train_dataset = (
-        GlueDataset(data_args, tokenizer=tokenizer, local_rank=training_args.local_rank, limit_length=100_000)
+        GlueDataset(data_args, tokenizer=tokenizer, local_rank=training_args.local_rank)
         if training_args.do_train
         else None
     )

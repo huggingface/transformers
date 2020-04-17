@@ -111,6 +111,7 @@ class Trainer:
     train_dataset: Optional[Dataset]
     eval_dataset: Optional[Dataset]
     compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None
+    prediction_loss_only: bool
     tb_writer: Optional["SummaryWriter"] = None
 
     def __init__(
@@ -121,10 +122,15 @@ class Trainer:
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
+        prediction_loss_only=False,
     ):
         """
         Trainer is a simple but feature-complete training and eval loop for PyTorch,
         optimized for Transformers.
+
+        Args:
+            prediction_loss_only:
+                (Optional) in evaluation and prediction, only return the loss
         """
         self.model = model
         self.args = args
@@ -135,6 +141,7 @@ class Trainer:
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
+        self.prediction_loss_only = prediction_loss_only
         if is_tensorboard_available() and self.args.local_rank in [-1, 0]:
             self.tb_writer = SummaryWriter(log_dir=self.args.logging_dir)
         set_seed(self.args.seed)
@@ -454,7 +461,9 @@ class Trainer:
             logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
             shutil.rmtree(checkpoint)
 
-    def evaluate(self, eval_dataset: Optional[Dataset] = None, return_loss_only=False,) -> Dict[str, float]:
+    def evaluate(
+        self, eval_dataset: Optional[Dataset] = None, prediction_loss_only: Optional[bool] = None
+    ) -> Dict[str, float]:
         """
         Run evaluation and return metrics.
 
@@ -484,12 +493,16 @@ class Trainer:
         test_dataloader = self.get_test_dataloader(test_dataset)
         return self._prediction_loop(test_dataloader, description="Prediction")
 
-    def _prediction_loop(self, dataloader: DataLoader, description: str) -> PredictionOutput:
+    def _prediction_loop(
+        self, dataloader: DataLoader, description: str, prediction_loss_only: Optional[bool] = None
+    ) -> PredictionOutput:
         """
         Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
 
         Works both with or without labels.
         """
+
+        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
 
         # multi-gpu eval
         if self.args.n_gpu > 1 and not isinstance(self.model, torch.nn.DataParallel):
@@ -520,15 +533,16 @@ class Trainer:
                 else:
                     logits = outputs[0]
 
-            if preds is None:
-                preds = logits.detach().cpu().numpy()
-            else:
-                preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-            if inputs.get("labels") is not None:
-                if label_ids is None:
-                    label_ids = inputs["labels"].detach().cpu().numpy()
+            if not prediction_loss_only:
+                if preds is None:
+                    preds = logits.detach().cpu().numpy()
                 else:
-                    label_ids = np.append(label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
+                    preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
+                if inputs.get("labels") is not None:
+                    if label_ids is None:
+                        label_ids = inputs["labels"].detach().cpu().numpy()
+                    else:
+                        label_ids = np.append(label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
