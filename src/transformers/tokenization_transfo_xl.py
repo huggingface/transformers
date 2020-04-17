@@ -407,7 +407,7 @@ class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
     Construct a "Fast" Transformer-XL tokenizer (backed by HuggingFace's `tokenizers` library).
 
     The Transformer-XL tokenizer is a word-level tokenizer (no sub-word tokenization).
-    
+
     Adapted from Vocab class in https://github.com/kimiyoung/transformer-xl
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users

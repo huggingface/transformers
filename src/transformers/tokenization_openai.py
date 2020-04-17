@@ -238,7 +238,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
 class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "Fast" BPE tokenizer for OpenAI GPT (backed by HuggingFace's `tokenizers` library).
-    
+
     Peculiarities:
 
     - lower case all inputs
