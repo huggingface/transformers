@@ -1,12 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, NewType, Tuple
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
 from ..tokenization_utils import PreTrainedTokenizer
-from .processors.utils import InputFeatures
 
 
 class DataCollator(ABC):
@@ -26,27 +25,46 @@ class DataCollator(ABC):
         pass
 
 
+InputDataClass = NewType("InputDataClass", Any)
+
+
 @dataclass
 class DefaultDataCollator(DataCollator):
     """
     Very simple data collator that:
     - simply collates batches of dict-like objects
-      (expects one key to be named `label`)
+    - Performs special handling for potential keys named:
+        - `label`: handles a single value (int or float) per object
+        - `label_ids`: handles a list of values per object
     - does not do any additional preprocessing
+
+    i.e., Property names of the input object will be used as corresponding inputs to the model.
+    See glue and ner for example of how it's useful.
     """
 
-    def collate_batch(self, features: List[InputFeatures]) -> Dict[str, torch.Tensor]:
+    def collate_batch(self, features: List[InputDataClass]) -> Dict[str, torch.Tensor]:
         # Ensure that tensor is created with the correct type
         # (it should be automatically the case, but let's make sure of it.)
-        if all(type(f.label) is int for f in features):
-            labels = torch.tensor([f.label for f in features], dtype=torch.long)
+        # Let's look at the first element to figure things out.
+        f = features[0]
+        if hasattr(f, "label") and f.label is not None:
+            if type(f.label) is int:
+                labels = torch.tensor([f.label for f in features], dtype=torch.long)
+            else:
+                labels = torch.tensor([f.label for f in features], dtype=torch.float)
+            batch = {"labels": labels}
+        elif hasattr(f, "label_ids") and f.label_ids is not None:
+            if type(f.label_ids[0]) is int:
+                labels = torch.tensor([f.label_ids for f in features], dtype=torch.long)
+            else:
+                labels = torch.tensor([f.label_ids for f in features], dtype=torch.float)
+            batch = {"labels": labels}
         else:
-            labels = torch.tensor([f.label for f in features], dtype=torch.float)
-        batch = {"labels": labels}
+            batch = {}
 
         # Use the first element to figure out which key/values are not None for this model.
         for k, v in vars(features[0]).items():
-            if k != "label" and v is not None:
+            if k not in ("label", "label_ids") and v is not None:
                 batch[k] = torch.tensor([getattr(f, k) for f in features], dtype=torch.long)
         return batch
 

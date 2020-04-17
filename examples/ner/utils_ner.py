@@ -75,6 +75,9 @@ class NerDataset(Dataset):
     """
 
     features: List[InputFeatures]
+    pad_token_label_id: int = nn.CrossEntropyLoss().ignore_index
+    # Use cross entropy ignore_index as padding label id so that only
+    # real label ids contribute to the loss later.
 
     def __init__(
         self,
@@ -85,15 +88,8 @@ class NerDataset(Dataset):
         max_seq_length: Optional[int] = None,
         overwrite_cache=False,
         mode: Split = Split.train,
-        pad_token_label_id: int = nn.CrossEntropyLoss().ignore_index,
         local_rank=-1,
     ):
-        """
-        Args:
-            pad_token_label_id:
-                Use cross entropy ignore_index as padding label id so that only
-                real label ids contribute to the loss later.
-        """
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(
             data_dir, "cached_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length)),
@@ -126,7 +122,7 @@ class NerDataset(Dataset):
                     # pad on the left for xlnet
                     pad_token=tokenizer.pad_token_id,
                     pad_token_segment_id=tokenizer.pad_token_type_id,
-                    pad_token_label_id=pad_token_label_id,
+                    pad_token_label_id=self.pad_token_label_id,
                 )
                 if local_rank in [-1, 0]:
                     logger.info(f"Saving features into cached file {cached_features_file}")
@@ -151,9 +147,7 @@ def read_examples_from_file(data_dir, mode: Union[Split, str]) -> List[InputExam
         for line in f:
             if line.startswith("-DOCSTART-") or line == "" or line == "\n":
                 if words:
-                    examples.append(
-                        InputExample(guid=f"{mode}-{guid_index}", words=words, labels=labels)
-                    )
+                    examples.append(InputExample(guid=f"{mode}-{guid_index}", words=words, labels=labels))
                     guid_index += 1
                     words = []
                     labels = []

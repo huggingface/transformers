@@ -76,8 +76,19 @@ def torch_distributed_zero_first(local_rank: int):
 
 
 class EvalPrediction(NamedTuple):
+    """
+    Evaluation output (always contains labels), to be used
+    to compute metrics.
+    """
+
     predictions: np.ndarray
     label_ids: np.ndarray
+
+
+class PredictionOutput(NamedTuple):
+    predictions: np.ndarray
+    label_ids: Optional[np.ndarray]
+    metrics: Optional[Dict[str, float]]
 
 
 class TrainOutput(NamedTuple):
@@ -149,6 +160,15 @@ class Trainer:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
         return DataLoader(
             eval_dataset if eval_dataset is not None else self.eval_dataset,
+            batch_size=self.args.eval_batch_size,
+            shuffle=False,
+            collate_fn=self.data_collator.collate_batch,
+        )
+
+    def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
+        # We use the same batch_size as for eval.
+        return DataLoader(
+            test_dataset,
             batch_size=self.args.eval_batch_size,
             shuffle=False,
             collate_fn=self.data_collator.collate_batch,
@@ -436,9 +456,9 @@ class Trainer:
 
     def evaluate(self, eval_dataset: Optional[Dataset] = None, return_loss_only=False,) -> Dict[str, float]:
         """
-        Run evaluation and return results.
+        Run evaluation and return metrics.
 
-        The calling script will be responsible for computing metrics, as they are
+        The calling script will be responsible for providing a method to compute metrics, as they are
         task-dependent.
 
         Args:
@@ -451,6 +471,26 @@ class Trainer:
         """
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
+        output = self._prediction_loop(eval_dataloader, description="Evaluation")
+        return output.metrics
+
+    def predict(self, test_dataset: Dataset) -> PredictionOutput:
+        """
+        Run prediction and return predictions and potential metrics.
+
+        Depending on the dataset and your use case, your test dataset may contain labels.
+        In that case, this method will also return metrics, like in evaluate().
+        """
+        test_dataloader = self.get_test_dataloader(test_dataset)
+        return self._prediction_loop(test_dataloader, description="Prediction")
+
+    def _prediction_loop(self, dataloader: DataLoader, description: str) -> PredictionOutput:
+        """
+        Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
+
+        Works both with or without labels.
+        """
+
         # multi-gpu eval
         if self.args.n_gpu > 1 and not isinstance(self.model, torch.nn.DataParallel):
             model = torch.nn.DataParallel(self.model)
@@ -458,38 +498,43 @@ class Trainer:
             model = self.model
         model.to(self.args.device)
 
-        # Eval!
-        logger.info("***** Running evaluation *****")
-        logger.info("  Num examples = %d", len(eval_dataloader.dataset))
-        logger.info("  Batch size = %d", self.args.eval_batch_size)
-        eval_loss = 0.0
-        nb_eval_steps = 0
+        logger.info("***** Running %s *****", description)
+        logger.info("  Num examples = %d", len(dataloader.dataset))
+        logger.info("  Batch size = %d", dataloader.batch_size)
+        eval_losses: List[float] = []
         preds: np.ndarray = None
         label_ids: np.ndarray = None
         model.eval()
 
-        for inputs in tqdm(eval_dataloader, desc="Evaluating"):
+        for inputs in tqdm(dataloader, desc=description):
+            has_labels = any(inputs.get(k) is not None for k in ["labels", "masked_lm_labels"])
+
             for k, v in inputs.items():
                 inputs[k] = v.to(self.args.device)
 
             with torch.no_grad():
                 outputs = model(**inputs)
-                step_eval_loss, logits = outputs[:2]
+                if has_labels:
+                    step_eval_loss, logits = outputs[:2]
+                    eval_losses += [step_eval_loss.mean().item()]
+                else:
+                    logits = outputs[0]
 
-                eval_loss += step_eval_loss.mean().item()
-            nb_eval_steps += 1
-            if not return_loss_only:
-                if preds is None:
-                    preds = logits.detach().cpu().numpy()
+            if preds is None:
+                preds = logits.detach().cpu().numpy()
+            else:
+                preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
+            if inputs.get("labels") is not None:
+                if label_ids is None:
                     label_ids = inputs["labels"].detach().cpu().numpy()
                 else:
-                    preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
                     label_ids = np.append(label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
 
-        eval_loss = eval_loss / nb_eval_steps
-        if not return_loss_only and self.compute_metrics is not None:
-            prediction = EvalPrediction(preds, label_ids)
-            metrics = self.compute_metrics(prediction)
+        if self.compute_metrics is not None and preds is not None and label_ids is not None:
+            metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
         else:
             metrics = {}
-        return {**{"loss": eval_loss}, **metrics}
+        if len(eval_losses) > 0:
+            metrics["loss"] = np.mean(eval_losses)
+
+        return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
