@@ -15,35 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class DataTrainingArguments:
-    """
-    Arguments pertaining to what data we are going to input our model for training and eval.
-
-    Using `HfArgumentParser` we can turn this class
-    into argparse arguments to be able to specify them on
-    the command line.
-    """
-
-    task_name: str = field(metadata={"help": "The name of the task to train on (see list in relevant example script)"})
-    data_dir: str = field(
-        metadata={"help": "The input data dir. Should contain the .tsv files (or other data files) for the task."}
-    )
-    max_seq_length: int = field(
-        default=128,
-        metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
-        },
-    )
-    overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
-    )
-
-    def __post_init__(self):
-        self.task_name = self.task_name.lower()
-
-
-@dataclass
 class TrainingArguments:
     """
     TrainingArguments is the subset of the arguments we use in our example scripts
@@ -63,6 +34,7 @@ class TrainingArguments:
 
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
+    do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluate_during_training: bool = field(
         default=False, metadata={"help": "Run evaluation during training at each logging step."}
     )

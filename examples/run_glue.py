@@ -28,9 +28,9 @@ from transformers import (
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    DataTrainingArguments,
     EvalPrediction,
     GlueDataset,
+    GlueDataTrainingArguments,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
@@ -60,7 +60,7 @@ class ModelArguments:
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pre-trained models downloaded from s3"}
+        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
 
 
@@ -69,7 +69,7 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, GlueDataTrainingArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if (
@@ -150,7 +150,6 @@ def main():
         return glue_compute_metrics(data_args.task_name, preds, prediction.label_ids)
 
     # Initialize our Trainer
-
     trainer = Trainer(
         model=model,
         args=training_args,

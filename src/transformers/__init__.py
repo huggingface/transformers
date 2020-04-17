@@ -142,7 +142,7 @@ from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
-from .training_args import DataTrainingArguments, TrainingArguments
+from .training_args import TrainingArguments
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -323,7 +323,7 @@ if is_torch_available():
     # Trainer
     from .trainer import Trainer, set_seed, torch_distributed_zero_first, EvalPrediction
     from .data.data_collator import DefaultDataCollator, DataCollator, DataCollatorForLanguageModeling
-    from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset
+    from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
 
 # TensorFlow
 if is_tf_available():

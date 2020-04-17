@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from dataclasses import dataclass, field
 from typing import List, Optional
 
 import torch
@@ -10,12 +11,40 @@ from ...tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_xlm_roberta import XLMRobertaTokenizer
 from ...trainer import torch_distributed_zero_first
-from ...training_args import DataTrainingArguments
 from ..processors.glue import glue_convert_examples_to_features, glue_output_modes, glue_processors
 from ..processors.utils import InputFeatures
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class GlueDataTrainingArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
+    """
+
+    task_name: str = field(metadata={"help": "The name of the task to train on: " + ", ".join(glue_processors.keys())})
+    data_dir: str = field(
+        metadata={"help": "The input data dir. Should contain the .tsv files (or other data files) for the task."}
+    )
+    max_seq_length: int = field(
+        default=128,
+        metadata={
+            "help": "The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
+    overwrite_cache: bool = field(
+        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    )
+
+    def __post_init__(self):
+        self.task_name = self.task_name.lower()
 
 
 class GlueDataset(Dataset):
@@ -24,13 +53,13 @@ class GlueDataset(Dataset):
     soon.
     """
 
-    args: DataTrainingArguments
+    args: GlueDataTrainingArguments
     output_mode: str
     features: List[InputFeatures]
 
     def __init__(
         self,
-        args: DataTrainingArguments,
+        args: GlueDataTrainingArguments,
         tokenizer: PreTrainedTokenizer,
         limit_length: Optional[int] = None,
         evaluate=False,
