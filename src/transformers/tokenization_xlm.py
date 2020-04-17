@@ -873,11 +873,12 @@ class XLMTokenizer(PreTrainedTokenizer):
             :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
 
         """
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+        bos = [self.bos_token_id]
         sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-        return cls + token_ids_0 + sep + token_ids_1 + sep
+
+        if token_ids_1 is None:
+            return bos + token_ids_0 + sep
+        return bos + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
