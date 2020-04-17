@@ -1006,3 +1006,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             outputs = (loss,) + outputs
 
         return outputs  # (lm_loss), lm_logits, (hidden_states), (attentions)
+
+    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
+        # TODO(PVP): Add smart caching
+        return {"input_ids": input_ids}
