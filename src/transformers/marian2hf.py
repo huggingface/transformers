@@ -47,13 +47,10 @@ CONFIG_KEY = "special:model.yml"
 def add_emb_entries(wemb, final_bias, n_special_tokens=1):
     vsize, d_model = wemb.shape
     embs_to_add = np.zeros((n_special_tokens, d_model))
-    new_embs =  np.concatenate([wemb, embs_to_add])
+    new_embs = np.concatenate([wemb, embs_to_add])
     bias_to_add = np.zeros((n_special_tokens, 1))
     new_bias = np.concatenate((final_bias, bias_to_add), axis=1)
     return new_embs, new_bias
-
-
-
 
 
 def load_yaml(path):
@@ -167,7 +164,7 @@ def add_special_tokens_to_vocab(model_dir: Path) -> None:
     # vocab = yaml.load(().open(), Loader=yaml.BaseLoader)
     vocab = {k: int(v) for k, v in vocab.items()}
     num_added = add_to_vocab_(vocab, ["<pad>"])
-    print(f'added {num_added} tokens to vocab')
+    print(f"added {num_added} tokens to vocab")
     save_json(vocab, model_dir / "vocab.json")
     write_metadata(model_dir)
 
@@ -196,7 +193,6 @@ def convert_marian_cfg_to_bart(marian_cfg, pad_token_id, eos_token_id, bos_token
         encoder_layers=marian_cfg["enc-depth"],
         decoder_attention_heads=marian_cfg["transformer-heads"],
         encoder_attention_heads=marian_cfg["transformer-heads"],
-
         decoder_ffn_dim=marian_cfg["transformer-dim-ffn"],
         encoder_ffn_dim=marian_cfg["transformer-dim-ffn"],
         d_model=marian_cfg["dim-emb"],
@@ -221,17 +217,18 @@ def check_marian_cfg_assumptions(marian_cfg):
     check_equal(marian_cfg, "transformer-dim-ffn", "transformer-dim-aan")
 
 
-BIAS_KEY = 'decoder_ff_logit_out_b'
+BIAS_KEY = "decoder_ff_logit_out_b"
+
+
 class OpusState:
     def __init__(self, source_dir):
         npz_path = find_model_file(source_dir)
         self.state_dict = np.load(npz_path)
         cfg = load_config_from_state_dict(self.state_dict)
         assert cfg["dim-vocabs"][0] == cfg["dim-vocabs"][1]
-        assert 'Wpos' not in self.state_dict
+        assert "Wpos" not in self.state_dict
         self.state_dict = dict(self.state_dict)
-        self.wemb, self.final_bias = add_emb_entries(
-            self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
+        self.wemb, self.final_bias = add_emb_entries(self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
         pad_token_id = bos_token_id = self.wemb.shape[0] - 1
 
         # self.cfg['vocab_size'] = cfg['dim-vocabs'][0]
@@ -260,7 +257,11 @@ class OpusState:
     def extra_keys(self):
         extra = []
         for k in self.state_keys:
-            if k.startswith("encoder_l") or k.startswith("decoder_l") or k in [CONFIG_KEY, "Wemb", "Wpos", 'decoder_ff_logit_out_b']:
+            if (
+                k.startswith("encoder_l")
+                or k.startswith("decoder_l")
+                or k in [CONFIG_KEY, "Wemb", "Wpos", "decoder_ff_logit_out_b"]
+            ):
                 continue
             else:
                 extra.append(k)

@@ -23,10 +23,10 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     """
 
     def __init__(self, embedding_dim, padding_idx, init_size):
-        super().__init__()
+        super().__init__(init_size, embedding_dim)
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
-        self.weights = create_sinusoidal_embeddings(init_size, embedding_dim)
+        self.weight = create_sinusoidal_embeddings(init_size, embedding_dim)
         self.max_positions = init_size
 
     @torch.no_grad()
@@ -81,7 +81,8 @@ class LearnedPositionalEmbedding(nn.Embedding):
         # if padding_idx is specified then offset the embedding ids by
         # this index and adjust num_embeddings appropriately
         assert padding_idx is not None
-        num_embeddings += padding_idx + 1  # WHY?
+        self.offset = 2
+        num_embeddings += self.offset
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
 
     def forward(self, input, use_cache=False):

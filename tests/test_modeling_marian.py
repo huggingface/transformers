@@ -21,6 +21,7 @@ from pathlib import Path
 
 from transformers import is_torch_available
 from transformers.marian2hf import main
+from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -35,14 +36,12 @@ if is_torch_available():
 LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
 LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
 
-from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
 
 
 class IntegrationTests(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls) -> None:
-        dest_dir = Path('utest-converted-en-de')
+        dest_dir = Path("utest-converted-en-de")
         dest_dir.mkdir(exist_ok=True)
         main(Path(LOCAL_MARIAN), dest_dir)
         cls.tokenizer = MarianSPTokenizer.from_pretrained(dest_dir.name)
@@ -54,6 +53,7 @@ class IntegrationTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         import shutil
+
         shutil.rmtree(cls.dest_dir)
 
     def test_forward(self):
@@ -63,32 +63,35 @@ class IntegrationTests(unittest.TestCase):
         desired_keys = {
             "input_ids",
             "attention_mask",
-            #"token_type_ids",
+            # "token_type_ids",
             "decoder_input_ids",
             "decoder_attention_mask",
-            #"decoder_token_type_ids",
+            # "decoder_token_type_ids",
         }
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
         logits, *enc_features = self.model(**model_inputs)
-        import ipdb; ipdb.set_trace()
+        import ipdb
+
+        ipdb.set_trace()
 
     def test_generate(self):
         """Should produce a good translation."""
         src, tgt = ["What's for dinner?", "life"], ["Was gibt es zum Abendessen", "Leben"]
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src)
-        result_ids = self.model.generate(**model_inputs, num_beams=6, decoder_start_token_id=self.eos_token_id, no_repeat_ngram_size=3)
+        result_ids = self.model.generate(
+            **model_inputs, num_beams=6, decoder_start_token_id=self.eos_token_id, no_repeat_ngram_size=3
+        )
         print(result_ids)
         predicted_de_text = [self.tokenizer.decode(r) for r in result_ids]
         self.assertListEqual(predicted_de_text, tgt)
 
-
     def test_positional_embeddings(self):
 
         pad = 1
-        input_ids = torch.tensor([[4,10, pad, pad, pad]], dtype=torch.long, device=torch_device)
+        input_ids = torch.tensor([[4, 10, pad, pad, pad]], dtype=torch.long, device=torch_device)
         emb1 = SinusoidalPositionalEmbedding(10, pad, init_size=32).to(torch_device)
         no_cache = emb1(input_ids, use_cache=False)
-        yes_cache = emb1(input_ids[:,-1:], use_cache=True)
+        yes_cache = emb1(input_ids[:, -1:], use_cache=True)
         pad = 0
         input_ids = torch.tensor([[4, 10, pad, pad, pad]], dtype=torch.long, device=torch_device)
         emb0 = SinusoidalPositionalEmbedding(10, pad, init_size=32).to(torch_device)
@@ -96,4 +99,6 @@ class IntegrationTests(unittest.TestCase):
         no_cache_pad_zero = emb0(input_ids, use_cache=False)
         position_ids = torch.arange(input_ids.shape[1], dtype=torch.long, device=torch_device)
         hard_coded = emb0.weights.index_select(0, position_ids).unsqueeze(0)
-        import ipdb; ipdb.set_trace()
+        import ipdb
+
+        ipdb.set_trace()

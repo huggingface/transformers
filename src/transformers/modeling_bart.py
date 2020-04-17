@@ -26,7 +26,8 @@ from .activations import ACT2FN
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel
-from .sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding, LearnedPositionalEmbedding
+from .sinusoidal_positional_embeddings import LearnedPositionalEmbedding, SinusoidalPositionalEmbedding
+
 
 logger = logging.getLogger(__name__)
 
@@ -304,7 +305,7 @@ class BartEncoder(nn.Module):
                 attn = None
             else:
                 x, attn = encoder_layer(x, attention_mask)
-                #x = x + new_x
+                # x = x + new_x
 
             if self.output_attentions:
                 all_attentions.append(attn)
@@ -480,8 +481,8 @@ class BartDecoder(PretrainedBartModel):
             input_ids = input_ids[:, -1:]
             positions = positions[:, -1:]  # happens after we embed them
             assert input_ids.ne(self.padding_idx).any()
-            print(f'input_ids after slice: {input_ids.shape}')
-            #print(positions)
+            print(f"input_ids after slice: {input_ids.shape}")
+            # print(positions)
 
         x = self.embed_tokens(input_ids) * self.embed_scale
         x += positions
@@ -514,7 +515,7 @@ class BartDecoder(PretrainedBartModel):
                 layer_state=layer_state,
                 causal_mask=decoder_causal_mask,
             )
-            #x  = x+ new_x
+            # x  = x+ new_x
 
             if use_cache:
                 next_decoder_cache.append(layer_past.copy())
@@ -843,7 +844,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         super().__init__(config)
         base_model = BartModel(config)
         self.model = base_model
-        self.register_buffer('final_logits_bias', torch.zeros((1, self.model.shared.num_embeddings)))
+        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def forward(
@@ -921,7 +922,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
     def output_layer(self, features):
         bias = self.final_logits_bias if self.config.add_bias_logits else None
         return F.linear(features, self.model.shared.weight, bias=bias)
-
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
