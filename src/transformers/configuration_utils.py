@@ -125,7 +125,7 @@ class PretrainedConfig(object):
         self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
         self.label2id = dict((key, int(value)) for key, value in self.label2id.items())
 
-    def save_pretrained(self, save_directory, use_diff=True):
+    def save_pretrained(self, save_directory):
         """
         Save a configuration object to the directory `save_directory`, so that it
         can be re-loaded using the :func:`~transformers.PretrainedConfig.from_pretrained` class method.
@@ -141,7 +141,7 @@ class PretrainedConfig(object):
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 
-        self.to_json_file(output_config_file, use_diff=use_diff)
+        self.to_json_file(output_config_file, use_diff=True)
         logger.info("Configuration saved in {}".format(output_config_file))
 
     @classmethod
@@ -364,12 +364,7 @@ class PretrainedConfig(object):
         """
         config_dict = self.to_dict()
 
-        # This way only the diff to the correct model class config would be serialized
-        # v1 in PR
-        default_config_dict = self.__class__().to_dict()
-
-        # This way the diff to the pretrained generic class config would be serialized
-        # v2 in PR
+        # get the default config dict
         default_config_dict = PretrainedConfig().to_dict()
 
         serializable_config_dict = {}
@@ -393,9 +388,13 @@ class PretrainedConfig(object):
             output["model_type"] = self.__class__.model_type
         return output
 
-    def to_json_string(self, use_diff=False):
+    def to_json_string(self, use_diff=True):
         """
         Serializes this instance to a JSON string.
+
+        Args:
+            use_diff (:obj:`bool`):
+                If set to True, only the difference between the config instance and the default PretrainedConfig() is serialized to JSON string.
 
         Returns:
             :obj:`string`: String containing all the attributes that make up this configuration instance in JSON format.
@@ -406,13 +405,15 @@ class PretrainedConfig(object):
             config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path, use_diff=False):
+    def to_json_file(self, json_file_path, use_diff=True):
         """
         Save this instance to a json file.
 
         Args:
             json_file_path (:obj:`string`):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
+            use_diff (:obj:`bool`):
+                If set to True, only the difference between the config instance and the default PretrainedConfig() is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
