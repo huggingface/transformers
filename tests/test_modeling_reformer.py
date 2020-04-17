@@ -14,22 +14,16 @@
 
 
 import unittest
+
+import gin
 import numpy as np
 
 # trax imports - to be deleted later
 import trax
-from trax.shapes import ShapeDtype as trax_ShapeDtype
-import gin
-
-
-from transformers import (
-    ReformerAttention,
-    ReformerConfig,
-    ReformerModelWithLMHead,
-)
-
-
 from transformers import is_torch_available  # noqa: F401
+from transformers import ReformerAttention, ReformerConfig, ReformerModelWithLMHead
+from trax.shapes import ShapeDtype as trax_ShapeDtype
+
 from .utils import require_torch, torch_device  # noqa: F401
 
 
@@ -37,14 +31,11 @@ if is_torch_available():
     import torch  # noqa: F401
 #    from transformers.modeling_reformer import ()
 
-PATH_TO_SAVE_WEIGHTS = (
-    "/home/patrick/hugging_face/experiments/reformer/intermediate_weights"
-)
+PATH_TO_SAVE_WEIGHTS = "/home/patrick/hugging_face/experiments/reformer/intermediate_weights"
 
 
 @require_torch
 class ReformerIntegrationTests(unittest.TestCase):
-
     def test_lsh_layer(self):
         config = ReformerConfig()
         shape = (2, 192, config.hidden_size)  # Batch x SeqLen x hiddenSize
@@ -82,9 +73,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_input = torch.tensor(np_input, dtype=torch.float)
         config.attn_type = "local"
         hf_layer = ReformerAttention(config)
-        self._set_layer_weights_in_torch_local(
-            trax_weights, hf_layer, config.hidden_size
-        )
+        self._set_layer_weights_in_torch_local(trax_weights, hf_layer, config.hidden_size)
         hf_layer.eval()
 
         hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
@@ -110,9 +99,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
 
         if mode != "predict":
-            hf_input = torch.cat(
-                [torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1
-            )
+            hf_input = torch.cat([torch.tensor(np_zeros), torch.tensor(np_input[:, :-1])], dim=-1)
         else:
             hf_input = torch.tensor(np_input)
 
@@ -123,19 +110,13 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_output = hf_model(hf_input)
         log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
 
-        self.assertTrue(
-            torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3)
-        )
+        self.assertTrue(torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3))
 
     def test_pretrained_crime_and_punishment_lm_model(self):
-        hf_model = ReformerModelWithLMHead.from_pretrained(
-            "patrickvonplaten/reformer-crime-and-punish"
-        )
+        hf_model = ReformerModelWithLMHead.from_pretrained("patrickvonplaten/reformer-crime-and-punish")
         config = hf_model.config
 
-        trax_model_path = (
-            "/home/patrick/hugging_face/models/trained_reformer_colab/model.pkl"
-        )
+        trax_model_path = "/home/patrick/hugging_face/models/trained_reformer_colab/model.pkl"
 
         shape = (1, 128)
         np_input = np.random.randint(0, config.vocab_size, size=shape)
@@ -143,9 +124,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_input = torch.tensor(np_input)
 
         input_signature = trax_ShapeDtype(shape, np.int32)
-        trax_model = self.load_crime_and_punishment_model(
-            trax_model_path, input_signature
-        )
+        trax_model = self.load_crime_and_punishment_model(trax_model_path, input_signature)
 
         hf_output = hf_model(hf_input)
         log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
@@ -153,9 +132,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_output = trax_model(np_input)
         trax_torch_output = torch.tensor(np.asarray(trax_output[0]))
 
-        self.assertTrue(
-            torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3)
-        )
+        self.assertTrue(torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3))
 
     def load_lsh_layer(self, config, mode="eval"):
         gin_config = """
@@ -310,7 +287,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.axial_pos_embds_dim,
             config.chunk_size_feed_forward,
             hidden_act,
-            attn_type
+            attn_type,
         )
         gin.parse_config(gin_config)
         model = trax.models.ReformerLM(mode=mode)
@@ -389,14 +366,10 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def _set_param(self, torch_layer, weight, bias=None):
         with torch.no_grad():
-            assert (
-                torch_layer.weight.shape == weight.shape
-            ), "{} layer.weight does not match".format(torch_layer)
+            assert torch_layer.weight.shape == weight.shape, "{} layer.weight does not match".format(torch_layer)
             torch_layer.weight = torch.nn.Parameter(weight)
             if bias is not None:
-                assert (
-                    torch_layer.bias.shape == bias.shape
-                ), "{} layer.bias does not match".format(torch_layer)
+                assert torch_layer.bias.shape == bias.shape, "{} layer.bias does not match".format(torch_layer)
                 torch_layer.bias = torch.nn.Parameter(bias)
 
     def _set_layer_weights_in_torch_lsh(self, weights, torch_layer, hidden_size):
@@ -407,18 +380,14 @@ class ReformerIntegrationTests(unittest.TestCase):
 
         self._set_param(
             torch_layer.self_attention.query_key,
-            torch.tensor(np_query_key)
-            .transpose(1, 2)
-            .contiguous()
-            .view(-1, hidden_size),
+            torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, hidden_size),
         )
         self._set_param(
             torch_layer.self_attention.value,
             torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
         )
         self._set_param(
-            torch_layer.output.dense,
-            torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
+            torch_layer.output.dense, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
         )
 
     def _set_layer_weights_in_torch_local(self, weights, torch_layer, hidden_size):
@@ -433,16 +402,14 @@ class ReformerIntegrationTests(unittest.TestCase):
             torch.tensor(np_query).transpose(1, 2).contiguous().view(-1, hidden_size),
         )
         self._set_param(
-            torch_layer.self_attention.key,
-            torch.tensor(np_key).transpose(1, 2).contiguous().view(-1, hidden_size),
+            torch_layer.self_attention.key, torch.tensor(np_key).transpose(1, 2).contiguous().view(-1, hidden_size),
         )
         self._set_param(
             torch_layer.self_attention.value,
             torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
         )
         self._set_param(
-            torch_layer.output.dense,
-            torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
+            torch_layer.output.dense, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
         )
 
     def _set_block_weights_in_torch(self, weights, torch_block, hidden_size):
@@ -451,21 +418,15 @@ class ReformerIntegrationTests(unittest.TestCase):
         layer_norm_1_weight = np.asarray(layer_norm_1[0])
         layer_norm_1_bias = np.asarray(layer_norm_1[1])
         self._set_param(
-            torch_block.attention.layer_norm,
-            torch.tensor(layer_norm_1_weight),
-            torch.tensor(layer_norm_1_bias),
+            torch_block.attention.layer_norm, torch.tensor(layer_norm_1_weight), torch.tensor(layer_norm_1_bias),
         )
 
         # lsh weights + output
         attn_weights = weights[0][1]
         if len(attn_weights) < 4:
-            self._set_layer_weights_in_torch_lsh(
-                attn_weights, torch_block.attention, hidden_size
-            )
+            self._set_layer_weights_in_torch_lsh(attn_weights, torch_block.attention, hidden_size)
         else:
-            self._set_layer_weights_in_torch_local(
-                attn_weights, torch_block.attention, hidden_size
-            )
+            self._set_layer_weights_in_torch_local(attn_weights, torch_block.attention, hidden_size)
 
         # intermediate weighs
         intermediate_weights = weights[2][0][2][2]
@@ -478,9 +439,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         layer_norm_2_weight = np.asarray(intermediate_weights[0][0])
         layer_norm_2_bias = np.asarray(intermediate_weights[0][1])
         self._set_param(
-            torch_block.feed_forward.layer_norm,
-            torch.tensor(layer_norm_2_weight),
-            torch.tensor(layer_norm_2_bias),
+            torch_block.feed_forward.layer_norm, torch.tensor(layer_norm_2_weight), torch.tensor(layer_norm_2_bias),
         )
 
         # intermediate dense
@@ -508,20 +467,17 @@ class ReformerIntegrationTests(unittest.TestCase):
         # word embeds
         word_embeddings = np.asarray(weights[1])
         self._set_param(
-            torch_model_reformer.embeddings.word_embeddings,
-            torch.tensor(word_embeddings),
+            torch_model_reformer.embeddings.word_embeddings, torch.tensor(word_embeddings),
         )
 
         if isinstance(weights[3], tuple):
             position_embeddings = torch_model_reformer.embeddings.position_embeddings
             for emb_idx in range(len(position_embeddings.weights)):
                 emb_weights = np.asarray(weights[3][emb_idx][0])
-                assert (
-                    position_embeddings.weights[emb_idx].shape == emb_weights.shape
-                ), "{} emb does not match".format(position_embeddings[emb_idx])
-                position_embeddings.weights[emb_idx] = torch.nn.Parameter(
-                    torch.tensor(emb_weights)
+                assert position_embeddings.weights[emb_idx].shape == emb_weights.shape, "{} emb does not match".format(
+                    position_embeddings[emb_idx]
                 )
+                position_embeddings.weights[emb_idx] = torch.nn.Parameter(torch.tensor(emb_weights))
 
         trax_layer_weights = weights[5]
         assert len(torch_model_reformer.encoder.layer) * 4 + 1 == len(

@@ -190,7 +190,7 @@ if is_torch_available():
         BertForQuestionAnswering,
         load_tf_weights_in_bert,
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        BertLayer
+        BertLayer,
     )
     from .modeling_openai import (
         OpenAIGPTPreTrainedModel,
@@ -320,12 +320,7 @@ if is_torch_available():
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
-    from .modeling_reformer import (
-        ReformerAttention,
-        ReformerLayer,
-        ReformerModel,
-        ReformerModelWithLMHead
-    )
+    from .modeling_reformer import ReformerAttention, ReformerLayer, ReformerModel, ReformerModelWithLMHead
 
     # Optimization
     from .optimization import (
