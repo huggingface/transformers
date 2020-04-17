@@ -49,13 +49,14 @@ class InputExample:
 
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
-        return json.dumps(dataclasses.asdict(self), indent=2, sort_keys=True) + "\n"
+        return json.dumps(dataclasses.asdict(self), indent=2) + "\n"
 
 
 @dataclass(frozen=True)
 class InputFeatures:
     """
     A single set of features of data.
+    Property names are the same names as the corresponding inputs to a model.
 
     Args:
         input_ids: Indices of input sequence tokens in the vocabulary.
@@ -75,10 +76,10 @@ class InputFeatures:
 
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
-        return json.dumps(dataclasses.asdict(self), sort_keys=True) + "\n"
+        return json.dumps(dataclasses.asdict(self)) + "\n"
 
 
-class DataProcessor(object):
+class DataProcessor:
     """Base class for data converters for sequence classification data sets."""
 
     def get_example_from_tensor_dict(self, tensor_dict):

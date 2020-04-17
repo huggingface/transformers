@@ -64,7 +64,6 @@ To start training, just run:
 
 ```bash
 python3 run_ner.py --data_dir ./ \
---model_type bert \
 --labels ./labels.txt \
 --model_name_or_path $BERT_MODEL \
 --output_dir $OUTPUT_DIR \
@@ -125,7 +124,6 @@ To start training, just run:
 
 ```bash
 python3 run_tf_ner.py --data_dir ./ \
---model_type bert \
 --labels ./labels.txt \
 --model_name_or_path $BERT_MODEL \
 --output_dir $OUTPUT_DIR \

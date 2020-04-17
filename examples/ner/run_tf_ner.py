@@ -9,6 +9,7 @@ import re
 import numpy as np
 import tensorflow as tf
 from absl import app, flags, logging
+from fastprogress import master_bar, progress_bar
 from seqeval import metrics
 
 from transformers import (
@@ -17,14 +18,11 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     GradientAccumulator,
+    PreTrainedTokenizer,
     TFAutoModelForTokenClassification,
     create_optimizer,
-    PreTrainedTokenizer,
 )
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
-
-
-from fastprogress import master_bar, progress_bar
 
 
 MODEL_CONFIG_CLASSES = list(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())
@@ -36,9 +34,7 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_string(
-    "model_name_or_path",
-    None,
-    "Path to pretrained model or model identifier from huggingface.co/models",
+    "model_name_or_path", None, "Path to pretrained model or model identifier from huggingface.co/models",
 )
 
 flags.DEFINE_string("output_dir", None, "The output directory where the model checkpoints will be written.")
@@ -404,9 +400,7 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, batch_s
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(
         args["data_dir"],
-        "cached_{}_{}_{}.tf_record".format(
-            mode, tokenizer.__class__.__name__, str(args["max_seq_length"])
-        ),
+        "cached_{}_{}_{}.tf_record".format(mode, tokenizer.__class__.__name__, str(args["max_seq_length"])),
     )
     if os.path.exists(cached_features_file) and not args["overwrite_cache"]:
         logging.info("Loading features from cached file %s", cached_features_file)

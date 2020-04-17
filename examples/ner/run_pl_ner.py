@@ -27,7 +27,7 @@ class NERTransformer(BaseTransformer):
         self.labels = get_labels(hparams.labels)
         num_labels = len(self.labels)
         self.pad_token_label_id = CrossEntropyLoss().ignore_index
-        super(NERTransformer, self).__init__(hparams, num_labels, self.mode)
+        super().__init__(hparams, num_labels, self.mode)
 
     def forward(self, **inputs):
         return self.model(**inputs)
@@ -35,9 +35,9 @@ class NERTransformer(BaseTransformer):
     def training_step(self, batch, batch_num):
         "Compute loss and log."
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
-        if self.hparams.model_type != "distilbert":
+        if self.config.model_type != "distilbert":
             inputs["token_type_ids"] = (
-                batch[2] if self.hparams.model_type in ["bert", "xlnet"] else None
+                batch[2] if self.config.model_type in ["bert", "xlnet"] else None
             )  # XLM and RoBERTa don"t use token_type_ids
 
         outputs = self(**inputs)
@@ -58,12 +58,12 @@ class NERTransformer(BaseTransformer):
                     self.labels,
                     args.max_seq_length,
                     self.tokenizer,
-                    cls_token_at_end=bool(args.model_type in ["xlnet"]),
+                    cls_token_at_end=bool(self.config.model_type in ["xlnet"]),
                     cls_token=self.tokenizer.cls_token,
-                    cls_token_segment_id=2 if args.model_type in ["xlnet"] else 0,
+                    cls_token_segment_id=2 if self.config.model_type in ["xlnet"] else 0,
                     sep_token=self.tokenizer.sep_token,
-                    sep_token_extra=bool(args.model_type in ["roberta"]),
-                    pad_on_left=bool(args.model_type in ["xlnet"]),
+                    sep_token_extra=bool(self.config.model_type in ["roberta"]),
+                    pad_on_left=bool(self.config.model_type in ["xlnet"]),
                     pad_token=self.tokenizer.pad_token_id,
                     pad_token_segment_id=self.tokenizer.pad_token_type_id,
                     pad_token_label_id=self.pad_token_label_id,
@@ -92,9 +92,9 @@ class NERTransformer(BaseTransformer):
         "Compute validation"
 
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
-        if self.hparams.model_type != "distilbert":
+        if self.config.model_type != "distilbert":
             inputs["token_type_ids"] = (
-                batch[2] if self.hparams.model_type in ["bert", "xlnet"] else None
+                batch[2] if self.config.model_type in ["bert", "xlnet"] else None
             )  # XLM and RoBERTa don"t use token_type_ids
         outputs = self(**inputs)
         tmp_eval_loss, logits = outputs[:2]
