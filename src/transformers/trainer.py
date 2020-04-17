@@ -345,7 +345,7 @@ class Trainer:
                             if self.tb_writer:
                                 for k, v in logs.items():
                                     self.tb_writer.add_scalar(k, v, global_step)
-                            print(json.dumps({**logs, **{"step": global_step}}))
+                            epoch_iterator.write(json.dumps({**logs, **{"step": global_step}}))
 
                         if self.args.save_steps > 0 and global_step % self.args.save_steps == 0:
                             # In all cases (even distributed/parallel), self.model is always a reference
