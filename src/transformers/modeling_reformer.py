@@ -22,9 +22,14 @@ from typing import Callable
 
 # DELETE later
 import numpy as np
+
+from operator import mul
+from functools import reduce
+
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from torch.autograd.function import Function
 
 from .activations import gelu, gelu_new, swish
 from .configuration_reformer import ReformerConfig
@@ -148,7 +153,7 @@ class AxialPositionEmbeddings(nn.Module):
 
         if self.training is True:
             assert (
-                int(np.prod(self.axial_pos_shape)) == sequence_length
+                reduce(mul, self.axial_pos_shape) == sequence_length
             ), "Make sure that config.axial_pos_shape factors: {} multiply to sequence length: {}".format(
                 self.axial_pos_shape, sequence_length
             )
@@ -168,7 +173,7 @@ class AxialPositionEmbeddings(nn.Module):
 
         else:
             assert (
-                int(np.prod(self.axial_pos_shape)) >= sequence_length
+                reduce(mul, self.axial_pos_shape) >= sequence_length
             ), "Make sure that config.axial_pos_shape factors: {} multiply at least to max(sequence_length, config.chunk_length): max({}, {})".format(
                 self.axial_pos_shape, sequence_length, self.chunk_length
             )
@@ -694,12 +699,13 @@ class ReformerSelfOutput(nn.Module):
         self.dense = nn.Linear(all_head_size, config.hidden_size, bias=False)
         self.dropout = config.hidden_dropout_prob
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
-        # residual connection
-        output = hidden_states + input_tensor
-        return output
+        return hidden_states
+
+#        output = hidden_states + input_tensor
+#        return output
 
 
 class ReformerAttention(nn.Module):
@@ -729,15 +735,11 @@ class ReformerAttention(nn.Module):
 
         self.output = ReformerSelfOutput(config)
 
-    def forward(
-        self, hidden_states, prev_attention_output, head_mask=None,
-    ):
+    def forward(self, hidden_states, head_mask=None):
         norm_hidden_states = self.layer_norm(hidden_states)
         self_attention_outputs = self.self_attention(norm_hidden_states, head_mask)
 
-        # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
-        # X_1 = prev_attention_output; X_2 = hidden_states
-        attention_output = self.output(self_attention_outputs[0], prev_attention_output)
+        attention_output = self.output(self_attention_outputs[0])
         outputs = (attention_output,) + self_attention_outputs[1:]  # add attentions if we output them
         return outputs
 
@@ -765,11 +767,10 @@ class ReformerFeedForwardOutput(nn.Module):
         self.dense = nn.Linear(config.feed_forward_size, config.hidden_size)
         self.dropout = config.hidden_dropout_prob
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
-        output = hidden_states + input_tensor
-        return output
+        return hidden_states
 
 
 class ChunkReformerFeedForward(nn.Module):
@@ -782,15 +783,14 @@ class ChunkReformerFeedForward(nn.Module):
         self.output = ReformerFeedForwardOutput(config)
 
     # TODO(PVP): Does this work with backpropagation?
-    def forward(self, attention_output, prev_attention_output):
+    def forward(self, attention_output):
         return apply_chunking_to_forward(
-            self.chunk_size_feed_forward, self.seq_len_dim, self.forward_chunk, attention_output, prev_attention_output
-        )
+            self.chunk_size_feed_forward, self.seq_len_dim, self.forward_chunk, attention_output)
 
-    def forward_chunk(self, attention_output, prev_attention_output):
+    def forward_chunk(self, attention_output):
         norm_attention_output = self.layer_norm(attention_output)
         dense_output = self.dense(norm_attention_output)
-        output = self.output(dense_output, prev_attention_output)
+        output = self.output(dense_output)
         return output
 
 
@@ -801,19 +801,52 @@ class ReformerLayer(nn.Module):
         self.feed_forward = ChunkReformerFeedForward(config)
 
     def forward(
-        self, prev_attention_output, hidden_states, head_mask=None,
+        self, prev_attn_output, hidden_states, head_mask=None,
     ):
 
-        # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
-        # X_1 = prev_attention_output; X_2 = hidden_states
-        # Y_1 = attention_output; Y_2 = output
-        attention_outputs = self.attention(hidden_states, prev_attention_output, head_mask)
-        attention_output = attention_outputs[0]
-        output = self.feed_forward(attention_output, hidden_states)
+        with torch.no_grad():
+            # is this _init_seed needed? in https://github.com/RobinBruegger/RevTorch/blob/master/revtorch/revtorch.py
+            attn_outputs = self.attention(hidden_states, head_mask)
+            attn_output = attn_outputs[0]
 
-        outputs = (attention_output, output) + attention_outputs[1:]
+            # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
+            # Y_1 = X_1 + f(X_2)
+            attn_output = prev_attn_output + attn_output
+            # Y_2 = X_2 + g(Y_1)
+            output = hidden_states = self.feed_forward(attn_output)
+
+        outputs = (attn_output, output) + attn_outputs[1:]
 
         return outputs
+
+    def backward_pass(self, next_attn_output, hidden_states, grad_next_attn_output, grad_hidden_states, head_mask=None):
+
+        with torch.enable_grad():
+            next_attn_output.requires_grad = True
+            attn_output = self.attention(next_attn_output, head_mask)
+            torch.autograd.backward(attn_output, grad_hidden_states)
+
+        with torch.no_grad():
+            hidden_states = hidden_states - attn_output
+            del attn_output
+
+            grad_next_attn_output = grad_next_attn_output + next_attn_output.grad
+            next_attn_output.grad = None
+
+        with torch.enable_grad():
+            hidden_states.requires_grad = True
+            output = self.feed_forward(hidden_states)
+            torch.autograd.backward(output, grad_next_attn_output, retain_graph=True)
+
+        with torch.no_grad():
+            next_attn_output = next_attn_output - output
+            del output
+
+            grad_hidden_states = grad_hidden_states + hidden_states.grad
+            hidden_states.grad = None
+            hidden_states = hidden_states.detach()
+
+        return next_attn_output, hidden_states, grad_next_attn_output, grad_hidden_states
 
 
 class ReformerEncoder(nn.Module):
@@ -821,7 +854,7 @@ class ReformerEncoder(nn.Module):
         super().__init__()
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.layer = nn.ModuleList([ReformerLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([ReformerLayer(config) for _ in range(config.num_hidden_layers)])
         # Reformer is using Rev Nets, thus last layer outputs are concatenated and
         # Layer Norm is done over 2 * hidden_size
         self.layer_norm = ReformerLayerNorm(2 * config.hidden_size, eps=config.layer_norm_eps)
@@ -830,26 +863,8 @@ class ReformerEncoder(nn.Module):
     def forward(
         self, hidden_states, head_mask=None,
     ):
-        all_hidden_states = ()
-        all_attentions = ()
-        attention_output = hidden_states
-
-        for i, layer_module in enumerate(self.layer):
-            if self.output_hidden_states:
-                all_hidden_states = all_hidden_states + (attention_output, hidden_states)
-
-            layer_outputs = layer_module(attention_output, hidden_states, head_mask[i])
-            attention_output, hidden_states = layer_outputs[:2]
-
-            if self.output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)
-
-        # Add last layer
-        if self.output_hidden_states:
-            all_hidden_states = all_hidden_states + (attention_output, hidden_states)
-
-        # Concatenate 2 RevNet outputs
-        hidden_states = torch.cat([attention_output, hidden_states], dim=-1)
+        # Make this work
+        hidden_states, all_hidden_states, all_attentions = _ReversibleFunction.apply(hidden_states, self.layers, head_mask)
 
         # Apply layer norm to concatenated hidden states
         hidden_states = self.layer_norm(hidden_states)
@@ -863,6 +878,53 @@ class ReformerEncoder(nn.Module):
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+
+
+class _ReversibleFunction(Function):
+
+    # Make this work
+    @staticmethod
+    def forward(ctx, hidden_states, layers, head_mask, output_hidden_states, output_attentions):
+        all_hidden_states = ()
+        all_attentions = ()
+        ctx.head_mask = head_mask
+
+        attn_output = hidden_states
+        for i, layer in enumerate(layers):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (attn_output, hidden_states)
+
+            layer_outputs = layer(attn_output, hidden_states, head_mask[i])
+            attn_output, hidden_states = layer_outputs[:2]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[2],)
+
+        # Add last layer
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (attn_output, hidden_states)
+
+        ctx.attn_output = attn_output.detach()
+        ctx.hidden_states = hidden_states.detach()
+        ctx.layers = layers
+
+        # Concatenate 2 RevNet outputs
+        hidden_states = torch.cat([attn_output, hidden_states], dim=-1)
+        return hidden_states, all_hidden_states, all_attentions
+
+    @staticmethod
+    def backward(ctx, grad_hidden_states):
+        grad_attn_output, grad_hidden_states = torch.chunk(grad_hidden_states, 2, dim=-1)
+        attn_output = ctx.attn_output
+        hidden_states = ctx.hidden_states
+        head_mask = ctx.head_mask
+
+        for i, layer in enumerate(ctx.layers[::-1]):
+            attn_output, hidden_states, grad_attn_output, grad_hidden_states = layer.backward_pass(attn_output, hidden_states, grad_attn_output, grad_hidden_states, head_mask[i])
+
+        grad_hidden_states = torch.cat([grad_attn_output, grad_hidden_states], dim=-1)
+
+        return grad_hidden_states, None, None
 
 
 class ReformerPreTrainedModel(PreTrainedModel):
