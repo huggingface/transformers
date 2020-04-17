@@ -1,6 +1,9 @@
 import os
+from typing import Dict
 
-from flax.serialization import from_bytes
+from flax.nn import Model, Module
+from flax.serialization import from_bytes, to_bytes
+from jax.random import PRNGKey
 
 from transformers import PretrainedConfig, logger, BertConfig
 from transformers.file_utils import hf_bucket_url, cached_path, WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, \
@@ -12,6 +15,22 @@ class JaxPreTrainedModel:
     pretrained_model_archive_map = {}
     base_model_prefix = ""
     model_class = None
+
+    def __init__(self, config: PretrainedConfig, module: Module, state: Dict):
+        if config is None:
+            raise Exception("config cannot be None")
+
+        if module is None:
+            raise Exception("module cannot be None")
+
+        if state is None:
+            raise Exception("state cannot be None")
+
+        self.key = PRNGKey(0)
+        self.config = config
+        self.module = module
+        self.state = state
+        self.model = Model(module, state)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -102,6 +121,16 @@ class JaxPreTrainedModel:
                                            .format(archive_file))
 
         return cls(config, state, *model_args, **model_kwargs)
+
+    def save_pretrained(self, folder):
+        folder_abs = os.path.abspath(folder)
+
+        if not os.path.exists(folder_abs):
+            os.mkdir(folder_abs)
+
+        with open(os.path.join(folder_abs, "{}.flax".format(self.config.model_type)), "wb") as f:
+            model_bytes = to_bytes(self.model)
+            f.write(model_bytes)
 
 
 def load_pytorch_weights_in_jax_model(pt_state_dict, config: BertConfig):
