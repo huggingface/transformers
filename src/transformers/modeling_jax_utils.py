@@ -1,16 +1,18 @@
 import os
+from abc import ABC, abstractmethod
 from typing import Dict
 
 from flax.nn import Model, Module
-from flax.serialization import from_bytes, to_bytes
+from flax.serialization import to_bytes
+from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
 
-from transformers import PretrainedConfig, logger, BertConfig
+from transformers import PretrainedConfig, logger
 from transformers.file_utils import hf_bucket_url, cached_path, WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, \
     is_remote_url
 
 
-class JaxPreTrainedModel:
+class JaxPreTrainedModel(ABC):
     config_class = None
     pretrained_model_archive_map = {}
     base_model_prefix = ""
@@ -18,19 +20,27 @@ class JaxPreTrainedModel:
 
     def __init__(self, config: PretrainedConfig, module: Module, state: Dict):
         if config is None:
-            raise Exception("config cannot be None")
+            raise ValueError("config cannot be None")
 
         if module is None:
-            raise Exception("module cannot be None")
+            raise ValueError("module cannot be None")
 
         if state is None:
-            raise Exception("state cannot be None")
+            raise ValueError("state cannot be None")
 
+        # Those are private to be exposed as typed property on derived classes.
+        self._config = config
+        self._module = module
+
+        # Those are public as their type is generic to every derived classes.
         self.key = PRNGKey(0)
-        self.config = config
-        self.module = module
         self.state = state
         self.model = Model(module, state)
+
+    @staticmethod
+    @abstractmethod
+    def convert_from_pytorch(pt_state: Dict, config: PretrainedConfig) -> Dict:
+        raise NotImplementedError()
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -114,7 +124,9 @@ class JaxPreTrainedModel:
                 try:
                     import torch
                     state = torch.load(state_f)
-                    state = load_pytorch_weights_in_jax_model(state, config)
+                    state = {k: v.numpy() for k, v in state.items()}
+                    state = cls.convert_from_pytorch(state, config)
+                    state = unflatten_dict({tuple(k.split('.')[1:]): v for k, v in state.items()})
                 except:
                     raise EnvironmentError("Unable to convert model {} to Flax deserializable object. "
                                            "Supported format are PyTorch archive or Flax msgpack"
@@ -128,76 +140,6 @@ class JaxPreTrainedModel:
         if not os.path.exists(folder_abs):
             os.mkdir(folder_abs)
 
-        with open(os.path.join(folder_abs, "{}.flax".format(self.config.model_type)), "wb") as f:
+        with open(os.path.join(folder_abs, "{}.flax".format(self._config.model_type)), "wb") as f:
             model_bytes = to_bytes(self.model)
             f.write(model_bytes)
-
-
-def load_pytorch_weights_in_jax_model(pt_state_dict, config: BertConfig):
-    from flax.traverse_util import unflatten_dict
-    state = {k: v.numpy() for k, v in pt_state_dict.items()}
-    jax_state = dict(state)
-
-    # Need to change some parameters name to match Flax names so that we don't have to fork any layer
-    for key, tensor in state.items():
-        # Key parts
-        key_parts = set(key.split("."))
-
-        # Every dense layer have a "kernel" parameters instead of "weight"
-        if "dense.weight" in key:
-            del jax_state[key]
-            key = key.replace("weight", "kernel")
-            jax_state[key] = tensor
-
-        # SelfAttention needs also to replace "weight" by "kernel"
-        if {"query", "key", "value"} & key_parts:
-
-            # Flax SelfAttention decomposes the heads (num_head, size // num_heads)
-            if "bias" in key:
-                jax_state[key] = tensor.reshape((config.num_attention_heads, -1))
-            elif "weight":
-                del jax_state[key]
-                key = key.replace("weight", "kernel")
-                tensor = tensor.reshape((config.num_attention_heads, -1, config.hidden_size)).transpose((2, 0, 1))
-                jax_state[key] = tensor
-
-        # SelfAttention output is not a separate layer, remove one nesting
-        if "attention.output.dense" in key:
-            del jax_state[key]
-            key = key.replace("attention.output.dense", "attention.self.out")
-            jax_state[key] = tensor
-
-        # SelfAttention output is not a separate layer, remove nesting on layer norm
-        if "attention.output.LayerNorm" in key:
-            del jax_state[key]
-            key = key.replace("attention.output.LayerNorm", "attention.LayerNorm")
-            jax_state[key] = tensor
-
-        # There are some transposed parameters w.r.t their PyTorch counterpart
-        if "intermediate.dense.kernel" in key or "output.dense.kernel" in key:
-            jax_state[key] = tensor.T
-
-        # Self Attention output projection needs to be transposed
-        if "out.kernel" in key:
-            jax_state[key] = tensor.reshape((config.hidden_size, config.num_attention_heads, -1)).transpose(1, 2, 0)
-
-        # Pooler needs to transpose its kernel
-        if "pooler.dense.kernel" in key:
-            jax_state[key] = tensor.T
-
-        # Handle LayerNorm conversion
-        if "LayerNorm" in key:
-            del jax_state[key]
-
-            # Replace LayerNorm by layer_norm
-            new_key = key.replace("LayerNorm", "layer_norm")
-
-            if "weight" in key:
-                new_key = new_key.replace("weight", "gamma")
-            elif "bias" in key:
-                new_key = new_key.replace("bias", "beta")
-
-            jax_state[new_key] = tensor
-
-    # Unflatten the dictionary to load into Jax
-    return unflatten_dict({tuple(k.split('.')[1:]): v for k, v in jax_state.items()})
