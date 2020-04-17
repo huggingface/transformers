@@ -31,6 +31,7 @@ if is_tf_available():
         TFRobertaForMaskedLM,
         TFRobertaForSequenceClassification,
         TFRobertaForTokenClassification,
+        TFRobertaForQuestionAnswering,
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
@@ -39,7 +40,15 @@ if is_tf_available():
 class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (TFRobertaModel, TFRobertaForMaskedLM, TFRobertaForSequenceClassification) if is_tf_available() else ()
+        (
+            TFRobertaModel,
+            TFRobertaForMaskedLM,
+            TFRobertaForSequenceClassification,
+            TFRobertaForTokenClassification,
+            TFRobertaForQuestionAnswering,
+        )
+        if is_tf_available()
+        else ()
     )
 
     class TFRobertaModelTester(object):
@@ -171,6 +180,19 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
                 list(result["logits"].shape), [self.batch_size, self.seq_length, self.num_labels]
             )
 
+        def create_and_check_roberta_for_question_answering(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            model = TFRobertaForQuestionAnswering(config=config)
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            start_logits, end_logits = model(inputs)
+            result = {
+                "start_logits": start_logits.numpy(),
+                "end_logits": end_logits.numpy(),
+            }
+            self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -203,6 +225,10 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_roberta_for_token_classification(*config_and_inputs)
+
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_roberta_for_question_answering(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
