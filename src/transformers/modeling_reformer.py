@@ -44,8 +44,6 @@ REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {}
 #    "reformer-base-cased": "https://s3.amazonaws.com/models.huggingface.co/reformer/reformer-base-cased-pytorch_model.bin",
 #    "reformer-large-cased": "https://s3.amazonaws.com/models.huggingface.co/reformer/reformer-large-cased-pytorch_model.bin",
 
-PATH_TO_SAVE_WEIGHTS = "/home/patrick/hugging_face/experiments/reformer/intermediate_weights"
-
 
 def mish(x):
     return x * torch.tanh(nn.functional.softplus(x))
@@ -102,7 +100,10 @@ def apply_chunking_to_forward(chunk_size: int, chunk_dim: int, forward_fn: Calla
     return forward_fn(*input_tensors)
 
 
-class AxialEmbeddings(nn.Module):
+class AxialPositionEmbeddings(nn.Module):
+    """Constructs axial position embeddings. Useful for very long input
+    sequences to stay memory and computational efficient
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -110,6 +111,7 @@ class AxialEmbeddings(nn.Module):
         self.axial_pos_embds_dim = config.axial_pos_embds_dim
         self.chunk_length = config.chunk_length
         self.weights = nn.ParameterList()
+        self.dropout = config.hidden_dropout_prob
 
         assert sum(self.axial_pos_embds_dim) == config.hidden_size, "Make sure that config.axial_pos_embds factors: {} sum to config.hidden_size: {}".format(self.axial_pos_embds_dim, config.hidden_size)
 
@@ -132,10 +134,16 @@ class AxialEmbeddings(nn.Module):
 
         if self.training is True:
             assert int(np.prod(self.axial_pos_shape)) == sequence_length, "Make sure that config.axial_pos_shape factors: {} multiply to sequence length: {}".format(self.axial_pos_shape, sequence_length)
-
-            # TODO (PVP): Add dropout when training
-            # get correct position encodings
-            position_encodings = torch.cat([torch.reshape(weight, (batch_size, sequence_length) + weight.shape[-1:]) for weight in broadcasted_weights], dim=-1)
+            if self.dropout > 0:
+                weights = torch.cat(broadcasted_weights, dim=-1)
+                # permute weights so that 2D correctly drops dims 1 and 2
+                perm_weigthts = weights.permute(0, 3, 2, 1)
+                # drop entire matrix of last two dims (prev dims 1 and 2)
+                drop_perm_weights = nn.functional.dropout2d(perm_weigthts, self.dropout, training=self.training)
+                drop_weights = drop_perm_weights.permute(0, 3, 2, 1)
+                position_encodings = torch.reshape(drop_weights, (batch_size, sequence_length, -1))
+            else:
+                position_encodings = torch.cat([torch.reshape(weight, (batch_size, sequence_length, -1)) for weight in broadcasted_weights], dim=-1)
 
         else:
             assert int(np.prod(self.axial_pos_shape)) >= sequence_length, "Make sure that config.axial_pos_shape factors: {} multiply at least to max(sequence_length, config.chunk_length): max({}, {})".format(self.axial_pos_shape, sequence_length, self.chunk_length)
@@ -146,6 +154,26 @@ class AxialEmbeddings(nn.Module):
         return position_encodings
 
 
+class PositionEmbeddings(nn.Module):
+    """Constructs conventional position embeddings of shape `[max_pos_embeddings, hidden_size]`.
+    """
+
+    def __init__(self, config):
+        self.max_position_embeddings = config.max_position_embeddings
+        self.dropout = config.hidden_dropout_prob
+        self.embedding = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        if self.config.sinusoidal_pos_embds is True:
+            create_sinusoidal_embeddings(
+                n_pos=config.max_position_embeddings, dim=config.hidden_size, out=self.embedding.weight
+            )
+
+    def forward(self, position_ids):
+        position_embeddings = self.embedding(position_ids)
+        if self.config.sinusoidal_pos_embds is False:
+            position_embeddings = nn.functional.dropout(position_embeddings, self.dropout, self.training)
+        return position_embeddings
+
+
 class ReformerEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings.
     """
@@ -153,17 +181,9 @@ class ReformerEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.max_position_embeddings = config.max_position_embeddings
-
+        self.position_embeddings = AxialPositionEmbeddings(config) if config.axial_pos_embds else PositionEmbeddings(config)
         assert not (config.sinusoidal_pos_embds and config.axial_pos_embds), "Select either config.sinusoidal_pos_embds or config.axial_pos_embds"
-        if config.sinusoidal_pos_embds:
-            create_sinusoidal_embeddings(
-                n_pos=config.max_position_embeddings, dim=config.hidden_size, out=self.position_embeddings.weight
-            )
-        elif config.axial_pos_embds:
-            self.position_embeddings = AxialEmbeddings(config)
-
+        self.max_position_embeddings = config.max_position_embeddings
         self.dropout = config.hidden_dropout_prob
 
     def forward(self, input_ids=None, position_ids=None, inputs_embeds=None):
@@ -183,13 +203,9 @@ class ReformerEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
 
         assert position_ids.shape[-1] <= self.max_position_embeddings, "Sequence Length: {} has to be larger equal than config.max_position_embeddings: {}".format(position_ids.shape[-1], self.max_position_embeddings)
+        embeddings = nn.functional.dropout(inputs_embeds, self.dropout, self.training)
 
         position_embeddings = self.position_embeddings(position_ids)
-
-        # TODO(PVP): In https://github.com/google/trax/blob/d947ebc184b94bc48d7e48cc63156a047f00992e/trax/models/reformer/reformer.py#L775 there are two dropouts right after each other as
-        # it is implemented here. Check if this is ok.
-
-        embeddings = nn.functional.dropout(inputs_embeds, self.dropout, self.training)
 
         embeddings = embeddings + position_embeddings
         embeddings = nn.functional.dropout(embeddings, self.dropout, self.training)
@@ -458,8 +474,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # where a token has no other valid attention targets (e.g. the first token in a sequence) "
 
         logits = torch.logsumexp(query_key_dots, dim=-1, keepdim=True)
+        # dots shape is `[batch_size, num_attn_heads, num_hashes * seq_len // chunk_length, chunk_length, chunk_length * (num_chunks_before + num_chunks_after)]`
         dots = torch.exp(query_key_dots - logits)
 
+        # TODO(PVP): discuss with thom. Trax uses special dropout  here where same dropout mask is applied for all "num_hashes * seq_len // chunk_length" dim.
+        # should be fine with normal dropout, no?
         # dropout
         dots = nn.functional.dropout(dots, self.dropout, self.training)
 
@@ -788,19 +807,26 @@ class ReformerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, AxialEmbeddings):
+        if isinstance(module, AxialPositionEmbeddings):
             for weight in module.weights:
                 torch.nn.init.normal_(weight, std=self.config.axial_norm_std)
-        elif isinstance(module, (nn.Linear, nn.Embedding)):
+        elif isinstance(module, nn.Embedding):
+            if module.weight.requires_grad:
+                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             if module.weight.requires_grad:
-                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+                torch.nn.init.xavier_uniform(module.weight)
+                # TODO(PVP): discuss with Thom if necessary here to use different init
+#                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, ReformerLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.data.normal_(mean=0.0, std=1e-6)
+            # TODO(PVP): discuss with Thom if necessary here to use different init
+#            module.bias.data.zero_()
 
 
 class ReformerModel(ReformerPreTrainedModel):
