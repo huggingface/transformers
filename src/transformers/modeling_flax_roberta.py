@@ -1,5 +1,3 @@
-from typing import Callable
-
 import jax
 import numpy as np
 import jax.numpy as jnp
@@ -30,6 +28,10 @@ class FlaxRobertaModel(FlaxBertModel):
         if config.pad_token_id is None:
             config.pad_token_id = 1
 
+    @property
+    def config(self) -> RobertaConfig:
+        return self._config
+
     def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
         @jax.jit
         def predict(input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
@@ -45,7 +47,7 @@ class FlaxRobertaModel(FlaxBertModel):
             if attention_mask is None:
                 attention_mask = np.ones_like(input_ids)
 
-            return self._bert(
+            return self.model(
                 jnp.array(input_ids, dtype='i4'),
                 jnp.array(token_type_ids, dtype='i4'),
                 jnp.array(position_ids, dtype='i4'),
