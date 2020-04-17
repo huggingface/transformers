@@ -423,9 +423,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # TODO: delete later when integration tests are ok
         # create a random self.attention_head_size x self.num_hashes x self.num_buckets/2
         #        random_rotations = torch.randn(rotations_shape, device=vectors.device)
-        numpy.random.seed(self.hash_seed)
+        np.random.seed(self.hash_seed)
         random_rotations = torch.tensor(
-            numpy.random.normal(size=rotations_shape), dtype=torch.float32, device=vectors.device
+            np.random.normal(size=rotations_shape), dtype=torch.float32, device=vectors.device
         )
         # rotated_vectors has dim:
         # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2

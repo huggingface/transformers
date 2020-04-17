@@ -21,17 +21,15 @@ import numpy as np
 # trax imports - to be deleted later
 import trax
 from transformers import is_torch_available  # noqa: F401
-from transformers import ReformerAttention, ReformerConfig, ReformerModelWithLMHead
+
 from trax.shapes import ShapeDtype as trax_ShapeDtype
 
 from .utils import require_torch, torch_device  # noqa: F401
 
 
 if is_torch_available():
-    import torch  # noqa: F401
-#    from transformers.modeling_reformer import ()
-
-PATH_TO_SAVE_WEIGHTS = "/home/patrick/hugging_face/experiments/reformer/intermediate_weights"
+    import torch
+    from transformers import ReformerAttention, ReformerConfig, ReformerModelWithLMHead
 
 
 @require_torch
@@ -89,7 +87,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         np_input = np.random.randint(0, config.vocab_size, size=shape)
         np_zeros = np.zeros((shape[0], 1), dtype=np.int)
 
-        mode = "train"
+        mode = "predict"
         trax_model = self.load_reformer_lm_model(config, mode=mode)
 
         input_signature = trax_ShapeDtype(shape, np.int32)
