@@ -460,6 +460,12 @@ class BatchEncoding(UserDict):
 
 
 class SpecialTokensMixin:
+    """ SpecialTokensMixin is derived by ``PreTrainedTokenizer`` and ``PreTrainedTokenizerFast`` and
+        handles specific behaviors related to special tokens. In particular, this class hold the
+        attributes which can be used to directly access to these special tokens in a
+        model-independant manner and allow to set and update the special tokens.
+    """
+
     SPECIAL_TOKENS_ATTRIBUTES = [
         "bos_token",
         "eos_token",

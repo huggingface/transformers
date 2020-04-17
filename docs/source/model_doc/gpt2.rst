@@ -51,6 +51,13 @@ GPT2Tokenizer
     :members: save_vocabulary
 
 
+GPT2TokenizerFast
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.GPT2TokenizerFast
+    :members:
+
+
 GPT2Model
 ~~~~~~~~~~~~~~~~~~~~~
 
