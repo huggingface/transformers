@@ -15,7 +15,7 @@ wc -l cnn_articles_input_data.txt # should print 11490
 wc -l cnn_articles_reference_summaries.txt # should print 11490
 ```
 
-### Usage
+### Generating Summaries
 
 To create summaries for each article in dataset, run:
 ```bash
@@ -23,3 +23,7 @@ python evaluate_cnn.py cnn_articles_input_data.txt cnn_generated_articles_summar
 ```
 The default batch size, 8, fits in 16GB GPU memory, but may need to be adjusted to fit your system.
 The rouge scores "rouge1, rouge2, rougeL" are automatically created and saved in ``rouge_score.txt``.
+
+
+### Finetuning
+Pass model_type=t5 and model `examples/summarization/bart/finetune.py`
