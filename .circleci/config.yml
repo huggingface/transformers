@@ -124,6 +124,10 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: sudo pip install .[sklearn,tf-cpu,testing]
+            - run: sudo pip install codecov pytest-cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: codecov
             - restore_cache:
                   keys:
                       - v0.3-tf-{{ checksum "setup.py" }}
@@ -150,7 +154,7 @@ jobs:
         steps:
             - checkout
             - run: pip install --upgrade pip
-            - run: pip install git+https://github.com/huggingface/nlp
+            - run: pip install git+https://github.com/huggingface/datasets
             - run: sudo pip install .[flax,sklearn,torch,testing]
             - run: sudo pip install codecov pytest-cov
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
