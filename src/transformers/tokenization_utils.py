@@ -166,7 +166,7 @@ class BatchEncoding(UserDict):
         In addition, this class expose utility methods to map from word/char space to token space.
 
         Args:
-            data (:obj:`dict`): Dictionnary of lists/arrays returned by the encode/batch_encode methods ('input_ids', 'attention_mask'...)
+            data (:obj:`dict`): Dictionary of lists/arrays returned by the encode/batch_encode methods ('input_ids', 'attention_mask'...)
             encoding (:obj:`EncodingFast`, :obj:`list(EncodingFast)`, `optional`, defaults to :obj:`None`):
                 If the tokenizer is a fast tokenizer which outputs additional informations like mapping from word/char space to token space
                 the `EncodingFast` instance or list of instance (for batches) hold these informations.
