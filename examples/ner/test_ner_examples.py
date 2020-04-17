@@ -30,4 +30,4 @@ class ExamplesTests(unittest.TestCase):
             """.split()
         with patch.object(sys, "argv", ["run.py"] + testargs):
             result = run_ner.main()
-            self.assertLess(result["loss"], 1.0)
+            self.assertLess(result["loss"], 1.5)
