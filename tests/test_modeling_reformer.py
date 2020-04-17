@@ -100,7 +100,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         np_input = np.random.randint(0, config.vocab_size, size=shape)
         np_zeros = np.zeros((shape[0], 1), dtype=np.int)
 
-        mode = "predict"
+        mode = "train"
         trax_model = self.load_reformer_lm_model(config, mode=mode)
 
         input_signature = trax_ShapeDtype(shape, np.int32)
