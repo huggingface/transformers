@@ -127,8 +127,7 @@ class ReformerConfig(PretrainedConfig):
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
-
-#        TO CHANGE LATER:
+        #        TO CHANGE LATER:
         self.seed = 0
 
         self.is_decoder = True
