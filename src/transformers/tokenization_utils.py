@@ -1434,7 +1434,6 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         )
 
         if return_tensors is not None:
-
             self.convert_to_tensors_(batch_outputs, return_tensors)
         return BatchEncoding(batch_outputs)
 
@@ -1479,9 +1478,6 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 if key not in batch_outputs:
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
-
-        if return_tensors is not None:
-            self.convert_to_tensors_(batch_outputs, return_tensors)
         return BatchEncoding(batch_outputs)
 
     def convert_to_tensors_(self, batch_outputs: dict, return_tensors: str) -> None:
