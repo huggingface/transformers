@@ -251,29 +251,25 @@ class FlaxBertModel(JaxPreTrainedModel):
     base_model_prefix = "bert"
 
     def __init__(self, config: BertConfig, state: dict, **kwargs):
-        self.config = config
-        self.key = PRNGKey(0)
-        self.state = state
-
-        self._model_def = BertModel.partial(
-            vocab_size=self.config.vocab_size,
-            hidden_size=self.config.hidden_size,
-            type_vocab_size=self.config.type_vocab_size,
-            max_length=self.config.max_position_embeddings,
-            num_encoder_layers=self.config.num_hidden_layers,
-            num_heads=self.config.num_attention_heads,
-            head_size=self.config.hidden_size,
-            intermediate_size=self.config.intermediate_size,
-            padding_idx=self.config.pad_token_id
+        model_def = BertModel.partial(
+            vocab_size=config.vocab_size,
+            hidden_size=config.hidden_size,
+            type_vocab_size=config.type_vocab_size,
+            max_length=config.max_position_embeddings,
+            num_encoder_layers=config.num_hidden_layers,
+            num_heads=config.num_attention_heads,
+            head_size=config.hidden_size,
+            intermediate_size=config.intermediate_size,
+            padding_idx=config.pad_token_id
         )
 
-        self._bert = nn.Model(self._model_def, self.state)
+        super().__init__(config, model_def, state)
 
     def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
 
         @jax.jit
         def predict(input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
-            return self._bert(
+            return self.model(
                 jnp.array(input_ids, dtype='i4'),
                 jnp.array(token_type_ids, dtype='i4'),
                 jnp.array(position_ids, dtype='i4'),
@@ -290,13 +286,3 @@ class FlaxBertModel(JaxPreTrainedModel):
             attention_mask = np.ones_like(input_ids)
 
         return predict(input_ids, token_type_ids, position_ids, attention_mask)
-
-    def save_pretrained(self, folder):
-        folder_abs = os.path.abspath(folder)
-
-        if not os.path.exists(folder_abs):
-            os.mkdir(folder_abs)
-
-        with open(os.path.join(folder_abs, 'model.flax'), 'wb') as f:
-            model_bytes = to_bytes(self._bert)
-            f.write(model_bytes)
