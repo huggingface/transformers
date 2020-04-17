@@ -116,6 +116,9 @@ class MarianSPTokenizer(PreTrainedTokenizer):
             return token_ids_0 + [self.eos_token_id]
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
+    def decode_batch(self, token_ids, **kwargs) -> List[str]:
+        return [self.decode(ids) for ids in token_ids]
+
     def prepare_translation_batch(
         self,
         src_texts: List[str],
@@ -150,7 +153,7 @@ class MarianSPTokenizer(PreTrainedTokenizer):
             return model_inputs
         decoder_inputs = self.batch_encode_plus(
             tgt_texts,
-            add_special_tokens=False,
+            add_special_tokens=True,
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,

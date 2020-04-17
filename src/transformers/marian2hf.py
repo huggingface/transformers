@@ -153,18 +153,21 @@ def write_metadata(dest_dir: Path):
 
 def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
     start = max(vocab.values()) + 1
+    added = 0
     for tok in special_tokens:
         if tok in vocab:
             continue
-        vocab[tok] = start
-        start += 1
+        vocab[tok] = start + added
+        added += 1
+    return added
 
 
 def add_special_tokens_to_vocab(model_dir: Path) -> None:
     vocab = load_yaml(model_dir / "opus.spm32k-spm32k.vocab.yml")
     # vocab = yaml.load(().open(), Loader=yaml.BaseLoader)
     vocab = {k: int(v) for k, v in vocab.items()}
-    add_to_vocab_(vocab, ["<pad>"])
+    num_added = add_to_vocab_(vocab, ["<pad>"])
+    print(f'added {num_added} tokens to vocab')
     save_json(vocab, model_dir / "vocab.json")
     write_metadata(model_dir)
 
@@ -184,14 +187,8 @@ def check_equal(marian_cfg, k1, k2):
     assert v1 == v2, f"hparams {k1},{k2} differ: {v1} != {v2}"
 
 
-def convert_v2(marian_cfg, pad_token_id, eos_token_id, bos_token_id) -> BartConfig:
-    for k, v in assume_vals.items():
-        actual = marian_cfg[k]
-        assert actual == v, f"Unexpected config value for {k} expected {v} got {actual}"
-
-    check_equal(marian_cfg, "transformer-ffn-activation", "transformer-aan-activation")
-    check_equal(marian_cfg, "transformer-ffn-depth", "transformer-aan-depth")
-    check_equal(marian_cfg, "transformer-dim-ffn", "transformer-dim-aan")
+def convert_marian_cfg_to_bart(marian_cfg, pad_token_id, eos_token_id, bos_token_id) -> BartConfig:
+    check_marian_cfg_assumptions(marian_cfg)
 
     bart_cfg = BartConfig(
         vocab_size=marian_cfg["vocab_size"],
@@ -199,7 +196,7 @@ def convert_v2(marian_cfg, pad_token_id, eos_token_id, bos_token_id) -> BartConf
         encoder_layers=marian_cfg["enc-depth"],
         decoder_attention_heads=marian_cfg["transformer-heads"],
         encoder_attention_heads=marian_cfg["transformer-heads"],
-        static_position_embeddings=marian_cfg["transformer-train-position-embeddings"],
+
         decoder_ffn_dim=marian_cfg["transformer-dim-ffn"],
         encoder_ffn_dim=marian_cfg["transformer-dim-ffn"],
         d_model=marian_cfg["dim-emb"],
@@ -210,15 +207,28 @@ def convert_v2(marian_cfg, pad_token_id, eos_token_id, bos_token_id) -> BartConf
         max_position_embeddings=marian_cfg["dim-emb"],
         scale_embedding=True,
         normalize_embedding="n" in marian_cfg["transformer-preprocess"],
+        static_position_embeddings=not marian_cfg["transformer-train-position-embeddings"],
     )
     return bart_cfg
 
+
+def check_marian_cfg_assumptions(marian_cfg):
+    for k, v in assume_vals.items():
+        actual = marian_cfg[k]
+        assert actual == v, f"Unexpected config value for {k} expected {v} got {actual}"
+    check_equal(marian_cfg, "transformer-ffn-activation", "transformer-aan-activation")
+    check_equal(marian_cfg, "transformer-ffn-depth", "transformer-aan-depth")
+    check_equal(marian_cfg, "transformer-dim-ffn", "transformer-dim-aan")
+
+
 BIAS_KEY = 'decoder_ff_logit_out_b'
 class OpusState:
-    def __init__(self, npz_path):
+    def __init__(self, source_dir):
+        npz_path = find_model_file(source_dir)
         self.state_dict = np.load(npz_path)
         cfg = load_config_from_state_dict(self.state_dict)
         assert cfg["dim-vocabs"][0] == cfg["dim-vocabs"][1]
+        assert 'Wpos' not in self.state_dict
         self.state_dict = dict(self.state_dict)
         self.wemb, self.final_bias = add_emb_entries(
             self.state_dict["Wemb"], self.state_dict[BIAS_KEY], 1)
@@ -232,7 +242,7 @@ class OpusState:
         if "Wtype" in self.state_dict:
             raise ValueError("found Wtype key")
         self.check_layer_entries()
-
+        self.source_dir = source_dir
         self.cfg = cfg
 
     def check_layer_entries(self):
@@ -264,7 +274,8 @@ class OpusState:
 
         hidden_size, intermediate_shape = state_dict["encoder_l1_ffn_W1"].shape
         assert hidden_size == marian_cfg["dim-emb"]
-        cfg = convert_v2(marian_cfg, pad_token_id, eos_token_id, None)
+        cfg = convert_marian_cfg_to_bart(marian_cfg, pad_token_id, eos_token_id, None)
+        assert cfg.static_position_embeddings
         model = BartForConditionalGeneration(cfg)
         assert "hidden_size" not in cfg.to_dict()
         print("loaded empty marian model")
@@ -280,7 +291,7 @@ class OpusState:
         model.model.shared.weight = wemb_tensor
         model.model.encoder.embed_tokens = model.model.decoder.embed_tokens = model.model.shared
 
-        model.final_bias = bias_tensor
+        model.final_logits_bias = bias_tensor
 
         if "Wpos" in state_dict:
             wpos_tensor = torch.tensor(state_dict["Wpos"])
@@ -329,8 +340,7 @@ def main(source_dir, dest_dir):
     tokenizer = MarianSPTokenizer.from_pretrained(str(source_dir))
     save_tokenizer(tokenizer, dest_dir)
 
-    model_path = find_model_file(source_dir)
-    opus_state = OpusState(model_path)  # not actually a dict
+    opus_state = OpusState(source_dir)  # not actually a dict
     assert opus_state.cfg["vocab_size"] == len(tokenizer.encoder)
     decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
     decoder_remap = {"beam-size": "num_beams", "normalize": "len_pen??", "word-penalty": "len_pen??"}

@@ -25,9 +25,8 @@ from torch import Tensor, nn
 from .activations import ACT2FN
 from .configuration_bart import BartConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
-from .sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
-
+from .modeling_utils import PreTrainedModel
+from .sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding, LearnedPositionalEmbedding
 
 logger = logging.getLogger(__name__)
 
@@ -732,33 +731,6 @@ class BartClassificationHead(nn.Module):
         x = self.dropout(x)
         x = self.out_proj(x)
         return x
-
-
-class LearnedPositionalEmbedding(nn.Embedding):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    Padding ids are ignored by either offsetting based on padding_idx
-    or by setting padding_idx to None and ensuring that the appropriate
-    position ids are passed to the forward function.
-    """
-
-    def __init__(
-        self, num_embeddings: int, embedding_dim: int, padding_idx: int,
-    ):
-        # if padding_idx is specified then offset the embedding ids by
-        # this index and adjust num_embeddings appropriately
-        assert padding_idx is not None
-        num_embeddings += padding_idx + 1  # WHY?
-        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
-
-    def forward(self, input, use_cache=False):
-        """Input is expected to be of size [bsz x seqlen]."""
-        if use_cache:  # the position is our current step in the decoded sequence
-            pos = int(self.padding_idx + input.size(1))
-            positions = input.data.new(1, 1).fill_(pos)
-        else:
-            positions = create_position_ids_from_input_ids(input, self.padding_idx)
-        return super().forward(positions)
 
 
 def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):

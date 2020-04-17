@@ -2308,6 +2308,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         else:
             return text
 
+    def decode_batch(self, token_ids, **kwargs) -> List[str]:
+        return [self.decode(ids) for ids in token_ids]
+
     def save_vocabulary(self, save_directory: str) -> Tuple[str]:
         if os.path.isdir(save_directory):
             files = self._tokenizer.save(save_directory)

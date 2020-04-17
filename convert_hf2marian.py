@@ -103,7 +103,7 @@ def extract(layer, nth, level):
         for n in pd:
             print("  " * (level + 1), n, pd[n].shape)
 
-        convert(pd, ["attention.self.query.weight"], f"encoder_l{nth + 1}_self_Wq", transpose=True)
+        convert(pd, ["attention.self.query.weight"], f"encoder_l{nth + 1}_self_Wq")
         convert(pd, ["attention.self.key.weight"], f"encoder_l{nth + 1}_self_Wk")
         convert(pd, ["attention.self.value.weight"], f"encoder_l{nth + 1}_self_Wv")
 

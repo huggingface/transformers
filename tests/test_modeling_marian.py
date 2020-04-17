@@ -35,6 +35,7 @@ if is_torch_available():
 LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
 LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
 
+from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
 
 
 class IntegrationTests(unittest.TestCase):
@@ -56,7 +57,7 @@ class IntegrationTests(unittest.TestCase):
         shutil.rmtree(cls.dest_dir)
 
     def test_forward(self):
-        src, tgt = ["What's for dinner?", "life"], ["Was gibt es zum Abendessen", "Leben"]
+        src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
         shapes = {k: v.shape for k, v in model_inputs.items()}
         desired_keys = {
@@ -68,7 +69,8 @@ class IntegrationTests(unittest.TestCase):
             #"decoder_token_type_ids",
         }
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
-        outputs = self.model(**model_inputs)
+        logits, *enc_features = self.model(**model_inputs)
+        import ipdb; ipdb.set_trace()
 
     def test_generate(self):
         """Should produce a good translation."""
@@ -78,3 +80,20 @@ class IntegrationTests(unittest.TestCase):
         print(result_ids)
         predicted_de_text = [self.tokenizer.decode(r) for r in result_ids]
         self.assertListEqual(predicted_de_text, tgt)
+
+
+    def test_positional_embeddings(self):
+
+        pad = 1
+        input_ids = torch.tensor([[4,10, pad, pad, pad]], dtype=torch.long, device=torch_device)
+        emb1 = SinusoidalPositionalEmbedding(10, pad, init_size=32).to(torch_device)
+        no_cache = emb1(input_ids, use_cache=False)
+        yes_cache = emb1(input_ids[:,-1:], use_cache=True)
+        pad = 0
+        input_ids = torch.tensor([[4, 10, pad, pad, pad]], dtype=torch.long, device=torch_device)
+        emb0 = SinusoidalPositionalEmbedding(10, pad, init_size=32).to(torch_device)
+        assert (emb1.weights == emb0.weights).all()
+        no_cache_pad_zero = emb0(input_ids, use_cache=False)
+        position_ids = torch.arange(input_ids.shape[1], dtype=torch.long, device=torch_device)
+        hard_coded = emb0.weights.index_select(0, position_ids).unsqueeze(0)
+        import ipdb; ipdb.set_trace()

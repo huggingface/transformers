@@ -461,9 +461,8 @@ class XLMModel(XLMPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(slen, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).expand((bs, slen))
-        else:
-            assert position_ids.size() == (bs, slen)  # (slen, bs)
-            # position_ids = position_ids.transpose(0, 1)
+
+        assert position_ids.size() == (bs, slen)  # (slen, bs)
 
         # langs
         if langs is not None:

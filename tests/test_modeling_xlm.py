@@ -187,6 +187,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             model = XLMModel(config=config)
+            import ipdb; ipdb.set_trace()
             model.to(torch_device)
             model.eval()
             outputs = model(input_ids, lengths=input_lengths, langs=token_type_ids)
