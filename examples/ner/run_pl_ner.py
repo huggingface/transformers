@@ -38,7 +38,7 @@ class NERTransformer(BaseTransformer):
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
                 batch[2] if self.hparams.model_type in ["bert", "xlnet"] else None
-            )  # XLM and RoBERTa don"t use segment_ids
+            )  # XLM and RoBERTa don"t use token_type_ids
 
         outputs = self(**inputs)
         loss = outputs[0]
@@ -77,11 +77,15 @@ class NERTransformer(BaseTransformer):
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+        all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
+        if features[0].token_type_ids is not None:
+            all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+        else:
+            all_token_type_ids = torch.tensor([0 for f in features], dtype=torch.long)
+            # HACK(we will not use this anymore soon)
         all_label_ids = torch.tensor([f.label_ids for f in features], dtype=torch.long)
         return DataLoader(
-            TensorDataset(all_input_ids, all_input_mask, all_segment_ids, all_label_ids), batch_size=batch_size
+            TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_label_ids), batch_size=batch_size
         )
 
     def validation_step(self, batch, batch_nb):
@@ -91,7 +95,7 @@ class NERTransformer(BaseTransformer):
         if self.hparams.model_type != "distilbert":
             inputs["token_type_ids"] = (
                 batch[2] if self.hparams.model_type in ["bert", "xlnet"] else None
-            )  # XLM and RoBERTa don"t use segment_ids
+            )  # XLM and RoBERTa don"t use token_type_ids
         outputs = self(**inputs)
         tmp_eval_loss, logits = outputs[:2]
         preds = logits.detach().cpu().numpy()
