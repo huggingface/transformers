@@ -111,6 +111,7 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_tpu_available,
+    is_flax_available
 )
 from .hf_argparser import HfArgumentParser
 
