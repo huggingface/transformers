@@ -84,6 +84,7 @@ extras["tf-cpu"] = [
     # "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx",
 ]
 extras["torch"] = ["torch"]
+extras["flax"] = ["flax"]
 extras["onnxruntime"] = ["onnxruntime>=1.4.0", "onnxruntime-tools>=1.4.2"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]

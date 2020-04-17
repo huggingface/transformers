@@ -124,6 +124,10 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - run: sudo pip install .[sklearn,tf-cpu,testing]
+            - run: sudo pip install codecov pytest-cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: codecov
             - restore_cache:
                   keys:
                       - v0.3-tf-{{ checksum "setup.py" }}
@@ -139,6 +143,20 @@ jobs:
             - store_artifacts:
                path: ~/transformers/output.txt
                destination: test_output.txt
+    run_tests_flax:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo pip install .[flax,sklearn,torch,testing]
+            - run: sudo pip install codecov pytest-cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: codecov
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
         docker:
@@ -303,6 +321,7 @@ workflows:
             - run_tests_torch_and_tf
             - run_tests_torch
             - run_tests_tf
+            - run_tests_flax
             - build_doc
             - deploy_doc: *workflow_filters
     tpu_testing_jobs:
