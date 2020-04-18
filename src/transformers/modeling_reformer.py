@@ -954,8 +954,6 @@ class ReformerPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.normal_(mean=0.0, std=1e-6)
             # TODO(PVP): discuss with Thom if necessary here to use different init
-
-
 #            module.bias.data.zero_()
 
 
