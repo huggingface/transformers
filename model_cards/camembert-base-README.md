@@ -14,8 +14,8 @@ For further information or requests, please go to [Camembert Website](https://ca
 
 ## Pre-trained models
 
-| Model                          | #params                                                                                                                  | Arch. | Training data                     |
-|--------------------------------|---------|--------------------------------------------------------------------------------------------------------------------------|-------|-----------------------------------|
+| Model                          | #params                        | Arch. | Training data                     |
+|--------------------------------|--------------------------------|-------|-----------------------------------|
 | `camembert-base` | 110M   | Base  | OSCAR (138 GB of text)            |
 | `camembert` / `camembert-large`              | 335M    | Large | CCNet (135 GB of text)            |
 | `camembert` / `camembert-base-ccnet`         | 110M    | Base  | CCNet (135 GB of text)            |
