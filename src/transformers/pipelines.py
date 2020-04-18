@@ -636,13 +636,14 @@ class TextGenerationPipeline(Pipeline):
                     prompt_text = self.PADDING_TEXT + prompt_text
                 inputs = self._parse_and_tokenize(prompt_text)
 
-                # Ensure that batch size = 1 (batch generation not allowed for now)
-                assert input_ids.shape[0] == 1
-
                 if self.framework == "pt":
                     inputs = self.ensure_tensor_on_device(**inputs)
 
                 input_ids = inputs["input_ids"]
+
+                # Ensure that batch size = 1 (batch generation not allowed for now)
+                assert input_ids.shape[0] == 1
+
                 output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
 
             generated_sequences = []
