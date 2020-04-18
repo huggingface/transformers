@@ -1594,7 +1594,7 @@ SUPPORTED_TASKS = {
             "tokenizer": ("t5-base", {"use_fast": False}),
         },
     },
-    "generation": {
+    "text_generation": {
         "impl": TextGenerationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
