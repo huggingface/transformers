@@ -57,6 +57,8 @@ Tips
 - For sequence to sequence generation, it is recommended to use ``T5ForConditionalGeneration.generate()``. The method takes care of feeding the encoded input via cross-attention layers to the decoder and auto-regressively generates the decoder output.
 - T5 uses relative scalar embeddings. Encoder input padding can be done on the left and on the right.
 
+The original code can be found `here <https://github.com/google-research/text-to-text-transfer-transformer>`_.
+
 
 T5Config
 ~~~~~~~~~~~~~~~~~~~~~

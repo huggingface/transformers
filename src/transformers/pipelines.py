@@ -23,17 +23,12 @@ import sys
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from os.path import abspath, exists
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
-from .configuration_bart import BartConfig
-from .configuration_distilbert import DistilBertConfig
-from .configuration_roberta import RobertaConfig
-from .configuration_t5 import T5Config
 from .configuration_utils import PretrainedConfig
-from .configuration_xlm import XLMConfig
 from .data import SquadExample, squad_convert_examples_to_features
 from .file_utils import is_tf_available, is_torch_available
 from .modelcard import ModelCard
@@ -423,27 +418,6 @@ class Pipeline(_ScikitCompat):
         """
         return {name: tensor.to(self.device) for name, tensor in inputs.items()}
 
-    def inputs_for_model(self, features: Union[dict, List[dict]]) -> Dict:
-        """
-        Generates the input dictionary with model-specific parameters.
-
-        Returns:
-            dict holding all the required parameters for model's forward
-        """
-        args = ["input_ids", "attention_mask"]
-
-        if not isinstance(self.model.config, (DistilBertConfig, XLMConfig, RobertaConfig, BartConfig, T5Config)):
-            args += ["token_type_ids"]
-
-        # PR #1548 (CLI) There is an issue with attention_mask
-        # if 'xlnet' in model_type or 'xlm' in model_type:
-        #     args += ['cls_index', 'p_mask']
-
-        if isinstance(features, dict):
-            return {k: features[k] for k in args}
-        else:
-            return {k: [feature[k] for feature in features] for k in args}
-
     def _parse_and_tokenize(self, *texts, pad_to_max_length=False, **kwargs):
         """
         Parse arguments and tokenize
@@ -457,9 +431,6 @@ class Pipeline(_ScikitCompat):
             max_length=self.tokenizer.max_len,
             pad_to_max_length=pad_to_max_length,
         )
-
-        # Filter out features not available on specific models
-        # inputs = self.inputs_for_model(inputs)
 
         return inputs
 
@@ -1087,6 +1058,7 @@ class QuestionAnsweringPipeline(Pipeline):
         kwargs.setdefault("max_answer_len", 15)
         kwargs.setdefault("max_seq_len", 384)
         kwargs.setdefault("max_question_len", 64)
+        kwargs.setdefault("handle_impossible_answer", False)
 
         if kwargs["topk"] < 1:
             raise ValueError("topk parameter should be >= 1 (got {})".format(kwargs["topk"]))
@@ -1109,7 +1081,8 @@ class QuestionAnsweringPipeline(Pipeline):
         ]
         all_answers = []
         for features, example in zip(features_list, examples):
-            fw_args = self.inputs_for_model([f.__dict__ for f in features])
+            model_input_names = self.tokenizer.model_input_names + ["input_ids"]
+            fw_args = {k: [feature.__dict__[k] for feature in features] for k in model_input_names}
 
             # Manage tensor allocation on correct device
             with self.device_placement():
@@ -1124,6 +1097,7 @@ class QuestionAnsweringPipeline(Pipeline):
                         start, end = self.model(**fw_args)
                         start, end = start.cpu().numpy(), end.cpu().numpy()
 
+            min_null_score = 1000000  # large and positive
             answers = []
             for (feature, start_, end_) in zip(features, start, end):
                 # Normalize logits and spans to retrieve the answer
@@ -1136,8 +1110,9 @@ class QuestionAnsweringPipeline(Pipeline):
                     end_ * np.abs(np.array(feature.p_mask) - 1),
                 )
 
-                # TODO : What happens if not possible
-                # Mask CLS
+                if kwargs["handle_impossible_answer"]:
+                    min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
+
                 start_[0] = end_[0] = 0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
@@ -1155,6 +1130,10 @@ class QuestionAnsweringPipeline(Pipeline):
                     }
                     for s, e, score in zip(starts, ends, scores)
                 ]
+
+            if kwargs["handle_impossible_answer"]:
+                answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
+
             answers = sorted(answers, key=lambda x: x["score"], reverse=True)[: kwargs["topk"]]
             all_answers += answers
 
