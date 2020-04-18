@@ -394,6 +394,7 @@ class PipelineCommonTests(unittest.TestCase):
         QuestionAnsweringPipeline,
         FillMaskPipeline,
         TextClassificationPipeline,
+        TextGenerationPipeline,
     )
 
     @slow
