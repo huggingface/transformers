@@ -140,12 +140,6 @@ class CTRLTokenizer(PreTrainedTokenizer):
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
         super().__init__(unk_token=unk_token, **kwargs)
-        self.max_len_single_sentence = (
-            self.max_len
-        )  # no default special tokens - you can update this value if you add special tokens
-        self.max_len_sentences_pair = (
-            self.max_len
-        )  # no default special tokens - you can update this value if you add special tokens
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)

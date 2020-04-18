@@ -138,8 +138,6 @@ class XLNetTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
         self._pad_token_type_id = 3
 
         try:
