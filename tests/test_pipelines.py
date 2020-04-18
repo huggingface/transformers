@@ -9,6 +9,7 @@ from transformers.pipelines import (
     Pipeline,
     QuestionAnsweringPipeline,
     TextClassificationPipeline,
+    TextGenerationPipeline,
 )
 
 from .utils import require_tf, require_torch, slow
@@ -65,6 +66,15 @@ TEXT_CLASSIF_FINETUNED_MODELS = {
         "distilbert-base-uncased-finetuned-sst-2-english",
         "distilbert-base-uncased-finetuned-sst-2-english",
     )
+}
+
+TEXT_GENERATION_FINETUNED_MODELS = {
+    ("gpt2", "gpt2"),
+    ("openai-gpt", "openai-gpt"),
+    ("transfo-xl-wt103", "transfo-xl-wt103"),
+    ("xlnet-base-cased", "xlnet-base-cased"),
+    ("t5-base", "t5-base"),
+    ("ctrl", "ctrl"),
 }
 
 FILL_MASK_FINETUNED_MODELS = [
@@ -298,6 +308,16 @@ class MonoColumnInputTestCase(unittest.TestCase):
             nlp = pipeline(task=task, model=model, tokenizer=tokenizer, framework="tf")
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, mandatory_keys,
+            )
+
+    @require_torch
+    def test_text_generation(self):
+        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        invalid_inputs = [None]
+        for model, tokenizer in TF_TRANSLATION_FINETUNED_MODELS:
+            nlp = pipeline(task="text_generation", model=model, tokenizer=tokenizer, framework="pt")
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, invalid_inputs, {},
             )
 
 
