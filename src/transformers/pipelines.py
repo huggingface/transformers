@@ -553,7 +553,7 @@ class FeatureExtractionPipeline(Pipeline):
         return super().__call__(*args, **kwargs).tolist()
 
 
-class GenerationPipeline(Pipeline):
+class TextGenerationPipeline(Pipeline):
     """
     Language generation pipeline using any ModelWithLMHead head. This pipeline predicts the words that will follow a specified text prompt.
 
@@ -1595,7 +1595,7 @@ SUPPORTED_TASKS = {
         },
     },
     "generation": {
-        "impl": GenerationPipeline,
+        "impl": TextGenerationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {"model": {"pt": "gpt2", "tf": "gpt2"}, "config": None, "tokenizer": "gpt2"},
