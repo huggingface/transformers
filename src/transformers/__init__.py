@@ -32,47 +32,24 @@ from .benchmark_utils import (
     stop_memory_tracing,
 )
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-from .configuration_auto import (
-    ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    CONFIG_MAPPING,
-    AutoConfig,
-)
+from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
 from .configuration_bart import BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
-from .configuration_camembert import (
-    CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    CamembertConfig,
-)
+from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
-from .configuration_distilbert import (
-    DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    DistilBertConfig,
-)
+from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
-from .configuration_flaubert import (
-    FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    FlaubertConfig,
-)
+from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_mmbt import MMBTConfig
-from .configuration_openai import (
-    OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    OpenAIGPTConfig,
-)
+from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
-from .configuration_transfo_xl import (
-    TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    TransfoXLConfig,
-)
-
+from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 # Configurations
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
-from .configuration_xlm_roberta import (
-    XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    XLMRobertaConfig,
-)
+from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
 from .data import (
     DataProcessor,
@@ -93,7 +70,6 @@ from .data import (
     xnli_processors,
     xnli_tasks_num_labels,
 )
-
 # Files and general utilities
 from .file_utils import (
     CONFIG_NAME,
@@ -111,10 +87,8 @@ from .file_utils import (
     is_torch_available,
 )
 from .hf_argparser import HfArgumentParser
-
 # Model Cards
 from .modelcard import ModelCard
-
 # TF 2.0 <=> PyTorch conversion utilities
 from .modeling_tf_pytorch_utils import (
     convert_tf_weight_name_to_pt_weight_name,
@@ -125,7 +99,6 @@ from .modeling_tf_pytorch_utils import (
     load_tf2_model_in_pytorch_model,
     load_tf2_weights_in_pytorch_model,
 )
-
 # Pipelines
 from .pipelines import (
     CsvPipelineDataFormat,
@@ -147,17 +120,8 @@ from .pipelines import (
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer, MBartTokenizer
-from .tokenization_bert import (
-    BasicTokenizer,
-    BertTokenizer,
-    BertTokenizerFast,
-    WordpieceTokenizer,
-)
-from .tokenization_bert_japanese import (
-    BertJapaneseTokenizer,
-    CharacterTokenizer,
-    MecabTokenizer,
-)
+from .tokenization_bert import BasicTokenizer, BertTokenizer, BertTokenizerFast, WordpieceTokenizer
+from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_camembert import CamembertTokenizer
 from .tokenization_ctrl import CTRLTokenizer
 from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFast
@@ -167,12 +131,7 @@ from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
-from .tokenization_transfo_xl import (
-    TransfoXLCorpus,
-    TransfoXLTokenizer,
-    TransfoXLTokenizerFast,
-)
-
+from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
 # Tokenizers
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlm import XLMTokenizer
