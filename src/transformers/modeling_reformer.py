@@ -820,7 +820,7 @@ class ReformerLayer(nn.Module):
 
         with torch.enable_grad():
             next_attn_output.requires_grad = True
-            attn_output = self.attention(next_attn_output, head_mask)
+            attn_output = self.attention(next_attn_output, head_mask)[0]
             torch.autograd.backward(attn_output, grad_hidden_states)
 
         with torch.no_grad():
@@ -849,9 +849,8 @@ class ReformerLayer(nn.Module):
 class _ReversibleFunction(Function):
     @staticmethod
     def forward(ctx, hidden_states, layers, head_mask, all_hidden_states, all_attentions, do_output_hidden_states, do_output_attentions):
-        ctx.head_mask = head_mask
 
-        attn_output = hidden_states
+        hidden_states, attn_output = torch.chunk(hidden_states, 2, dim=-1)
         for i, layer in enumerate(layers):
             if do_output_hidden_states is True:
                 all_hidden_states.append(attn_output)
@@ -868,6 +867,8 @@ class _ReversibleFunction(Function):
             all_hidden_states.append(attn_output)
             all_hidden_states.append(hidden_states)
 
+        # attach params to ctx for backward
+        ctx.head_mask = head_mask
         ctx.attn_output = attn_output.detach()
         ctx.hidden_states = hidden_states.detach()
         ctx.layers = layers
@@ -879,16 +880,21 @@ class _ReversibleFunction(Function):
     @staticmethod
     def backward(ctx, grad_hidden_states):
         grad_attn_output, grad_hidden_states = torch.chunk(grad_hidden_states, 2, dim=-1)
+
+        # retrieve params from ctx for backward
         attn_output = ctx.attn_output
         hidden_states = ctx.hidden_states
         head_mask = ctx.head_mask
+        layers = ctx.layers
 
-        for i, layer in enumerate(ctx.layers[::-1]):
+        for i, layer in enumerate(layers[::-1]):
             attn_output, hidden_states, grad_attn_output, grad_hidden_states = layer.backward_pass(attn_output, hidden_states, grad_attn_output, grad_hidden_states, head_mask[i])
 
         grad_hidden_states = torch.cat([grad_attn_output, grad_hidden_states], dim=-1)
 
-        return grad_hidden_states, None, None
+        # num of return vars has to match num of forward() args
+        # return gradient for hidden_states arg and None for other args
+        return grad_hidden_states, None, None, None, None, None, None
 
 
 class ReformerEncoder(nn.Module):
@@ -908,6 +914,7 @@ class ReformerEncoder(nn.Module):
         all_attentions = []
 
         # Make this work
+        hidden_states = torch.cat([hidden_states, hidden_states], dim=-1)
         hidden_states = _ReversibleFunction.apply(hidden_states, self.layers, head_mask, all_hidden_states, all_attentions, do_output_hidden_states, do_output_attentions)
 
         # Apply layer norm to concatenated hidden states
