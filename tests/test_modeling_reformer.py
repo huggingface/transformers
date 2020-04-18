@@ -54,7 +54,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_layer.eval()
 
         hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
-        hf_output = hf_layer.output(hf_attention_all_heads, torch.zeros_like(hf_input))
+        hf_output = hf_layer.output(hf_attention_all_heads)
 
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
 
@@ -75,7 +75,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         hf_layer.eval()
 
         hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
-        hf_output = hf_layer.output(hf_attention_all_heads, torch.zeros_like(hf_input))
+        hf_output = hf_layer.output(hf_attention_all_heads)
 
         trax_torch_output = torch.tensor(np.asarray(trax_output))
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
@@ -478,10 +478,10 @@ class ReformerIntegrationTests(unittest.TestCase):
                 position_embeddings.weights[emb_idx] = torch.nn.Parameter(torch.tensor(emb_weights))
 
         trax_layer_weights = weights[5]
-        assert len(torch_model_reformer.encoder.layer) * 4 + 1 == len(
+        assert len(torch_model_reformer.encoder.layers) * 4 + 1 == len(
             trax_layer_weights
         ), "HF and trax model do not have the same number of layers"
-        for layer_idx, layer in enumerate(torch_model_reformer.encoder.layer):
+        for layer_idx, layer in enumerate(torch_model_reformer.encoder.layers):
             block_weights = trax_layer_weights[4 * layer_idx : 4 * (layer_idx + 1)]
             self._set_block_weights_in_torch(block_weights, layer, hidden_size)
 
