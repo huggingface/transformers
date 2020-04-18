@@ -635,14 +635,14 @@ class TextGenerationPipeline(Pipeline):
                 if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
                     prompt_text = self.PADDING_TEXT + prompt_text
                 inputs = self._parse_and_tokenize(prompt_text)
-                input_ids = inputs["input_ids"]
 
                 # Ensure that batch size = 1 (batch generation not allowed for now)
                 assert input_ids.shape[0] == 1
 
                 if self.framework == "pt":
-                    input_ids = self.ensure_tensor_on_device(**input_ids)
+                    inputs = self.ensure_tensor_on_device(**inputs)
 
+                input_ids = inputs["input_ids"]
                 output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
 
             generated_sequences = []
