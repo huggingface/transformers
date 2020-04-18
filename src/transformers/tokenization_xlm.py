@@ -629,9 +629,6 @@ class XLMTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
-
         # cache of sm.MosesPunctNormalizer instance
         self.cache_moses_punct_normalizer = dict()
         # cache of sm.MosesTokenizer instance
