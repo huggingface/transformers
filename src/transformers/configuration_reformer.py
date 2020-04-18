@@ -121,7 +121,7 @@ class ReformerConfig(PretrainedConfig):
         axial_pos_embds=True,
         axial_pos_shape=[64, 3],
         axial_pos_embds_dim=[64, 64],
-        attn_type="lsh",
+        attn_type="local",
         pad_token_id=0,
         **kwargs
     ):

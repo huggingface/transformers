@@ -320,7 +320,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.chunk_length = config.chunk_length
         self.num_chunks_before = config.num_chunks_before
         self.num_chunks_after = config.num_chunks_after
-        self.output_attentions = config.output_attentions
         self.is_decoder = config.is_decoder
         self.max_position_embeddings = config.max_position_embeddings
 
@@ -334,7 +333,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.dropout = config.attention_probs_dropout_prob
 
     def forward(
-        self, hidden_states, head_mask=None,
+        self, hidden_states, head_mask=None, do_output_attentions=False
     ):
         # get SeqLen and BatchSize
         sequence_length = hidden_states.shape[1]
@@ -397,7 +396,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size)
 
         out_vectors = self._transpose_for_output(out_vectors, self.num_attention_heads, self.attention_head_size)
-        outputs = (out_vectors, attention_probs) if self.output_attentions else (out_vectors,)
+        outputs = (out_vectors, attention_probs) if do_output_attentions else (out_vectors,)
 
         return outputs
 
@@ -583,7 +582,6 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         self.chunk_length = config.chunk_length
         self.num_chunks_before = config.num_chunks_before
         self.num_chunks_after = config.num_chunks_after
-        self.output_attentions = config.output_attentions
         self.is_decoder = config.is_decoder
         self.pad_token_id = config.pad_token_id
 
@@ -598,7 +596,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         self.dropout = config.attention_probs_dropout_prob
 
     def forward(
-        self, hidden_states, head_mask=None,
+        self, hidden_states, head_mask=None, do_output_attentions=False,
     ):
 
         # get SeqLen and BatchSize
@@ -686,8 +684,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size)
 
         out_vectors = self._transpose_for_output(out_vectors, self.num_attention_heads, self.attention_head_size)
-        outputs = (out_vectors, attention_probs) if self.output_attentions else (out_vectors,)
-        #        outputs = (out_vectors, attention_probs) if self.output_attentions else (out_vectors[:, :3, :],)
+        outputs = (out_vectors, attention_probs) if do_output_attentions else (out_vectors,)
 
         return outputs
 
@@ -735,9 +732,9 @@ class ReformerAttention(nn.Module):
 
         self.output = ReformerSelfOutput(config)
 
-    def forward(self, hidden_states, head_mask=None):
+    def forward(self, hidden_states, head_mask=None, do_output_attentions=False):
         norm_hidden_states = self.layer_norm(hidden_states)
-        self_attention_outputs = self.self_attention(norm_hidden_states, head_mask)
+        self_attention_outputs = self.self_attention(norm_hidden_states, head_mask, do_output_attentions)
 
         attention_output = self.output(self_attention_outputs[0])
         outputs = (attention_output,) + self_attention_outputs[1:]  # add attentions if we output them
@@ -801,19 +798,19 @@ class ReformerLayer(nn.Module):
         self.feed_forward = ChunkReformerFeedForward(config)
 
     def forward(
-        self, prev_attn_output, hidden_states, head_mask=None,
+        self, prev_attn_output, hidden_states, head_mask=None, do_output_attentions=False
     ):
 
         with torch.no_grad():
             # is this _init_seed needed? in https://github.com/RobinBruegger/RevTorch/blob/master/revtorch/revtorch.py
-            attn_outputs = self.attention(hidden_states, head_mask)
+            attn_outputs = self.attention(hidden_states, head_mask, do_output_attentions)
             attn_output = attn_outputs[0]
 
             # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
             # Y_1 = X_1 + f(X_2)
             attn_output = prev_attn_output + attn_output
             # Y_2 = X_2 + g(Y_1)
-            output = hidden_states = self.feed_forward(attn_output)
+            output = hidden_states + self.feed_forward(attn_output)
 
         outputs = (attn_output, output) + attn_outputs[1:]
 
@@ -849,60 +846,27 @@ class ReformerLayer(nn.Module):
         return next_attn_output, hidden_states, grad_next_attn_output, grad_hidden_states
 
 
-class ReformerEncoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
-        self.layers = nn.ModuleList([ReformerLayer(config) for _ in range(config.num_hidden_layers)])
-        # Reformer is using Rev Nets, thus last layer outputs are concatenated and
-        # Layer Norm is done over 2 * hidden_size
-        self.layer_norm = ReformerLayerNorm(2 * config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = config.hidden_dropout_prob
-
-    def forward(
-        self, hidden_states, head_mask=None,
-    ):
-        # Make this work
-        hidden_states, all_hidden_states, all_attentions = _ReversibleFunction.apply(hidden_states, self.layers, head_mask)
-
-        # Apply layer norm to concatenated hidden states
-        hidden_states = self.layer_norm(hidden_states)
-
-        # Apply dropout
-        hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
-
-        outputs = (hidden_states,)
-        if self.output_hidden_states:
-            outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
-            outputs = outputs + (all_attentions,)
-        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
-
-
 class _ReversibleFunction(Function):
-
-    # Make this work
     @staticmethod
-    def forward(ctx, hidden_states, layers, head_mask, output_hidden_states, output_attentions):
-        all_hidden_states = ()
-        all_attentions = ()
+    def forward(ctx, hidden_states, layers, head_mask, all_hidden_states, all_attentions, do_output_hidden_states, do_output_attentions):
         ctx.head_mask = head_mask
 
         attn_output = hidden_states
         for i, layer in enumerate(layers):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (attn_output, hidden_states)
+            if do_output_hidden_states is True:
+                all_hidden_states.append(attn_output)
+                all_hidden_states.append(hidden_states)
 
-            layer_outputs = layer(attn_output, hidden_states, head_mask[i])
+            layer_outputs = layer(attn_output, hidden_states, head_mask[i], do_output_attentions)
             attn_output, hidden_states = layer_outputs[:2]
 
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)
+            if do_output_attentions:
+                all_attentions.append(layer_outputs[2])
 
         # Add last layer
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (attn_output, hidden_states)
+        if do_output_hidden_states is True:
+            all_hidden_states.append(attn_output)
+            all_hidden_states.append(hidden_states)
 
         ctx.attn_output = attn_output.detach()
         ctx.hidden_states = hidden_states.detach()
@@ -910,7 +874,7 @@ class _ReversibleFunction(Function):
 
         # Concatenate 2 RevNet outputs
         hidden_states = torch.cat([attn_output, hidden_states], dim=-1)
-        return hidden_states, all_hidden_states, all_attentions
+        return hidden_states
 
     @staticmethod
     def backward(ctx, grad_hidden_states):
@@ -925,6 +889,39 @@ class _ReversibleFunction(Function):
         grad_hidden_states = torch.cat([grad_attn_output, grad_hidden_states], dim=-1)
 
         return grad_hidden_states, None, None
+
+
+class ReformerEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.layers = nn.ModuleList([ReformerLayer(config) for _ in range(config.num_hidden_layers)])
+        # Reformer is using Rev Nets, thus last layer outputs are concatenated and
+        # Layer Norm is done over 2 * hidden_size
+        self.layer_norm = ReformerLayerNorm(2 * config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = config.hidden_dropout_prob
+
+    def forward(
+        self, hidden_states, head_mask=None, do_output_hidden_states=False, do_output_attentions=False,
+    ):
+        # hidden_states and attention lists to be filled if wished
+        all_hidden_states = []
+        all_attentions = []
+
+        # Make this work
+        hidden_states = _ReversibleFunction.apply(hidden_states, self.layers, head_mask, all_hidden_states, all_attentions, do_output_hidden_states, do_output_attentions)
+
+        # Apply layer norm to concatenated hidden states
+        hidden_states = self.layer_norm(hidden_states)
+
+        # Apply dropout
+        hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
+
+        outputs = (hidden_states,)
+        if do_output_hidden_states:
+            outputs = outputs + (tuple(all_hidden_states),)
+        if do_output_attentions:
+            outputs = outputs + (tuple(all_attentions),)
+        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 
 class ReformerPreTrainedModel(PreTrainedModel):
@@ -948,7 +945,7 @@ class ReformerPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             if module.weight.requires_grad:
-                torch.nn.init.xavier_uniform(module.weight)
+                torch.nn.init.xavier_uniform_(module.weight)
                 # TODO(PVP): discuss with Thom if necessary here to use different init
         #                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, ReformerLayerNorm):
@@ -1003,7 +1000,7 @@ class ReformerModel(ReformerPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(
-        self, input_ids=None, attention_mask=None, position_ids=None, head_mask=None, inputs_embeds=None,
+        self, input_ids=None, attention_mask=None, position_ids=None, head_mask=None, inputs_embeds=None, do_output_hidden_states=False, do_output_attentions=False
     ):
         r"""
     Return:
@@ -1015,7 +1012,7 @@ class ReformerModel(ReformerPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``do_output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1092,7 +1089,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
 
-        encoder_outputs = self.encoder(embedding_output, head_mask=head_mask,)
+        encoder_outputs = self.encoder(embedding_output, head_mask, do_output_hidden_states, do_output_attentions)
         sequence_output = encoder_outputs[0]
 
         # if padding was applied
@@ -1144,11 +1141,11 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         pass
 
     def forward(
-        self, input_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, lm_labels=None,
+        self, input_ids=None, position_ids=None, head_mask=None, inputs_embeds=None, lm_labels=None, do_output_hidden_states=False, do_output_attentions=False
     ):
 
         reformer_outputs = self.reformer(
-            input_ids, position_ids=position_ids, head_mask=head_mask, inputs_embeds=inputs_embeds,
+            input_ids, position_ids=position_ids, head_mask=head_mask, inputs_embeds=inputs_embeds, do_output_hidden_states=do_output_hidden_states, do_output_attentions=do_output_attentions
         )
 
         sequence_output = reformer_outputs[0]
