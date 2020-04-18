@@ -633,8 +633,6 @@ class TextGenerationPipeline(Pipeline):
                 generated_sequences += [total_sequence]
             all_generated_sequences += [generated_sequences]
 
-        if len(all_generated_sequences) == 1:
-            return all_generated_sequences[0]
         return all_generated_sequences
 
 
