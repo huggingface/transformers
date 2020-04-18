@@ -643,7 +643,6 @@ class TextGenerationPipeline(Pipeline):
 
                 # Ensure that batch size = 1 (batch generation not allowed for now)
                 assert input_ids.shape[0] == 1
-
                 output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
 
             generated_sequences = []
