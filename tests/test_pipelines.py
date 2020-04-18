@@ -62,11 +62,8 @@ TEXT_CLASSIF_FINETUNED_MODELS = {
 
 TEXT_GENERATION_FINETUNED_MODELS = {
     ("gpt2", "gpt2"),
-    ("openai-gpt", "openai-gpt"),
     ("transfo-xl-wt103", "transfo-xl-wt103"),
     ("xlnet-base-cased", "xlnet-base-cased"),
-    ("t5-base", "t5-base"),
-    ("ctrl", "ctrl"),
 }
 
 FILL_MASK_FINETUNED_MODELS = [
