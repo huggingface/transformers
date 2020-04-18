@@ -613,16 +613,6 @@ class GenerationPipeline(Pipeline):
         args_parser: ArgumentHandler = None,
         device: int = -1,
         task: str = "",
-        length: int = 20,
-        temperature: float = 1.0,
-        top_k: int = 0,
-        top_p: float = 0.9,
-        repetition_penalty: float = 1.0,
-        do_sample: bool = True,
-        num_return_sequences: int = 1,
-        stop_token: str = None,
-        padding_text: str = "",
-        xlm_language: str = "en",
     ):
         super().__init__(
             model=model,
@@ -634,62 +624,26 @@ class GenerationPipeline(Pipeline):
             binary_output=True,
             task=task,
         )
-        self.stop_token = stop_token
-        self.padding_text = padding_text if padding_text else self.PADDING_TEXT
-        self.xlm_language = xlm_language
-        self.length = length
-        self.temperature = temperature
-        self.top_k = top_k
-        self.top_p = top_p
-        self.repetition_penalty = repetition_penalty
-        self.do_sample = do_sample
-        self.num_return_sequences = num_return_sequences
-        self.model_type = self.model.config.to_dict()["model_type"]
-        self.preprocessing_functions = {
-            "ctrl": self.prepare_ctrl_input,
-            "xlm": self.prepare_xlm_input,
-            "xlnet": self.prepare_xlnet_input,
-            "transfo-xl": self.prepare_transfoxl_input,
-        }
 
-    def __call__(self, *texts, **kwargs):
-        inputs = self._args_parser(*texts, **kwargs)
+    def __call__(self, *texts, **generate_kwargs):
+        text_inputs = self._args_parser(*texts)
 
         all_generated_sequences = []
-        for i, prompt_text in enumerate(inputs):
+        for i, prompt_text in enumerate(text_inputs):
             # Manage correct placement of the tensors
             with self.device_placement():
-                tokens = self.prepare_input(prompt_text)
+                if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
+                    prompt_text = self.PADDING_TEXT + prompt_text
+                inputs = self._parse_and_tokenize(prompt_text)
+                input_ids = inputs["input_ids"]
+
+                # Ensure that batch size = 1 (batch generation not allowed for now)
+                assert input_ids.shape[0] == 1
+
                 if self.framework == "pt":
-                    with torch.no_grad():
-                        tokens = tokens.to(self.device)
+                    input_ids = self.ensure_tensor_on_device(**input_ids)
 
-                        output_sequences = self.model.generate(
-                            input_ids=tokens,  # BS x SL
-                            max_length=self.length + len(tokens.squeeze()),  # SL
-                            temperature=self.temperature,
-                            top_k=self.top_k,
-                            top_p=self.top_p,
-                            repetition_penalty=self.repetition_penalty,
-                            do_sample=self.do_sample,
-                            num_return_sequences=self.num_return_sequences,
-                        )
-
-                else:
-                    output_sequences = self.model.generate(
-                        input_ids=tokens,  # BS x SL
-                        max_length=self.length + len(tokens.squeeze()),  # SL
-                        temperature=self.temperature,
-                        top_k=self.top_k,
-                        top_p=self.top_p,
-                        repetition_penalty=self.repetition_penalty,
-                        do_sample=self.do_sample,
-                        num_return_sequences=self.num_return_sequences,
-                    )
-
-            # Remove the batch dimension when returning multiple sequences
-            if len(output_sequences.shape) > 2:
-                output_sequences.squeeze_()
+                output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
 
             generated_sequences = []
 
@@ -699,13 +653,10 @@ class GenerationPipeline(Pipeline):
                 # Decode text
                 text = self.tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
 
-                # Remove all text after the stop token
-                text = text[: text.find(self.stop_token) if self.stop_token else None]
-
                 # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
                 total_sequence = (
                     prompt_text
-                    + text[len(self.tokenizer.decode(tokens.squeeze(), clean_up_tokenization_spaces=True)) :]
+                    + text[len(self.tokenizer.decode(input_ids.squeeze(), clean_up_tokenization_spaces=True)) :]
                 )
 
                 generated_sequences += [total_sequence]
@@ -714,69 +665,6 @@ class GenerationPipeline(Pipeline):
         if len(all_generated_sequences) == 1:
             return all_generated_sequences[0]
         return all_generated_sequences
-
-    def prepare_ctrl_input(self, prompt_text):
-        if self.temperature > 0.7:
-            logger.info("CTRL typically works better with lower temperatures (and lower top_k).")
-
-        encoded_prompt = self.tokenizer.encode(prompt_text, add_special_tokens=False)
-        if not any(encoded_prompt[0] == x for x in self.tokenizer.control_codes.values()):
-            logger.info(
-                "WARNING! You are not starting your generation from a control code so you won't get good results"
-            )
-        return prompt_text
-
-    def prepare_xlm_input(self, prompt_text):
-        # kwargs = {"language": None, "mask_token_id": None}
-
-        # Set the language
-        use_lang_emb = hasattr(self.model.config, "use_lang_emb") and self.model.config.use_lang_emb
-        if hasattr(self.model.config, "lang2id") and use_lang_emb:
-            available_languages = self.model.config.lang2id.keys()
-            if self.xlm_language in available_languages:
-                language = self.xlm_language
-            else:
-                logger.info(
-                    "Setting language to 'en' since language chosen was not found in available languages: "
-                    + str(list(available_languages))
-                )
-                language = "en"
-
-            self.model.config.lang_id = self.model.config.lang2id[language]
-            # kwargs["language"] = tokenizer.lang2id[language]
-
-        # TODO fix mask_token_id setup when configurations will be synchronized between models and tokenizers
-        # XLM masked-language modeling (MLM) models need masked token
-        # is_xlm_mlm = "mlm" in self.model_name_or_path
-        # if is_xlm_mlm:
-        #     kwargs["mask_token_id"] = tokenizer.mask_token_id
-
-        return prompt_text
-
-    def prepare_xlnet_input(self, prompt_text):
-        prompt_text = self.padding_text + prompt_text
-        return prompt_text
-
-    def prepare_transfoxl_input(self, prompt_text):
-        prompt_text = self.padding_text + prompt_text
-        return prompt_text
-
-    def prepare_input(self, prompt_text):
-        requires_preprocessing = self.model_type in self.preprocessing_functions.keys()
-        if requires_preprocessing:
-            preprocessed_prompt_text = self.preprocessing_functions.get(self.model_type)(prompt_text)
-            encoded_prompt = self.tokenizer.encode(
-                preprocessed_prompt_text,
-                add_special_tokens=False,
-                return_tensors=self.framework,
-                add_space_before_punct_symbol=True,
-            )
-        else:
-            encoded_prompt = self.tokenizer.encode(
-                prompt_text, add_special_tokens=False, return_tensors=self.framework
-            )
-
-        return encoded_prompt
 
 
 class TextClassificationPipeline(Pipeline):
@@ -1788,14 +1676,6 @@ def pipeline(
         model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
         tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
         pipeline('ner', model=model, tokenizer=tokenizer)
-
-        # Named entity recognition pipeline, passing a model and configuration with a HTTPS URL.
-        model_url = "https://s3.amazonaws.com/models.huggingface.co/bert/dbmdz/bert-large-cased-finetuned-conll03-english/pytorch_model.bin"
-        config_url = "https://s3.amazonaws.com/models.huggingface.co/bert/dbmdz/bert-large-cased-finetuned-conll03-english/config.json"
-        pipeline('ner', model=model_url, config=config_url, tokenizer='bert-base-cased')
-
-        # Generation pipeline
-        pipeline('generation')
     """
     # Retrieve the task
     if task not in SUPPORTED_TASKS:
