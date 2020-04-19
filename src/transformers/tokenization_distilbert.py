@@ -57,8 +57,9 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class DistilBertTokenizer(BertTokenizer):
     r"""
-    Constructs a DistilBertTokenizer.
-    :class:`~transformers.DistilBertTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    Constructs a  DistilBertTokenizer.
+
+    :class:`~transformers.DistilBertTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
     tokenization: punctuation splitting + wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
@@ -73,6 +74,16 @@ class DistilBertTokenizer(BertTokenizer):
 
 
 class DistilBertTokenizerFast(BertTokenizerFast):
+    r"""
+    Constructs a  "Fast" DistilBertTokenizer (backed by HuggingFace's `tokenizers` library).
+
+    :class:`~transformers.DistilBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
+    tokenization: punctuation splitting + wordpiece.
+
+    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
+    parameters.
+    """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES

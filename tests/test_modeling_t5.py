@@ -244,7 +244,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
             # test that outputs are equal for slice
-            self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-6))
+            self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
         def create_and_check_t5_decoder_model_attention_mask_past(
             self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,

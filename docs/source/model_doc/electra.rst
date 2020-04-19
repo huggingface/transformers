@@ -61,6 +61,13 @@ ElectraTokenizer
     :members:
 
 
+ElectraTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ElectraTokenizerFast
+    :members:
+
+
 ElectraModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

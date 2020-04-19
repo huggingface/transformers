@@ -182,8 +182,6 @@ class BertTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             **kwargs,
         )
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
@@ -583,6 +581,48 @@ def _is_punctuation(char):
 
 
 class BertTokenizerFast(PreTrainedTokenizerFast):
+    r"""
+    Constructs a "Fast" BERT tokenizer (backed by HuggingFace's `tokenizers` library).
+
+    Bert tokenization is Based on WordPiece.
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
+
+    Args:
+        vocab_file (:obj:`string`):
+            File containing the vocabulary.
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to lowercase the input when tokenizing.
+        unk_token (:obj:`string`, `optional`, defaults to "[UNK]"):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        sep_token (:obj:`string`, `optional`, defaults to "[SEP]"):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
+            for sequence classification or for a text and a question for question answering.
+            It is also used as the last token of a sequence built with special tokens.
+        pad_token (:obj:`string`, `optional`, defaults to "[PAD]"):
+            The token used for padding, for example when batching sequences of different lengths.
+        cls_token (:obj:`string`, `optional`, defaults to "[CLS]"):
+            The classifier token which is used when doing sequence classification (classification of the whole
+            sequence instead of per-token classification). It is the first token of the sequence when built with
+            special tokens.
+        mask_token (:obj:`string`, `optional`, defaults to "[MASK]"):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
+        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to tokenize Chinese characters.
+            This should likely be deactivated for Japanese:
+            see: https://github.com/huggingface/transformers/issues/328
+        clean_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to clean the text before tokenization by removing any control characters and
+            replacing all whitespaces by the classic one.
+        tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to tokenize Chinese characters.
+            This should likely be deactivated for Japanese:
+            see: https://github.com/huggingface/transformers/issues/328
+    """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
