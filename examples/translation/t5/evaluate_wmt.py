@@ -15,8 +15,6 @@ def chunks(lst, n):
 
 
 def generate_translations(lns, output_file_path, model_size, batch_size, device):
-    output_file = Path(output_file_path).open("w")
-
     model = T5ForConditionalGeneration.from_pretrained(model_size)
     model.to(device)
 
@@ -27,27 +25,29 @@ def generate_translations(lns, output_file_path, model_size, batch_size, device)
     if task_specific_params is not None:
         model.config.update(task_specific_params.get("translation_en_to_de", {}))
 
-    for batch in tqdm(list(chunks(lns, batch_size))):
-        batch = [model.config.prefix + text for text in batch]
+    with Path(output_file_path).open("w") as output_file:
+        for batch in tqdm(list(chunks(lns, batch_size))):
+            batch = [model.config.prefix + text for text in batch]
 
-        dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="pt", pad_to_max_length=True)
+            dct = tokenizer.batch_encode_plus(batch, max_length=512, return_tensors="pt", pad_to_max_length=True)
 
-        input_ids = dct["input_ids"].to(device)
-        attention_mask = dct["attention_mask"].to(device)
+            input_ids = dct["input_ids"].to(device)
+            attention_mask = dct["attention_mask"].to(device)
 
-        translations = model.generate(input_ids=input_ids, attention_mask=attention_mask)
-        dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in translations]
+            translations = model.generate(input_ids=input_ids, attention_mask=attention_mask)
+            dec = [
+                tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in translations
+            ]
 
-        for hypothesis in dec:
-            output_file.write(hypothesis + "\n")
-            output_file.flush()
+            for hypothesis in dec:
+                output_file.write(hypothesis + "\n")
 
 
 def calculate_bleu_score(output_lns, refs_lns, score_path):
     bleu = corpus_bleu(output_lns, [refs_lns])
     result = "BLEU score: {}".format(bleu.score)
-    score_file = Path(score_path).open("w")
-    score_file.write(result)
+    with Path(score_path).open("w") as score_file:
+        score_file.write(result)
 
 
 def run_generate():
@@ -59,13 +59,13 @@ def run_generate():
         default="t5-base",
     )
     parser.add_argument(
-        "input_path", type=str, help="like wmt/newstest2013.en",
+        "input_path", type=str, help="like wmt/newstest2014.en",
     )
     parser.add_argument(
         "output_path", type=str, help="where to save translation",
     )
     parser.add_argument(
-        "reference_path", type=str, help="like wmt/newstest2013.de",
+        "reference_path", type=str, help="like wmt/newstest2014.de",
     )
     parser.add_argument(
         "score_path", type=str, help="where to save the bleu score",
@@ -82,12 +82,19 @@ def run_generate():
 
     dash_pattern = (" ##AT##-##AT## ", "-")
 
-    input_lns = [x.strip().replace(dash_pattern[0], dash_pattern[1]) for x in open(args.input_path).readlines()]
+    # Read input lines into python
+    with open(args.input_path, "r") as input_file:
+        input_lns = [x.strip().replace(dash_pattern[0], dash_pattern[1]) for x in input_file.readlines()]
 
     generate_translations(input_lns, args.output_path, args.model_size, args.batch_size, args.device)
 
-    output_lns = [x.strip() for x in open(args.output_path).readlines()]
-    refs_lns = [x.strip().replace(dash_pattern[0], dash_pattern[1]) for x in open(args.reference_path).readlines()]
+    # Read generated lines into python
+    with open(args.output_path, "r") as output_file:
+        output_lns = [x.strip() for x in output_file.readlines()]
+
+    # Read reference lines into python
+    with open(args.reference_path, "r") as reference_file:
+        refs_lns = [x.strip().replace(dash_pattern[0], dash_pattern[1]) for x in reference_file.readlines()]
 
     calculate_bleu_score(output_lns, refs_lns, args.score_path)
 

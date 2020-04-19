@@ -150,8 +150,6 @@ class RobertaTokenizer(GPT2Tokenizer):
             mask_token=mask_token,
             **kwargs,
         )
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -244,6 +242,47 @@ class RobertaTokenizer(GPT2Tokenizer):
 
 
 class RobertaTokenizerFast(GPT2TokenizerFast):
+    """
+    Constructs a "Fast" RoBERTa BPE tokenizer (backed by HuggingFace's `tokenizers` library).
+
+    Peculiarities:
+
+    - Byte-level Byte-Pair-Encoding
+    - Requires a space to start the input string => the encoding methods should be called with the
+      ``add_prefix_space`` flag set to ``True``.
+      Otherwise, this tokenizer ``encode`` and ``decode`` method will not conserve
+      the absence of a space at the beginning of a string:
+
+    ::
+
+        tokenizer.decode(tokenizer.encode("Hello")) = " Hello"
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
+
+    Args:
+        vocab_file (:obj:`str`):
+            Path to the vocabulary file.
+        merges_file (:obj:`str`):
+            Path to the merges file.
+        errors (:obj:`str`, `optional`, defaults to "replace"):
+            Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
+            <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
+        unk_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        bos_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The beginning of sequence token.
+        eos_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The end of sequence token.
+        add_prefix_space (:obj:`bool`, `optional`, defaults to `False`):
+            Whether to add a leading space to the first word.
+            This allows to treat the leading word just as any other word.
+            (GPT2 tokenizer detect beginning of words by the preceeding space)
+        trim_offsets (:obj:`bool`, `optional`, defaults to `True`):
+            Whether the post processing step should trim offsets to avoid including whitespaces.
+    """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -262,6 +301,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=True,
+        trim_offsets=True,
         **kwargs
     ):
         kwargs.setdefault("pad_token", pad_token)
@@ -276,23 +316,18 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             bos_token=bos_token,
             eos_token=eos_token,
             add_prefix_space=add_prefix_space,
+            trim_offsets=trim_offsets,
             **kwargs,
         )
 
-        self.tokenizer._tokenizer.post_processor = RobertaProcessing(
-            (sep_token, self.sep_token_id), (cls_token, self.cls_token_id)
+        self.backend_tokenizer._tokenizer.post_processor = RobertaProcessing(
+            sep=(sep_token, self.sep_token_id),
+            cls=(cls_token, self.cls_token_id),
+            add_prefix_space=add_prefix_space,
+            trim_offsets=trim_offsets,
         )
 
-        self.tokenizer.add_special_tokens([kwargs["mask_token"]])
-
-        # As we override the post_processor post super.__init__ the computed num_added_tokens is wrong in super().
-        # We need to recompute max_len according to the newly register post_processor to get real values.
-        self.max_len_single_sentence = self.max_len - self.num_special_tokens_to_add(
-            False
-        )  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - self.num_special_tokens_to_add(
-            True
-        )  # take into account special tokens
+        self.backend_tokenizer.add_special_tokens([kwargs["mask_token"]])
 
     @PreTrainedTokenizer.mask_token.setter
     def mask_token(self, value):
@@ -300,7 +335,7 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             value = AddedToken(value, lstrip=True)
 
         self._mask_token = str(value)
-        self.tokenizer.add_special_tokens([value])
+        self._maybe_update_backend([value])
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
