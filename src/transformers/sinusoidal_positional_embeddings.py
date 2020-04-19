@@ -49,7 +49,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
             assert seq_len != 1, "Remove me"
             return self.weights[seq_len].expand(bsz, 1, -1)
         else:
-            positions = create_position_ids_from_input_ids(input_ids, 0, 1)
+            positions = create_position_ids_from_input_ids(input_ids, self.padding_idx, 0)
         return self.weights.index_select(0, positions.view(-1)).view(bsz, seq_len, -1).detach()
 
 
