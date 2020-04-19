@@ -213,6 +213,12 @@ class ReformerIntegrationTests(unittest.TestCase):
             attn_type = "SelfAttention"
         else:
             raise ValueError()
+        if config.sinusoidal_pos_embds is True:
+            axial_pos_shape = ()
+            d_axial_pos_embs = None
+        else:
+            axial_pos_shape = config.axial_pos_shape
+            d_axial_pos_embs = config.axial_pos_embds_dim
 
         gin_config = """
             import trax.layers
@@ -281,8 +287,8 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.num_hidden_layers,
             config.num_attention_heads,
             config.max_position_embeddings,
-            config.axial_pos_shape,
-            config.axial_pos_embds_dim,
+            axial_pos_shape,
+            d_axial_pos_embs,
             config.chunk_size_feed_forward,
             hidden_act,
             attn_type,

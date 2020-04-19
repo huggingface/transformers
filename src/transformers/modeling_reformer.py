@@ -26,6 +26,8 @@ import numpy as np
 from operator import mul
 from functools import reduce
 
+from collections import namedtuple
+
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -52,6 +54,12 @@ def mish(x):
 
 ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 ReformerLayerNorm = torch.nn.LayerNorm
+
+
+LSHSelfAttentionOutput = namedtuple("LSHSelfAttentionOutput", ["hidden_states", "attention_probs", "buckets"])
+LocalSelfAttentionOutput = namedtuple("LocalSelfAttentionOutput", ["hidden_states", "attention_probs"])
+AttentionOutput = namedtuple("AttentionOutput", ["hidden_states", "attention_probs", "buckets"])
+ReformerOutput = namedtuple("ReformerOutput", ["hidden_states", "attn_output", "attention_probs", "buckets"])
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -191,7 +199,8 @@ class PositionEmbeddings(nn.Module):
     """
 
     def __init__(self, config):
-        self.max_position_embeddings = config.max_position_embeddings
+        super().__init__()
+        self.config = config
         self.dropout = config.hidden_dropout_prob
         self.embedding = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         if self.config.sinusoidal_pos_embds is True:
@@ -333,7 +342,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.dropout = config.attention_probs_dropout_prob
 
     def forward(
-        self, hidden_states, head_mask=None, do_output_attentions=False
+        self, hidden_states, head_mask=None, do_output_attentions=False, **kwargs
     ):
         # get SeqLen and BatchSize
         sequence_length = hidden_states.shape[1]
@@ -356,8 +365,13 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             # set `num_buckets` on the fly
             self._set_num_buckets_on_the_fly(sequence_length)
 
-        # hash query key vectors into buckets
-        buckets = self._hash_vectors(query_key_vectors)
+        # use cached buckets for backprop
+        buckets = kwargs["buckets"] if "buckets" in kwargs else None
+
+        if buckets is None:
+            # hash query key vectors into buckets
+            buckets = self._hash_vectors(query_key_vectors)
+
         assert int(buckets.shape[-1]) == self.num_hashes * sequence_length
 
         ticker, undo_ticker = self._get_ticker_and_undo_ticker(sequence_length, buckets)
@@ -396,9 +410,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size)
 
         out_vectors = self._transpose_for_output(out_vectors, self.num_attention_heads, self.attention_head_size)
-        outputs = (out_vectors, attention_probs) if do_output_attentions else (out_vectors,)
 
-        return outputs
+        if do_output_attentions is False:
+            attention_probs = ()
+
+        return LSHSelfAttentionOutput(hidden_states=out_vectors, attention_probs=attention_probs, buckets=buckets)
 
     def _hash_vectors(self, vectors):
         batch_size = vectors.shape[0]
@@ -596,7 +612,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         self.dropout = config.attention_probs_dropout_prob
 
     def forward(
-        self, hidden_states, head_mask=None, do_output_attentions=False,
+        self, hidden_states, head_mask=None, do_output_attentions=False, **kwargs
     ):
 
         # get SeqLen and BatchSize
@@ -684,9 +700,11 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size)
 
         out_vectors = self._transpose_for_output(out_vectors, self.num_attention_heads, self.attention_head_size)
-        outputs = (out_vectors, attention_probs) if do_output_attentions else (out_vectors,)
 
-        return outputs
+        if do_output_attentions is False:
+            attention_probs = ()
+
+        return LocalSelfAttentionOutput(hidden_states=out_vectors, attention_probs=attention_probs)
 
 
 class ReformerSelfOutput(nn.Module):
@@ -700,9 +718,6 @@ class ReformerSelfOutput(nn.Module):
         hidden_states = self.dense(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
         return hidden_states
-
-#        output = hidden_states + input_tensor
-#        return output
 
 
 class ReformerAttention(nn.Module):
@@ -732,13 +747,21 @@ class ReformerAttention(nn.Module):
 
         self.output = ReformerSelfOutput(config)
 
-    def forward(self, hidden_states, head_mask=None, do_output_attentions=False):
+    def forward(self, hidden_states, head_mask=None, do_output_attentions=False, buckets=None):
         norm_hidden_states = self.layer_norm(hidden_states)
-        self_attention_outputs = self.self_attention(norm_hidden_states, head_mask, do_output_attentions)
 
-        attention_output = self.output(self_attention_outputs[0])
-        outputs = (attention_output,) + self_attention_outputs[1:]  # add attentions if we output them
-        return outputs
+        # use cached buckets for backprob if buckets not None for LSHSelfAttention
+        self_attention_outputs = self.self_attention(norm_hidden_states, head_mask, do_output_attentions, buckets=buckets)
+
+        attention_output = self.output(self_attention_outputs.hidden_states)
+
+        # add buckets if necessary
+        if hasattr(self_attention_outputs, "buckets"):
+            buckets = self_attention_outputs.buckets
+        else:
+            buckets = None
+
+        return AttentionOutput(hidden_states=attention_output, attention_probs=self_attention_outputs.attention_probs, buckets=buckets)
 
 
 class ReformerFeedForwardDense(nn.Module):
@@ -804,23 +827,23 @@ class ReformerLayer(nn.Module):
         with torch.no_grad():
             # is this _init_seed needed? in https://github.com/RobinBruegger/RevTorch/blob/master/revtorch/revtorch.py
             attn_outputs = self.attention(hidden_states, head_mask, do_output_attentions)
-            attn_output = attn_outputs[0]
+            attn_output = attn_outputs.hidden_states
 
             # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
             # Y_1 = X_1 + f(X_2)
             attn_output = prev_attn_output + attn_output
             # Y_2 = X_2 + g(Y_1)
-            output = hidden_states + self.feed_forward(attn_output)
+            hidden_states = hidden_states + self.feed_forward(attn_output)
 
-        outputs = (attn_output, output) + attn_outputs[1:]
+        return ReformerOutput(attn_output=attn_output, hidden_states=hidden_states, attention_probs=attn_outputs.attention_probs, buckets=attn_outputs.buckets)
 
-        return outputs
-
-    def backward_pass(self, next_attn_output, hidden_states, grad_next_attn_output, grad_hidden_states, head_mask=None):
+    def backward_pass(self, next_attn_output, hidden_states, grad_next_attn_output, grad_hidden_states, head_mask=None, buckets=None):
 
         with torch.enable_grad():
             next_attn_output.requires_grad = True
-            attn_output = self.attention(next_attn_output, head_mask)[0]
+
+            # use cached buckets for backprob if buckets not None for LSHSelfAttention
+            attn_output = self.attention(next_attn_output, head_mask, buckets=buckets).hidden_states
             torch.autograd.backward(attn_output, grad_hidden_states)
 
         with torch.no_grad():
@@ -850,6 +873,7 @@ class _ReversibleFunction(Function):
     @staticmethod
     def forward(ctx, hidden_states, layers, head_mask, all_hidden_states, all_attentions, do_output_hidden_states, do_output_attentions):
 
+        all_buckets = ()
         hidden_states, attn_output = torch.chunk(hidden_states, 2, dim=-1)
         for i, layer in enumerate(layers):
             if do_output_hidden_states is True:
@@ -857,10 +881,12 @@ class _ReversibleFunction(Function):
                 all_hidden_states.append(hidden_states)
 
             layer_outputs = layer(attn_output, hidden_states, head_mask[i], do_output_attentions)
-            attn_output, hidden_states = layer_outputs[:2]
+            attn_output = layer_outputs.attn_output
+            hidden_states = layer_outputs.hidden_states
+            all_buckets = all_buckets + (layer_outputs.buckets,)
 
             if do_output_attentions:
-                all_attentions.append(layer_outputs[2])
+                all_attentions.append(layer_outputs.attention_probs)
 
         # Add last layer
         if do_output_hidden_states is True:
@@ -872,6 +898,7 @@ class _ReversibleFunction(Function):
         ctx.attn_output = attn_output.detach()
         ctx.hidden_states = hidden_states.detach()
         ctx.layers = layers
+        ctx.all_buckets = all_buckets
 
         # Concatenate 2 RevNet outputs
         hidden_states = torch.cat([attn_output, hidden_states], dim=-1)
@@ -886,9 +913,14 @@ class _ReversibleFunction(Function):
         hidden_states = ctx.hidden_states
         head_mask = ctx.head_mask
         layers = ctx.layers
+        all_buckets = ctx.all_buckets
 
         for i, layer in enumerate(layers[::-1]):
-            attn_output, hidden_states, grad_attn_output, grad_hidden_states = layer.backward_pass(attn_output, hidden_states, grad_attn_output, grad_hidden_states, head_mask[i])
+            # pop last buckets
+            buckets = all_buckets[-1]
+            all_buckets = all_buckets[:-1]
+
+            attn_output, hidden_states, grad_attn_output, grad_hidden_states = layer.backward_pass(attn_output, hidden_states, grad_attn_output, grad_hidden_states, head_mask=head_mask[i], buckets=buckets)
 
         grad_hidden_states = torch.cat([grad_attn_output, grad_hidden_states], dim=-1)
 
