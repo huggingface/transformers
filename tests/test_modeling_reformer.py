@@ -21,7 +21,6 @@ import numpy as np
 # trax imports - to be deleted later
 import trax
 from transformers import is_torch_available  # noqa: F401
-
 from trax.shapes import ShapeDtype as trax_ShapeDtype
 
 from .utils import require_torch, torch_device  # noqa: F401
@@ -114,7 +113,9 @@ class ReformerIntegrationTests(unittest.TestCase):
         config = ReformerConfig()
 
         shape = (1, 192)  # Batch x SeqLen x ModelDimPerHead
-        input_ids = torch.tensor(np.random.randint(0, config.vocab_size, size=shape), dtype=torch.long, device=torch_device)
+        input_ids = torch.tensor(
+            np.random.randint(0, config.vocab_size, size=shape), dtype=torch.long, device=torch_device
+        )
 
         model = ReformerModelWithLMHead(config)
         loss = model(input_ids, lm_labels=input_ids)[0]
