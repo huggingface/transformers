@@ -17,12 +17,11 @@
 
 import argparse
 import logging
+import pickle
 
 import numpy as np
 import torch
-
 from tensorflow.compat.v1.io.gfile import GFile
-import pickle
 
 from transformers import ReformerConfig, ReformerModelWithLMHead
 
@@ -49,8 +48,7 @@ def set_layer_weights_in_torch_lsh(weights, torch_layer, hidden_size):
         torch.tensor(np_query_key).transpose(1, 2).contiguous().view(-1, hidden_size),
     )
     set_param(
-        torch_layer.self_attention.value,
-        torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
+        torch_layer.self_attention.value, torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
     )
     set_param(
         torch_layer.output.dense, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
@@ -65,15 +63,13 @@ def set_layer_weights_in_torch_local(weights, torch_layer, hidden_size):
     np_dense = np.asarray(weights[3])
 
     set_param(
-        torch_layer.self_attention.query,
-        torch.tensor(np_query).transpose(1, 2).contiguous().view(-1, hidden_size),
+        torch_layer.self_attention.query, torch.tensor(np_query).transpose(1, 2).contiguous().view(-1, hidden_size),
     )
     set_param(
         torch_layer.self_attention.key, torch.tensor(np_key).transpose(1, 2).contiguous().view(-1, hidden_size),
     )
     set_param(
-        torch_layer.self_attention.value,
-        torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
+        torch_layer.self_attention.value, torch.tensor(np_value).transpose(1, 2).contiguous().view(-1, hidden_size),
     )
     set_param(
         torch_layer.output.dense, torch.tensor(np_dense).view(-1, hidden_size).contiguous().transpose(0, 1),
@@ -184,8 +180,8 @@ def convert_trax_checkpoint_to_pytorch(trax_model_pkl_path, config_file, pytorch
     print("Building PyTorch model from configuration: {}".format(str(config)))
     model = ReformerModelWithLMHead(config)
 
-    with GFile(trax_model_pkl_path, 'rb') as f:
-        model_weights = pickle.load(f)['weights']
+    with GFile(trax_model_pkl_path, "rb") as f:
+        model_weights = pickle.load(f)["weights"]
 
     set_model_weights_in_torch(model_weights, model, config.hidden_size)
 
