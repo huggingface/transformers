@@ -342,7 +342,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.dropout = config.attention_probs_dropout_prob
 
     def forward(
-        self, hidden_states, head_mask=None, do_output_attentions=False, **kwargs
+        self, hidden_states, head_mask=None, do_output_attentions=False, buckets=None, **kwargs
     ):
         # get SeqLen and BatchSize
         sequence_length = hidden_states.shape[1]
@@ -365,9 +365,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             # set `num_buckets` on the fly
             self._set_num_buckets_on_the_fly(sequence_length)
 
-        # use cached buckets for backprop
-        buckets = kwargs["buckets"] if "buckets" in kwargs else None
-
+        # use cached buckets for backprop only
         if buckets is None:
             # hash query key vectors into buckets
             buckets = self._hash_vectors(query_key_vectors)
