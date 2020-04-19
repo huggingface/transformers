@@ -428,7 +428,6 @@ class Pipeline(_ScikitCompat):
             inputs,
             add_special_tokens=True,
             return_tensors=self.framework,
-            max_length=self.tokenizer.max_len,
             pad_to_max_length=pad_to_max_length,
         )
 
