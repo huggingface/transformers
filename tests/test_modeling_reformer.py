@@ -48,7 +48,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_torch_output = torch.tensor(np.asarray(trax_output))
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
-        config.attn_type = "lsh"
+        config.attn_layers = ["lsh"]
         hf_layer = ReformerAttention(config)
         self._set_layer_weights_in_torch_lsh(trax_weights, hf_layer, config.hidden_size)
         hf_layer.eval()
@@ -69,7 +69,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_output = trax_layer(np_input, weights=trax_weights, state=trax_state)
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
-        config.attn_type = "local"
+        config.attn_layers = ["local"]
         hf_layer = ReformerAttention(config)
         self._set_layer_weights_in_torch_local(trax_weights, hf_layer, config.hidden_size)
         hf_layer.eval()
@@ -109,6 +109,16 @@ class ReformerIntegrationTests(unittest.TestCase):
         log_softmax_output = torch.nn.functional.log_softmax(hf_output[0], dim=-1)
 
         self.assertTrue(torch.allclose(log_softmax_output, trax_torch_output, atol=1e-3))
+
+    def test_backprop_lm_model(self):
+        config = ReformerConfig()
+
+        shape = (1, 192)  # Batch x SeqLen x ModelDimPerHead
+        input_ids = torch.tensor(np.random.randint(0, config.vocab_size, size=shape), dtype=torch.long, device=torch_device)
+
+        model = ReformerModelWithLMHead(config)
+        loss = model(input_ids, lm_labels=input_ids)[0]
+        loss.backward()
 
     def test_pretrained_crime_and_punishment_lm_model(self):
         hf_model = ReformerModelWithLMHead.from_pretrained("patrickvonplaten/reformer-crime-and-punish")
@@ -155,7 +165,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.num_attention_heads,
             config.attention_head_size,
             config.attention_head_size,
-            config.chunk_length,
+            config.lsh_attn_chunk_length,
             config.num_chunks_before,
             config.num_chunks_after,
             config.num_hashes,
@@ -189,7 +199,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.num_attention_heads,
             config.attention_head_size,
             config.attention_head_size,
-            config.chunk_length,
+            config.local_attn_chunk_length,
             config.num_chunks_before,
             config.num_chunks_after,
             config.attention_probs_dropout_prob,
@@ -207,9 +217,10 @@ class ReformerIntegrationTests(unittest.TestCase):
             hidden_act = "Relu"
         else:
             raise ValueError()
-        if config.attn_type == "lsh":
+        attn_type = config.attn_layers[0]
+        if attn_type == "lsh":
             attn_type = "LSHSelfAttention"
-        elif config.attn_type == "local":
+        elif attn_type == "local":
             attn_type = "SelfAttention"
         else:
             raise ValueError()
@@ -266,16 +277,16 @@ class ReformerIntegrationTests(unittest.TestCase):
             ReformerLM.share_qk = False
             ReformerLM.ff_use_sru = 0
             """.format(
-            config.chunk_length,
-            config.chunk_length,
-            config.chunk_length // 2,
+            config.lsh_attn_chunk_length,
+            config.lsh_attn_chunk_length,
+            config.lsh_attn_chunk_length // 2,
             config.num_chunks_before,
             config.num_chunks_after,
             config.num_hashes,
             config.num_buckets,
             config.seed,
             config.is_decoder,
-            config.chunk_length,
+            config.local_attn_chunk_length,
             config.num_chunks_before,
             config.num_chunks_after,
             config.is_decoder,

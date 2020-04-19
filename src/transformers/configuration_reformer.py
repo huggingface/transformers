@@ -100,11 +100,11 @@ class ReformerConfig(PretrainedConfig):
         vocab_size=200,
         attention_head_size=32,
         hidden_size=128,
-        num_hidden_layers=4,
         num_attention_heads=2,
         num_buckets=2,
         num_hashes=4,
-        chunk_length=64,
+        lsh_attn_chunk_length=64,
+        local_attn_chunk_length=64,
         num_chunks_before=1,
         num_chunks_after=0,
         chunk_size_lm_head=0,
@@ -121,7 +121,7 @@ class ReformerConfig(PretrainedConfig):
         axial_pos_embds=False,
         axial_pos_shape=[64, 3],
         axial_pos_embds_dim=[64, 64],
-        attn_type="lsh",
+        attn_layers=["lsh", "lsh", "lsh", "lsh"],
         pad_token_id=0,
         **kwargs
     ):
@@ -134,11 +134,12 @@ class ReformerConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.attention_head_size = attention_head_size
         self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_hashes = num_hashes
+        self.num_hidden_layers = len(attn_layers)
         self.num_buckets = tuple(num_buckets) if isinstance(num_buckets, list) else num_buckets
-        self.chunk_length = chunk_length
+        self.lsh_attn_chunk_length = lsh_attn_chunk_length
+        self.local_attn_chunk_length = local_attn_chunk_length
         self.num_chunks_after = num_chunks_after
         self.num_chunks_before = num_chunks_before
         self.hidden_act = hidden_act
@@ -155,4 +156,4 @@ class ReformerConfig(PretrainedConfig):
         self.axial_norm_std = axial_norm_std
         self.chunk_size_lm_head = chunk_size_lm_head
         self.chunk_size_feed_forward = chunk_size_feed_forward
-        self.attn_type = attn_type
+        self.attn_layers = attn_layers
