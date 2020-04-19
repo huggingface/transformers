@@ -432,9 +432,13 @@ class BartDecoder(PretrainedBartModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.embed_tokens = embed_tokens
-        self.embed_positions = LearnedPositionalEmbedding(
-            config.max_position_embeddings, config.d_model, self.padding_idx,
-        )
+        if config.static_position_embeddings:
+            self.embed_positions = SinusoidalPositionalEmbedding(config.d_model, config.pad_token_id,
+                                                                 config.max_position_embeddings)
+        else:
+            self.embed_positions = LearnedPositionalEmbedding(
+                config.max_position_embeddings, config.d_model, self.padding_idx,
+            )
         self.layers = nn.ModuleList(
             [DecoderLayer(config) for _ in range(config.decoder_layers)]
         )  # type: List[DecoderLayer]

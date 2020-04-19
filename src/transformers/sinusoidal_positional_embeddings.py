@@ -25,8 +25,8 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     def __init__(self, embedding_dim, padding_idx, init_size):
         super().__init__(init_size, embedding_dim)
         self.embedding_dim = embedding_dim
-        self.padding_idx = padding_idx
-        self.weight = create_sinusoidal_embeddings(init_size, embedding_dim)
+        self._padding_idx = padding_idx   # dont overwrite original nn.Embedding.padding_idx
+        create_sinusoidal_embeddings(init_size, embedding_dim, self.weight)
         self.max_positions = init_size
 
     @torch.no_grad()
@@ -46,11 +46,12 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         # )
         # self.weights = self.weights.to(self._float_tensor)
         if use_cache:
-            assert seq_len != 1, "Remove me"
-            return self.weights[seq_len].expand(bsz, 1, -1)
+            #assert seq_len != 1, "Remove me"
+            positions = input_ids.data.new(1, 1).fill_(seq_len)  # called before slicing.
+            # return self.weight[seq_len].expand(bsz, 1, -1)
         else:
-            positions = create_position_ids_from_input_ids(input_ids, self.padding_idx, 0)
-        return self.weights.index_select(0, positions.view(-1)).view(bsz, seq_len, -1).detach()
+            positions = create_position_ids_from_input_ids(input_ids, self._padding_idx, 0)
+        return super().forward(positions)
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx, offset=1):

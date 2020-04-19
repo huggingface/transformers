@@ -88,17 +88,16 @@ class IntegrationTests(unittest.TestCase):
     def test_positional_embeddings(self):
 
         pad = 1
-        input_ids = torch.tensor([[4, 10, pad, pad, pad]], dtype=torch.long, device=torch_device)
+        input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
         emb1 = SinusoidalPositionalEmbedding(10, pad, init_size=32).to(torch_device)
         no_cache = emb1(input_ids, use_cache=False)
-        yes_cache = emb1(input_ids[:, -1:], use_cache=True)
-        pad = 0
-        input_ids = torch.tensor([[4, 10, pad, pad, pad]], dtype=torch.long, device=torch_device)
-        emb0 = SinusoidalPositionalEmbedding(10, pad, init_size=32).to(torch_device)
-        assert (emb1.weights == emb0.weights).all()
-        no_cache_pad_zero = emb0(input_ids, use_cache=False)
-        position_ids = torch.arange(input_ids.shape[1], dtype=torch.long, device=torch_device)
-        hard_coded = emb0.weights.index_select(0, position_ids).unsqueeze(0)
-        import ipdb
+        yes_cache = emb1(input_ids, use_cache=True)
+        self.assertListEqual(no_cache[0,-1:].tolist(),  yes_cache[0].tolist())
 
-        ipdb.set_trace()
+        # pad = 0
+        # input_ids = torch.tensor([[4, 10, pad, pad, pad]], dtype=torch.long, device=torch_device)
+        # emb0 = SinusoidalPositionalEmbedding(10, pad, init_size=32).to(torch_device)
+        # assert (emb1.weights == emb0.weights).all()
+        # no_cache_pad_zero = emb0(input_ids, use_cache=False)
+        # position_ids = torch.arange(input_ids.shape[1], dtype=torch.long, device=torch_device)
+        # hard_coded = emb0.weights.index_select(0, position_ids).unsqueeze(0)
