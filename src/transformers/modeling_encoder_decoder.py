@@ -21,7 +21,6 @@ import os
 from .modeling_auto import AutoModel, AutoModelWithLMHead
 from .modeling_utils import PreTrainedModel
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -39,6 +38,7 @@ class EncoderDecoderModel(PreTrainedModel):
         assert decoder is not None, "The decoder has to be defined"
 
         config = self._init_config(encoder.config, decoder.config)
+        config.is_encoder_decoder = True
         super().__init__(config)
 
         self.encoder = encoder
@@ -49,14 +49,18 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def _init_config(self, encoder_config, decoder_config):
         # decoder config is used as default config (important for generation)
-        # TODO: check with thom
         config = decoder_config
-        config.is_encoder_decoder = True
 
         return config
 
     def get_encoder(self):
         return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
+
+    def get_input_embeddings(self):
+        return self.encoder.get_input_embeddings()
 
     def get_output_embeddings(self):
         return self.decoder.get_output_embeddings()
@@ -134,7 +138,7 @@ class EncoderDecoderModel(PreTrainedModel):
         # that apply to the model as a whole.
         # We let the specific kwargs override the common ones in case of conflict.
 
-        kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
+        kwargs_encoder = {argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")}
 
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
@@ -143,7 +147,7 @@ class EncoderDecoderModel(PreTrainedModel):
         # Load and initialize the encoder and decoder
         # The distinction between encoder and decoder at the model level is made
         # by the value of the flag `is_decoder` that we need to set correctly.
-        encoder = kwargs_encoder.pop("encoder_model", None)
+        encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
             assert (
                 pretrained_model_name_or_path is not None
@@ -212,14 +216,16 @@ class EncoderDecoderModel(PreTrainedModel):
     def forward(
         self,
         input_ids=None,
+        inputs_embeds=None,
         attention_mask=None,
+        head_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        lm_labels=None,
-        inputs_embeds=None,
+        decoder_head_mask=None,
         decoder_inputs_embeds=None,
-        head_mask=None,
+        masked_lm_labels=None,
+        lm_labels=None,
     ):
 
         """
@@ -245,7 +251,9 @@ class EncoderDecoderModel(PreTrainedModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            head_mask=head_mask,
+            head_mask=decoder_head_mask,
+            lm_labels=lm_labels,
+            masked_lm_labels=masked_lm_labels
         )
 
         return decoder_outputs + encoder_outputs
@@ -261,13 +269,17 @@ class EncoderDecoderModel(PreTrainedModel):
 
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, attention_mask)
 
+        import ipdb
+        ipdb.set_trace()
+
         return {
+            "attention_mask": attention_mask,
             "decoder_input_ids": decoder_inputs["input_ids"],
+            "decoder_attention_mask": decoder_inputs["attention_mask"],
             "encoder_outputs": encoder_outputs,
-            "attention_mask": decoder_inputs["attention_mask"],
         }
 
     def _reorder_cache(self, past, beam_idx):
-        # as a default encoder-decoder models do not re-order the past. TODO: might
-        # have to be updated, e.g. if GPT2 is to be used as a decoder
+        # as a default encoder-decoder models do not re-order the past.
+        # TODO(PVP): might have to be updated, e.g. if GPT2 is to be used as a decoder
         return past
