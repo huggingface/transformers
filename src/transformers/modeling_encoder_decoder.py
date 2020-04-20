@@ -271,6 +271,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
         return {
             "attention_mask": attention_mask,
+            "decoder_attention_mask": decoder_inputs["attention_mask"],
             "decoder_input_ids": decoder_inputs["input_ids"],
             "encoder_outputs": encoder_outputs,
         }
