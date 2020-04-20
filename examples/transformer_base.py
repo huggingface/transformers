@@ -4,6 +4,7 @@ import random
 
 import numpy as np
 import pytorch_lightning as pl
+import json
 import torch
 
 from transformers import (
@@ -20,7 +21,7 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 from transformers.modeling_auto import MODEL_MAPPING
-
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,12 @@ class BaseTransformer(pl.LightningModule):
 
     def is_logger(self):
         return self.trainer.proc_rank <= 0
+
+    def log_hyperparams(self):
+        model = self.model
+        model.config.save_pretrained(model.hparams.output_dir)  # , 'config.json'))
+        with open(os.path.join(model.hparams.output_dir, 'hparam.json')) as f:
+            json.dump(model.hparams, f)
 
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
@@ -256,7 +263,7 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
 
-def generic_train(model, args):
+def generic_train(model: BaseTransformer, args):
     # init model
     set_seed(args)
 
@@ -301,6 +308,7 @@ def generic_train(model, args):
         train_params["distributed_backend"] = "ddp"
 
     trainer = pl.Trainer(**train_params)
+
 
     if args.do_train:
         trainer.fit(model)

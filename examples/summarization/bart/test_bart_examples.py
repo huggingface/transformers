@@ -15,7 +15,6 @@ from .evaluate_cnn import run_generate
 from .finetune import main
 from .utils import SummarizationDataset
 
-
 logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger()
@@ -92,9 +91,13 @@ class TestBartExamples(unittest.TestCase):
         args_d.update(
             data_dir=tmp_dir, model_type="bart", train_batch_size=2, eval_batch_size=2, n_gpu=0, output_dir=output_dir,
         )
+        #pl_module = BaseTransformer.load_from_checkpoint(output_dir)
         main(argparse.Namespace(**args_d))
         args_d.update({"do_train": False, "do_predict": True})
         main(argparse.Namespace(**args_d))
+
+
+        #cfg = BartConfig.from_pretrained(output_dir)
 
     def test_t5_run_sum_cli(self):
         args_d: dict = DEFAULT_ARGS.copy()
@@ -111,6 +114,7 @@ class TestBartExamples(unittest.TestCase):
             do_predict=True,
         )
         main(argparse.Namespace(**args_d))
+
         # args_d.update({"do_train": False, "do_predict": True})
         # main(argparse.Namespace(**args_d))
 
