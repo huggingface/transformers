@@ -20,21 +20,18 @@ import os
 
 from transformers import is_torch_available
 
-from .utils import require_torch, slow, torch_device
+from .utils import require_torch, slow
 
 # this line reruns all the tests in BertModelTest; not sure whether this can be prevented
 # for now only run module with pytest tests/test_modeling_encoder_decoder.py::EncoderDecoderModelTest
 from .test_modeling_bert import BertModelTest
 
 if is_torch_available():
-    import torch
     from transformers import BertModel, BertForMaskedLM, EncoderDecoderModel
 
 
 @require_torch
 class EncoderDecoderModelTest(unittest.TestCase):
-
-    all_model_classes = ()
 
     def prepare_config_and_inputs_bert(self):
         bert_model_tester = BertModelTest.BertModelTester(self)
@@ -85,7 +82,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
         self.assertEqual(outputs_encoder_decoder[0].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)))
         self.assertEqual(outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,)))
         encoder_outputs = (encoder_hidden_states,)
-        outputs_encoder_decoder_from_encoder_outputs = enc_dec_model(encoder_outputs=encoder_outputs, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask, decoder_attention_mask=decoder_attention_mask)
+        outputs_encoder_decoder = enc_dec_model(encoder_outputs=encoder_outputs, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask, decoder_attention_mask=decoder_attention_mask)
 
         self.assertEqual(outputs_encoder_decoder[0].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)))
         self.assertEqual(outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,)))
@@ -145,9 +142,10 @@ class EncoderDecoderModelTest(unittest.TestCase):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder_model, decoder_model)
-        
+
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(input_ids, decoder_start_token_id=enc_dec_model.config.pad_token_id)
+        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
 
     def test_bert_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs_bert()
@@ -172,3 +170,8 @@ class EncoderDecoderModelTest(unittest.TestCase):
     def test_bert_encoder_decoder_model_generate(self):
         input_ids_dict = self.prepare_config_and_inputs_bert()
         self.create_and_check_bert_encoder_decoder_model_generate(**input_ids_dict)
+
+    @slow
+    def test_real_bert_model_from_pretrained(self):
+        model = EncoderDecoderModel.from_pretrained("bert-base-uncased", "bert-base-uncased")
+        self.assertIsNotNone(model)
