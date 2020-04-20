@@ -625,7 +625,9 @@ class TextGenerationPipeline(Pipeline):
                 text = self.tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
 
                 # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
-                total_sequence = (
+                if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
+                    text = text[len(self.PADDING_TEXT):]
+                
                     prompt_text
                     + text[len(self.tokenizer.decode(input_ids.squeeze(), clean_up_tokenization_spaces=True)) :]
                 )
