@@ -964,19 +964,22 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
 
-        effective_batch_size = input_ids.shape[0]
+        input_shape = input_ids.shape
+        effective_batch_size = input_shape[0]
+
         dummy_token = torch.full(
             (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
         )
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
-        inputs = {"input_ids": input_ids}
 
         if attention_mask is not None:
-            # add attention_mask if necessary (for no encoder-decoder models)
+            # attention_mask should be given to `prepare_inputs_for_generation` if bert is used as single decoder model
             attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
-            inputs["attention_mask"] = attention_mask
+        else:
+            # no attention_mask should be given to `prepare_inputs_for_generation` if bert is used as a decoder in a encoder-decoder model. In this case attention mask will automatically be created
+            attention_mask = torch.cat([input_ids.new_ones(input_shape), input_ids.new_zeros((effective_batch_size, 1))], dim=-1)
 
-        return inputs
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
 @add_start_docstrings(
