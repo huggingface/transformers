@@ -479,4 +479,4 @@ def convert_examples_to_features(
 processors = {"race": RaceProcessor, "swag": SwagProcessor, "arc": ArcProcessor, "cosmos": CosmosProcessor, "socialiqa": SocialIQAProcessor}
 
 
-MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4, "cosmos", 4,"socialiqa",4}
+MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4, "cosmos", 4,"socialiqa",3}
