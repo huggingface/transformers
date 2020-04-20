@@ -624,7 +624,7 @@ class TextGenerationPipeline(Pipeline):
                 # Decode text
                 text = self.tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
 
-                # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
+                # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
                 total_sequence = (
                     prompt_text
                     + text[len(self.tokenizer.decode(input_ids.squeeze(), clean_up_tokenization_spaces=True)) :]
