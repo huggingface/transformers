@@ -628,7 +628,6 @@ class TextGenerationPipeline(Pipeline):
                 if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
                     text = text[len(self.PADDING_TEXT):]
                 
-                    prompt_text
                     + text[len(self.tokenizer.decode(input_ids.squeeze(), clean_up_tokenization_spaces=True)) :]
                 )
 
