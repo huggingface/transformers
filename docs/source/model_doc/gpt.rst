@@ -36,6 +36,9 @@ Tips:
 `Write With Transformer <https://transformer.huggingface.co/doc/gpt>`__ is a webapp created and hosted by
 Hugging Face showcasing the generative capabilities of several models. GPT is one of them.
 
+The original code can be found `here <https://github.com/openai/finetune-transformer-lm>`_.
+
+
 OpenAIGPTConfig
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -48,6 +51,13 @@ OpenAIGPTTokenizer
 
 .. autoclass:: transformers.OpenAIGPTTokenizer
     :members: save_vocabulary
+
+
+OpenAIGPTTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.OpenAIGPTTokenizerFast
+    :members:
 
 
 OpenAIGPTModel
