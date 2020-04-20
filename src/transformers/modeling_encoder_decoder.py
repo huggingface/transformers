@@ -21,6 +21,7 @@ import os
 from .modeling_auto import AutoModel, AutoModelWithLMHead
 from .modeling_utils import PreTrainedModel
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -138,7 +139,9 @@ class EncoderDecoderModel(PreTrainedModel):
         # that apply to the model as a whole.
         # We let the specific kwargs override the common ones in case of conflict.
 
-        kwargs_encoder = {argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")}
+        kwargs_encoder = {
+            argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
+        }
 
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
@@ -253,7 +256,7 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             lm_labels=lm_labels,
-            masked_lm_labels=masked_lm_labels
+            masked_lm_labels=masked_lm_labels,
         )
 
         return decoder_outputs + encoder_outputs

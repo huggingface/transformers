@@ -974,10 +974,14 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         if attention_mask is not None:
             # attention_mask should be given to `prepare_inputs_for_generation` if bert is used as single decoder model
-            attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
+            attention_mask = torch.cat(
+                [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1
+            )
         else:
             # no attention_mask should be given to `prepare_inputs_for_generation` if bert is used as a decoder in a encoder-decoder model. In this case attention mask will automatically be created
-            attention_mask = torch.cat([input_ids.new_ones(input_shape), input_ids.new_zeros((effective_batch_size, 1))], dim=-1)
+            attention_mask = torch.cat(
+                [input_ids.new_ones(input_shape), input_ids.new_zeros((effective_batch_size, 1))], dim=-1
+            )
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
