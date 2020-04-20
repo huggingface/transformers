@@ -267,15 +267,11 @@ class EncoderDecoderModel(PreTrainedModel):
         else:
             encoder_outputs = (past,)
 
-        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, attention_mask)
-
-        import ipdb
-        ipdb.set_trace()
+        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids)
 
         return {
             "attention_mask": attention_mask,
             "decoder_input_ids": decoder_inputs["input_ids"],
-            "decoder_attention_mask": decoder_inputs["attention_mask"],
             "encoder_outputs": encoder_outputs,
         }
 
