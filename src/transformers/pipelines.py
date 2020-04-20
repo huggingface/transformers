@@ -600,7 +600,7 @@ class TextGenerationPipeline(Pipeline):
         text_inputs = self._args_parser(*texts)
 
         all_generated_sequences = []
-        for i, prompt_text in enumerate(text_inputs):
+        for prompt_text in text_inputs:
             # Manage correct placement of the tensors
             with self.device_placement():
                 if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
