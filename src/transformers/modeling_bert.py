@@ -959,7 +959,7 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         return outputs  # (ltr_lm_loss), (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
         # Add dummy token at the end (no attention on this one)
 
         assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
@@ -969,10 +969,14 @@ class BertForMaskedLM(BertPreTrainedModel):
             (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
         )
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
+        inputs = {"input_ids": input_ids}
 
-        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
+        if attention_mask is not None:
+            # add attention_mask if necessary (for no encoder-decoder models)
+            attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
+            inputs["attention_mask"] = attention_mask
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
+        return inputs
 
 
 @add_start_docstrings(
