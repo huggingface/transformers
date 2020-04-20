@@ -147,3 +147,4 @@ class AlbertConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout_prob = classifier_dropout_prob
+        self.pre_layer_norm = kwargs.get("pre_layer_norm", False)

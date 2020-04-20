@@ -236,6 +236,7 @@ class TFAlbertSelfOutput(tf.keras.layers.Layer):
 
 class TFAlbertAttention(TFBertSelfAttention):
     def __init__(self, config, **kwargs):
+        """ Includes self-attention, then layer-norm. """
         super().__init__(config, **kwargs)
 
         self.hidden_size = config.hidden_size
@@ -244,12 +245,16 @@ class TFAlbertAttention(TFBertSelfAttention):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.pruned_heads = set()
+        self.pre_layer_norm = config.pre_layer_norm
 
     def prune_heads(self, heads):
         raise NotImplementedError
 
     def call(self, inputs, training=False):
         input_tensor, attention_mask, head_mask = inputs
+
+        if self.pre_layer_norm:
+            input_tensor = self.LayerNorm(input_tensor)
 
         batch_size = shape_list(input_tensor)[0]
         mixed_query_layer = self.query(input_tensor)
@@ -295,7 +300,9 @@ class TFAlbertAttention(TFBertSelfAttention):
 
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
-        attention_output = self.LayerNorm(hidden_states + input_tensor)
+        attention_output = hidden_states + input_tensor
+        if not self.pre_layer_norm:
+            attention_output = self.LayerNorm(hidden_states + input_tensor)
 
         # add attentions if we output them
         outputs = (attention_output,) + self_outputs[1:]
@@ -324,16 +331,23 @@ class TFAlbertLayer(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
+        self.pre_layer_norm = config.pre_layer_norm
+
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
+        if self.pre_layer_norm:
+            hidden_states = self.full_layer_layer_norm(hidden_states)
         attention_outputs = self.attention([hidden_states, attention_mask, head_mask], training=training)
         ffn_output = self.ffn(attention_outputs[0])
         ffn_output = self.activation(ffn_output)
         ffn_output = self.ffn_output(ffn_output)
 
+        # This line doesn't appear to be used; another dropout bug?
         hidden_states = self.dropout(hidden_states, training=training)
-        hidden_states = self.full_layer_layer_norm(ffn_output + attention_outputs[0])
+        hidden_states = ffn_output + attention_outputs[0]
+        if not self.pre_layer_norm:
+            hidden_states = self.full_layer_layer_norm(hidden_states)
 
         # add attentions if we output them
         outputs = (hidden_states,) + attention_outputs[1:]
@@ -781,7 +795,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertMainLayer(config, name="albert")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(config.classifier_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
