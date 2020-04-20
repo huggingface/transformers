@@ -960,17 +960,16 @@ class BertForMaskedLM(BertPreTrainedModel):
         return outputs  # (ltr_lm_loss), (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
-        # Add dummy token at the end (no attention on this one)
-
-        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
 
+        # if model is used as a decoder in encoder-decoder model decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
         # if model is does not use a casaul mask then add a dummy token
         if self.config.is_decoder is False:
+            assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
             attention_mask = torch.cat(
                 [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1
             )
