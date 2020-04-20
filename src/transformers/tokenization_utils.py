@@ -1713,39 +1713,6 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 )
 
             max_length = max([total_sequence_length(ids) for ids in input_ids])
-
-        batch_outputs = self.prepare_batch_for_model(
-            input_ids,
-            add_special_tokens,
-            max_length,
-            pad_to_max_length,
-            return_attention_masks,
-            return_input_lengths,
-            return_overflowing_tokens,
-            return_special_tokens_masks,
-            return_token_type_ids,
-            stride,
-            truncation_strategy,
-        )
-
-        if return_tensors is not None:
-            self.convert_to_tensors_(batch_outputs, return_tensors)
-        return BatchEncoding(batch_outputs)
-
-    def prepare_batch_for_model(
-        self,
-        input_ids,
-        add_special_tokens,
-        max_length,
-        pad_to_max_length,
-        return_attention_masks,
-        return_input_lengths,
-        return_overflowing_tokens,
-        return_special_tokens_masks,
-        return_token_type_ids,
-        stride,
-        truncation_strategy,
-    ):
         batch_outputs = {}
         for first_ids, second_ids in input_ids:
             # Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by
@@ -1771,6 +1738,9 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 if key not in batch_outputs:
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
+
+        if return_tensors is not None:
+            self.convert_to_tensors_(batch_outputs, return_tensors)
         return BatchEncoding(batch_outputs)
 
     def convert_to_tensors_(self, batch_outputs: dict, return_tensors: str) -> None:

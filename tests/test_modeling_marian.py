@@ -70,9 +70,15 @@ class IntegrationTests(unittest.TestCase):
         }
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
         logits, *enc_features = self.model(**model_inputs)
-        import ipdb
 
-        ipdb.set_trace()
+    def test_tokenizer(self):
+        input_ids = self.tokenizer.prepare_translation_batch(["I am a small frog"])['input_ids'][0]
+        # expected = [444, 982, 111, 34045, 1, 0]   # marian produces this, see invocation issue.
+        expected = [38, 121, 14, 697, 38848, 0]
+        self.assertListEqual(expected, input_ids.tolist())
+        input_ids_w_pad = self.tokenizer.prepare_translation_batch(["I am a small frog <pad>"])['input_ids'][0]
+        expected_w_pad =  [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad goes before EOS.
+        self.assertListEqual(expected_w_pad, input_ids_w_pad.tolist())
 
     def test_generate(self):
         """Should produce a good translation."""
