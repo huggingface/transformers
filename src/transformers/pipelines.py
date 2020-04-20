@@ -629,7 +629,6 @@ class TextGenerationPipeline(Pipeline):
                     text = text[len(self.PADDING_TEXT):]
                 
                     + text[len(self.tokenizer.decode(input_ids.squeeze(), clean_up_tokenization_spaces=True)) :]
-                )
 
                 generated_sequences += [total_sequence]
             all_generated_sequences += [generated_sequences]
