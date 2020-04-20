@@ -618,7 +618,7 @@ class TextGenerationPipeline(Pipeline):
 
             generated_sequences = []
 
-            for generated_sequence_idx, generated_sequence in enumerate(output_sequences):
+            for generated_sequence in output_sequences:
                 generated_sequence = generated_sequence.tolist()
 
                 # Decode text
