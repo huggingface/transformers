@@ -62,7 +62,6 @@ TEXT_CLASSIF_FINETUNED_MODELS = {
 
 TEXT_GENERATION_FINETUNED_MODELS = {
     ("gpt2", "gpt2"),
-    ("transfo-xl-wt103", "transfo-xl-wt103"),
     ("xlnet-base-cased", "xlnet-base-cased"),
 }
 
