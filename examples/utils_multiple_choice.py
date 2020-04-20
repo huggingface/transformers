@@ -345,6 +345,59 @@ class CosmosProcessor(DataProcessor):
         return examples
 
 
+class SocialIQAProcessor(DataProcessor):
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {} train".format(data_dir))
+        return self._create_examples(self._read_json(os.path.join(data_dir, "train.jsonl")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {} valid".format(data_dir))
+        return self._create_examples(self._read_json(os.path.join(data_dir, "valid.jsonl")), "valid")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {} test".format(data_dir))
+        return self._create_examples(self._read_json(os.path.join(data_dir, "test.jsonl")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["A", "B", "C"]
+
+    def _read_json(self, input_file):
+        with open(input_file, "r", encoding="utf-8") as fin:
+            lines = fin.readlines()
+            return lines
+
+    def _create_examples(self, lines, type):
+
+        examples = []
+
+        count_id=0
+        for line in tqdm.tqdm(lines, desc="read socialIQA data"):
+            example = json.loads(line.strip("\n"))
+
+            question = example["question"]
+            context = example["context"]
+            answer0 = example["answerA"]
+            answer1 = example["answerB"]
+            answer2 = example["answerC"]
+            correct_label = example["correct"]
+
+            examples.append(
+                    InputExample(
+                        example_id=count_id,
+                        question=question,
+                        contexts=[context, context, context],
+                        endings=[answer0, answer1, answer2],
+                        label=correct_label,
+                    )
+                )
+            count_id=count_id+1
+
+        return examples
+
 def convert_examples_to_features(
     examples: List[InputExample],
     label_list: List[str],
@@ -423,7 +476,7 @@ def convert_examples_to_features(
     return features
 
 
-processors = {"race": RaceProcessor, "swag": SwagProcessor, "arc": ArcProcessor, "cosmos": CosmosProcessor}
+processors = {"race": RaceProcessor, "swag": SwagProcessor, "arc": ArcProcessor, "cosmos": CosmosProcessor, "socialiqa": SocialIQAProcessor}
 
 
-MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4, "cosmos", 4}
+MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4, "cosmos", 4,"socialiqa",4}
