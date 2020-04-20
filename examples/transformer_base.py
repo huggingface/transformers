@@ -1,10 +1,10 @@
+import argparse
 import logging
 import os
 import random
 
 import numpy as np
 import pytorch_lightning as pl
-import json
 import torch
 
 from transformers import (
@@ -21,7 +21,7 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 from transformers.modeling_auto import MODEL_MAPPING
-import json
+
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ MODEL_MODES = {
 }
 
 
-def set_seed(args):
+def set_seed(args: argparse.Namespace):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -48,7 +48,7 @@ def set_seed(args):
 
 
 class BaseTransformer(pl.LightningModule):
-    def __init__(self, hparams, num_labels=None, mode="base", **config_kwargs):
+    def __init__(self, hparams: argparse.Namespace, num_labels=None, mode="base", **config_kwargs):
         "Initialize a model."
 
         super(BaseTransformer, self).__init__()
@@ -76,12 +76,6 @@ class BaseTransformer(pl.LightningModule):
 
     def is_logger(self):
         return self.trainer.proc_rank <= 0
-
-    def log_hyperparams(self):
-        model = self.model
-        model.config.save_pretrained(model.hparams.output_dir)  # , 'config.json'))
-        with open(os.path.join(model.hparams.output_dir, 'hparam.json')) as f:
-            json.dump(model.hparams, f)
 
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
@@ -199,7 +193,7 @@ class BaseTransformer(pl.LightningModule):
 
 
 class LoggingCallback(pl.Callback):
-    def on_validation_end(self, trainer, pl_module):
+    def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         logger.info("***** Validation results *****")
         if pl_module.is_logger():
             metrics = trainer.callback_metrics
@@ -208,7 +202,7 @@ class LoggingCallback(pl.Callback):
                 if key not in ["log", "progress_bar"]:
                     logger.info("{} = {}\n".format(key, str(metrics[key])))
 
-    def on_test_end(self, trainer, pl_module):
+    def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         logger.info("***** Test results *****")
 
         if pl_module.is_logger():
@@ -263,7 +257,7 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
 
-def generic_train(model: BaseTransformer, args):
+def generic_train(model: BaseTransformer, args: argparse.Namespace):
     # init model
     set_seed(args)
 
@@ -308,7 +302,6 @@ def generic_train(model: BaseTransformer, args):
         train_params["distributed_backend"] = "ddp"
 
     trainer = pl.Trainer(**train_params)
-
 
     if args.do_train:
         trainer.fit(model)
