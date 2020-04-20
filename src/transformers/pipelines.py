@@ -425,11 +425,7 @@ class Pipeline(_ScikitCompat):
         # Parse arguments
         inputs = self._args_parser(*texts, **kwargs)
         inputs = self.tokenizer.batch_encode_plus(
-            inputs,
-            add_special_tokens=True,
-            return_tensors=self.framework,
-            max_length=self.tokenizer.max_len,
-            pad_to_max_length=pad_to_max_length,
+            inputs, add_special_tokens=True, return_tensors=self.framework, pad_to_max_length=pad_to_max_length,
         )
 
         return inputs
