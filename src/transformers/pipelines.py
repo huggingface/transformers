@@ -537,28 +537,6 @@ class TextGenerationPipeline(Pipeline):
     which includes the uni-directional models in the library (e.g. gpt2).
     See the list of available community models on
     `huggingface.co/models <https://huggingface.co/models?search=&filter=lm-head>`__.
-
-    Arguments:
-        model (:obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`):
-            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            :class:`~transformers.PreTrainedModel` for PyTorch and :class:`~transformers.TFPreTrainedModel` for
-            TensorFlow.
-        tokenizer (:obj:`~transformers.PreTrainedTokenizer`):
-            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-            :class:`~transformers.PreTrainedTokenizer`.
-        modelcard (:obj:`str` or :class:`~transformers.ModelCard`, `optional`, defaults to :obj:`None`):
-            Model card attributed to the model for this pipeline.
-        framework (:obj:`str`, `optional`, defaults to :obj:`None`):
-            The framework to use, either "pt" for PyTorch or "tf" for TensorFlow. The specified framework must be
-            installed.
-
-            If no framework is specified, will default to the one currently installed. If no framework is specified
-            and both frameworks are installed, will default to PyTorch.
-        args_parser (:class:`~transformers.pipelines.ArgumentHandler`, `optional`, defaults to :obj:`None`):
-            Reference to the object in charge of parsing supplied pipeline parameters.
-        device (:obj:`int`, `optional`, defaults to :obj:`-1`):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, >=0 will run the model
-            on the associated CUDA device id.
     """
 
     # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
@@ -575,31 +553,12 @@ class TextGenerationPipeline(Pipeline):
     the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
     with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
-    def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
-        device: int = -1,
-        task: str = "",
+    def __call__(
+        self, *texts, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
-        super().__init__(
-            model=model,
-            tokenizer=tokenizer,
-            modelcard=modelcard,
-            framework=framework,
-            args_parser=args_parser,
-            device=device,
-            binary_output=True,
-            task=task,
-        )
-
-    def __call__(self, *texts, **generate_kwargs):
         text_inputs = self._args_parser(*texts)
 
-        all_generated_sequences = []
+        results = []
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
             with self.device_placement():
@@ -613,26 +572,39 @@ class TextGenerationPipeline(Pipeline):
                 input_ids = inputs["input_ids"]
 
                 # Ensure that batch size = 1 (batch generation not allowed for now)
-                assert input_ids.shape[0] == 1, "Batch generation is currently not supported. See https://github.com/huggingface/transformers/issues/3021 for more information."
+                assert (
+                    input_ids.shape[0] == 1
+                ), "Batch generation is currently not supported. See https://github.com/huggingface/transformers/issues/3021 for more information."
                 output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
 
-            generated_sequences = []
+            result = []
 
             for generated_sequence in output_sequences:
                 generated_sequence = generated_sequence.tolist()
+                record = {}
+                if return_tensors:
+                    record["generated_token_ids"] = generated_sequence
+                if return_text:
+                    # Decode text
+                    text = self.tokenizer.decode(
+                        generated_sequence,
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                    )
 
-                # Decode text
-                text = self.tokenizer.decode(generated_sequence, clean_up_tokenization_spaces=True)
+                    # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
+                    if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
+                        text = text[len(self.PADDING_TEXT) :]
 
-                # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
-                if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
-                    text = text[len(self.PADDING_TEXT):]
-                
+                    record["generated_text"] = text
 
-                generated_sequences += [total_sequence]
-            all_generated_sequences += [generated_sequences]
+                result.append(record)
+            results += [results]
 
-        return all_generated_sequences
+        if len(results) == 1:
+            return results[0]
+
+        return results
 
 
 class TextClassificationPipeline(Pipeline):
