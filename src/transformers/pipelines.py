@@ -599,7 +599,7 @@ class TextGenerationPipeline(Pipeline):
                     record["generated_text"] = text
 
                 result.append(record)
-            results += [results]
+            results += [result]
 
         if len(results) == 1:
             return results[0]
