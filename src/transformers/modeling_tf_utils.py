@@ -199,21 +199,23 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             Pointer to the input tokens Embeddings Module of the model
         """
         base_model = getattr(self, self.base_model_prefix, self)
-        new_embeddings = base_model._resize_token_embeddings(new_num_tokens)
-
-        # TODO: Set up set_input_embeddings() on the model
-        self.set_imput_embeddings(new_embeddings)
+        model_embeds = base_model._resize_token_embeddings(new_num_tokens)
+        if new_num_tokens is None:
+            return model_embeds
+        
         # Update base model and current model config
         self.config.vocab_size = new_num_tokens
         base_model.vocab_size = new_num_tokens
+
         # # tie weights
         # self.tie_weights()
-        return self.get_input_embeddings()
+        return model_embeds
     
     def _resize_token_embeddings(self, new_num_tokens):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
-        return new_embeddings
+        self.set_input_embeddings(new_embeddings)
+        return self.get_input_embeddings()
 
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
         """ Build a resized Embedding Module from a provided token Embedding Module.
