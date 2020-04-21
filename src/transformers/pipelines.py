@@ -579,7 +579,8 @@ class TextGenerationPipeline(Pipeline):
                 output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
                 if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
                     output_sequences = output_sequences[:, self.PADDING_TEXT_TOKEN_LENGTH :]
-                    result = []
+
+            result = []
 
             for generated_sequence in output_sequences:
                 generated_sequence = generated_sequence.tolist()
