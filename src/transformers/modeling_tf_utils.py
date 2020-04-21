@@ -218,22 +218,61 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         Return: ``tf.Variable``
             Pointer to the input tokens Embeddings Module of the model
         """
-        base_model = getattr(self, self.base_model_prefix, self)  # get the base model if needed
-        weights = base_model.embeddings.word_embeddings.numpy()
-        nb_tokens, h_dim = weights.shape
-        base_model.embeddings.word_embeddings = base_model.embeddings.add_weight("weight",
-            shape=[new_num_tokens, h_dim],
-            initializer=get_initializer(self.config.initializer_range),
-            dtype=tf.float32)
-        new_init_weights = base_model.embeddings.word_embeddings.numpy()
-        new_init_weights[:nb_tokens, :] = weights
-        base_model.embeddings.word_embeddings.assign(new_init_weights)
+        base_model = getattr(self, self.base_model_prefix, self)
+        new_embeddings = base_model._resize_token_embeddings(new_num_tokens)
 
+        # TODO: Set up set_input_embeddings() on the model
+        self.embed_tokens = new_embeddings
         # Update base model and current model config
         self.config.vocab_size = new_num_tokens
-        base_model.vocab_size = new_num_tokens
+        #base_model.vocab_size = new_num_tokens
         # set the embedding
-        return base_model.embeddings.word_embeddings
+        self.embed_tokens = new_embeddings
+        # tie weights
+        self.tie_weights()
+        return self.get_input_embeddings()
+    
+    def _resize_token_embeddings(self, new_num_tokens):
+        old_embeddings = self.get_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        return new_embeddings
+
+    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
+        """ Build a resized Embedding Module from a provided token Embedding Module.
+            Increasing the size will add newly initialized vectors at the end
+            Reducing the size will remove vectors from the end
+
+        Args:
+            new_num_tokens: (`optional`) int
+                New number of tokens in the embedding matrix.
+                Increasing the size will add newly initialized vectors at the end
+                Reducing the size will remove vectors from the end
+                If not provided or None: return the provided token Embedding Module.
+        Return: ``torch.nn.Embeddings``
+            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
+        """
+        if new_num_tokens is None:
+            return old_embeddings
+
+        old_num_tokens, old_embedding_dim = old_embeddings.weights[0].shape
+        if old_num_tokens == new_num_tokens:
+            return old_embeddings
+
+        # Build new embeddings
+        new_embeddings = old_embeddings.__class__(new_num_tokens, old_embedding_dim)
+
+        # initialize all new embeddings (in particular added tokens)
+        new_embeddings.build([new_num_tokens, old_embedding_dim])
+        init_weights = new_embeddings.get_weights()[0]
+
+        # Copy token embeddings from the previous weights
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        _weights_to_carry_over = old_embeddings.weights[0][:num_tokens_to_copy, :]
+        init_weights[:num_tokens_to_copy] = _weights_to_carry_over
+        new_embeddings.set_weights([init_weights])
+
+        return new_embeddings
+
 
     def prune_heads(self, heads_to_prune):
         """ Prunes heads of the base model.
