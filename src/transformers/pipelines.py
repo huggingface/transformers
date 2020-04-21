@@ -601,7 +601,7 @@ class TextGenerationPipeline(Pipeline):
                     if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
                         text = text[len(self.PADDING_TEXT) :]
 
-                    record["generated_text"] = text
+                    record["generated_text"] = prompt_text + text[len(self.tokenizer.decode(input_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=clean_up_tokenization_spaces)):]
 
                 result.append(record)
             results += [result]
