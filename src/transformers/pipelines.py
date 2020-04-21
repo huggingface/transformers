@@ -577,7 +577,6 @@ class TextGenerationPipeline(Pipeline):
                     input_ids.shape[0] == 1
                 ), "Batch generation is currently not supported. See https://github.com/huggingface/transformers/issues/3021 for more information."
 
-                # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
                 if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
                     output_sequences = output_sequences[:, self.PADDING_TEXT_TOKEN_LENGTH :]
 
