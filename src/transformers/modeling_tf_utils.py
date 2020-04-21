@@ -188,12 +188,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         new_embeddings = base_model._resize_token_embeddings(new_num_tokens)
 
         # TODO: Set up set_input_embeddings() on the model
-        self.embed_tokens = new_embeddings
+        self.shared = new_embeddings
         # Update base model and current model config
         self.config.vocab_size = new_num_tokens
         base_model.vocab_size = new_num_tokens
-        # tie weights
-        self.tie_weights()
+        # # tie weights
+        # self.tie_weights()
         return self.get_input_embeddings()
     
     def _resize_token_embeddings(self, new_num_tokens):
