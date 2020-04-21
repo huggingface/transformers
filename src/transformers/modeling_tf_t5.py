@@ -433,8 +433,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         head_mask=None,
         training=False,
     ):
-        logger.info(input_ids)
-        logger.info(input_ids.numpy())
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -733,8 +731,9 @@ class TFT5Model(TFT5PreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
-
+        logger.info(decoder_input_ids)
         if isinstance(decoder_input_ids, dict):
+            logger.info("we are getting a dict, yes!")
             kwargs.update(decoder_input_ids)
         else:
             kwargs["decoder_input_ids"] = decoder_input_ids
