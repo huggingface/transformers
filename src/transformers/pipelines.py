@@ -552,7 +552,7 @@ class TextGenerationPipeline(Pipeline):
     man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
     the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
     with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
-PADDING_TEXT_TOKEN_LENGTH = 170
+    PADDING_TEXT_TOKEN_LENGTH = 170
 
     def __call__(
         self, *texts, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
@@ -577,9 +577,9 @@ PADDING_TEXT_TOKEN_LENGTH = 170
                     input_ids.shape[0] == 1
                 ), "Batch generation is currently not supported. See https://github.com/huggingface/transformers/issues/3021 for more information."
                 output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
-if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
-    output_sequences = output_sequences[:, self.PADDING_TEXT_TOKEN_LENGTH:]
-            result = []
+                if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
+                    output_sequences = output_sequences[:, self.PADDING_TEXT_TOKEN_LENGTH :]
+                    result = []
 
             for generated_sequence in output_sequences:
                 generated_sequence = generated_sequence.tolist()
