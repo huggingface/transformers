@@ -1,5 +1,5 @@
 # DistilBERT Yelp Review Sentiment
-This model is used for sentiment analysis on yelp english yelp reviews.  
+This model is used for sentiment analysis on english yelp reviews.  
 It is a DistilBERT model trained on 1 million reviews from the yelp open dataset.  
 It is a regression model, with outputs in the range of ~-2 to ~2. With -2 being 1 star and 2 being 5 stars.  
 It was trained using the [ktrain](https://github.com/amaiya/ktrain) because of it's ease of use.
