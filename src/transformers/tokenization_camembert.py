@@ -22,8 +22,7 @@ from typing import List, Optional
 
 import sentencepiece as spm
 
-from transformers.tokenization_utils import PreTrainedTokenizer
-
+from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE
 
 
