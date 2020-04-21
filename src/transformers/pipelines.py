@@ -577,7 +577,8 @@ PADDING_TEXT_TOKEN_LENGTH = 170
                     input_ids.shape[0] == 1
                 ), "Batch generation is currently not supported. See https://github.com/huggingface/transformers/issues/3021 for more information."
                 output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
-
+if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
+    output_sequences = output_sequences[:, self.PADDING_TEXT_TOKEN_LENGTH:]
             result = []
 
             for generated_sequence in output_sequences:
