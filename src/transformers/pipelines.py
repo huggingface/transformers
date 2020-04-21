@@ -577,7 +577,6 @@ class TextGenerationPipeline(Pipeline):
                     input_ids.shape[0] == 1
                 ), "Batch generation is currently not supported. See https://github.com/huggingface/transformers/issues/3021 for more information."
 
-                    output_sequences = output_sequences[:, self.PADDING_TEXT_TOKEN_LENGTH :]
 
             result = []
 
