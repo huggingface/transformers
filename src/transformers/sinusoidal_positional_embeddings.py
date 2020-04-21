@@ -41,10 +41,11 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
 
     def __init__(self, embedding_dim, padding_idx, init_size):
         super().__init__(init_size, embedding_dim)
-        self.embedding_dim = embedding_dim
-        self._padding_idx = padding_idx   # dont overwrite original nn.Embedding.padding_idx
+        #self.embedding_dim = embedding_dim
+        # self._padding_idx = padding_idx   # dont overwrite original nn.Embedding.padding_idx
         self.weight = init_sinusoidal_embeddings_marian_(self.weight)
-        self.max_positions = init_size
+        assert self.weight[1][0] == 0.84147096
+        # self.max_positions = init_size
 
     @torch.no_grad()
     def forward(
@@ -113,3 +114,13 @@ class LearnedPositionalEmbedding(nn.Embedding):
         else:
             positions = create_position_ids_from_input_ids(input, self.padding_idx, 1)
         return super().forward(positions)
+
+
+def assert_valid_pos_emb(emb1):
+    """SinusoidalPositionalEmbeddings."""
+    marian_results = torch.Tensor([[0, 0, 0, 0, 0],
+                                   [0.84147096, 0.82177866, 0.80180490, 0.78165019, 0.76140374],
+                                   [0.90929741, 0.93651021, 0.95829457, 0.97505713, 0.98720258]
+                                   ])
+    weights = emb1.weight.data[:3, :5]
+    assert torch.allclose(marian_results, weights, atol=1e-3)

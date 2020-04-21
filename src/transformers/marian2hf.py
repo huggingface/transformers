@@ -18,6 +18,7 @@ from transformers import BartConfig, BartForConditionalGeneration, BertConfig, B
 from transformers.marian_constants import BART_CONVERTER, BERT_LAYER_CONVERTER, EMBED_CONVERTER, assume_vals
 from transformers.tokenization_marian import MarianSPTokenizer
 from transformers.tokenization_utils import ADDED_TOKENS_FILE, TOKENIZER_CONFIG_FILE
+from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding, assert_valid_pos_emb
 
 
 OPUS_MODELS_PATH = "/Users/shleifer/OPUS-MT-train/models"  # git clone git@github.com:Helsinki-NLP/Opus-MT.git
@@ -274,18 +275,20 @@ class OpusState:
         state_dict, marian_cfg = self.state_dict, self.cfg
 
         hidden_size, intermediate_shape = state_dict["encoder_l1_ffn_W1"].shape
-        assert hidden_size == marian_cfg["dim-emb"]
+        assert hidden_size == marian_cfg["dim-emb"] == 512
         cfg = convert_marian_cfg_to_bart(marian_cfg, pad_token_id, eos_token_id, None)
         assert cfg.static_position_embeddings
         model = BartForConditionalGeneration(cfg)
+        assert_valid_pos_emb(model.model.encoder.embed_positions)
+
         assert "hidden_size" not in cfg.to_dict()
         print("loaded empty marian model")
         load_layers_(
             model.model.encoder.layers, state_dict, converter=BART_CONVERTER,
         )
-        print("loaded encoder")
         load_layers_(model.model.decoder.layers, state_dict, converter=BART_CONVERTER, is_decoder=True)
 
+        # handle word embs
         # embs_state: dict = convert_embeddings_(state_dict)
         wemb_tensor = torch.nn.Parameter(torch.FloatTensor(self.wemb))
         bias_tensor = torch.nn.Parameter(torch.FloatTensor(self.final_bias))
@@ -295,6 +298,7 @@ class OpusState:
         model.final_logits_bias = bias_tensor
 
         if "Wpos" in state_dict:
+            raise
             wpos_tensor = torch.tensor(state_dict["Wpos"])
             model.model.encoder.embed_positions.weight = wpos_tensor
             model.model.decoder.embed_positions.weight = wpos_tensor
@@ -317,8 +321,8 @@ class OpusState:
         for k in model.model.state_dict():
             if k.startswith("encoder.layers") or k.startswith("decoder.layers") or k == "shared.weight":
                 continue
-            elif k.startswith("encoder.embed") or k.startswith("decoder.embed"):
-                continue
+            #elif k.startswith("encoder.embed") or k.startswith("decoder.embed"):
+            #    continue
             else:
                 extra_bart_keys.append(k)
 
@@ -349,12 +353,16 @@ def main(source_dir, dest_dir):
     save_json(opus_state.cfg, dest_dir / "marian_original_config.json")
 
     model = opus_state.load_marian_model(tokenizer.pad_token_id, tokenizer.eos_token_id)
+    assert_valid_pos_emb(model.model.encoder.embed_positions)
+    assert_valid_pos_emb(model.model.decoder.embed_positions)
     # model.resize_token_embeddings(tokenizer.vocab_size)  # account for added pad token
     # model.config.vocab_size = tokenizer.vocab_size
     # model.config.eos_token_id = tokenizer.eos_token_id
     # model.config.pad_token_id = tokenizer.pad_token_id
     model.save_pretrained(dest_dir)
     model.from_pretrained(dest_dir)  # sanity check
+    assert_valid_pos_emb(model.model.encoder.embed_positions)
+    assert_valid_pos_emb(model.model.decoder.embed_positions)
 
 
 if __name__ == "__main__":

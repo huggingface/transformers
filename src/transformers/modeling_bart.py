@@ -126,7 +126,9 @@ class PretrainedBartModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        if isinstance(module, nn.Embedding):
+        elif isinstance(module, SinusoidalPositionalEmbedding):
+            pass
+        elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
@@ -290,7 +292,7 @@ class BartEncoder(nn.Module):
 
         inputs_embeds = self.embed_tokens(input_ids)# * self.embed_scale
         log_tensor(f'inputs_embeds', inputs_embeds)
-        import ipdb; ipdb.set_trace()
+
         inputs_embeds = inputs_embeds * self.embed_scale
         embed_pos = self.embed_positions(input_ids)
         log_tensor(f'embed_pos', embed_pos)
