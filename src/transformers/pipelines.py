@@ -564,7 +564,9 @@ class TextGenerationPipeline(Pipeline):
             # Manage correct placement of the tensors
             with self.device_placement():
                 if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
-                    prompt_text = self.PADDING_TEXT + prompt_text
+                    inputs = self._parse_and_tokenize(self.PADDING_TEXT + prompt_text)
+                else:
+                    inputs = self._parse_and_tokenize(prompt_text)
                 inputs = self._parse_and_tokenize(prompt_text)
 
                 if self.framework == "pt":
