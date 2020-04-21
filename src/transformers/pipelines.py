@@ -567,7 +567,6 @@ class TextGenerationPipeline(Pipeline):
                     inputs = self._parse_and_tokenize(self.PADDING_TEXT + prompt_text)
                 else:
                     inputs = self._parse_and_tokenize(prompt_text)
-                inputs = self._parse_and_tokenize(prompt_text)
 
                 if self.framework == "pt":
                     inputs = self.ensure_tensor_on_device(**inputs)
