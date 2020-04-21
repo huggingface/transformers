@@ -395,7 +395,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
-        self.876 = embed_tokens
+        self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
 
         self.config = config
