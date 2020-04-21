@@ -395,7 +395,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
-        self.embed_tokens = embed_tokens
+        self.876 = embed_tokens
         self.is_decoder = config.is_decoder
 
         self.config = config
@@ -698,6 +698,9 @@ class TFT5Model(TFT5PreTrainedModel):
 
     def get_output_embeddings(self):
         return self.shared
+    
+    def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
 
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
     def call(self, decoder_input_ids, **kwargs):
