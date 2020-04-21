@@ -171,40 +171,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         """
         return None  # Overwrite for models with output embeddings
 
-    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
-        """ Build a resized Embedding Variable from a provided token Embedding Module.
-            Increasing the size will add newly initialized vectors at the end
-            Reducing the size will remove vectors from the end
-
-        Args:
-            new_num_tokens: (`optional`) int
-                New number of tokens in the embedding matrix.
-                Increasing the size will add newly initialized vectors at the end
-                Reducing the size will remove vectors from the end
-                If not provided or None: return the provided token Embedding Module.
-        Return: ``tf.Variable``
-            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
-        """
-        # if new_num_tokens is None:
-        #     return old_embeddings
-
-        # old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
-        # if old_num_tokens == new_num_tokens:
-        #     return old_embeddings
-
-        # # Build new embeddings
-        # new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
-        # new_embeddings.to(old_embeddings.weight.device)
-
-        # # initialize all new embeddings (in particular added tokens)
-        # self._init_weights(new_embeddings)
-
-        # # Copy token embeddings from the previous weights
-        # num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        # new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
-
-        # return new_embeddings
-
     def resize_token_embeddings(self, new_num_tokens=None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
         Take care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
@@ -225,9 +191,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         self.embed_tokens = new_embeddings
         # Update base model and current model config
         self.config.vocab_size = new_num_tokens
-        #base_model.vocab_size = new_num_tokens
-        # set the embedding
-        self.embed_tokens = new_embeddings
+        base_model.vocab_size = new_num_tokens
         # tie weights
         self.tie_weights()
         return self.get_input_embeddings()
