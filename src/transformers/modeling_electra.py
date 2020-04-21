@@ -4,10 +4,9 @@ import os
 import torch
 import torch.nn as nn
 
-from transformers import ElectraConfig, add_start_docstrings
-from transformers.activations import get_activation
-
-from .file_utils import add_start_docstrings_to_callable
+from .activations import get_activation
+from .configuration_electra import ElectraConfig
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bert import BertEmbeddings, BertEncoder, BertLayerNorm, BertPreTrainedModel
 
 
