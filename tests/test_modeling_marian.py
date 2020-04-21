@@ -21,7 +21,7 @@ from pathlib import Path
 
 from transformers import is_torch_available
 from transformers.marian2hf import main
-from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
+
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -31,6 +31,7 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 if is_torch_available():
     import torch
     from transformers import BertConfig, BertModel, MarianModel, MarianSPTokenizer, BartConfig
+    from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding, init_sinusoidal_embeddings_marian_
 
 
 LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
@@ -97,6 +98,10 @@ class IntegrationTests(unittest.TestCase):
         predicted_de_text = [self.tokenizer.decode(r) for r in result_ids]
         self.assertListEqual(predicted_de_text, tgt)
 
+
+
+@require_torch
+class FastTests(unittest.TestCase):
     def test_positional_embeddings(self):
 
         pad = 1
@@ -106,10 +111,31 @@ class IntegrationTests(unittest.TestCase):
         yes_cache = emb1(input_ids, use_cache=True)
         self.assertListEqual(no_cache[0,-1:].tolist(),  yes_cache[0].tolist())
 
+    def test_pos_v2(self):
+        pad = 1
+        input_ids = torch.tensor([[4, 10]* 3], dtype=torch.long, device=torch_device)
+        emb1 = SinusoidalPositionalEmbedding(512, pad, init_size=512).to(torch_device)
+        marian_results = [[0, 0, 0, 0, 0],
+                          [0.84147096, 0.82177866, 0.80180490, 0.78165019, 0.76140374],
+                          [0.90929741, 0.93651021, 0.95829457, 0.97505713, 0.98720258]
+                          ]
+        weights = emb1.weight.data[:3, :5].tolist()
+        for i, (expected, actual) in enumerate(zip(marian_results, weights)):
+            for j in range(5):
+                print(f'position {i}, {j}')
+                self.assertAlmostEqual(expected[j], actual[j], places=3)
+        #no_cache = emb1(input_ids, use_cache=False)
+        #yes_cache = emb1(input_ids, use_cache=True)
+        #self.assertListEqual(no_cache[0, -1:].tolist(), yes_cache[0].tolist())
+
         # pad = 0
-        # input_ids = torch.tensor([[4, 10, pad, pad, pad]], dtype=torch.long, device=torch_device)
+        input_ids = torch.tensor([[4, 10, pad, pad, pad]], dtype=torch.long, device=torch_device)
+        no_cache_pad_zero = emb1(input_ids)
+        #no_cache_pad_zero.tolist()
+        self.assertTrue(torch.allclose(torch.Tensor(marian_results), no_cache_pad_zero[:3, :5], atol=1e-3))
+
         # emb0 = SinusoidalPositionalEmbedding(10, pad, init_size=32).to(torch_device)
         # assert (emb1.weights == emb0.weights).all()
-        # no_cache_pad_zero = emb0(input_ids, use_cache=False)
+
         # position_ids = torch.arange(input_ids.shape[1], dtype=torch.long, device=torch_device)
         # hard_coded = emb0.weights.index_select(0, position_ids).unsqueeze(0)

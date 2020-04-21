@@ -17,6 +17,21 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
     out.detach_()
     out.requires_grad = False
 
+def init_sinusoidal_embeddings_marian_(out: nn.Parameter):
+    """Identical to the XLM create_sinusoidal_embeddings except features are not interleaved.
+        The cos features are in the 2nd half of the vector.
+    """
+    n_pos, dim = out.shape
+    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim)
+                              for j in range(dim)]
+                             for pos in range(n_pos)])
+    out[:, 0:dim//2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
+    out[:, dim//2:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
+    out.detach_()
+    out.requires_grad = False
+    return out
+
+
 
 class SinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length.
@@ -28,7 +43,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         super().__init__(init_size, embedding_dim)
         self.embedding_dim = embedding_dim
         self._padding_idx = padding_idx   # dont overwrite original nn.Embedding.padding_idx
-        create_sinusoidal_embeddings(init_size, embedding_dim, self.weight)
+        self.weight = init_sinusoidal_embeddings_marian_(self.weight)
         self.max_positions = init_size
 
     @torch.no_grad()
@@ -52,7 +67,8 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
             positions = input_ids.data.new(1, 1).fill_(seq_len)  # called before slicing.
             # return self.weight[seq_len].expand(bsz, 1, -1)
         else:
-            positions = create_position_ids_from_input_ids(input_ids, self._padding_idx, -1)
+            #positions = create_position_ids_from_input_ids(input_ids, self._padding_idx, -1)
+            positions = torch.arange(seq_len, dtype=torch.long)
             print('positions', positions)
         return super().forward(positions)
 
