@@ -160,6 +160,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             return base_model.get_input_embeddings()
         else:
             raise NotImplementedError
+    
+    def set_input_embeddings(self, value):
+        """
+        Set model's input embeddings
+
+        Args:
+            value (:obj:`tf.keras.layers.Layer`):
+                A module mapping vocabulary to hidden states.
+        """
+        base_model = getattr(self, self.base_model_prefix, self)
+        if base_model is not self:
+            base_model.set_input_embeddings(value)
+        else:
+            raise NotImplementedError
 
     def get_output_embeddings(self):
         """
@@ -188,7 +202,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         new_embeddings = base_model._resize_token_embeddings(new_num_tokens)
 
         # TODO: Set up set_input_embeddings() on the model
-        self.shared = new_embeddings
+        self.set_imput_embeddings(new_embeddings)
         # Update base model and current model config
         self.config.vocab_size = new_num_tokens
         base_model.vocab_size = new_num_tokens
