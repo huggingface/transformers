@@ -57,9 +57,14 @@ class IntegrationTests(unittest.TestCase):
         shutil.rmtree(cls.dest_dir)
 
     def test_forward(self):
-        src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
+        #src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
+        src, tgt = ["I am a small frog"], ['▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch']
+        expected = [38, 121, 14, 697, 38848, 0]
+
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
+        self.assertListEqual(expected, model_inputs['input_ids'][0].tolist())
         shapes = {k: v.shape for k, v in model_inputs.items()}
+
         desired_keys = {
             "input_ids",
             "attention_mask",
@@ -69,7 +74,8 @@ class IntegrationTests(unittest.TestCase):
             # "decoder_token_type_ids",
         }
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
-        logits, *enc_features = self.model(**model_inputs)
+        with torch.no_grad():
+            logits, *enc_features = self.model(**model_inputs)
 
     def test_tokenizer(self):
         input_ids = self.tokenizer.prepare_translation_batch(["I am a small frog"])['input_ids'][0]

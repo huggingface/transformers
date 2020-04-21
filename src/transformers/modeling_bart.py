@@ -227,6 +227,8 @@ class EncoderLayer(nn.Module):
             x = self.final_layer_norm(x)
         return x, attn_weights
 
+def log_tensor(msg, x):
+    print(f'{msg}: shape: {x.shape} min: {x.min(): .4f} max: {x.max(): .4f}')
 
 class BartEncoder(nn.Module):
     """
@@ -286,9 +288,14 @@ class BartEncoder(nn.Module):
         if attention_mask is not None:
             attention_mask = invert_mask(attention_mask)
 
-        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        inputs_embeds = self.embed_tokens(input_ids)# * self.embed_scale
+        log_tensor(f'inputs_embeds', inputs_embeds)
+        import ipdb; ipdb.set_trace()
+        inputs_embeds = inputs_embeds * self.embed_scale
         embed_pos = self.embed_positions(input_ids)
+        log_tensor(f'embed_pos', embed_pos)
         x = inputs_embeds + embed_pos
+
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
 
@@ -296,9 +303,10 @@ class BartEncoder(nn.Module):
         x = x.transpose(0, 1)
 
         encoder_states, all_attentions = [], []
-        for encoder_layer in self.layers:
+        for i, encoder_layer in enumerate(self.layers):
             if self.output_hidden_states:
                 encoder_states.append(x)
+            log_tensor(f'encoder layer input {i}', x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer

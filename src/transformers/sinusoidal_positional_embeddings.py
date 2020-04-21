@@ -9,7 +9,9 @@ from transformers.modeling_utils import create_position_ids_from_input_ids
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
-    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
+    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim)
+                              for j in range(dim)]
+                             for pos in range(n_pos)])
     out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
     out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
     out.detach_()
@@ -50,7 +52,8 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
             positions = input_ids.data.new(1, 1).fill_(seq_len)  # called before slicing.
             # return self.weight[seq_len].expand(bsz, 1, -1)
         else:
-            positions = create_position_ids_from_input_ids(input_ids, self._padding_idx, 0)
+            positions = create_position_ids_from_input_ids(input_ids, self._padding_idx, -1)
+            print('positions', positions)
         return super().forward(positions)
 
 
