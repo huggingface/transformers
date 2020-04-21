@@ -552,7 +552,6 @@ class TextGenerationPipeline(Pipeline):
     man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
     the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
     with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
-    PADDING_TEXT_TOKEN_LENGTH = 170
 
     def __call__(
         self, *texts, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
