@@ -142,12 +142,12 @@ def main():
         else None
     )
 
-    def compute_metrics(prediction: EvalPrediction) -> Dict:
+    def compute_metrics(p: EvalPrediction) -> Dict:
         if output_mode == "classification":
-            preds = np.argmax(prediction.predictions, axis=1)
+            preds = np.argmax(p.predictions, axis=1)
         elif output_mode == "regression":
-            preds = np.squeeze(prediction.predictions)
-        return glue_compute_metrics(data_args.task_name, preds, prediction.label_ids)
+            preds = np.squeeze(p.predictions)
+        return glue_compute_metrics(data_args.task_name, preds, p.label_ids)
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -186,9 +186,9 @@ def main():
             )
             with open(output_eval_file, "w") as writer:
                 logger.info("***** Eval results {} *****".format(eval_dataset.args.task_name))
-                for key in sorted(result.keys()):
-                    logger.info("  %s = %s", key, str(result[key]))
-                    writer.write("%s = %s\n" % (key, str(result[key])))
+                for key, value in result.items():
+                    logger.info("  %s = %s", key, value)
+                    writer.write("%s = %s\n" % (key, value))
 
             results.update(result)
 

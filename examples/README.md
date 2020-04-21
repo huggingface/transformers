@@ -365,7 +365,6 @@ Download [swag](https://github.com/rowanz/swagaf/tree/master/data) data
 #training on 4 tesla V100(16GB) GPUS
 export SWAG_DIR=/path/to/swag_data_dir
 python ./examples/run_multiple_choice.py \
---model_type roberta \
 --task_name swag \
 --model_name_or_path roberta-base \
 --do_train \

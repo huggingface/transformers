@@ -118,8 +118,7 @@ class NerDataset(Dataset):
                     sep_token=tokenizer.sep_token,
                     sep_token_extra=bool(model_type in ["roberta"]),
                     # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
-                    pad_on_left=bool(model_type in ["xlnet"]),
-                    # pad on the left for xlnet
+                    pad_on_left=bool(tokenizer.padding_side == "left"),
                     pad_token=tokenizer.pad_token_id,
                     pad_token_segment_id=tokenizer.pad_token_type_id,
                     pad_token_label_id=self.pad_token_label_id,

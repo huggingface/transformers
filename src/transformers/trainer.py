@@ -144,6 +144,10 @@ class Trainer:
         self.prediction_loss_only = prediction_loss_only
         if is_tensorboard_available() and self.args.local_rank in [-1, 0]:
             self.tb_writer = SummaryWriter(log_dir=self.args.logging_dir)
+        if not is_tensorboard_available():
+            logger.warning(
+                "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
+            )
         set_seed(self.args.seed)
         # Create output directory if needed
         if self.args.local_rank in [-1, 0]:
@@ -371,6 +375,7 @@ class Trainer:
         if self.tb_writer:
             self.tb_writer.close()
 
+        logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         return TrainOutput(global_step, tr_loss / global_step)
 
     def _training_step(
