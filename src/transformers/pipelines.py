@@ -531,7 +531,7 @@ class TextGenerationPipeline(Pipeline):
     This language generation pipeline can currently be loaded from the :func:`~transformers.pipeline` method using
     the following task identifier(s):
 
-    - "generation", for generating text from a specified prompt.
+    - "text-generation", for generating text from a specified prompt.
 
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling objective,
     which includes the uni-directional models in the library (e.g. gpt2).
