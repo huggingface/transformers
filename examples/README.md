@@ -246,7 +246,6 @@ and unpack it to some directory `$GLUE_DIR`.
 export GLUE_DIR=/path/to/glue
 
 python run_glue.py \
-  --model_type bert \
   --model_name_or_path bert-base-cased \
   --task_name MRPC \
   --do_train \
@@ -272,7 +271,6 @@ Using Apex and 16 bit precision, the fine-tuning on MRPC only takes 27 seconds. 
 export GLUE_DIR=/path/to/glue
 
 python run_glue.py \
-  --model_type bert \
   --model_name_or_path bert-base-cased \
   --task_name MRPC \
   --do_train \
@@ -296,7 +294,6 @@ export GLUE_DIR=/path/to/glue
 
 python -m torch.distributed.launch \
     --nproc_per_node 8 run_glue.py \
-    --model_type bert \
     --model_name_or_path bert-base-cased \
     --task_name MRPC \
     --do_train \
@@ -329,7 +326,6 @@ export GLUE_DIR=/path/to/glue
 
 python -m torch.distributed.launch \
     --nproc_per_node 8 run_glue.py \
-    --model_type bert \
     --model_name_or_path bert-base-cased \
     --task_name mnli \
     --do_train \
@@ -369,7 +365,6 @@ Download [swag](https://github.com/rowanz/swagaf/tree/master/data) data
 #training on 4 tesla V100(16GB) GPUS
 export SWAG_DIR=/path/to/swag_data_dir
 python ./examples/run_multiple_choice.py \
---model_type roberta \
 --task_name swag \
 --model_name_or_path roberta-base \
 --do_train \
