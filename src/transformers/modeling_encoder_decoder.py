@@ -268,6 +268,8 @@ class EncoderDecoderModel(PreTrainedModel):
         if "BERT" in str(type(self.decoder)).upper():
             kwargs_decoder['encoder_hidden_states'] = hidden_states
             kwargs_decoder['encoder_attention_mask'] = attention_mask
+            kwargs_decoder['lm_labels'] = lm_labels
+            kwargs_decoder['masked_lm_labels']=masked_lm_labels
 
         # Allow for generation based on encoder-generated embeddings if nothing else is provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -279,8 +281,6 @@ class EncoderDecoderModel(PreTrainedModel):
             inputs_embeds=decoder_inputs_embeds,
             attention_mask=decoder_attention_mask,
             head_mask=decoder_head_mask,
-            lm_labels=lm_labels,
-            masked_lm_labels=masked_lm_labels,
             **kwargs_decoder,
         )
 
