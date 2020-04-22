@@ -104,7 +104,7 @@ class SummarizationTrainer(BaseTransformer):
 
     def get_dataloader(self, type_path: str, batch_size: int) -> DataLoader:
         dataset = SummarizationDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)
-        dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn)
+        dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn, shuffle=(type_path == "train"))
         return dataloader
 
     def train_dataloader(self) -> DataLoader:
