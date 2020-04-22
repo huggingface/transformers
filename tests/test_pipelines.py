@@ -303,7 +303,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
         invalid_inputs = [None]
         for model, tokenizer in TEXT_GENERATION_FINETUNED_MODELS:
-            nlp = pipeline(task="text_generation", model=model, tokenizer=tokenizer, framework="pt")
+            nlp = pipeline(task="text-generation", model=model, tokenizer=tokenizer, framework="pt")
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, {},
             )
