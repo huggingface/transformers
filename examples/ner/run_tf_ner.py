@@ -137,16 +137,22 @@ def run_model(train_features, train_labels, training, model, labels, pad_token_l
 
 
 def train(
-    args, strategy, train_dataset, tokenizer, model, num_train_examples, labels, train_batch_size,
-    pad_token_label_id, model_type
+    args,
+    strategy,
+    train_dataset,
+    tokenizer,
+    model,
+    num_train_examples,
+    labels,
+    train_batch_size,
+    pad_token_label_id,
+    model_type,
 ):
     if args["max_steps"] > 0:
         num_train_steps = args["max_steps"]
         args["num_train_epochs"] = 1
     else:
-        num_train_steps = (
-            math.ceil(num_train_examples / train_batch_size)
-        )
+        num_train_steps = math.ceil(num_train_examples / train_batch_size)
 
     writer = tf.summary.create_file_writer("/tmp/mylogs")
 
@@ -166,8 +172,7 @@ def train(
     logging.info("  Num Epochs = %d", args["num_train_epochs"])
     logging.info("  Instantaneous batch size per device = %d", args["per_device_train_batch_size"])
     logging.info(
-        "  Total train batch size (w. parallel, distributed & accumulation) = %d",
-        train_batch_size,
+        "  Total train batch size (w. parallel, distributed & accumulation) = %d", train_batch_size,
     )
     logging.info("  Gradient Accumulation steps = %d", args["gradient_accumulation_steps"])
     logging.info("  Total training steps = %d", num_train_steps)
@@ -226,7 +231,9 @@ def train(
 
     def forward(per_replica_features, per_replica_labels):
         """Forwards a training example and accumulates the gradients."""
-        per_example_loss, logits = run_model(per_replica_features, per_replica_labels, True, model, labels, pad_token_label_id, loss_fct)
+        per_example_loss, logits = run_model(
+            per_replica_features, per_replica_labels, True, model, labels, pad_token_label_id, loss_fct
+        )
         loss = tf.nn.compute_average_loss(per_example_loss, global_batch_size=train_batch_size)
         vars = [var for var in model.trainable_variables if "pooler" not in var.name]
         gradients = optimizer.get_gradients(loss, vars)
@@ -249,8 +256,7 @@ def train(
                 # Log metrics
                 if args["evaluate_during_training"]:
                     y_true, y_pred, eval_loss = evaluate(
-                        args, strategy, model, tokenizer, labels, pad_token_label_id,
-                        model_type, mode="dev"
+                        args, strategy, model, tokenizer, labels, pad_token_label_id, model_type, mode="dev"
                     )
                     report = metrics.classification_report(y_true, y_pred, digits=4)
 
@@ -272,9 +278,7 @@ def train(
 
                 with writer.as_default():
                     tf.summary.scalar("lr", learning_rate, global_step)
-                    tf.summary.scalar(
-                        "loss", training_loss, global_step
-                    )
+                    tf.summary.scalar("loss", training_loss, global_step)
 
             with writer.as_default():
                 tf.summary.scalar("loss", training_loss, step=global_step)
@@ -492,8 +496,7 @@ def main(_):
 
         train_batch_size = args["per_device_train_batch_size"]
         train_dataset, num_train_examples = load_and_cache_examples(
-            args, tokenizer, labels, pad_token_label_id, train_batch_size,
-            config.model_type, mode="train"
+            args, tokenizer, labels, pad_token_label_id, train_batch_size, config.model_type, mode="train"
         )
         train_dataset = strategy.experimental_distribute_dataset(train_dataset)
         train(
@@ -506,7 +509,7 @@ def main(_):
             labels,
             train_batch_size,
             pad_token_label_id,
-            config.model_type
+            config.model_type,
         )
 
         os.makedirs(args["output_dir"], exist_ok=True)
@@ -573,7 +576,9 @@ def main(_):
         predict_dataset, _ = load_and_cache_examples(
             args, tokenizer, labels, pad_token_label_id, eval_batch_size, config.model_type, mode="test"
         )
-        y_true, y_pred, pred_loss = evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, config.model_type, mode="test")
+        y_true, y_pred, pred_loss = evaluate(
+            args, strategy, model, tokenizer, labels, pad_token_label_id, config.model_type, mode="test"
+        )
         output_test_results_file = os.path.join(args["output_dir"], "test_results.txt")
         output_test_predictions_file = os.path.join(args["output_dir"], "test_predictions.txt")
         report = metrics.classification_report(y_true, y_pred, digits=4)
