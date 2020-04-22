@@ -577,9 +577,9 @@ class TextGenerationPipeline(Pipeline):
                     input_ids.shape[0] == 1
                 ), "Batch generation is currently not supported. See https://github.com/huggingface/transformers/issues/3021 for more information."
 
-
+                output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
+                
             result = []
-
             for generated_sequence in output_sequences:
                 generated_sequence = generated_sequence.tolist()
                 record = {}
@@ -594,7 +594,18 @@ class TextGenerationPipeline(Pipeline):
                     )
 
                     # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
-                    record["generated_text"] = prompt_text + text[len(self.tokenizer.decode(input_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=clean_up_tokenization_spaces)):]
+                    record["generated_text"] = (
+                        prompt_text
+                        + text[
+                            len(
+                                self.tokenizer.decode(
+                                    input_ids[0],
+                                    skip_special_tokens=True,
+                                    clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                                )
+                            ) :
+                        ]
+                    )
 
                 result.append(record)
             results += [result]
