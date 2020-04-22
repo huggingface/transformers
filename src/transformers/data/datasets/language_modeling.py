@@ -24,7 +24,7 @@ class TextDataset(Dataset):
     ):
         assert os.path.isfile(file_path)
 
-        block_size = block_size - (tokenizer.max_len - tokenizer.max_len_single_sentence)
+        block_size = block_size - tokenizer.num_special_tokens_to_add(pair=False)
 
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
