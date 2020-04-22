@@ -35,12 +35,13 @@ if is_torch_available():
 class ReformerIntegrationTests(unittest.TestCase):
     def test_lsh_layer(self):
         config = ReformerConfig()
-        shape = (2, 192, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        shape = (1, 64, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
         trax_layer = self.load_lsh_layer(config)
         input_signature = trax_ShapeDtype(shape, np.float32)
         trax_weights, trax_state = trax_layer.init(input_signature)
+        mask = np.ones(shape[:-1], dtype=np.int32)
 
         trax_output = trax_layer(np_input, weights=trax_weights, state=trax_state)
 
@@ -52,7 +53,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         self._set_layer_weights_in_torch_lsh(trax_weights, hf_layer, config.hidden_size)
         hf_layer.eval()
 
-        hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
+        hf_attention_all_heads = hf_layer.self_attention(hf_input, attention_mask=torch.tensor(mask))[0]
         hf_output = hf_layer.output(hf_attention_all_heads)
 
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
@@ -62,10 +63,13 @@ class ReformerIntegrationTests(unittest.TestCase):
         shape = (1, 64, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
-        trax_layer = self.load_local_layer(config)
+        trax_layer = self.load_local_layer(config, mask=True)
         input_signature = trax_ShapeDtype(shape, np.float32)
         trax_weights, trax_state = trax_layer.init(input_signature)
-        trax_output = trax_layer(np_input, weights=trax_weights, state=trax_state)
+        mask = np.ones(shape[:-1], dtype=np.int32)
+        mask[:, -10:] = 0
+
+        trax_output = trax_layer(np_input, mask=mask, weights=trax_weights, state=trax_state)
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
         config.attn_layers = ["local"]
@@ -73,7 +77,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         self._set_layer_weights_in_torch_local(trax_weights, hf_layer, config.hidden_size)
         hf_layer.eval()
 
-        hf_attention_all_heads = hf_layer.self_attention(hf_input)[0]
+        hf_attention_all_heads = hf_layer.self_attention(hf_input, attention_mask=torch.tensor(mask))[0]
         hf_output = hf_layer.output(hf_attention_all_heads)
 
         trax_torch_output = torch.tensor(np.asarray(trax_output))
@@ -180,7 +184,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         layer = trax.layers.LSHSelfAttention(mode=mode)
         return layer
 
-    def load_local_layer(self, config, mode="eval"):
+    def load_local_layer(self, config, mask=False, mode="eval"):
         gin_config = """
             import trax.layers
 
@@ -195,6 +199,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             SelfAttention.attention_dropout = {}
             SelfAttention.output_dropout = {}
             SelfAttention.causal = {}
+            SelfAttention.masked= {}
             SelfAttention.use_reference_code = True
             """.format(
             config.num_attention_heads,
@@ -206,6 +211,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.attention_probs_dropout_prob,
             config.hidden_dropout_prob,
             config.is_decoder,
+            mask,
         )
         gin.parse_config(gin_config)
         layer = trax.layers.SelfAttention(mode=mode)
