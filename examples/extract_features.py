@@ -287,12 +287,14 @@ def tokenid2wordid(input_ids,tokenizer,examples):
 
 
 def examples2embeds(examples,tokenizer,model,device,writer,args):
-    input_ids=torch.tensor(tokenizer.batch_encode_plus(examples,max_length=args.max_seq_length,add_special_tokens=True,pad_to_max_length='right')['input_ids'])
+    input=torch.tensor(tokenizer.batch_encode_plus(examples,max_length=args.max_seq_length,return_attention_masks=True,add_special_tokens=True,pad_to_max_length='right'))
+    input_ids=input['input_ids']
+    attention_mask=input['attention_mask'].to(device)
     input_ids=input_ids.to(device)
     model.eval()
     with torch.no_grad():
         w2token_batch=tokenid2wordid(input_ids,tokenizer,examples)
-        all_encoder_layers,_=model(input_ids)[-2:]
+        all_encoder_layers,_=model(input_ids,attention_mask=attention_mask)[-2:]
         average_layer_batch = sum(all_encoder_layers[-args.layers:]) / args.layers
         wembs_sent_batch=tokenemb2wemb(average_layer_batch.cpu().detach().numpy(),w2token_batch)
         for i,sent in enumerate(examples):
