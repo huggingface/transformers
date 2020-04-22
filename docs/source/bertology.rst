@@ -8,7 +8,7 @@ There is a growing field of study concerned with investigating the inner working
 * Are Sixteen Heads Really Better than One? by Paul Michel, Omer Levy, Graham Neubig: https://arxiv.org/abs/1905.10650
 * What Does BERT Look At? An Analysis of BERT's Attention by Kevin Clark, Urvashi Khandelwal, Omer Levy, Christopher D. Manning: https://arxiv.org/abs/1906.04341
 
-In order to help this new field develop, we have included a few additional features in the BERT/GPT/GPT-2 models to help people access the inner representations, mainly adapted  from the great work of Paul Michel (https://arxiv.org/abs/1905.10650):
+In order to help this new field develop, we have included a few additional features in the BERT/GPT/GPT-2 models to help people access the inner representations, mainly adapted from the great work of Paul Michel (https://arxiv.org/abs/1905.10650):
 
 
 * accessing all the hidden-states of BERT/GPT/GPT-2,
