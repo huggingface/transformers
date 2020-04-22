@@ -76,8 +76,9 @@ class IntegrationTests(unittest.TestCase):
         predicted_words = self.tokenizer.decode_batch(max_indices)
         print(predicted_words)
     def test_repl_generate(self):
-        # src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
-        src, tgt = ["I am a small frog"], ["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
+
+        src = ["I am a small frog", "Hello"]
+        #["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
         # expected = [self.tokenizer.pad_token_id, 38, 121, 14, 697, 38848, 0]
 
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src)
@@ -87,7 +88,7 @@ class IntegrationTests(unittest.TestCase):
             # decoder_start_token_id=self.model.config.eos_token_id,
         )
         generated_words = self.tokenizer.decode_batch(generated_ids)[0]
-        expected_words = "<pad> Ich bin ein kleiner Frosch"
+        expected_words = "Ich bin ein kleiner Frosch"
         self.assertEqual(expected_words, generated_words)
 
     def test_tokenizer(self):
@@ -98,18 +99,6 @@ class IntegrationTests(unittest.TestCase):
         input_ids_w_pad = self.tokenizer.prepare_translation_batch(["I am a small frog <pad>"])["input_ids"][0]
         expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad goes before EOS.
         self.assertListEqual(expected_w_pad, input_ids_w_pad.tolist())
-
-    def test_generate(self):
-        """Should produce a good translation."""
-        src, tgt = ["What's for dinner?", "life"], ["Was gibt es zum Abendessen", "Leben"]
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src)
-        result_ids = self.model.generate(
-            **model_inputs, num_beams=6, decoder_start_token_id=self.eos_token_id, no_repeat_ngram_size=3
-        )
-        print(result_ids)
-        predicted_de_text = [self.tokenizer.decode(r) for r in result_ids]
-        self.assertListEqual(predicted_de_text, tgt)
-
 
 @require_torch
 class FastTests(unittest.TestCase):
