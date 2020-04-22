@@ -162,11 +162,6 @@ def check_equal(marian_cfg, k1, k2):
     assert v1 == v2, f"hparams {k1},{k2} differ: {v1} != {v2}"
 
 
-    
-
-    
-
-
 def check_marian_cfg_assumptions(marian_cfg):
     assumed_settings = {
         "tied-embeddings-all": True,
@@ -249,25 +244,25 @@ class OpusState:
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
         # TODO: what are normalize and word-penalty?
         check_marian_cfg_assumptions(cfg)
-        self.hf_config =  MarianConfig(
-        vocab_size=cfg["vocab_size"],
-        decoder_layers=cfg["dec-depth"],
-        encoder_layers=cfg["enc-depth"],
-        decoder_attention_heads=cfg["transformer-heads"],
-        encoder_attention_heads=cfg["transformer-heads"],
-        decoder_ffn_dim=cfg["transformer-dim-ffn"],
-        encoder_ffn_dim=cfg["transformer-dim-ffn"],
-        d_model=cfg["dim-emb"],
-        activation_function=cfg["transformer-aan-activation"],
-        pad_token_id=self.pad_token_id,
-        eos_token_id=0,
-        bos_token_id=0,
-        max_position_embeddings=cfg["dim-emb"],
-        scale_embedding=True,
-        normalize_embedding="n" in cfg["transformer-preprocess"],
-        static_position_embeddings=not cfg["transformer-train-position-embeddings"],
-        # default: add_final_layer_norm=False,
-        num_beams=decoder_yml["beam-size"],
+        self.hf_config = MarianConfig(
+            vocab_size=cfg["vocab_size"],
+            decoder_layers=cfg["dec-depth"],
+            encoder_layers=cfg["enc-depth"],
+            decoder_attention_heads=cfg["transformer-heads"],
+            encoder_attention_heads=cfg["transformer-heads"],
+            decoder_ffn_dim=cfg["transformer-dim-ffn"],
+            encoder_ffn_dim=cfg["transformer-dim-ffn"],
+            d_model=cfg["dim-emb"],
+            activation_function=cfg["transformer-aan-activation"],
+            pad_token_id=self.pad_token_id,
+            eos_token_id=0,
+            bos_token_id=0,
+            max_position_embeddings=cfg["dim-emb"],
+            scale_embedding=True,
+            normalize_embedding="n" in cfg["transformer-preprocess"],
+            static_position_embeddings=not cfg["transformer-train-position-embeddings"],
+            # default: add_final_layer_norm=False,
+            num_beams=decoder_yml["beam-size"],
         )
 
     def _check_layer_entries(self):
