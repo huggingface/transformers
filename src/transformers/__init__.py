@@ -117,6 +117,7 @@ from .pipelines import (
     QuestionAnsweringPipeline,
     SummarizationPipeline,
     TextClassificationPipeline,
+    TextGenerationPipeline,
     TokenClassificationPipeline,
     TranslationPipeline,
     pipeline,
