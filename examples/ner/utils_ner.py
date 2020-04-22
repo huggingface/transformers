@@ -21,9 +21,8 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Union
-from transformers import is_torch_available
 
-from transformers import PreTrainedTokenizer
+from transformers import PreTrainedTokenizer, is_torch_available
 
 
 logger = logging.getLogger(__name__)
