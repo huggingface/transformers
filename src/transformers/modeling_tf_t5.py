@@ -733,6 +733,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
         """
         logger.info(decoder_input_ids)
+        logger.info(type(decoder_input_ids))
         if isinstance(decoder_input_ids, dict):
             logger.info("we are getting a dict, yes!")
             kwargs.update(decoder_input_ids)
