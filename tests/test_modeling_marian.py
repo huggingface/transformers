@@ -49,8 +49,8 @@ class IntegrationTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         import shutil
-
-        shutil.rmtree(cls.dest_dir)
+        if cls.dest_dir.name.startswith('temp-'):
+            shutil.rmtree(cls.dest_dir)
 
     def test_forward(self):
         #src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
@@ -73,6 +73,7 @@ class IntegrationTests(unittest.TestCase):
         with torch.no_grad():
             logits, *enc_features = self.model(**model_inputs)
         max_indices = logits.argmax(-1)
+        import ipdb; ipdb.set_trace()
         #print(max_indices)
     def test_repl_generate(self):
         #src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
