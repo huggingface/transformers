@@ -16,9 +16,9 @@ import yaml
 from durbango import lmap, pickle_save, remove_prefix
 from transformers import BartConfig, BartForConditionalGeneration, BertConfig, BertModel, MarianConfig, MarianModel
 from transformers.marian_constants import BART_CONVERTER, BERT_LAYER_CONVERTER, EMBED_CONVERTER, assume_vals
+from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding, assert_valid_pos_emb
 from transformers.tokenization_marian import MarianSPTokenizer
 from transformers.tokenization_utils import ADDED_TOKENS_FILE, TOKENIZER_CONFIG_FILE
-from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding, assert_valid_pos_emb
 
 
 OPUS_MODELS_PATH = "/Users/shleifer/OPUS-MT-train/models"  # git clone git@github.com:Helsinki-NLP/Opus-MT.git
@@ -308,10 +308,6 @@ class OpusState:
             assert "encoder_emb_ln_scale_pre" in state_dict
             raise NotImplementedError("Need to convert layernorm_embedding")
 
-        # result = model.model.encoder.load_state_dict(embs_state, strict=False)
-        # print(f"encoder.embeddings: {result})")  # TODO(SS): logger
-        # result2 = model.model.decoder.load_state_dict(embs_state, strict=False)
-        # model.shared = model.model.decoder.embed_tokens
         print(f"extra bart keys: {self.get_extra_bart_keys(model)}, extra_opus: {self.extra_keys}")
         assert model.model.shared.padding_idx == pad_token_id
 
@@ -322,8 +318,8 @@ class OpusState:
         for k in model.model.state_dict():
             if k.startswith("encoder.layers") or k.startswith("decoder.layers") or k == "shared.weight":
                 continue
-            #elif k.startswith("encoder.embed") or k.startswith("decoder.embed"):
-            #    continue
+            elif k.startswith("encoder.embed") or k.startswith("decoder.embed"):
+                continue
             else:
                 extra_bart_keys.append(k)
 

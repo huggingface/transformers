@@ -32,13 +32,12 @@ LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
 LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
 
 
-
 class IntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         dest_dir = Path("converted-en-de")
         dest_dir.mkdir(exist_ok=True)
-        #main(Path(LOCAL_MARIAN), dest_dir)
+        # main(Path(LOCAL_MARIAN), dest_dir)
         cls.tokenizer = MarianSPTokenizer.from_pretrained(dest_dir.name)
         cls.model = MarianModel.from_pretrained(dest_dir.name)
         cls.config: BartConfig = cls.model.config
@@ -49,16 +48,17 @@ class IntegrationTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         import shutil
-        if cls.dest_dir.name.startswith('temp-'):
+
+        if cls.dest_dir.name.startswith("temp-"):
             shutil.rmtree(cls.dest_dir)
 
     def test_forward(self):
-        #src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
-        src, tgt = ["I am a small frog"], ['▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch']
+        # src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
+        src, tgt = ["I am a small frog"], ["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
         expected = [38, 121, 14, 697, 38848, 0]
 
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
-        self.assertListEqual(expected, model_inputs['input_ids'][0].tolist())
+        self.assertListEqual(expected, model_inputs["input_ids"][0].tolist())
         shapes = {k: v.shape for k, v in model_inputs.items()}
 
         desired_keys = {
@@ -73,33 +73,30 @@ class IntegrationTests(unittest.TestCase):
         with torch.no_grad():
             logits, *enc_features = self.model(**model_inputs)
         max_indices = logits.argmax(-1)
-        import ipdb; ipdb.set_trace()
-        #print(max_indices)
+        predicted_words = self.tokenizer.decode_batch(max_indices)
+        print(predicted_words)
     def test_repl_generate(self):
-        #src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
-        src, tgt = ["I am a small frog"], ['▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch']
-        expected = [38, 121, 14, 697, 38848, 0]
+        # src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
+        src, tgt = ["I am a small frog"], ["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
+        # expected = [self.tokenizer.pad_token_id, 38, 121, 14, 697, 38848, 0]
 
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src)
         generated_ids = self.model.generate(
-            model_inputs['input_ids'],
+            model_inputs["input_ids"],
             num_beams=2,
-            decoder_start_token_id=self.model.config.pad_token_id,
+            # decoder_start_token_id=self.model.config.eos_token_id,
         )
-        generated_words = self.tokenizer.decode_batch(generated_ids)
-        print(generated_words)
-
-
-
-
+        generated_words = self.tokenizer.decode_batch(generated_ids)[0]
+        expected_words = "<pad> Ich bin ein kleiner Frosch"
+        self.assertEqual(expected_words, generated_words)
 
     def test_tokenizer(self):
-        input_ids = self.tokenizer.prepare_translation_batch(["I am a small frog"])['input_ids'][0]
+        input_ids = self.tokenizer.prepare_translation_batch(["I am a small frog"])["input_ids"][0]
         # expected = [444, 982, 111, 34045, 1, 0]   # marian produces this, see invocation issue.
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, input_ids.tolist())
-        input_ids_w_pad = self.tokenizer.prepare_translation_batch(["I am a small frog <pad>"])['input_ids'][0]
-        expected_w_pad =  [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad goes before EOS.
+        input_ids_w_pad = self.tokenizer.prepare_translation_batch(["I am a small frog <pad>"])["input_ids"][0]
+        expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad goes before EOS.
         self.assertListEqual(expected_w_pad, input_ids_w_pad.tolist())
 
     def test_generate(self):
@@ -120,27 +117,27 @@ class FastTests(unittest.TestCase):
 
         pad = 1
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
-        emb1 = SinusoidalPositionalEmbedding(10, pad, init_size=32).to(torch_device)
+        emb1 = SinusoidalPositionalEmbedding(init_size=32, embedding_dim=10, padding_idx=pad).to(torch_device)
         no_cache = emb1(input_ids, use_cache=False)
         yes_cache = emb1(input_ids, use_cache=True)
-        self.assertListEqual(no_cache[0,-1:].tolist(),  yes_cache[0].tolist())
+        self.assertListEqual(no_cache[0, -1:].tolist(), yes_cache[0].tolist())
 
     def test_pos_v2(self):
         """SinusoidalPositionalEmbeddings."""
         pad = 1
-        input_ids = torch.tensor([[4, 10]* 3], dtype=torch.long, device=torch_device)
-        emb1 = SinusoidalPositionalEmbedding(512, pad, init_size=512).to(torch_device)
+        input_ids = torch.tensor([[4, 10] * 3], dtype=torch.long, device=torch_device)
+        emb1 = SinusoidalPositionalEmbedding(init_size=512, embedding_dim=512, padding_idx=pad).to(torch_device)
 
-        marian_results = [[0, 0, 0, 0, 0],
-                          [0.84147096, 0.82177866, 0.80180490, 0.78165019, 0.76140374],
-                          [0.90929741, 0.93651021, 0.95829457, 0.97505713, 0.98720258]
-                          ]
+        marian_results = [
+            [0, 0, 0, 0, 0],
+            [0.84147096, 0.82177866, 0.80180490, 0.78165019, 0.76140374],
+            [0.90929741, 0.93651021, 0.95829457, 0.97505713, 0.98720258],
+        ]
         weights = emb1.weight.data[:3, :5].tolist()
         for i, (expected, actual) in enumerate(zip(marian_results, weights)):
             for j in range(5):
-                print(f'position {i}, {j}')
+                print(f"position {i}, {j}")
                 self.assertAlmostEqual(expected[j], actual[j], places=3)
-
 
         # test that forward pass is just a lookup
         input_ids = torch.tensor([[4, 10, pad, pad, pad]], dtype=torch.long, device=torch_device)

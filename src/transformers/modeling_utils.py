@@ -1303,7 +1303,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         done = [False for _ in range(batch_size)]
 
         while cur_len < max_length:
-            print(f'### Step {cur_len}/{max_length}')
+            print(f"### Step {cur_len}/{max_length}")
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
             )
