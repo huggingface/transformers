@@ -433,6 +433,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         head_mask=None,
         training=False,
     ):
+        logger.info(input_ids)
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
