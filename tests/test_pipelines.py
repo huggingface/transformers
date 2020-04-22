@@ -386,7 +386,7 @@ class PipelineCommonTests(unittest.TestCase):
         "translation_en_to_fr",
         "translation_en_to_de",
         "translation_en_to_ro",
-        "text_generation",
+        "text-generation",
     )
 
     @slow
