@@ -854,7 +854,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         model.generate(input_ids)
 
         """
-
+        logger.info(decoder_input_ids)
+        logger.info(type(decoder_input_ids))
         if isinstance(decoder_input_ids, dict):
             kwargs.update(decoder_input_ids)
         else:
@@ -873,6 +874,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
+            logger.info('encoder')
             encoder_outputs = self.encoder(
                 input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
             )
@@ -880,6 +882,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         hidden_states = encoder_outputs[0]
 
         # Decode
+        logger.info('decoder')
         decoder_outputs = self.decoder(
             decoder_input_ids,
             attention_mask=decoder_attention_mask,
