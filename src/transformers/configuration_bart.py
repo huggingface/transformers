@@ -86,7 +86,6 @@ class BartConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **common_kwargs,
         )
-
         self.vocab_size = vocab_size
         self.d_model = d_model  # encoder_embed_dim and decoder_embed_dim
         self.encoder_ffn_dim = encoder_ffn_dim
