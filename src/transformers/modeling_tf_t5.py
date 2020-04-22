@@ -701,6 +701,12 @@ class TFT5Model(TFT5PreTrainedModel):
     
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
+        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+        self.decoder.set_embed_tokens(embed_tokens)
 
     @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
     def call(self, decoder_input_ids, **kwargs):
@@ -752,6 +758,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
+            logger.info("encoder")
             encoder_outputs = self.encoder(
                 input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
             )
@@ -759,6 +766,7 @@ class TFT5Model(TFT5PreTrainedModel):
         hidden_states = encoder_outputs[0]
 
         # Decode
+        logger.info("decoder")
         decoder_outputs = self.decoder(
             decoder_input_ids,
             attention_mask=decoder_attention_mask,
