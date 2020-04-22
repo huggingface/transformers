@@ -957,7 +957,7 @@ class BertForMaskedLM(BertPreTrainedModel):
             ltr_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), lm_labels.view(-1))
             outputs = (ltr_lm_loss,) + outputs
 
-        return outputs  # (masked_lm_loss), (ltr_lm_loss), prediction_scores, (hidden_states), (attentions)
+        return outputs  # (ltr_lm_loss), (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 
 
 @add_start_docstrings(

@@ -1,4 +1,4 @@
-from transformers import (
+from src.transformers import (
     AutoConfig,
     AutoModel,
     AutoModelForQuestionAnswering,
@@ -6,10 +6,10 @@ from transformers import (
     AutoModelWithLMHead,
     AutoTokenizer,
 )
-from transformers.file_utils import add_start_docstrings
+from src.transformers.file_utils import add_start_docstrings
 
 
-dependencies = ["torch", "tqdm", "boto3", "requests", "regex", "sentencepiece", "sacremoses"]
+dependencies = ["torch", "numpy", "tokenizers", "boto3", "filelock", "requests", "tqdm", "regex", "sentencepiece", "sacremoses"]
 
 
 @add_start_docstrings(AutoConfig.__doc__)
