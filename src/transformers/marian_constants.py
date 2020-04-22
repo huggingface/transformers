@@ -128,8 +128,8 @@ BART_CONVERTER = {
     "context_bo": "encoder_attn.out_proj.bias",
     "context_bq": "encoder_attn.q_proj.bias",
     "context_bv": "encoder_attn.v_proj.bias",
-    "context_Wo_ln_bias": "encoder_attn_layer_norm.weight",
-    "context_Wo_ln_scale": "encoder_attn_layer_norm.bias",
+    "context_Wo_ln_scale": "encoder_attn_layer_norm.weight",
+    "context_Wo_ln_bias": "encoder_attn_layer_norm.bias",
 }
 
 from transformers import BartConfig, BertConfig

@@ -36,9 +36,9 @@ LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
 class IntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        dest_dir = Path("utest-converted-en-de")
+        dest_dir = Path("converted-en-de")
         dest_dir.mkdir(exist_ok=True)
-        main(Path(LOCAL_MARIAN), dest_dir)
+        #main(Path(LOCAL_MARIAN), dest_dir)
         cls.tokenizer = MarianSPTokenizer.from_pretrained(dest_dir.name)
         cls.model = MarianModel.from_pretrained(dest_dir.name)
         cls.config: BartConfig = cls.model.config

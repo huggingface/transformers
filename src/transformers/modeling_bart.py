@@ -233,8 +233,10 @@ def log_tensor(msg, x):
     sq = x.squeeze()
     if sq.ndim == 2:
         slice = x[:3, :4]
+    elif sq.ndim == 3:
+        slice = x[:,0, :6]
     else:
-        slice = ''
+        slice = x[:5]
     print(f'{msg}: shape: {x.shape} min: {x.min(): .4f} max: {x.max(): .4f} slice: {slice}')
 
 class BartEncoder(nn.Module):
@@ -399,31 +401,36 @@ class DecoderLayer(nn.Module):
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
         if self.normalize_before:
             x = self.encoder_attn_layer_norm(x)
+        #import ipdb; ipdb.set_trace()
         x, _ = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
         )
-
+        log_tensor('\t decoder cross attn output before dropout', x)
         x = F.dropout(x, p=self.dropout, training=self.training)
-        log_tensor('\t decoder cross attn output before add', x)
+        log_tensor('\t decoder cross attn: output before add', x)
+        log_tensor('\t decoder cross attn: we will add', residual)
         x = residual + x
-
+        log_tensor('\t decoder cross attn output before layernorm', x)
         if not self.normalize_before:
             x = self.encoder_attn_layer_norm(x)
-        log_tensor('\t decoder cross attn output', x)
+        log_tensor('\t decoder cross attn output before FC', x)
         # Fully Connected
         residual = x
         if self.normalize_before:
             x = self.final_layer_norm(x)
+
         x = self.activation_fn(self.fc1(x))
         x = F.dropout(x, p=self.activation_dropout, training=self.training)
         x = self.fc2(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
+        log_tensor('\t decoder after FC', x)
         if not self.normalize_before:
             x = self.final_layer_norm(x)
+        log_tensor('\t decoder after final LayerNorm', x)
         return (
             x,
             self_attn_weights,
@@ -444,6 +451,7 @@ class BartDecoder(PretrainedBartModel):
 
     def __init__(self, config: BartConfig, embed_tokens: nn.Embedding):
         super().__init__(config)
+        self.config  # type: BartConfig
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
@@ -508,13 +516,13 @@ class BartDecoder(PretrainedBartModel):
             positions = positions[:, -1:]  # happens after we embed them
             #assert input_ids.ne(self.padding_idx).any()
             print(f"input_ids after slice: {input_ids}")
+            assert decoder_padding_mask is None
+            assert decoder_causal_mask is None
             # print(positions)
 
         x = self.embed_tokens(input_ids)
         log_tensor("unscaled embeddings", x)
         x = x * self.embed_scale
-
-
         x += positions
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -547,6 +555,7 @@ class BartDecoder(PretrainedBartModel):
                 layer_state=layer_state,
                 causal_mask=decoder_causal_mask,
             )
+            log_tensor('decoder actual output', x)
             # raise ValueError("stop after 1 layer")
             # x  = x+ new_x
 
@@ -554,6 +563,7 @@ class BartDecoder(PretrainedBartModel):
                 next_decoder_cache.append(layer_past.copy())
 
             if self.layer_norm and (idx == len(self.layers) - 1):  # last layer of mbart
+                assert self.config.normalize_before
                 x = self.layer_norm(x)
             if self.output_attentions:
                 all_self_attns += (layer_self_attn,)
@@ -641,6 +651,9 @@ class SelfAttention(nn.Module):
         else:
             k = self.k_proj(query)
             v = self.v_proj(query)
+        # if static_kv:
+        #     log_tensor('kh', k)
+        #     log_tensor('vh', v)
 
         q = self._shape(q, tgt_len, bsz)
         if k is not None:

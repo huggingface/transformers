@@ -205,6 +205,7 @@ def convert_marian_cfg_to_bart(marian_cfg, pad_token_id, eos_token_id, bos_token
         scale_embedding=True,
         normalize_embedding="n" in marian_cfg["transformer-preprocess"],
         static_position_embeddings=not marian_cfg["transformer-train-position-embeddings"],
+        # default: add_final_layer_norm=False,
     )
     return bart_cfg
 
