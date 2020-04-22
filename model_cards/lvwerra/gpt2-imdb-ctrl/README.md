@@ -1,4 +1,4 @@
-# GPT2-IMDB-pos
+# GPT2-IMDB-ctrl
 
 ## What is it?
 A small GPT2 (`lvwerra/gpt2-imdb`) language model fine-tuned to produce controlled movie reviews based the [IMDB dataset](https://www.kaggle.com/lakshmi25npathi/imdb-dataset-of-50k-movie-reviews). The model is trained with rewards from a BERT sentiment classifier (`lvwerra/bert-imdb`) via PPO.
