@@ -65,11 +65,11 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         # self.weights = self.weights.to(self._float_tensor)
         if use_cache:
             #assert seq_len != 1, "Remove me"
-            positions = input_ids.data.new(1, 1).fill_(seq_len)  # called before slicing.
+            positions = input_ids.data.new(bsz, 1).fill_(seq_len - 1)  # called before slicing.
             # return self.weight[seq_len].expand(bsz, 1, -1)
         else:
             #positions = create_position_ids_from_input_ids(input_ids, self._padding_idx, -1)
-            positions = torch.arange(seq_len, dtype=torch.long)
+            positions = torch.arange(seq_len, dtype=torch.long) # starts at 0
             print('positions', positions)
         return super().forward(positions)
 

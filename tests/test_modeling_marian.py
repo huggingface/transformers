@@ -25,7 +25,7 @@ from .utils import require_torch, torch_device
 
 if is_torch_available():
     import torch
-    from transformers import MarianModel, MarianSPTokenizer
+    from transformers import MarianModel, MarianSPTokenizer, BartConfig
     from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding, assert_valid_pos_emb
 
 LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
@@ -41,6 +41,7 @@ class IntegrationTests(unittest.TestCase):
         main(Path(LOCAL_MARIAN), dest_dir)
         cls.tokenizer = MarianSPTokenizer.from_pretrained(dest_dir.name)
         cls.model = MarianModel.from_pretrained(dest_dir.name)
+        cls.config: BartConfig = cls.model.config
         cls.dest_dir = dest_dir
         cls.eos_token_id = cls.model.config.eos_token_id
         return cls
@@ -71,6 +72,25 @@ class IntegrationTests(unittest.TestCase):
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
         with torch.no_grad():
             logits, *enc_features = self.model(**model_inputs)
+        max_indices = logits.argmax(-1)
+        #print(max_indices)
+    def test_repl_generate(self):
+        #src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
+        src, tgt = ["I am a small frog"], ['▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch']
+        expected = [38, 121, 14, 697, 38848, 0]
+
+        model_inputs: dict = self.tokenizer.prepare_translation_batch(src)
+        generated_ids = self.model.generate(
+            model_inputs['input_ids'],
+            num_beams=2,
+            decoder_start_token_id=self.model.config.pad_token_id,
+        )
+        generated_words = self.tokenizer.decode_batch(generated_ids)
+        print(generated_words)
+
+
+
+
 
     def test_tokenizer(self):
         input_ids = self.tokenizer.prepare_translation_batch(["I am a small frog"])['input_ids'][0]
