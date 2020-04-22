@@ -20,6 +20,7 @@ import itertools
 import logging
 import math
 
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
@@ -29,7 +30,6 @@ from .activations import gelu
 from .configuration_xlm import XLMConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel, SequenceSummary, SQuADHead, prune_linear_layer
-from .sinusoidal_positional_embeddings import create_sinusoidal_embeddings
 
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,14 @@ XLM_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "xlm-mlm-17-1280": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-17-1280-pytorch_model.bin",
     "xlm-mlm-100-1280": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-100-1280-pytorch_model.bin",
 }
+
+
+def create_sinusoidal_embeddings(n_pos, dim, out):
+    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
+    out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
+    out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
+    out.detach_()
+    out.requires_grad = False
 
 
 def get_masks(slen, lengths, causal, padding_mask=None):
@@ -461,8 +469,9 @@ class XLMModel(XLMPreTrainedModel):
         if position_ids is None:
             position_ids = torch.arange(slen, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).expand((bs, slen))
-
-        assert position_ids.size() == (bs, slen)  # (slen, bs)
+        else:
+            assert position_ids.size() == (bs, slen)  # (slen, bs)
+            # position_ids = position_ids.transpose(0, 1)
 
         # langs
         if langs is not None:

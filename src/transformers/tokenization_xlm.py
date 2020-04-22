@@ -702,7 +702,7 @@ class XLMTokenizer(PreTrainedTokenizer):
     def get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
 
-    def bpe(self, token: str):
+    def bpe(self, token):
         word = tuple(token[:-1]) + (token[-1] + "</w>",)
         if token in self.cache:
             return self.cache[token]
@@ -746,7 +746,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    def _tokenize(self, text: str, lang="en", bypass_tokenizer=False) -> list:
+    def _tokenize(self, text, lang="en", bypass_tokenizer=False):
         """
         Tokenize a string given language code. For Chinese, Japanese and Thai, we use a language specific tokenizerself. Otherwise, we use Moses.
 

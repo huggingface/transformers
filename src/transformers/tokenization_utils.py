@@ -376,6 +376,7 @@ class BatchEncoding(UserDict):
             token_index (:obj:`int`):
                 Index of the token.
         """
+
         if not self._encodings:
             raise ValueError("char_to_token() is not available when using Python based tokenizers")
         if char_index is not None:
@@ -916,9 +917,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                     "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
                 }
                 # Look for the tokenizer main vocabulary files + the additional tokens files
-                files_to_resolve = {**cls.vocab_files_names, **additional_files_names}
-
-                for file_id, file_name in files_to_resolve.items():
+                for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
                     if os.path.isdir(pretrained_model_name_or_path):
                         full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
                         if not os.path.exists(full_file_name):
@@ -1662,15 +1661,14 @@ class PreTrainedTokenizer(SpecialTokensMixin):
               tokens and 1 specifying sequence tokens.
         """
 
-        def get_input_ids(seq):
-            is_listy = isinstance(seq, (list, tuple)) and len(seq) > 0
-            if isinstance(seq, str):
-                tokens = self.tokenize(seq, add_special_tokens=add_special_tokens, **kwargs)
+        def get_input_ids(text):
+            if isinstance(text, str):
+                tokens = self.tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
                 return self.convert_tokens_to_ids(tokens)
-            elif is_listy and isinstance(seq[0], str):
-                return self.convert_tokens_to_ids(seq)
-            elif is_listy and isinstance(seq[0], int):
-                return seq
+            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
+                return self.convert_tokens_to_ids(text)
+            elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
+                return text
             else:
                 raise ValueError(
                     "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
@@ -1713,6 +1711,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 )
 
             max_length = max([total_sequence_length(ids) for ids in input_ids])
+
         batch_outputs = {}
         for first_ids, second_ids in input_ids:
             # Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by
@@ -1740,6 +1739,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 batch_outputs[key].append(value)
 
         if return_tensors is not None:
+
             self.convert_to_tensors_(batch_outputs, return_tensors)
         return BatchEncoding(batch_outputs)
 
@@ -2616,9 +2616,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             return clean_text
         else:
             return text
-
-    def decode_batch(self, token_ids, **kwargs) -> List[str]:
-        return [self.decode(ids) for ids in token_ids]
 
     def save_vocabulary(self, save_directory: str) -> Tuple[str]:
         if os.path.isdir(save_directory):
