@@ -1,32 +1,8 @@
-import math
-from typing import Any, Optional
-
 import numpy as np
 import torch
-from torch import Tensor, nn
+from torch import nn
 
 from transformers.modeling_utils import create_position_ids_from_input_ids
-
-
-def create_sinusoidal_embeddings(n_pos, dim, out):
-    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
-    out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
-    out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-    out.detach_()
-    out.requires_grad = False
-
-
-def init_sinusoidal_embeddings_marian_(out: nn.Parameter):
-    """Identical to the XLM create_sinusoidal_embeddings except features are not interleaved.
-        The cos features are in the 2nd half of the vector.
-    """
-    n_pos, dim = out.shape
-    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
-    out[:, 0 : dim // 2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
-    out[:, dim // 2 :] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-    out.detach_()
-    out.requires_grad = False
-    return out
 
 
 class SinusoidalPositionalEmbedding(nn.Embedding):
@@ -37,51 +13,34 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
 
     def __init__(self, init_size, embedding_dim, padding_idx):
         super().__init__(init_size, embedding_dim)
-        # self.embedding_dim = embedding_dim
-        # self._padding_idx = padding_idx   # dont overwrite original nn.Embedding.padding_idx
-        self.weight = init_sinusoidal_embeddings_marian_(self.weight)
-        assert self.weight[1][0] == 0.84147096
-        # self.max_positions = init_size
+        self.weight = self._init_weight(self.weight)
+
+    @staticmethod
+    def _init_weight(out: nn.Parameter):
+        """Identical to the XLM create_sinusoidal_embeddings except features are not interleaved.
+            The cos features are in the 2nd half of the vector. [dim // 2:]
+        """
+        n_pos, dim = out.shape
+        position_enc = np.array(
+            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+        )
+        out[:, 0 : dim // 2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
+        out[:, dim // 2 :] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
+        out.detach_()
+        out.requires_grad = False
+        return out
 
     @torch.no_grad()
     def forward(
-        self,
-        input_ids,
-        use_cache=False,
-        # timestep: Optional[Tensor] = None,
-        # positions: Optional[Any] = None,
+        self, input_ids, use_cache=False,
     ):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input_ids.shape[:2]
-        # max_pos = self.padding_idx + 1 + seq_len
-        # if self.weights is None or max_pos > self.weights.size(0):
-        #    # recompute/expand embeddings if needed
-        #    self.weights = self.get_embedding(max_pos, self.embedding_dim, self.padding_idx
-        # )
-        # self.weights = self.weights.to(self._float_tensor)
         if use_cache:
-            # assert seq_len != 1, "Remove me"
-            positions = input_ids.data.new(bsz, 1).fill_(seq_len - 1)  # called before slicing.
-            # return self.weight[seq_len].expand(bsz, 1, -1)
+            positions = input_ids.data.new(1, 1).fill_(seq_len - 1)  # called before slicing.
         else:
-            # positions = create_position_ids_from_input_ids(input_ids, self._padding_idx, -1)
-            positions = torch.arange(seq_len, dtype=torch.long)  # starts at 0
-            print("positions", positions)
+            positions = torch.arange(seq_len, dtype=torch.long)  # starts at 0, ends at 1-seq_len
         return super().forward(positions)
-
-
-def create_position_ids_from_input_ids(input_ids, padding_idx, offset=1):
-    """ Replace non-padding symbols with their position numbers. Position numbers begin at
-    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
-    `utils.make_positions`.
-
-    :param torch.Tensor x:
-    :return torch.Tensor:
-    """
-    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-    mask = input_ids.ne(padding_idx).int()
-    incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
-    return incremental_indices.long() + offset
 
 
 class LearnedPositionalEmbedding(nn.Embedding):
@@ -98,9 +57,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
         # if padding_idx is specified then offset the embedding ids by
         # this index and adjust num_embeddings appropriately
         assert padding_idx is not None
-        self.offset = 2
-        num_embeddings += self.offset
-        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+        super().__init__(num_embeddings + 2, embedding_dim, padding_idx=padding_idx)
 
     def forward(self, input, use_cache=False):
         """Input is expected to be of size [bsz x seqlen]."""
@@ -108,18 +65,5 @@ class LearnedPositionalEmbedding(nn.Embedding):
             pos = int(self.padding_idx + input.size(1))
             positions = input.data.new(1, 1).fill_(pos)  # called before slicing.
         else:
-            positions = create_position_ids_from_input_ids(input, self.padding_idx, 1)
+            positions = create_position_ids_from_input_ids(input, self.padding_idx)
         return super().forward(positions)
-
-
-def assert_valid_pos_emb(emb1):
-    """SinusoidalPositionalEmbeddings."""
-    marian_results = torch.Tensor(
-        [
-            [0, 0, 0, 0, 0],
-            [0.84147096, 0.82177866, 0.80180490, 0.78165019, 0.76140374],
-            [0.90929741, 0.93651021, 0.95829457, 0.97505713, 0.98720258],
-        ]
-    )
-    weights = emb1.weight.data[:3, :5]
-    assert torch.allclose(marian_results, weights, atol=1e-3)

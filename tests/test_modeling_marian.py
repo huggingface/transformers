@@ -18,7 +18,6 @@ import unittest
 from pathlib import Path
 
 from transformers import is_torch_available
-from transformers.marian2hf import main
 
 from .utils import require_torch, torch_device
 
@@ -26,7 +25,7 @@ from .utils import require_torch, torch_device
 if is_torch_available():
     import torch
     from transformers import MarianModel, MarianSPTokenizer, BartConfig
-    from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding, assert_valid_pos_emb
+    from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
 
 LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
 LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
@@ -59,7 +58,7 @@ class IntegrationTests(unittest.TestCase):
 
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
         self.assertListEqual(expected, model_inputs["input_ids"][0].tolist())
-        shapes = {k: v.shape for k, v in model_inputs.items()}
+        #  shapes = {k: v.shape for k, v in model_inputs.items()}
 
         desired_keys = {
             "input_ids",
@@ -75,10 +74,11 @@ class IntegrationTests(unittest.TestCase):
         max_indices = logits.argmax(-1)
         predicted_words = self.tokenizer.decode_batch(max_indices)
         print(predicted_words)
+
     def test_repl_generate(self):
 
         src = ["I am a small frog", "Hello"]
-        #["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
+        # ["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
         # expected = [self.tokenizer.pad_token_id, 38, 121, 14, 697, 38848, 0]
 
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src)
@@ -100,6 +100,7 @@ class IntegrationTests(unittest.TestCase):
         expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad goes before EOS.
         self.assertListEqual(expected_w_pad, input_ids_w_pad.tolist())
 
+
 @require_torch
 class FastTests(unittest.TestCase):
     def test_positional_embeddings(self):
@@ -111,11 +112,12 @@ class FastTests(unittest.TestCase):
         yes_cache = emb1(input_ids, use_cache=True)
         self.assertListEqual(no_cache[0, -1:].tolist(), yes_cache[0].tolist())
 
-    def test_pos_v2(self):
+    def test_positional_embs_against_marian(self):
         """SinusoidalPositionalEmbeddings."""
         pad = 1
         input_ids = torch.tensor([[4, 10] * 3], dtype=torch.long, device=torch_device)
         emb1 = SinusoidalPositionalEmbedding(init_size=512, embedding_dim=512, padding_idx=pad).to(torch_device)
+        self.assertEqual(0.84147096, emb1.weight[1, 0])
 
         marian_results = [
             [0, 0, 0, 0, 0],
@@ -133,9 +135,3 @@ class FastTests(unittest.TestCase):
         no_cache_pad_zero = emb1(input_ids)
 
         self.assertTrue(torch.allclose(torch.Tensor(marian_results), no_cache_pad_zero[:3, :5], atol=1e-3))
-
-        # emb0 = SinusoidalPositionalEmbedding(10, pad, init_size=32).to(torch_device)
-        # assert (emb1.weights == emb0.weights).all()
-
-        # position_ids = torch.arange(input_ids.shape[1], dtype=torch.long, device=torch_device)
-        # hard_coded = emb0.weights.index_select(0, position_ids).unsqueeze(0)

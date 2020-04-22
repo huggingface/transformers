@@ -17,7 +17,6 @@
 import logging
 
 import torch
-import torch.nn.functional as F
 
 from transformers.modeling_bart import BartForConditionalGeneration
 

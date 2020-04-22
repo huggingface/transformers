@@ -17,10 +17,8 @@
 
 
 import logging
-from copy import deepcopy
 
 from .configuration_bart import BartConfig
-from .configuration_utils import PretrainedConfig
 
 
 logger = logging.getLogger(__name__)
