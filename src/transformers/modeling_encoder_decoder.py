@@ -14,14 +14,12 @@
 # limitations under the License.
 """ Classes to support Encoder-Decoder architectures """
 
-
 import logging
 import os
 
+from .configuration_auto import AutoConfig
 from .modeling_auto import AutoModel, AutoModelWithLMHead
 from .modeling_utils import PreTrainedModel
-from .configuration_auto import AutoConfig
-
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +32,6 @@ class EncoderDecoderModel(PreTrainedModel):
         decoder when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
         class method for the encoder and `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
     """
-
     def __init__(self, encoder, decoder):
         assert encoder is not None, "The encoder has to be defined"
         assert decoder is not None, "The decoder has to be defined"
@@ -68,9 +65,11 @@ class EncoderDecoderModel(PreTrainedModel):
         return self.decoder.get_output_embeddings()
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path=None, decoder_pretrained_model_name_or_path=None, *model_args, **kwargs
-    ):
+    def from_pretrained(cls,
+                        pretrained_model_name_or_path=None,
+                        decoder_pretrained_model_name_or_path=None,
+                        *model_args,
+                        **kwargs):
         r""" Instantiates an encoder and a decoder from one or two base classes of the library from pre-trained model checkpoints.
 
 
@@ -141,11 +140,15 @@ class EncoderDecoderModel(PreTrainedModel):
         # We let the specific kwargs override the common ones in case of conflict.
 
         kwargs_encoder = {
-            argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
+            argument: value
+            for argument, value in kwargs.items()
+            if not argument.startswith("decoder_")
         }
 
         kwargs_decoder = {
-            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
+            argument[len("decoder_"):]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("decoder_")
         }
 
         # Load and initialize the encoder and decoder
@@ -156,18 +159,21 @@ class EncoderDecoderModel(PreTrainedModel):
             assert (
                 pretrained_model_name_or_path is not None
             ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
-            encoder = AutoModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs_encoder)
+            encoder = AutoModel.from_pretrained(pretrained_model_name_or_path,
+                                                *model_args, **kwargs_encoder)
         encoder.config.is_decoder = False
 
         decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
-            decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
+            decoder_config = AutoConfig.from_pretrained(
+                decoder_pretrained_model_name_or_path)
             decoder_config.is_decoder = True
             kwargs_decoder["config"] = decoder_config
             assert (
                 decoder_pretrained_model_name_or_path is not None
             ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
-            decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            decoder = AutoModelWithLMHead.from_pretrained(
+                decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         model = cls(encoder, decoder)
 
@@ -186,8 +192,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
         # Check whether the output directory is empty or not
         sub_directories = [
-            directory
-            for directory in os.listdir(save_directory)
+            directory for directory in os.listdir(save_directory)
             if os.path.isdir(os.path.join(save_directory, directory))
         ]
 
@@ -195,15 +200,19 @@ class EncoderDecoderModel(PreTrainedModel):
             if "encoder" in sub_directories and "decoder" in sub_directories:
                 print(
                     "WARNING: there is an older version of encoder-decoder saved in"
-                    + " the output directory. The default behaviour is to overwrite them."
+                    +
+                    " the output directory. The default behaviour is to overwrite them."
                 )
 
             # Empty the output directory
             for directory_to_remove in sub_directories:
                 # Remove all files into the subdirectory
-                files_to_remove = os.listdir(os.path.join(save_directory, directory_to_remove))
+                files_to_remove = os.listdir(
+                    os.path.join(save_directory, directory_to_remove))
                 for file_to_remove in files_to_remove:
-                    os.remove(os.path.join(save_directory, directory_to_remove, file_to_remove))
+                    os.remove(
+                        os.path.join(save_directory, directory_to_remove,
+                                     file_to_remove))
                 # Remove the subdirectory itself
                 os.rmdir(os.path.join(save_directory, directory_to_remove))
 
@@ -231,7 +240,6 @@ class EncoderDecoderModel(PreTrainedModel):
         masked_lm_labels=None,
         lm_labels=None,
     ):
-
         """
         Params:
             encoder_input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
@@ -243,33 +251,47 @@ class EncoderDecoderModel(PreTrainedModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
             )
 
         hidden_states = encoder_outputs[0]
+
+        kwargs_decoder = {}
+
+        # not all decoders support these kwargs
+        if "BERT" in str(type(self.decoder)).upper():
+            kwargs_decoder['encoder_hidden_states'] = hidden_states
+            kwargs_decoder['encoder_attention_mask'] = attention_mask
+
+        # Allow for generation based on encoder-generated embeddings
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            decoder_inputs_embeds = hidden_states
 
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             inputs_embeds=decoder_inputs_embeds,
             attention_mask=decoder_attention_mask,
-            encoder_hidden_states=hidden_states,
-            encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             lm_labels=lm_labels,
             masked_lm_labels=masked_lm_labels,
+            **kwargs_decoder,
         )
 
         return decoder_outputs + encoder_outputs
 
-    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past, attention_mask,
+                                      **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
 
         # first step
         if type(past) is tuple:
             encoder_outputs = past
         else:
-            encoder_outputs = (past,)
+            encoder_outputs = (past, )
 
         decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids)
 
