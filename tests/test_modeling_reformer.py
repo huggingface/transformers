@@ -63,13 +63,12 @@ class ReformerIntegrationTests(unittest.TestCase):
         shape = (1, 64, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
-        trax_layer = self.load_local_layer(config, mask=True)
+        trax_layer = self.load_local_layer(config)
         input_signature = trax_ShapeDtype(shape, np.float32)
         trax_weights, trax_state = trax_layer.init(input_signature)
         mask = np.ones(shape[:-1], dtype=np.int32)
-        mask[:, -10:] = 0
 
-        trax_output = trax_layer(np_input, mask=mask, weights=trax_weights, state=trax_state)
+        trax_output = trax_layer(np_input, weights=trax_weights, state=trax_state)
 
         hf_input = torch.tensor(np_input, dtype=torch.float)
         config.attn_layers = ["local"]
