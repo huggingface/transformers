@@ -858,6 +858,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         logger.info(type(decoder_input_ids))
         if isinstance(decoder_input_ids, dict):
             kwargs.update(decoder_input_ids)
+            logging.info(kwargs)
         else:
             kwargs["decoder_input_ids"] = decoder_input_ids
 
