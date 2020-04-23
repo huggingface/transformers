@@ -290,7 +290,7 @@ class ArcProcessor(DataProcessor):
 
         return examples
 
-
+from transformers.examples.text_rank_reduction import Reduction
 class CosmosProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
         """See base class."""
@@ -319,12 +319,12 @@ class CosmosProcessor(DataProcessor):
     def _create_examples(self, lines, type):
 
         examples = []
-
+        reduction = Reduction()
         for line in tqdm.tqdm(lines, desc="read cosmos data"):
             example = json.loads(line.strip("\n"))
 
             example_id = example["id"]
-            question = example["question"]
+            question = " ".join(reduction.reduce(example["question"],0.8))
             context = example["context"]
             answer0 = example["answer0"]
             answer1 = example["answer1"]
