@@ -1,4 +1,5 @@
 import argparse
+import os
 import shutil
 import warnings
 from pathlib import Path
@@ -9,7 +10,7 @@ import torch
 import yaml
 
 from transformers import MarianConfig, MarianForConditionalGeneration
-from transformers.file_utils import save_json
+from transformers.file_utils import save_json, unzip
 from transformers.tokenization_marian import MarianSentencePieceTokenizer
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 
@@ -326,6 +327,19 @@ class OpusState:
         assert not self.extra_keys, f"Failed to convert {self.extra_keys}"
         assert model.model.shared.padding_idx == self.pad_token_id
         return model
+
+
+
+
+def download_and_unzip(url, dest_dir):
+    try:
+        import wget
+    except ImportError:
+        raise ImportError("you must pip install wget")
+
+    filename = wget.download(url)
+    unzip(filename, dest_dir)
+    os.remove(filename)
 
 
 def main(source_dir, dest_dir):

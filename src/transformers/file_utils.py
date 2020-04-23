@@ -21,7 +21,6 @@ from zipfile import ZipFile, is_zipfile
 
 import boto3
 import requests
-import wget
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from filelock import FileLock
@@ -554,12 +553,6 @@ def tf_required(func):
 def unzip(zip_path, dest_dir):
     with ZipFile(zip_path, "r") as zipObj:
         zipObj.extractall(dest_dir)
-
-
-def download_and_unzip(url, dest_dir):
-    filename = wget.download(url)
-    unzip(filename, dest_dir)
-    os.remove(filename)
 
 
 def save_json(content, path):
