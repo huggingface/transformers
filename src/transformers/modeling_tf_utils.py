@@ -147,6 +147,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         # Save config in model
         self.config = config
 
+    def get_encoder(self):
+        raise NotImplementedError # Overwrite for models with output embeddings
+
     def get_input_embeddings(self):
         """
         Returns the model's input embeddings.
@@ -174,6 +177,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             base_model.set_input_embeddings(value)
         else:
             raise NotImplementedError
+    
 
     def get_output_embeddings(self):
         """
