@@ -31,7 +31,7 @@ from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
 
-from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
+from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available, torch_required
 
 
 if is_tf_available():
@@ -458,6 +458,7 @@ class BatchEncoding(UserDict):
             char_index = batch_or_char_index
         return self._encodings[batch_index].char_to_word(char_index)
 
+    @torch_required
     def to(self, device: str):
         """Send all values to device by calling v.to(device)"""
         assert is_torch_available(), "This function requires pytorch"

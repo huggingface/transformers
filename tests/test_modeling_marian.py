@@ -15,45 +15,33 @@
 
 
 import unittest
-from pathlib import Path
 
 from transformers import is_torch_available
+from transformers.file_utils import cached_property
 
-from .utils import require_torch, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
     import torch
-    from transformers import MarianForConditionalGeneration, MarianSentencePieceTokenizer, MarianConfig
+    from transformers import MarianForConditionalGeneration, MarianSentencePieceTokenizer
     from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
-
-LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
-LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
 
 
 @require_torch
 class IntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        dest_dir = Path("converted-en-de")
-        dest_dir.mkdir(exist_ok=True)
-        # main(Path(LOCAL_MARIAN), dest_dir)
-        model_name = dest_dir.name
-        model_name = "opus/marian-en-de"
-        cls.tokenizer = MarianSentencePieceTokenizer.from_pretrained(model_name)
-        cls.model = MarianForConditionalGeneration.from_pretrained(model_name).to(torch_device)
-        cls.config: MarianConfig = cls.model.config
-        cls.dest_dir = dest_dir
-        cls.eos_token_id = cls.model.config.eos_token_id
+        cls.model_name = "opus/marian-en-de"
+        cls.tokenizer = MarianSentencePieceTokenizer.from_pretrained(cls.model_name)
+        cls.eos_token_id = cls.tokenizer.eos_token_id
         return cls
 
-    @classmethod
-    def tearDownClass(cls) -> None:
-        import shutil
+    @cached_property
+    def model(self):
+        return MarianForConditionalGeneration.from_pretrained(self.model_name).to(torch_device)
 
-        if cls.dest_dir.name.startswith("temp-"):
-            shutil.rmtree(cls.dest_dir)
-
+    @slow
     def test_forward(self):
         src, tgt = ["I am a small frog"], ["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
         expected = [38, 121, 14, 697, 38848, 0]
@@ -74,34 +62,28 @@ class IntegrationTests(unittest.TestCase):
         predicted_words = self.tokenizer.decode_batch(max_indices)
         print(predicted_words)
 
+    @slow
     def test_repl_generate(self):
-
         src = ["I am a small frog", "Hello"]
-        # ["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
-        # expected = [self.tokenizer.pad_token_id, 38, 121, 14, 697, 38848, 0]
-
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src).to(torch_device)
-        generated_ids = self.model.generate(
-            model_inputs["input_ids"],
-            num_beams=2,
-            # decoder_start_token_id=self.model.config.eos_token_id,
-        )
+        generated_ids = self.model.generate(model_inputs["input_ids"], num_beams=2,)
         generated_words = self.tokenizer.decode_batch(generated_ids)[0]
         expected_words = "Ich bin ein kleiner Frosch"
         self.assertEqual(expected_words, generated_words)
 
-    def test_tokenizer(self):
+    def test_marian_equivalence(self):
         input_ids = self.tokenizer.prepare_translation_batch(["I am a small frog"])["input_ids"][0].to(torch_device)
-        # expected = [444, 982, 111, 34045, 1, 0]   # marian produces this, see invocation issue.
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, input_ids.tolist())
+
+    def test_pad_not_split(self):
         input_ids_w_pad = self.tokenizer.prepare_translation_batch(["I am a small frog <pad>"])["input_ids"][0]
-        expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad goes before EOS.
+        expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad
         self.assertListEqual(expected_w_pad, input_ids_w_pad.tolist())
 
 
 @require_torch
-class TestPositionalEmbeddings(unittest.TestCase):
+class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
     def test_positional_emb_cache_logic(self):
         pad = 1
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
