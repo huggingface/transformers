@@ -175,7 +175,7 @@ class ModuleUtilsMixin:
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    def get_head_mask(self, head_mask, num_hidden_layers):
+    def get_head_mask(self, head_mask, num_hidden_layers, is_attention_chunked=False):
         """
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -189,6 +189,8 @@ class ModuleUtilsMixin:
         """
         if head_mask is not None:
             head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
+            if is_attention_chunked is True:
+                head_mask = head_mask.unsqueeze(-1)
         else:
             head_mask = [None] * num_hidden_layers
 
