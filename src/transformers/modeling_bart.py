@@ -859,6 +859,21 @@ class BartForConditionalGeneration(PretrainedBartModel):
         self.model = base_model
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
 
+    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+        old_num_tokens = self.model.shared.num_embeddings
+        new_embeddings = super().resize_token_embeddings(new_num_tokens)
+        self.model.shared = new_embeddings
+        self._resize_final_logits_bias(new_num_tokens, old_num_tokens)
+        return new_embeddings
+
+    def _resize_final_logits_bias(self, new_num_tokens: int, old_num_tokens: int) -> None:
+        if new_num_tokens <= old_num_tokens:
+            new_bias = self.final_logits_bias[:, :new_num_tokens]
+        else:
+            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens))
+            new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
+        self.register_buffer("final_logits_bias", new_bias)
+
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
     def forward(
         self,
