@@ -42,9 +42,6 @@ def load_layers_(layer_lst: torch.nn.ModuleList, opus_state: dict, converter, is
         layer.load_state_dict(sd, strict=True)
 
 
-CONFIG_KEY = "special:model.yml"
-
-
 def add_emb_entries(wemb, final_bias, n_special_tokens=1):
     vsize, d_model = wemb.shape
     embs_to_add = np.zeros((n_special_tokens, d_model))
@@ -52,11 +49,6 @@ def add_emb_entries(wemb, final_bias, n_special_tokens=1):
     bias_to_add = np.zeros((n_special_tokens, 1))
     new_bias = np.concatenate((final_bias, bias_to_add), axis=1)
     return new_embs, new_bias
-
-
-def load_yaml(path):
-    with open(path) as f:
-        return yaml.load(f, Loader=yaml.BaseLoader)
 
 
 def _cast_yaml_str(v):
@@ -73,6 +65,9 @@ def _cast_yaml_str(v):
 
 def cast_marian_config(raw_cfg: Dict[str, str]) -> Dict:
     return {k: _cast_yaml_str(v) for k, v in raw_cfg.items()}
+
+
+CONFIG_KEY = "special:model.yml"
 
 
 def load_config_from_state_dict(opus_dict):
@@ -96,11 +91,11 @@ def parse_readmes(repo_path=OPUS_MODELS_PATH):
             continue
         else:
             lns = list(open(p / "README.md").readlines())
-            results[p.name] = parse_readme(lns)
+            results[p.name] = _parse_readme(lns)
     return results
 
 
-def parse_readme(lns):
+def _parse_readme(lns):
     """Get link and metadata from opus model card equivalent."""
     subres = {}
     for ln in [x.strip() for x in lns]:
@@ -329,8 +324,6 @@ class OpusState:
         return model
 
 
-
-
 def download_and_unzip(url, dest_dir):
     try:
         import wget
@@ -370,3 +363,8 @@ if __name__ == "__main__":
     assert source_dir.exists()
     dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
     main(source_dir, dest_dir)
+
+
+def load_yaml(path):
+    with open(path) as f:
+        return yaml.load(f, Loader=yaml.BaseLoader)

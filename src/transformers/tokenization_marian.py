@@ -1,41 +1,29 @@
-import json
 from typing import List, Optional
 
 import sentencepiece
-import yaml
 from mosestokenizer import MosesPunctuationNormalizer
 
+from .file_utils import S3_BUCKET_PREFIX, load_json
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 
 
-URL_START = "https://s3.amazonaws.com/models.huggingface.co/bert/opus/"
-models = ["marian-en-de"]
 vocab_files_names = {
     "source_spm": "source.spm",
     "target_spm": "target.spm",
     "vocab": "vocab.json",
     "tokenizer_config_file": "tokenizer_config.json",
 }
-
-# eg {marian-en-de:
-PRETRAINED_VOCAB_FILES_MAP = {k: {m: f"{URL_START}/{m}/{v}" for m in models} for k, v in vocab_files_names.items()}
+MODEL_NAMES = ("marian-en-de",)
+PRETRAINED_VOCAB_FILES_MAP = {
+    k: {m: f"{S3_BUCKET_PREFIX}/opus/{m}/{fname}" for m in MODEL_NAMES} for k, fname in vocab_files_names.items()
+}
 # Example URL https://s3.amazonaws.com/models.huggingface.co/bert/opus/marian-en-de/vocab.json
-
-
-def load_json(path):
-    with open(path, "r") as f:
-        return json.load(f)
-
-
-def load_yaml(path):
-    with open(path) as f:
-        return yaml.load(f, Loader=yaml.BaseLoader)
 
 
 class MarianSentencePieceTokenizer(PreTrainedTokenizer):
     vocab_files_names = vocab_files_names
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = {m: 512 for m in models}
+    max_model_input_sizes = {m: 512 for m in MODEL_NAMES}
     model_input_names = ["attention_mask"]  # actually attention_mask, decoder_attention_mask
 
     def __init__(
