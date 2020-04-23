@@ -47,6 +47,11 @@ except ImportError:
     except ImportError:
         _has_tensorboard = False
 
+try:
+    import wandb
+    _has_wandb = True
+except ImportError:
+    _has_wandb = False
 
 def is_tensorboard_available():
     return _has_tensorboard
@@ -150,6 +155,10 @@ class Trainer:
         if not is_tensorboard_available():
             logger.warning(
                 "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
+            )
+        if not _has_wandb:
+            logger.warning(
+                "You are instantiating a Trainer but wandb is not installed. Install it to use Weights & Biases logging."
             )
         set_seed(self.args.seed)
         # Create output directory if needed
@@ -264,6 +273,12 @@ class Trainer:
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", self.args.to_json_string())
 
+        # Start a wandb run and log config parameters
+        if _has_wandb:
+            wandb.init(config={**vars(self.args), 'config':self.model.config.to_dict()})
+            # keep track of model topology and gradients
+            wandb.watch(self.model)
+
         # Train!
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_dataloader.dataset))
@@ -346,11 +361,12 @@ class Trainer:
                             learning_rate_scalar = scheduler.get_last_lr()[0]
                             logs["learning_rate"] = learning_rate_scalar
                             logs["loss"] = loss_scalar
+                            logs["epoch"] = global_step / (len(train_dataloader) // self.args.gradient_accumulation_steps)
                             logging_loss = tr_loss
 
-                            if self.tb_writer:
-                                for k, v in logs.items():
-                                    self.tb_writer.add_scalar(k, v, global_step)
+                            # log data
+                            self.log(logs, global_step)
+
                             epoch_iterator.write(json.dumps({**logs, **{"step": global_step}}))
 
                         if self.args.save_steps > 0 and global_step % self.args.save_steps == 0:
@@ -466,6 +482,16 @@ class Trainer:
             logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
             shutil.rmtree(checkpoint)
 
+    def log(self, vals: Dict[str, float], step: int):
+        """
+        Log vals through Weights & Biases and Tensorboard
+        """
+        if self.tb_writer:
+            for k, v in vals.items():
+                self.tb_writer.add_scalar(k, v, step)
+        if _has_wandb:
+            wandb.log(vals, step=step)
+        
     def evaluate(
         self, eval_dataset: Optional[Dataset] = None, prediction_loss_only: Optional[bool] = None
     ) -> Dict[str, float]:
