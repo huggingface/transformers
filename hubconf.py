@@ -1,12 +1,19 @@
-from src.transformers import (
+import os
+import sys
+
+SRC_DIR = os.path.join(os.path.dirname(__file__), "src")
+sys.path.append(SRC_DIR)
+
+
+from transformers import (
     AutoConfig,
     AutoModel,
     AutoModelForQuestionAnswering,
     AutoModelForSequenceClassification,
     AutoModelWithLMHead,
     AutoTokenizer,
+    add_start_docstrings,
 )
-from src.transformers.file_utils import add_start_docstrings
 
 
 dependencies = ["torch", "numpy", "tokenizers", "boto3", "filelock", "requests", "tqdm", "regex", "sentencepiece", "sacremoses"]
