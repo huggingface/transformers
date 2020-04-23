@@ -8,6 +8,7 @@ from typing import Dict, List
 import numpy as np
 import torch
 import yaml
+from tqdm import tqdm
 
 from transformers import MarianConfig, MarianForConditionalGeneration
 from transformers.file_utils import save_json, unzip
@@ -80,7 +81,7 @@ def find_model_file(dest_dir):  # this one better
     return model_file
 
 
-def parse_readmes(repo_path="~/OPUS-MT-train/models"):
+def parse_readmes(repo_path):
     results = {}
     for p in Path(repo_path).ls():
         n_dash = p.name.count("-")
@@ -90,6 +91,21 @@ def parse_readmes(repo_path="~/OPUS-MT-train/models"):
             lns = list(open(p / "README.md").readlines())
             results[p.name] = _parse_readme(lns)
     return results
+
+
+def download_all_sentencepiece_models(repo_path='Opus-MT-train/models'):
+    """Requires 300GB"""
+    save_dir = Path('marian_ckpt')
+    if not Path(repo_path).exists():
+        raise ValueError('You must run: git clone git clone git@github.com:Helsinki-NLP/Opus-MT-train.git')
+    results: dict = parse_readmes(repo_path)
+    for k, v in tqdm(list(results.items())):
+        if os.path.exists(save_dir / k):
+            print(f'already have path {k}')
+            continue
+        if 'SentencePiece' not in v['pre-processing']:
+            continue
+        download_and_unzip(v['download'], save_dir / k)
 
 
 def _parse_readme(lns):
