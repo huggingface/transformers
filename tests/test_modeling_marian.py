@@ -58,8 +58,7 @@ class IntegrationTests(unittest.TestCase):
         with torch.no_grad():
             logits, *enc_features = self.model(**model_inputs)
         max_indices = logits.argmax(-1)
-        predicted_words = self.tokenizer.decode_batch(max_indices)
-        print(predicted_words)
+        self.tokenizer.decode_batch(max_indices)
 
     @slow
     def test_repl_generate(self):
