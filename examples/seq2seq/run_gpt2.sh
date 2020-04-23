@@ -5,9 +5,9 @@ export MODEL_NAME=gpt2
 
 # set env vars
 export MAX_LENGTH=16
-export NUM_EPOCHS=1
+export NUM_EPOCHS=5
 export OUTPUT_DIR="name_${MODEL_TYPE}"
-export BATCH_SIZE=64
+export BATCH_SIZE=16
 export SAVE_STEPS=300
 export LOGGING_STEPS=50
 export SEED=1
@@ -27,13 +27,11 @@ python3 run_seq2seq.py \
   --save_steps $SAVE_STEPS \
   --logging_steps $LOGGING_STEPS \
   --optimizer lamb \
-  --eval_all_checkpoints \
   --learning_rate 0.01 \
   --weight_decay 0.0 \
   --seed $SEED \
   --overwrite_output_dir \
   --overwrite_cache \
-  --evaluate_during_training \
   --do_train \
   --do_eval \
   --do_predict
