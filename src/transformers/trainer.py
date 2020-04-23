@@ -358,7 +358,7 @@ class Trainer:
                             else:
                                 assert model is self.model
                             # Save model checkpoint
-                            output_dir = os.path.join(self.args.output_dir, f"checkpoint-{global_step}")
+                            output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{global_step}")
                             self.save_model(output_dir)
                             self._rotate_checkpoints()
                             torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
