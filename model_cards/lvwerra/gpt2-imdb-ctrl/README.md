@@ -4,14 +4,10 @@
 A small GPT2 (`lvwerra/gpt2-imdb`) language model fine-tuned to produce controlled movie reviews based the [IMDB dataset](https://www.kaggle.com/lakshmi25npathi/imdb-dataset-of-50k-movie-reviews). The model is trained with rewards from a BERT sentiment classifier (`lvwerra/bert-imdb`) via PPO.
 
 ## Training setting
-The model was trained for `200` optimisation steps with a batch size of `256` which corresponds to `51200` training samples. The full experiment setup can be found in the Jupyter notebook in the [trl repo](https://lvwerra.github.io/trl/05-gpt2-sentiment-ppo-training/).
+The model was trained for `200` optimisation steps with a batch size of `256` which corresponds to `51200` training samples. The full experiment setup can be found in the Jupyter notebook in the [trl repo](https://lvwerra.github.io/trl/05-gpt2-sentiment-ppo-training/). The strings `"[negative]"`, `"[neutral]"`, and `"[positive]"` are added at the beginning of the query to control the sentiment.
 
 ## Examples
 A few examples of the model response to a query before and after optimisation:
-
-
-
-
 
 | query | response [negative] | rewards [negative] | response [neutral] | rewards [neutral] | response [positive] | rewards [positive] |
 |-------|---------------------|--------------------|--------------------|-------------------|---------------------|--------------------|
