@@ -194,7 +194,7 @@ def convert_examples_to_features(
         # sanity checks
         assert all(token_id is not None for token_id in input_ids)
         assert all(token_id is not None for token_id in output_ids)
-        
+
         assert len(input_ids) == max_seq_length
         assert len(input_mask) == max_seq_length
         assert len(output_ids) == max_seq_length

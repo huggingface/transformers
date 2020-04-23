@@ -15,11 +15,12 @@ import argparse
 import glob
 import logging
 import os
-from copy import deepcopy
 import random
+from copy import deepcopy
 
 import numpy as np
 import torch
+from pytorch_lamb import Lamb
 from sklearn.metrics import f1_score, precision_score, recall_score
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
@@ -34,7 +35,6 @@ from transformers import (
     EncoderDecoderModel,
     get_linear_schedule_with_warmup,
 )
-from pytorch_lamb import Lamb
 from utils_seq2seq import convert_examples_to_features, read_examples_from_file
 
 
@@ -83,13 +83,13 @@ def train(args, train_dataset, model, tokenizer, pad_token_label_id):
         },
         {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
     ]
-    if args.optimizer.lower()=="adamw":
+    if args.optimizer.lower() == "adamw":
         optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    elif args.optimizer.lower()=="lamb":
+    elif args.optimizer.lower() == "lamb":
         optimizer = Lamb(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     else:
         raise Exception("Invalid optimizer specified")
-  
+
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
     )
@@ -293,10 +293,7 @@ def evaluate(args, model, tokenizer, pad_token_label_id, mode, prefix=""):
             vocab_size = decoder_predictions.shape[-1]
 
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(
-                    decoder_predictions.view(-1, vocab_size), 
-                    output_ids.view(-1),
-                   )
+            loss = loss_fct(decoder_predictions.view(-1, vocab_size), output_ids.view(-1),)
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel evaluating
 
@@ -313,10 +310,10 @@ def evaluate(args, model, tokenizer, pad_token_label_id, mode, prefix=""):
     out_ids = out_ids.flatten()
     unflattened_preds = deepcopy(preds)
     preds = preds.flatten()
-    target_tokens = np.where(out_ids!=tokenizer.pad_token_id)[0]
-    preds=preds[target_tokens]
-    out_ids=out_ids[target_tokens]
-    
+    target_tokens = np.where(out_ids != tokenizer.pad_token_id)[0]
+    preds = preds[target_tokens]
+    out_ids = out_ids[target_tokens]
+
     preds.dump("predictions.npy")
     out_ids.dump("truth.npy")
 
@@ -372,9 +369,7 @@ def load_and_cache_examples(args, tokenizer, pad_token_label_id, mode):
     all_output_mask = torch.tensor([feat.output_mask for feat in features], dtype=torch.long)
     all_segment_ids = torch.tensor([feat.segment_ids for feat in features], dtype=torch.long)
 
-    dataset = TensorDataset(
-        all_input_ids, all_output_ids, all_input_mask, all_output_mask, all_segment_ids,
-    )
+    dataset = TensorDataset(all_input_ids, all_output_ids, all_input_mask, all_output_mask, all_segment_ids,)
     return dataset
 
 
