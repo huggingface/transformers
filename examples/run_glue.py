@@ -163,7 +163,7 @@ def main():
 
     # Training
     if training_args.do_train:
-        global_step, _ = trainer.train(
+        trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
         trainer.save_model()
@@ -187,9 +187,6 @@ def main():
 
         for eval_dataset in eval_datasets:
             result = trainer.evaluate(eval_dataset=eval_dataset)
-
-            # Log final results
-            trainer.log({**{"eval_{}".format(k):v for k, v in result.items()}, "epoch":training_args.num_train_epochs}, global_step)
 
             output_eval_file = os.path.join(
                 training_args.output_dir, f"eval_results_{eval_dataset.args.task_name}.txt"

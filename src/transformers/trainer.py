@@ -352,7 +352,7 @@ class Trainer:
                         ):
                             logs = {}
                             if self.args.evaluate_during_training:
-                                results = self.evaluate()
+                                results = self.evaluate(no_log=True)
                                 for key, value in results.items():
                                     eval_key = "eval_{}".format(key)
                                     logs[eval_key] = value
@@ -361,11 +361,13 @@ class Trainer:
                             learning_rate_scalar = scheduler.get_last_lr()[0]
                             logs["learning_rate"] = learning_rate_scalar
                             logs["loss"] = loss_scalar
-                            logs["epoch"] = global_step / (len(train_dataloader) // self.args.gradient_accumulation_steps)
                             logging_loss = tr_loss
 
-                            # log data
-                            self.log(logs, global_step)
+                            if self.tb_writer:
+                                for k, v in logs.items():
+                                    self.tb_writer.add_scalar(k, v, global_step)
+                            if _has_wandb:
+                                wandb.log({**logs, "epoch": global_step / (len(train_dataloader) // self.args.gradient_accumulation_steps)})
 
                             epoch_iterator.write(json.dumps({**logs, **{"step": global_step}}))
 
@@ -482,18 +484,8 @@ class Trainer:
             logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
             shutil.rmtree(checkpoint)
 
-    def log(self, vals: Dict[str, float], step: int):
-        """
-        Log vals through Weights & Biases and Tensorboard
-        """
-        if self.tb_writer:
-            for k, v in vals.items():
-                self.tb_writer.add_scalar(k, v, step)
-        if _has_wandb:
-            wandb.log(vals, step=step)
-        
     def evaluate(
-        self, eval_dataset: Optional[Dataset] = None, prediction_loss_only: Optional[bool] = None
+        self, eval_dataset: Optional[Dataset] = None, prediction_loss_only: Optional[bool] = None, no_log: Optional[bool] = False
     ) -> Dict[str, float]:
         """
         Run evaluation and return metrics.
@@ -512,6 +504,9 @@ class Trainer:
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
         output = self._prediction_loop(eval_dataloader, description="Evaluation")
+        if _has_wandb and not no_log and wandb.run:
+            # Log final metrics
+            wandb.log({**{"eval_{}".format(k):v for k, v in output.metrics.items()}, "epoch":self.args.num_train_epochs})
         return output.metrics
 
     def predict(self, test_dataset: Dataset) -> PredictionOutput:
