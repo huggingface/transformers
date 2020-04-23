@@ -16,6 +16,7 @@
 
 from .configuration_bart import BartConfig
 
+
 PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 

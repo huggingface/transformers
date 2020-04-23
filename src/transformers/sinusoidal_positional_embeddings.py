@@ -6,13 +6,12 @@ from transformers.modeling_utils import create_position_ids_from_input_ids
 
 
 class SinusoidalPositionalEmbedding(nn.Embedding):
-    """This module produces sinusoidal positional embeddings of any length.
+    """This module produces sinusoidal positional embeddings of any length."""
 
-    Padding symbols are ignored.
-    """
-
-    def __init__(self, init_size, embedding_dim, padding_idx):
+    def __init__(self, init_size, embedding_dim, padding_idx=None):
         super().__init__(init_size, embedding_dim)
+        if embedding_dim % 2 != 0:
+            raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
         self.weight = self._init_weight(self.weight)
 
     @staticmethod
@@ -24,7 +23,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         position_enc = np.array(
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
-        out[:, 0 : dim // 2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
+        out[:, 0 : dim // 2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))  # This line breaks for odd n_pos
         out[:, dim // 2 :] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
         out.detach_()
         out.requires_grad = False
@@ -56,14 +55,14 @@ class LearnedPositionalEmbedding(nn.Embedding):
     ):
         # if padding_idx is specified then offset the embedding ids by
         # this index and adjust num_embeddings appropriately
-        assert padding_idx is not None
+        assert padding_idx == 1
         super().__init__(num_embeddings + 2, embedding_dim, padding_idx=padding_idx)
 
     def forward(self, input, use_cache=False):
         """Input is expected to be of size [bsz x seqlen]."""
         if use_cache:  # the position is our current step in the decoded sequence
             pos = int(self.padding_idx + input.size(1))
-            positions = input.data.new(1, 1).fill_(pos)  # called before slicing.
+            positions = input.data.new(1,).fill_(pos)  # called before slicing.
         else:
             positions = create_position_ids_from_input_ids(input, self.padding_idx)
         return super().forward(positions)

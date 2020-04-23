@@ -24,22 +24,23 @@ from .utils import require_torch, torch_device
 
 if is_torch_available():
     import torch
-    from transformers import MarianModel, MarianSPTokenizer, BartConfig
+    from transformers import MarianForConditionalGeneration, MarianSentencePieceTokenizer, MarianConfig
     from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
 
 LOCAL_PATH = "/Users/shleifer/transformers_fork/converted-en-de/"
 LOCAL_MARIAN = "/Users/shleifer/transformers_fork/en-de/"
 
 
+@require_torch
 class IntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         dest_dir = Path("converted-en-de")
         dest_dir.mkdir(exist_ok=True)
         # main(Path(LOCAL_MARIAN), dest_dir)
-        cls.tokenizer = MarianSPTokenizer.from_pretrained(dest_dir.name)
-        cls.model = MarianModel.from_pretrained(dest_dir.name)
-        cls.config: BartConfig = cls.model.config
+        cls.tokenizer = MarianSentencePieceTokenizer.from_pretrained(dest_dir.name)
+        cls.model = MarianForConditionalGeneration.from_pretrained(dest_dir.name).to(torch_device)
+        cls.config: MarianConfig = cls.model.config
         cls.dest_dir = dest_dir
         cls.eos_token_id = cls.model.config.eos_token_id
         return cls
@@ -58,15 +59,12 @@ class IntegrationTests(unittest.TestCase):
 
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
         self.assertListEqual(expected, model_inputs["input_ids"][0].tolist())
-        #  shapes = {k: v.shape for k, v in model_inputs.items()}
 
         desired_keys = {
             "input_ids",
             "attention_mask",
-            # "token_type_ids",
             "decoder_input_ids",
             "decoder_attention_mask",
-            # "decoder_token_type_ids",
         }
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
         with torch.no_grad():
@@ -81,7 +79,7 @@ class IntegrationTests(unittest.TestCase):
         # ["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
         # expected = [self.tokenizer.pad_token_id, 38, 121, 14, 697, 38848, 0]
 
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src)
+        model_inputs: dict = self.tokenizer.prepare_translation_batch(src).to(torch_device)
         generated_ids = self.model.generate(
             model_inputs["input_ids"],
             num_beams=2,
@@ -92,7 +90,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(expected_words, generated_words)
 
     def test_tokenizer(self):
-        input_ids = self.tokenizer.prepare_translation_batch(["I am a small frog"])["input_ids"][0]
+        input_ids = self.tokenizer.prepare_translation_batch(["I am a small frog"])["input_ids"][0].to(torch_device)
         # expected = [444, 982, 111, 34045, 1, 0]   # marian produces this, see invocation issue.
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, input_ids.tolist())
@@ -102,20 +100,28 @@ class IntegrationTests(unittest.TestCase):
 
 
 @require_torch
-class FastTests(unittest.TestCase):
+class TestPositionalEmbeddings(unittest.TestCase):
     def test_positional_embeddings(self):
-
         pad = 1
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
-        emb1 = SinusoidalPositionalEmbedding(init_size=32, embedding_dim=10, padding_idx=pad).to(torch_device)
+        emb1 = SinusoidalPositionalEmbedding(init_size=32, embedding_dim=6, padding_idx=pad).to(torch_device)
         no_cache = emb1(input_ids, use_cache=False)
         yes_cache = emb1(input_ids, use_cache=True)
-        self.assertListEqual(no_cache[0, -1:].tolist(), yes_cache[0].tolist())
+        self.assertEqual((1, 1, 6), yes_cache.shape)  # extra dim to allow broadcasting, feel free to delete!
+        self.assertListEqual(no_cache[-1].tolist(), yes_cache[0][0].tolist())
+
+    def test_odd_embed_dim(self):
+        with self.assertRaises(NotImplementedError):
+            SinusoidalPositionalEmbedding(init_size=4, embedding_dim=5, padding_idx=0).to(torch_device)
+
+        # odd init_size is allowed
+        SinusoidalPositionalEmbedding(init_size=5, embedding_dim=4, padding_idx=0).to(torch_device)
 
     def test_positional_embs_against_marian(self):
         """SinusoidalPositionalEmbeddings."""
         pad = 1
         input_ids = torch.tensor([[4, 10] * 3], dtype=torch.long, device=torch_device)
+
         emb1 = SinusoidalPositionalEmbedding(init_size=512, embedding_dim=512, padding_idx=pad).to(torch_device)
         self.assertEqual(0.84147096, emb1.weight[1, 0])
 

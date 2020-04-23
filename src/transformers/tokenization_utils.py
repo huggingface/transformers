@@ -458,6 +458,13 @@ class BatchEncoding(UserDict):
             char_index = batch_or_char_index
         return self._encodings[batch_index].char_to_word(char_index)
 
+    def to(self, device: str):
+        """Send all values to device by calling v.to(device)"""
+        assert is_torch_available(), "This function requires pytorch"
+        for k, v in self.items():
+            v.to(device)
+        return self
+
 
 class SpecialTokensMixin:
     """ SpecialTokensMixin is derived by ``PreTrainedTokenizer`` and ``PreTrainedTokenizerFast`` and

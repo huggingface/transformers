@@ -8,9 +8,9 @@ import numpy as np
 import torch
 import yaml
 
-from transformers import MarianConfig, MarianModel
+from transformers import MarianConfig, MarianForConditionalGeneration
 from transformers.file_utils import save_json
-from transformers.tokenization_marian import MarianSPTokenizer
+from transformers.tokenization_marian import MarianSentencePieceTokenizer
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 
 
@@ -293,11 +293,11 @@ class OpusState:
     def sub_keys(self, layer_prefix):
         return [remove_prefix(k, layer_prefix) for k in self.state_dict if k.startswith(layer_prefix)]
 
-    def load_marian_model(self) -> MarianModel:
+    def load_marian_model(self) -> MarianForConditionalGeneration:
         state_dict, cfg = self.state_dict, self.hf_config
 
         assert cfg.static_position_embeddings
-        model = MarianModel(cfg)
+        model = MarianForConditionalGeneration(cfg)
 
         assert "hidden_size" not in cfg.to_dict()
         load_layers_(
@@ -333,7 +333,7 @@ def main(source_dir, dest_dir):
     dest_dir.mkdir(exist_ok=True)
 
     add_special_tokens_to_vocab(source_dir)
-    tokenizer = MarianSPTokenizer.from_pretrained(str(source_dir))
+    tokenizer = MarianSentencePieceTokenizer.from_pretrained(str(source_dir))
     save_tokenizer(tokenizer, dest_dir)
 
     opus_state = OpusState(source_dir)
