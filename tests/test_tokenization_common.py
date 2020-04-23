@@ -107,16 +107,15 @@ class TokenizerTesterMixin:
 
         before_tokens = tokenizer.encode("He is very happy, UNwant\u00E9d,running", add_special_tokens=False)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            tokenizer.save_pretrained(tmpdirname)
-            tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
+        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname)
 
-            after_tokens = tokenizer.encode("He is very happy, UNwant\u00E9d,running", add_special_tokens=False)
-            self.assertListEqual(before_tokens, after_tokens)
+        after_tokens = tokenizer.encode("He is very happy, UNwant\u00E9d,running", add_special_tokens=False)
+        self.assertListEqual(before_tokens, after_tokens)
 
-            self.assertEqual(tokenizer.max_len, 42)
-            tokenizer = self.tokenizer_class.from_pretrained(tmpdirname, max_len=43)
-            self.assertEqual(tokenizer.max_len, 43)
+        self.assertEqual(tokenizer.max_len, 42)
+        tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname, max_len=43)
+        self.assertEqual(tokenizer.max_len, 43)
 
     def test_pickle_tokenizer(self):
         tokenizer = self.get_tokenizer()
@@ -125,14 +124,12 @@ class TokenizerTesterMixin:
         text = "Munich and Berlin are nice cities"
         subwords = tokenizer.tokenize(text)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
+        filename = os.path.join(self.tmpdirname, "tokenizer.bin")
+        with open(filename, "wb") as handle:
+            pickle.dump(tokenizer, handle)
 
-            filename = os.path.join(tmpdirname, "tokenizer.bin")
-            with open(filename, "wb") as handle:
-                pickle.dump(tokenizer, handle)
-
-            with open(filename, "rb") as handle:
-                tokenizer_new = pickle.load(handle)
+        with open(filename, "rb") as handle:
+            tokenizer_new = pickle.load(handle)
 
         subwords_loaded = tokenizer_new.tokenize(text)
 
