@@ -18,7 +18,9 @@
 from transformers.modeling_bart import BartForConditionalGeneration
 
 
-PRETRAINED_MODEL_ARCHIVE_MAP = {}
+PRETRAINED_MODEL_ARCHIVE_MAP = {
+    "marian-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/opus/marian-en-de/pytorch_model.bin",
+}
 
 
 class MarianForConditionalGeneration(BartForConditionalGeneration):

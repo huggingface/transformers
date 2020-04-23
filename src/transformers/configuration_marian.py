@@ -17,7 +17,9 @@
 from .configuration_bart import BartConfig
 
 
-PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "marian-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/opus/marian-en-de/config.json",
+}
 
 
 class MarianConfig(BartConfig):

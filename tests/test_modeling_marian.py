@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google T5 Authors and HuggingFace Inc. team.
+# Copyright 2020 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -101,7 +101,7 @@ class IntegrationTests(unittest.TestCase):
 
 @require_torch
 class TestPositionalEmbeddings(unittest.TestCase):
-    def test_positional_embeddings(self):
+    def test_positional_emb_cache_logic(self):
         pad = 1
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
         emb1 = SinusoidalPositionalEmbedding(init_size=32, embedding_dim=6, padding_idx=pad).to(torch_device)
@@ -117,7 +117,7 @@ class TestPositionalEmbeddings(unittest.TestCase):
         # odd init_size is allowed
         SinusoidalPositionalEmbedding(init_size=5, embedding_dim=4, padding_idx=0).to(torch_device)
 
-    def test_positional_embs_against_marian(self):
+    def test_positional_emb_weights_against_marian(self):
         """SinusoidalPositionalEmbeddings."""
         pad = 1
         input_ids = torch.tensor([[4, 10] * 3], dtype=torch.long, device=torch_device)

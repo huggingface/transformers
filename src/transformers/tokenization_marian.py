@@ -5,13 +5,16 @@ import sentencepiece
 import yaml
 from mosestokenizer import MosesPunctuationNormalizer
 
+from .file_utils import S3_BUCKET_PREFIX
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 
 
+URL_START = "https://s3.amazonaws.com/models.huggingface.co/bert"
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab": {
-        # "marian/en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/marian/en-de/source.spm"
-    }
+    "vocab": {"marian/en-de": f"{S3_BUCKET_PREFIX}/vocab.json"},
+    "source_spm": {"marian/en-de": f"{S3_BUCKET_PREFIX}/source.spm"},
+    "target_spm": {"marian/en-de": f"{S3_BUCKET_PREFIX}/target.spm"},
+    "tokenizer_config_file": {"marian/en-de": f"{S3_BUCKET_PREFIX}/tokenizer_config.json"},
 }
 
 
