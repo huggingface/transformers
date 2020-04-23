@@ -38,8 +38,10 @@ class IntegrationTests(unittest.TestCase):
         dest_dir = Path("converted-en-de")
         dest_dir.mkdir(exist_ok=True)
         # main(Path(LOCAL_MARIAN), dest_dir)
-        cls.tokenizer = MarianSentencePieceTokenizer.from_pretrained(dest_dir.name)
-        cls.model = MarianForConditionalGeneration.from_pretrained(dest_dir.name).to(torch_device)
+        model_name = dest_dir.name
+        model_name = "opus/marian-en-de"
+        cls.tokenizer = MarianSentencePieceTokenizer.from_pretrained(model_name)
+        cls.model = MarianForConditionalGeneration.from_pretrained(model_name).to(torch_device)
         cls.config: MarianConfig = cls.model.config
         cls.dest_dir = dest_dir
         cls.eos_token_id = cls.model.config.eos_token_id
@@ -53,7 +55,6 @@ class IntegrationTests(unittest.TestCase):
             shutil.rmtree(cls.dest_dir)
 
     def test_forward(self):
-        # src, tgt = ["dinner", "life"], ["Abendessen", "Leben"]
         src, tgt = ["I am a small frog"], ["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
         expected = [38, 121, 14, 697, 38848, 0]
 
