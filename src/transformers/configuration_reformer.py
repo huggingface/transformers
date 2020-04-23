@@ -117,21 +117,19 @@ class ReformerConfig(PretrainedConfig):
         initializer_range=0.02,
         axial_norm_std=1.0,
         layer_norm_eps=1e-12,
-        sinusoidal_pos_embds=True,
+        sinusoidal_pos_embds=False,
         axial_pos_embds=False,
         axial_pos_shape=[64, 3],
         axial_pos_embds_dim=[64, 64],
         attn_layers=["lsh", "lsh", "lsh", "lsh"],
+        is_decoder=False,
         pad_token_id=0,
-        seed=0,  # TO REMOVE LATER:
+        hash_seed=None,
         **kwargs
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(pad_token_id=pad_token_id, is_decoder=is_decoder, **kwargs)
 
-        # TO REMOVE LATER:
-        self.seed = seed
-
-        self.is_decoder = True
+        self.hash_seed = hash_seed
         self.vocab_size = vocab_size
         self.attention_head_size = attention_head_size
         self.hidden_size = hidden_size
