@@ -1,7 +1,7 @@
+import warnings
 from typing import List, Optional
 
 import sentencepiece
-from mosestokenizer import MosesPunctuationNormalizer
 
 from .file_utils import S3_BUCKET_PREFIX, load_json
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
@@ -68,7 +68,13 @@ class MarianSentencePieceTokenizer(PreTrainedTokenizer):
 
         # Note(SS): splitter would require lots of book-keeping.
         # self.sentence_splitter = MosesSentenceSplitter(source_lang)
-        self.punc_normalizer = MosesPunctuationNormalizer(source_lang)
+        try:
+            from mosestokenizer import MosesPunctuationNormalizer
+
+            self.punc_normalizer = MosesPunctuationNormalizer(source_lang)
+        except ImportError:
+            warnings.warn("Recommended: pip install mosestokenizer")
+            self.punc_normalizer = lambda x: x
 
     def _convert_token_to_id(self, token):
         return self.encoder[token]
