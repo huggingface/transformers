@@ -123,12 +123,13 @@ class ReformerConfig(PretrainedConfig):
         axial_pos_embds_dim=[64, 64],
         attn_layers=["lsh", "lsh", "lsh", "lsh"],
         pad_token_id=0,
+        seed=0,  # TO REMOVE LATER:
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
-        #        TO CHANGE LATER:
-        self.seed = 0
+        # TO REMOVE LATER:
+        self.seed = seed
 
         self.is_decoder = True
         self.vocab_size = vocab_size
