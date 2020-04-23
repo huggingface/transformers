@@ -557,8 +557,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # Attention mask: chunk, look up correct mask value from key_value_info
         # IMPORTANT: official trax code does not use a mask for LSH Atttention. Not sure why.
         if attention_mask is not None:
-            attn_mask = attention_mask.to(torch.uint8)[:, None, :]
-            attn_mask = self._split_dim_by(attn_mask, -1, self.chunk_length, 1).expand(ticker.shape)
+            attn_mask = attention_mask.to(torch.uint8)[:, None, None, :]
+            # expand attn_mask to fit with key_value_info shape
+            attn_mask = attn_mask.expand(ticker.shape[:-1] + (-1,))
             attn_mask = torch.gather(attn_mask, -1, key_value_info)
             # expand to query_key_dots shape: duplicate along query axis since key sorting is the same for each query position in chunk
             attn_mask = attn_mask.unsqueeze(-2).expand(query_key_dots.shape)
