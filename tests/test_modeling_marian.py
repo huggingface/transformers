@@ -61,13 +61,48 @@ class IntegrationTests(unittest.TestCase):
         self.tokenizer.decode_batch(max_indices)
 
     @slow
-    def test_repl_generate(self):
-        src = ["I am a small frog", "Hello"]
+    def test_repl_generate_one(self):
+        src = ["I am a small frog.", "Hello"]
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src).to(torch_device)
-        generated_ids = self.model.generate(model_inputs["input_ids"], num_beams=2,)
+        generated_ids = self.model.generate(model_inputs["input_ids"], num_beams=6,)
         generated_words = self.tokenizer.decode_batch(generated_ids)[0]
-        expected_words = "Ich bin ein kleiner Frosch"
+        expected_words = "Ich bin ein kleiner Frosch."
         self.assertEqual(expected_words, generated_words)
+
+    @slow
+    def test_repl_generate_batch(self):
+        src = [
+            "I am a small frog.",
+            "Now I can forget the 100 words of german that I know.",
+            "O",
+            "Tom asked his teacher for advice.",
+            "That's how I would do it.",
+            "Tom really admired Mary's courage.",
+            "Turn around and close your eyes.",
+        ]
+        expected = [
+            "Ich bin ein kleiner Frosch.",
+            "Jetzt kann ich die 100 Wörter vergessen, die ich kenne.",
+            "O",
+            "Tom bat seinen Lehrer um Rat.",
+            "So würde ich das machen.",
+            "Tom bewunderte Marias Mut wirklich.",
+            "Umdrehen und die Augen schließen.",
+        ]
+        model_inputs: dict = self.tokenizer.prepare_translation_batch(src).to(torch_device)
+        generated_ids = self.model.generate(
+            model_inputs["input_ids"],
+            length_penalty=1.0,
+            # num_beams=6, by default
+            bad_words_ids=[[self.tokenizer.pad_token_id]],
+        )
+        generated_words = self.tokenizer.decode_batch(generated_ids, skip_special_tokens=True)
+        print(generated_words)
+        # self.assertListEqual(expected, generated_words)
+        # Better traceback than assertlistequal
+        self.assertEqual(len(expected), len(generated_words))
+        for i, generated in enumerate(generated_words):
+            self.assertEqual(expected[i], generated)
 
     def test_marian_equivalence(self):
         input_ids = self.tokenizer.prepare_translation_batch(["I am a small frog"])["input_ids"][0].to(torch_device)

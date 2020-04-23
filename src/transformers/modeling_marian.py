@@ -29,8 +29,7 @@ class MarianForConditionalGeneration(BartForConditionalGeneration):
 
     pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
 
-    def prepare_scores_for_generation(self, scores, **kwargs):
+    def prepare_scores_for_generation(self, scores, cur_len, max_length):
+        if cur_len == max_length - 1 and self.config.eos_token_id is not None:
+            self._force_token_ids_generation(scores, self.config.eos_token_id)
         return scores
-
-    def _force_token_ids_generation(self, scores, token_ids) -> None:
-        pass
