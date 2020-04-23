@@ -15,11 +15,14 @@
 
 import unittest
 
-import torch
-
-from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
+from transformers.file_utils import is_torch_available
 
 from .utils import require_torch, torch_device
+
+
+if is_torch_available():
+    import torch
+    from transformers.sinusoidal_positional_embeddings import SinusoidalPositionalEmbedding
 
 
 @require_torch
