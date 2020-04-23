@@ -236,7 +236,6 @@ class TFAlbertSelfOutput(tf.keras.layers.Layer):
 
 class TFAlbertAttention(TFBertSelfAttention):
     def __init__(self, config, **kwargs):
-        """ Includes self-attention, then layer-norm. """
         super().__init__(config, **kwargs)
 
         self.hidden_size = config.hidden_size
