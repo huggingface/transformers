@@ -36,7 +36,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
     def test_positional_emb_cache_logic(self):
         pad = 1
         input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
-        emb1 = SinusoidalPositionalEmbedding(init_size=32, embedding_dim=6, padding_idx=pad).to(torch_device)
+        emb1 = SinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6, padding_idx=pad).to(torch_device)
         no_cache = emb1(input_ids, use_cache=False)
         yes_cache = emb1(input_ids, use_cache=True)
         self.assertEqual((1, 1, 6), yes_cache.shape)  # extra dim to allow broadcasting, feel free to delete!
@@ -44,14 +44,14 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
 
     def test_odd_embed_dim(self):
         with self.assertRaises(NotImplementedError):
-            SinusoidalPositionalEmbedding(init_size=4, embedding_dim=5, padding_idx=0).to(torch_device)
+            SinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=0).to(torch_device)
 
         # odd init_size is allowed
-        SinusoidalPositionalEmbedding(init_size=5, embedding_dim=4, padding_idx=0).to(torch_device)
+        SinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=0).to(torch_device)
 
     def test_positional_emb_weights_against_marian(self):
         pad = 1
-        emb1 = SinusoidalPositionalEmbedding(init_size=512, embedding_dim=512, padding_idx=pad).to(torch_device)
+        emb1 = SinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512, padding_idx=pad).to(torch_device)
         weights = emb1.weight.data[:3, :5].tolist()
         for i, (expected_weight, actual_weight) in enumerate(zip(self.desired_weights, weights)):
             for j in range(5):

@@ -2,14 +2,12 @@ import numpy as np
 import torch
 from torch import nn
 
-from transformers.modeling_utils import create_position_ids_from_input_ids
-
 
 class SinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, init_size, embedding_dim, padding_idx=None):
-        super().__init__(init_size, embedding_dim)
+    def __init__(self, num_positions, embedding_dim, padding_idx=None):
+        super().__init__(num_positions, embedding_dim)
         if embedding_dim % 2 != 0:
             raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
         self.weight = self._init_weight(self.weight)
@@ -30,39 +28,11 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         return out
 
     @torch.no_grad()
-    def forward(
-        self, input_ids, use_cache=False,
-    ):
+    def forward(self, input_ids, use_cache=False):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input_ids.shape[:2]
         if use_cache:
             positions = input_ids.data.new(1, 1).fill_(seq_len - 1)  # called before slicing.
         else:
             positions = torch.arange(seq_len, dtype=torch.long)  # starts at 0, ends at 1-seq_len
-        return super().forward(positions)
-
-
-class LearnedPositionalEmbedding(nn.Embedding):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    Padding ids are ignored by either offsetting based on padding_idx
-    or by setting padding_idx to None and ensuring that the appropriate
-    position ids are passed to the forward function.
-    """
-
-    def __init__(
-        self, num_embeddings: int, embedding_dim: int, padding_idx: int,
-    ):
-        # if padding_idx is specified then offset the embedding ids by
-        # this index and adjust num_embeddings appropriately
-        assert padding_idx == 1
-        super().__init__(num_embeddings + 2, embedding_dim, padding_idx=padding_idx)
-
-    def forward(self, input, use_cache=False):
-        """Input is expected to be of size [bsz x seqlen]."""
-        if use_cache:  # the position is our current step in the decoded sequence
-            pos = int(self.padding_idx + input.size(1))
-            positions = input.data.new(1,).fill_(pos)  # called before slicing.
-        else:
-            positions = create_position_ids_from_input_ids(input, self.padding_idx)
         return super().forward(positions)
