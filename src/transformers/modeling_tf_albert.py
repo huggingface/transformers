@@ -781,7 +781,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertMainLayer(config, name="albert")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(config.classifier_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
