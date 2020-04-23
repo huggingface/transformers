@@ -49,9 +49,11 @@ except ImportError:
 
 try:
     import wandb
+
     _has_wandb = True
 except ImportError:
     _has_wandb = False
+
 
 def is_tensorboard_available():
     return _has_tensorboard
@@ -275,7 +277,7 @@ class Trainer:
 
         # Start a wandb run and log config parameters
         if _has_wandb:
-            wandb.init(config={**vars(self.args), 'config':self.model.config.to_dict()})
+            wandb.init(config={**vars(self.args), "config": self.model.config.to_dict()})
             # keep track of model topology and gradients
             wandb.watch(self.model)
 
@@ -367,7 +369,13 @@ class Trainer:
                                 for k, v in logs.items():
                                     self.tb_writer.add_scalar(k, v, global_step)
                             if _has_wandb:
-                                wandb.log({**logs, "epoch": global_step / (len(train_dataloader) // self.args.gradient_accumulation_steps)})
+                                wandb.log(
+                                    {
+                                        **logs,
+                                        "epoch": global_step
+                                        / (len(train_dataloader) // self.args.gradient_accumulation_steps),
+                                    }
+                                )
 
                             epoch_iterator.write(json.dumps({**logs, **{"step": global_step}}))
 
@@ -485,7 +493,10 @@ class Trainer:
             shutil.rmtree(checkpoint)
 
     def evaluate(
-        self, eval_dataset: Optional[Dataset] = None, prediction_loss_only: Optional[bool] = None, no_log: Optional[bool] = False
+        self,
+        eval_dataset: Optional[Dataset] = None,
+        prediction_loss_only: Optional[bool] = None,
+        no_log: Optional[bool] = False,
     ) -> Dict[str, float]:
         """
         Run evaluation and return metrics.
@@ -506,7 +517,9 @@ class Trainer:
         output = self._prediction_loop(eval_dataloader, description="Evaluation")
         if _has_wandb and not no_log and wandb.run:
             # Log final metrics
-            wandb.log({**{"eval_{}".format(k):v for k, v in output.metrics.items()}, "epoch":self.args.num_train_epochs})
+            wandb.log(
+                {**{"eval_{}".format(k): v for k, v in output.metrics.items()}, "epoch": self.args.num_train_epochs}
+            )
         return output.metrics
 
     def predict(self, test_dataset: Dataset) -> PredictionOutput:
