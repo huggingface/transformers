@@ -107,13 +107,13 @@ class TFFlaubertModel(TFXLMModel):
     pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFFlaubertModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
 
 
 class TFFlaubertMainLayer(TFXLMMainLayer):
     def __init__(self, config, *inputs, **kwargs):
-        super(TFFlaubertMainLayer, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
 
@@ -312,7 +312,7 @@ class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
     pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFFlaubertWithLMHeadModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
 
 
@@ -326,5 +326,5 @@ class TFFlaubertForSequenceClassification(TFXLMForSequenceClassification):
     pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFFlaubertForSequenceClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
