@@ -15,9 +15,6 @@ from transformers.tokenization_marian import MarianSentencePieceTokenizer
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 
 
-OPUS_MODELS_PATH = "/Users/shleifer/OPUS-MT-train/models"  # git clone git@github.com:Helsinki-NLP/Opus-MT.git
-
-
 def remove_prefix(text: str, prefix: str):
     if text.startswith(prefix):
         return text[len(prefix) :]
@@ -83,7 +80,7 @@ def find_model_file(dest_dir):  # this one better
     return model_file
 
 
-def parse_readmes(repo_path=OPUS_MODELS_PATH):
+def parse_readmes(repo_path="~/OPUS-MT-train/models"):
     results = {}
     for p in Path(repo_path).ls():
         n_dash = p.name.count("-")
