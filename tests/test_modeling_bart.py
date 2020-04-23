@@ -21,7 +21,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -562,7 +562,7 @@ class BartModelIntegrationTests(unittest.TestCase):
     def test_model_from_pretrained(self):
         # Forces 1.6GB download from S3 for each model
         for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys()):
-            model = BartModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+            model = BartModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
