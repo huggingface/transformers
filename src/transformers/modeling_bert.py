@@ -1347,7 +1347,7 @@ class BertForTokenClassification(BertPreTrainedModel):
 )
 class BertForQuestionAnswering(BertPreTrainedModel):
     def __init__(self, config):
-        super(BertForQuestionAnswering, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.bert = BertModel(config)
