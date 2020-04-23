@@ -52,8 +52,8 @@ class PretrainedConfig(object):
             torchscript (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Is the model used with Torchscript (for PyTorch models).
     """
-    pretrained_config_archive_map = {}  # type: Dict[str, str]
-    model_type = ""  # type: str
+    pretrained_config_archive_map: Dict[str, str] = {}
+    model_type: str = ""
 
     def __init__(self, **kwargs):
         # Attributes with defaults
