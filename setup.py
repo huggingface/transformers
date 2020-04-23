@@ -67,7 +67,7 @@ extras["mecab"] = ["mecab-python3"]
 extras["sklearn"] = ["scikit-learn"]
 extras["tf"] = ["tensorflow"]
 extras["tf-cpu"] = ["tensorflow-cpu"]
-extras["torch"] = ["torch"]
+extras["torch"] = ["torch==1.4.0"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch"]
@@ -96,7 +96,7 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.7.0rc7",
+        "tokenizers == 0.7.0",
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
         # accessing files from S3 directly

@@ -60,6 +60,11 @@ TEXT_CLASSIF_FINETUNED_MODELS = {
     )
 }
 
+TEXT_GENERATION_FINETUNED_MODELS = {
+    ("gpt2", "gpt2"),
+    ("xlnet-base-cased", "xlnet-base-cased"),
+}
+
 FILL_MASK_FINETUNED_MODELS = [
     (("distilroberta-base", {"use_fast": False}), "distilroberta-base", None),
 ]
@@ -293,6 +298,16 @@ class MonoColumnInputTestCase(unittest.TestCase):
                 nlp, valid_inputs, invalid_inputs, mandatory_keys,
             )
 
+    @require_torch
+    def test_text_generation(self):
+        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        invalid_inputs = [None]
+        for model, tokenizer in TEXT_GENERATION_FINETUNED_MODELS:
+            nlp = pipeline(task="text-generation", model=model, tokenizer=tokenizer, framework="pt")
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, invalid_inputs, {},
+            )
+
 
 class MultiColumnInputTestCase(unittest.TestCase):
     def _test_multicolumn_pipeline(self, nlp, valid_inputs: list, invalid_inputs: list, output_keys: Iterable[str]):
@@ -371,6 +386,7 @@ class PipelineCommonTests(unittest.TestCase):
         "translation_en_to_fr",
         "translation_en_to_de",
         "translation_en_to_ro",
+        "text-generation",
     )
 
     @slow

@@ -10,7 +10,6 @@ export PYTHONPATH="../../":"${PYTHONPATH}"
 
 python finetune.py \
 --data_dir=./cnn-dailymail/cnn_dm \
---model_type=bart \
 --model_name_or_path=bart-large \
 --learning_rate=3e-5 \
 --train_batch_size=4 \

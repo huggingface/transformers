@@ -22,6 +22,7 @@ from unittest.mock import patch
 
 import run_generation
 import run_glue
+import run_language_modeling
 import run_squad
 
 
@@ -56,12 +57,37 @@ class ExamplesTests(unittest.TestCase):
             "--warmup_steps=2",
             "--overwrite_output_dir",
             "--seed=42",
+            "--max_seq_length=128",
         ]
-        model_type, model_name = ("--model_type=bert", "--model_name_or_path=bert-base-uncased")
-        with patch.object(sys, "argv", testargs + [model_type, model_name]):
+        model_name = "--model_name_or_path=bert-base-uncased"
+        with patch.object(sys, "argv", testargs + [model_name]):
             result = run_glue.main()
+            del result["loss"]
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
+
+    def test_run_language_modeling(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        testargs = """
+            run_language_modeling.py
+            --model_name_or_path distilroberta-base
+            --model_type roberta
+            --mlm
+            --line_by_line
+            --train_data_file ./tests/fixtures/sample_text.txt
+            --eval_data_file ./tests/fixtures/sample_text.txt
+            --output_dir ./tests/fixtures
+            --overwrite_output_dir
+            --do_train
+            --do_eval
+            --num_train_epochs=1
+            --no_cuda
+            """.split()
+        with patch.object(sys, "argv", testargs):
+            result = run_language_modeling.main()
+            self.assertLess(result["perplexity"], 35)
 
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)

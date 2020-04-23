@@ -159,7 +159,7 @@ def main(args):
 
     # If output_dir not provided, a folder will be generated in pwd
     if not args.output_dir:
-        args.output_dir = os.path.join("./results", f"{args.task}_{args.model_type}_{time.strftime('%Y%m%d_%H%M%S')}",)
+        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
     model = SummarizationTrainer(args)
     trainer = generic_train(model, args)
