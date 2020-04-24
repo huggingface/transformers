@@ -17,7 +17,7 @@
 
 import logging
 import os
-from typing import Callable, Tuple, Sequence 
+from typing import Callable, Sequence, Tuple
 
 import torch
 from torch import Tensor, device, dtype, nn
@@ -352,7 +352,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         self.set_input_embeddings(new_embeddings)
         return self.get_input_embeddings()
 
-    def _get_resized_embeddings(self, old_embeddings: torch.nn.Embedding, new_num_tokens: int = None) -> torch.nn.Embedding:
+    def _get_resized_embeddings(
+        self, old_embeddings: torch.nn.Embedding, new_num_tokens: int = None
+    ) -> torch.nn.Embedding:
         """ Build a resized Embedding Module from a provided token Embedding Module.
             Increasing the size will add newly initialized vectors at the end
             Reducing the size will remove vectors from the end
@@ -1601,7 +1603,13 @@ def calc_banned_bad_words_ids(prev_input_ids: Sequence, bad_words_ids: Sequence)
     return banned_tokens
 
 
-def top_k_top_p_filtering(logits: Sequence, top_k: int = 0, top_p: float = 1.0, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1) -> Sequence:
+def top_k_top_p_filtering(
+    logits: Sequence,
+    top_k: int = 0,
+    top_p: float = 1.0,
+    filter_value: float = -float("Inf"),
+    min_tokens_to_keep: int = 1,
+) -> Sequence:
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
             logits: logits distribution shape (batch size, vocabulary size)
