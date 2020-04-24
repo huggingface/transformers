@@ -33,7 +33,7 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Overwrite the content of the output directory."
-                "continue training if output_dir points to a checkpoint directory."
+                "Use this to continue training if output_dir points to a checkpoint directory."
             )
         },
     )
