@@ -581,12 +581,17 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # Attention mask: chunk, look up correct mask value from key_value_info
         # IMPORTANT: official trax code does not use a mask for LSH Atttention. Not sure why.
         if attention_mask is not None:
-            attn_mask = attention_mask.to(torch.uint8)[:, None, None, :]
+            attention_mask = attention_mask.to(torch.uint8)[:, None, None, :]
             # expand attn_mask to fit with key_value_info shape
-            attn_mask = attn_mask.expand(ticker.shape[:-1] + (-1,))
-            attn_mask = torch.gather(attn_mask, -1, key_value_info)
+            attention_mask = attention_mask.expand(ticker.shape[:-1] + (-1,))
+            key_attn_mask = torch.gather(attention_mask, -1, key_value_info)
+            query_attn_mask = torch.gather(attention_mask, -1, query_info)
             # expand to query_key_dots shape: duplicate along query axis since key sorting is the same for each query position in chunk
-            attn_mask = attn_mask.unsqueeze(-2).expand(query_key_dots.shape)
+            attn_mask = query_attn_mask.unsqueeze(-1) * key_attn_mask.unsqueeze(-2)
+
+            # free memory
+            del query_attn_mask, key_attn_mask, attention_mask
+
             # multiply by casaul mask if necessary
             if mask is not None:
                 mask = mask * attn_mask
@@ -745,7 +750,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         if attention_mask is not None:
             attention_mask = attention_mask.to(torch.uint8)[:, None, :]
             attention_mask = self._split_dim_by(attention_mask, -1, self.chunk_length, 1)
-            attention_mask = self._look_adjacent(attention_mask, self.num_chunks_before, self.num_chunks_after)
+            attention_mask_key = self._look_adjacent(attention_mask, self.num_chunks_before, self.num_chunks_after)
 
         # get logits and dots
         # query_key_dots shape is `[batch_size, num_attn_heads, seq_len // chunk_length, chunk_length, chunk_length * (1 + num_chunks_before + num_chunks_after)]`
@@ -761,7 +766,8 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
 
         # Attention mask
         if attention_mask is not None:
-            attn_mask = attention_mask.unsqueeze(-2).expand(query_key_dots.shape)
+            # create attn_mask
+            attn_mask = (attention_mask.unsqueeze(-1) * attention_mask_key.unsqueeze(-2)).expand(query_key_dots.shape)
             # multiply by casaul mask if necessary
             if mask is not None:
                 mask = mask * attn_mask
@@ -769,7 +775,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
                 mask = attn_mask
 
             # free memory
-            del attn_mask
+            del attn_mask, attention_mask, attention_mask_key
 
         if mask is not None:
             query_key_dots = torch.where(
@@ -1335,7 +1341,7 @@ class ReformerModel(ReformerPreTrainedModel):
             # Extend `attention_mask`
             if attention_mask is not None:
                 attention_mask = torch.cat(
-                    [attention_mask, torch.zeros(input_shape[0], padding_length, device=device, dtype=torch.long,),],
+                    [attention_mask, torch.zeros(input_shape[0], padding_length, device=device, dtype=torch.long,)],
                     dim=-1,
                 )
 

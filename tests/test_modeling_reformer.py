@@ -106,6 +106,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.chunk_size_feed_forward = chunk_size_feed_forward
             self.scope = scope
             self.attn_layers = attn_layers
+            self.pad_token_id = pad_token_id
 
             self.encoder_seq_length = seq_length // local_attn_chunk_length + (
                 self.seq_length % local_attn_chunk_length != 0
@@ -138,6 +139,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 num_chunks_after=self.num_chunks_after,
                 num_chunks_before=self.num_chunks_before,
                 attn_layers=self.attn_layers,
+                pad_token_id=self.pad_token_id,
             )
 
             return (
@@ -182,6 +184,43 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.check_loss_output(result)
 
+        def create_and_check_reformer_model_with_attn_mask(
+            self, config, input_ids, input_mask, is_decoder
+        ):
+            # no special position embeddings
+            config.axial_pos_embds = False
+            config.is_decoder = is_decoder
+
+            model = ReformerModel(config=config)
+            model.to(torch_device)
+            model.eval()
+            # set all position encodings to zero so that postions don't matter
+            with torch.no_grad():
+                embedding = model.embeddings.position_embeddings.embedding
+                embedding.weight = torch.nn.Parameter(torch.zeros(embedding.weight.shape))
+                embedding.weight.requires_grad = False
+
+            half_seq_len = self.seq_length // 2
+            roll = self.local_attn_chunk_length
+            roll = self.local_attn_chunk_length
+            half_input_ids = input_ids[:, :half_seq_len]
+
+            # normal padded
+            attn_mask = torch.cat([torch.ones_like(half_input_ids), torch.zeros_like(half_input_ids)], dim=-1)
+            input_ids_padded = torch.cat([half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1)
+
+            # shifted padded
+            input_ids_roll = torch.cat([half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1)
+            input_ids_roll = torch.roll(input_ids_roll, roll, dims=-1)
+            attn_mask_roll = torch.roll(attn_mask, roll, dims=-1)
+
+#            input_ids_padded_begin = torch.cat([torch.full_like(input_ids[:, :half_seq_len], self.pad_token_id), input_ids[:, :half_seq_len],], dim=-1)
+
+            output_padded = model(input_ids_padded, attention_mask=attn_mask)[0][:, :half_seq_len]
+            output_padded_rolled = model(input_ids_roll, attention_mask=attn_mask_roll)[0][:, roll: half_seq_len + roll]
+
+            self.parent.assertTrue(torch.allclose(output_padded, output_padded_rolled, atol=1e-3))
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask,) = config_and_inputs
@@ -198,6 +237,11 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
     def test_reformer_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model(*config_and_inputs)
+
+    def test_reformer_model_attn_masking(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, True)
+        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, False)
 
     def test_for_reformer_with_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -275,6 +319,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.scope = scope
             self.attn_layers = attn_layers
             self.hash_seed = hash_seed
+            self.pad_token_id = pad_token_id
 
             self.encoder_seq_length = seq_length // lsh_attn_chunk_length + (seq_length % lsh_attn_chunk_length != 0)
             self.key_length = (self.num_chunks_before + self.num_chunks_after + 1) * lsh_attn_chunk_length
@@ -306,6 +351,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 num_chunks_before=self.num_chunks_before,
                 attn_layers=self.attn_layers,
                 hash_seed=self.hash_seed,
+                pad_token_id=self.pad_token_id,
             )
 
             return (
@@ -350,6 +396,46 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.check_loss_output(result)
 
+        def create_and_check_reformer_model_with_attn_mask(
+            self, config, input_ids, input_mask, is_decoder
+        ):
+            # no special position embeddings
+            config.axial_pos_embds = False
+            config.is_decoder = is_decoder
+
+            # need to set chunk length equal sequence length to be certain that chunking works
+            config.lsh_attn_chunk_length = self.seq_length
+
+            model = ReformerModel(config=config)
+            model.to(torch_device)
+            model.eval()
+            # set all position encodings to zero so that postions don't matter
+            with torch.no_grad():
+                embedding = model.embeddings.position_embeddings.embedding
+                embedding.weight = torch.nn.Parameter(torch.zeros(embedding.weight.shape))
+                embedding.weight.requires_grad = False
+
+            half_seq_len = self.seq_length // 2
+            roll = self.lsh_attn_chunk_length
+            roll = half_seq_len
+            half_input_ids = input_ids[:, :half_seq_len]
+
+            # normal padded
+            attn_mask = torch.cat([torch.ones_like(half_input_ids), torch.zeros_like(half_input_ids)], dim=-1)
+            input_ids_padded = torch.cat([half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1)
+
+            # shifted padded
+            input_ids_roll = torch.cat([half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1)
+            input_ids_roll = torch.roll(input_ids_roll, roll, dims=-1)
+            attn_mask_roll = torch.roll(attn_mask, roll, dims=-1)
+
+#            input_ids_padded_begin = torch.cat([torch.full_like(input_ids[:, :half_seq_len], self.pad_token_id), input_ids[:, :half_seq_len],], dim=-1)
+
+            output_padded = model(input_ids_padded, attention_mask=attn_mask)[0][:, :half_seq_len]
+            output_padded_rolled = model(input_ids_roll, attention_mask=attn_mask_roll)[0][:, roll: half_seq_len + roll]
+
+            self.parent.assertTrue(torch.allclose(output_padded, output_padded_rolled, atol=1e-3))
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask,) = config_and_inputs
@@ -366,6 +452,11 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
     def test_reformer_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model(*config_and_inputs)
+
+    def test_reformer_model_attn_masking(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, True)
+        self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, False)
 
     def test_for_reformer_with_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -435,7 +526,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         trax_model = self.load_reformer_lm_model(config, mode=mode)
 
         assert (
-            config.is_decoder == True
+            config.is_decoder is True
         ), "trax can only test casaul mask for ReformerLM. Use tests for layers to test non-casaul mask"
         input_signature = trax_ShapeDtype(shape, np.int32)
         trax_weights, trax_state = trax_model.init(input_signature)

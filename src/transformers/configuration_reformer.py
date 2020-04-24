@@ -124,10 +124,11 @@ class ReformerConfig(PretrainedConfig):
         attn_layers=["lsh", "lsh", "lsh", "lsh"],
         is_decoder=False,
         pad_token_id=0,
+        eos_token_id=2,
         hash_seed=None,
         **kwargs
     ):
-        super().__init__(pad_token_id=pad_token_id, is_decoder=is_decoder, **kwargs)
+        super().__init__(pad_token_id=pad_token_id, eos_token_id=eos_token_id, is_decoder=is_decoder, **kwargs)
 
         self.hash_seed = hash_seed
         self.vocab_size = vocab_size
