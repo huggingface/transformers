@@ -377,7 +377,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         query_key_vectors = self.query_key(hidden_states)
         value_vectors = self.value(hidden_states)
-
         # free memory
         del hidden_states
 
@@ -400,9 +399,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         assert int(buckets.shape[-1]) == num_hashes * sequence_length
 
-        ticker, undo_ticker = self._get_ticker_and_undo_ticker(sequence_length, buckets, num_hashes)
-        query_key_vectors = self._gather_by_expansion(query_key_vectors, ticker, num_hashes)
-        value_vectors = self._gather_by_expansion(value_vectors, ticker, num_hashes)
+        sorted_bucket_idx, undo_sorted_bucket_idx = self._get_sorted_bucket_idx_and_undo_sorted_bucket_idx(
+            sequence_length, buckets, num_hashes
+        )
+        query_key_vectors = self._gather_by_expansion(query_key_vectors, sorted_bucket_idx, num_hashes)
+        value_vectors = self._gather_by_expansion(value_vectors, sorted_bucket_idx, num_hashes)
 
         query_key_vectors = self._split_dim_by(
             query_key_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
@@ -410,8 +411,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         value_vectors = self._split_dim_by(
             value_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
         )
-
-        ticker = self._split_dim_by(ticker, -1, self.chunk_length, self.num_attention_heads)
 
         if self.chunk_length is None:
             assert self.num_chunks_before == 0 and self.num_chunks_after == 0
@@ -422,12 +421,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             query_vectors=query_key_vectors,
             key_vectors=key_vectors,
             value_vectors=value_vectors,
-            ticker=ticker,
-            undo_ticker=undo_ticker,
+            sorted_bucket_idx=sorted_bucket_idx,
+            undo_sorted_bucket_idx=undo_sorted_bucket_idx,
             attention_mask=attention_mask,
             head_mask=head_mask,
         )
-
         # free memory
         del query_key_vectors, key_vectors, value_vectors
 
@@ -441,7 +439,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
             probs_vectors = torch.exp(logits - torch.logsumexp(logits, dim=2, keepdim=True))
             out_vectors = torch.sum(out_vectors * probs_vectors, dim=2)
-
             # free memory
             del probs_vectors
 
@@ -527,28 +524,29 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         return offset_buckets
 
-    def _get_ticker_and_undo_ticker(self, sequence_length, buckets, num_hashes):
+    def _get_sorted_bucket_idx_and_undo_sorted_bucket_idx(self, sequence_length, buckets, num_hashes):
         batch_size = buckets.shape[0]
 
-        # TODO: what is ticker? Is ticker something like indices?? Ask authors
-        ticker = torch.arange(num_hashes * sequence_length, device=buckets.device)
-        ticker = ticker.repeat(batch_size, self.num_attention_heads, 1)
+        # TODO: what is sorted_bucket_idx? Is sorted_bucket_idx something like indices?? Ask authors
+        orig_indices = torch.arange(num_hashes * sequence_length, device=buckets.device)
+        orig_indices = orig_indices.repeat(batch_size, self.num_attention_heads, 1)
 
-        buckets_and_t = sequence_length * buckets + (ticker % sequence_length)
+        # scale buckets
+        scaled_buckets = sequence_length * buckets + (orig_indices % sequence_length)
 
         # remove gradient
-        buckets_and_t.detach()
+        scaled_buckets.detach()
 
         # Hash-based sort
-        sorted_ticker = torch.argsort(buckets_and_t, dim=-1)
-        undo_sorted_ticker = torch.argsort(sorted_ticker, dim=-1)
+        sorted_bucket_idx = torch.argsort(scaled_buckets, dim=-1)
+        undo_sorted_bucket_idx = torch.argsort(sorted_bucket_idx, dim=-1)
 
         # remove gradient
-        sorted_ticker.detach()
-        undo_sorted_ticker.detach()
+        sorted_bucket_idx.detach()
+        undo_sorted_bucket_idx.detach()
 
-        sorted_ticker = sorted_ticker % sequence_length
-        return sorted_ticker, undo_sorted_ticker
+        sorted_bucket_idx = sorted_bucket_idx % sequence_length
+        return sorted_bucket_idx, undo_sorted_bucket_idx
 
     def _set_num_buckets_on_the_fly(self, sequence_length):
         # recommended `num_buckets` from paper
@@ -563,38 +561,43 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.num_buckets = num_buckets
 
     def _attend(
-        self, query_vectors, key_vectors, value_vectors, ticker, undo_ticker, attention_mask, head_mask,
+        self,
+        query_vectors,
+        key_vectors,
+        value_vectors,
+        sorted_bucket_idx,
+        undo_sorted_bucket_idx,
+        attention_mask,
+        head_mask,
     ):
         key_vectors = self._look_adjacent(key_vectors, self.num_chunks_before, self.num_chunks_after)
         value_vectors = self._look_adjacent(value_vectors, self.num_chunks_before, self.num_chunks_after)
 
         # get logits and dots
         query_key_dots = torch.matmul(query_vectors, key_vectors.transpose(-1, -2))
-
         # free memory
         del query_vectors, key_vectors
 
-        # TODO(PVP): better naming
-        query_info = ticker
-        key_value_info = self._look_adjacent(ticker, self.num_chunks_before, self.num_chunks_after)
+        query_bucket_idx = self._split_dim_by(sorted_bucket_idx, -1, self.chunk_length, self.num_attention_heads)
+        key_value_bucket_idx = self._look_adjacent(query_bucket_idx, self.num_chunks_before, self.num_chunks_after)
 
         mask = None
         # Causal mask
         if self.is_decoder:
-            # TODO (PVP): This line can be improved in terms of memory. Mask should be inserted and does not have to be created each time layer is called
-            mask = torch.ge(query_info.unsqueeze(-1), key_value_info.unsqueeze(-2)).to(query_info.device)
+            mask = torch.ge(query_bucket_idx.unsqueeze(-1), key_value_bucket_idx.unsqueeze(-2)).to(
+                query_bucket_idx.device
+            )
 
-        # Attention mask: chunk, look up correct mask value from key_value_info
+        # Attention mask: chunk, look up correct mask value from key_value_bucket_idx
         # IMPORTANT: official trax code does not use a mask for LSH Atttention. Not sure why.
         if attention_mask is not None:
             attention_mask = attention_mask.to(torch.uint8)[:, None, None, :]
-            # expand attn_mask to fit with key_value_info shape
-            attention_mask = attention_mask.expand(ticker.shape[:-1] + (-1,))
-            key_attn_mask = torch.gather(attention_mask, -1, key_value_info)
-            query_attn_mask = torch.gather(attention_mask, -1, query_info)
+            # expand attn_mask to fit with key_value_bucket_idx shape
+            attention_mask = attention_mask.expand(query_bucket_idx.shape[:-1] + (-1,))
+            key_attn_mask = torch.gather(attention_mask, -1, key_value_bucket_idx)
+            query_attn_mask = torch.gather(attention_mask, -1, query_bucket_idx)
             # expand to query_key_dots shape: duplicate along query axis since key sorting is the same for each query position in chunk
             attn_mask = query_attn_mask.unsqueeze(-1) * key_attn_mask.unsqueeze(-2)
-
             # free memory
             del query_attn_mask, key_attn_mask, attention_mask
 
@@ -603,7 +606,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
                 mask = mask * attn_mask
             else:
                 mask = attn_mask
-
             # free memory
             del attn_mask
 
@@ -625,18 +627,16 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # query vector with a vector at another position. We therefore modify the masking
         # to forbid a token from attending to itself, except in situations
         # where a token has no other valid attention targets (e.g. the first token in a sequence) "
-        mask = torch.ne(query_info.unsqueeze(-1), key_value_info.unsqueeze(-2)).to(query_info.device)
+        mask = torch.ne(query_bucket_idx.unsqueeze(-1), key_value_bucket_idx.unsqueeze(-2)).to(query_bucket_idx.device)
         query_key_dots = torch.where(
             mask, query_key_dots, torch.tensor(-1e5, dtype=query_key_dots.dtype, device=query_key_dots.device),
         )
-
         # free memory
         del mask
 
         logits = torch.logsumexp(query_key_dots, dim=-1, keepdim=True)
         # dots shape is `[batch_size, num_attn_heads, num_hashes * seq_len // chunk_length, chunk_length, chunk_length * (1 + num_chunks_before + num_chunks_after)]`
         dots = torch.exp(query_key_dots - logits)
-
         # free memory
         del query_key_dots
 
@@ -651,37 +651,17 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         # attend values
         out_vectors = torch.matmul(dots, value_vectors)
-
         # free memory
         del value_vectors
-
-        class UnsortLogits(Function):
-            @staticmethod
-            def forward(ctx, out_vectors, logits):
-                out_vectors = out_vectors.detach()
-                logits = logits.detach()
-                expanded_undo_sort_indices = undo_ticker.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
-                out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
-                logits = torch.gather(logits, 2, undo_ticker)
-                return out_vectors, logits
-
-            @staticmethod
-            def backward(ctx, grad_out_vectors, grad_logits):
-                import ipdb
-                ipdb.set_trace()
-                expanded_sort_indices = ticker.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
-                grad_out_vectors = torch.gather(grad_out_vectors, 2, expanded_sort_indices)
-                grad_logits = torch.gather(grad_logits, 2, ticker)
-                return grad_out_vectors, grad_logits
 
         # merge chunk length
         logits = self._merge_by_middle_dim(logits, self.num_attention_heads).squeeze(-1)
         out_vectors = self._merge_by_middle_dim(out_vectors, self.num_attention_heads)
 
-        out_vectors, logits = UnsortLogits.apply(out_vectors, logits)
+        out_vectors, logits = UndoSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx)
 
-#        out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
-#        logits = torch.gather(logits, 2, undo_ticker)
+        #        out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
+        #        logits = torch.gather(logits, 2, undo_sorted_bucket_idx)
 
         return out_vectors, logits, dots
 
@@ -701,6 +681,35 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         expanded_idxs = idxs.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
         vectors = vectors.repeat(1, 1, num_hashes, 1)
         return torch.gather(vectors, 2, expanded_idxs)
+
+
+class UndoSort(Function):
+    @staticmethod
+    def forward(ctx, out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx):
+        # save sorted_bucket_idx for backprop
+        ctx.sorted_bucket_idx = sorted_bucket_idx
+
+        out_vectors = out_vectors.detach()
+        logits = logits.detach()
+
+        # undo sort to have correct order for next layer
+        expanded_undo_sort_indices = undo_sorted_bucket_idx.unsqueeze(-1).expand(out_vectors.shape)
+        out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
+        logits = torch.gather(logits, 2, undo_sorted_bucket_idx)
+        return out_vectors, logits
+
+    @staticmethod
+    def backward(ctx, grad_out_vectors, grad_logits):
+        # get sorted_bucket_idx
+        sorted_bucket_idx = ctx.sorted_bucket_idx
+
+        # reverse sort of forward
+        expanded_sort_indices = sorted_bucket_idx.unsqueeze(-1).expand(grad_out_vectors.shape)
+        grad_out_vectors = torch.gather(grad_out_vectors, 2, expanded_sort_indices)
+        grad_logits = torch.gather(grad_logits, 2, sorted_bucket_idx)
+
+        # return grad and `None` fillers for last 2 forward args
+        return grad_out_vectors, grad_logits, None, None
 
 
 class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
@@ -781,7 +790,6 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         # get logits and dots
         # query_key_dots shape is `[batch_size, num_attn_heads, seq_len // chunk_length, chunk_length, chunk_length * (1 + num_chunks_before + num_chunks_after)]`
         query_key_dots = torch.matmul(query_vectors, key_vectors.transpose(-1, -2))
-
         # free memory
         del query_vectors, key_vectors
 
@@ -799,7 +807,6 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
                 mask = mask * attn_mask
             else:
                 mask = attn_mask
-
             # free memory
             del attn_mask, attention_mask, attention_mask_key
 
@@ -813,7 +820,6 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
 
         logits = torch.logsumexp(query_key_dots, dim=-1, keepdim=True)
         attention_probs = torch.exp(query_key_dots - logits)
-
         # free memory
         del logits
 
@@ -826,7 +832,6 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
 
         # attend values
         out_vectors = torch.matmul(attention_probs, value_vectors)
-
         # free memory
         del value_vectors
 
@@ -1342,7 +1347,7 @@ class ReformerModel(ReformerPreTrainedModel):
                 input_shape[-2], least_common_mult_chunk_length, input_shape[-2] + padding_length
             )
 
-            logger.warning(
+            logger.info(
                 "Input ids are automatically padded from {} to {} to be a multiple of `config.chunk_length`: {}".format(
                     input_shape[-1], input_shape[-1] + padding_length, least_common_mult_chunk_length
                 )
@@ -1351,6 +1356,21 @@ class ReformerModel(ReformerPreTrainedModel):
             padded_input_ids = torch.full(
                 (input_shape[0], padding_length), self.config.pad_token_id, device=device, dtype=torch.long,
             )
+
+            # Extend `attention_mask`
+            if attention_mask is not None:
+                attention_mask = torch.cat(
+                    [attention_mask, torch.zeros(input_shape[0], padding_length, device=device, dtype=torch.long,)],
+                    dim=-1,
+                )
+            else:
+                attention_mask = torch.cat(
+                    [
+                        torch.ones(input_shape, device=device, dtype=torch.uint8),
+                        torch.zeros((input_shape[0], padding_length), device=device, dtype=torch.uint8),
+                    ],
+                    dim=-1,
+                )
 
             # Extend `input_ids` with padding to match least common multiple chunk_length
             if input_ids is not None:
@@ -1362,13 +1382,6 @@ class ReformerModel(ReformerPreTrainedModel):
                 padded_inputs_embeds = self.embeddings(padded_input_ids, position_ids)
                 inputs_embeds = torch.cat([inputs_embeds, padded_inputs_embeds], dim=-2)
                 input_shape = inputs_embeds.size()
-
-            # Extend `attention_mask`
-            if attention_mask is not None:
-                attention_mask = torch.cat(
-                    [attention_mask, torch.zeros(input_shape[0], padding_length, device=device, dtype=torch.long,)],
-                    dim=-1,
-                )
 
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
 
