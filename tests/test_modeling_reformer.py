@@ -184,9 +184,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.check_loss_output(result)
 
-        def create_and_check_reformer_model_with_attn_mask(
-            self, config, input_ids, input_mask, is_decoder
-        ):
+        def create_and_check_reformer_model_with_attn_mask(self, config, input_ids, input_mask, is_decoder):
             # no special position embeddings
             config.axial_pos_embds = False
             config.is_decoder = is_decoder
@@ -207,17 +205,23 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
 
             # normal padded
             attn_mask = torch.cat([torch.ones_like(half_input_ids), torch.zeros_like(half_input_ids)], dim=-1)
-            input_ids_padded = torch.cat([half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1)
+            input_ids_padded = torch.cat(
+                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1
+            )
 
             # shifted padded
-            input_ids_roll = torch.cat([half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1)
+            input_ids_roll = torch.cat(
+                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1
+            )
             input_ids_roll = torch.roll(input_ids_roll, roll, dims=-1)
             attn_mask_roll = torch.roll(attn_mask, roll, dims=-1)
 
-#            input_ids_padded_begin = torch.cat([torch.full_like(input_ids[:, :half_seq_len], self.pad_token_id), input_ids[:, :half_seq_len],], dim=-1)
+            #            input_ids_padded_begin = torch.cat([torch.full_like(input_ids[:, :half_seq_len], self.pad_token_id), input_ids[:, :half_seq_len],], dim=-1)
 
             output_padded = model(input_ids_padded, attention_mask=attn_mask)[0][:, :half_seq_len]
-            output_padded_rolled = model(input_ids_roll, attention_mask=attn_mask_roll)[0][:, roll: half_seq_len + roll]
+            output_padded_rolled = model(input_ids_roll, attention_mask=attn_mask_roll)[0][
+                :, roll : half_seq_len + roll
+            ]
 
             self.parent.assertTrue(torch.allclose(output_padded, output_padded_rolled, atol=1e-3))
 
@@ -396,9 +400,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.check_loss_output(result)
 
-        def create_and_check_reformer_model_with_attn_mask(
-            self, config, input_ids, input_mask, is_decoder
-        ):
+        def create_and_check_reformer_model_with_attn_mask(self, config, input_ids, input_mask, is_decoder):
             # no special position embeddings
             config.axial_pos_embds = False
             config.is_decoder = is_decoder
@@ -422,17 +424,23 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
 
             # normal padded
             attn_mask = torch.cat([torch.ones_like(half_input_ids), torch.zeros_like(half_input_ids)], dim=-1)
-            input_ids_padded = torch.cat([half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1)
+            input_ids_padded = torch.cat(
+                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1
+            )
 
             # shifted padded
-            input_ids_roll = torch.cat([half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1)
+            input_ids_roll = torch.cat(
+                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1
+            )
             input_ids_roll = torch.roll(input_ids_roll, roll, dims=-1)
             attn_mask_roll = torch.roll(attn_mask, roll, dims=-1)
 
-#            input_ids_padded_begin = torch.cat([torch.full_like(input_ids[:, :half_seq_len], self.pad_token_id), input_ids[:, :half_seq_len],], dim=-1)
+            #            input_ids_padded_begin = torch.cat([torch.full_like(input_ids[:, :half_seq_len], self.pad_token_id), input_ids[:, :half_seq_len],], dim=-1)
 
             output_padded = model(input_ids_padded, attention_mask=attn_mask)[0][:, :half_seq_len]
-            output_padded_rolled = model(input_ids_roll, attention_mask=attn_mask_roll)[0][:, roll: half_seq_len + roll]
+            output_padded_rolled = model(input_ids_roll, attention_mask=attn_mask_roll)[0][
+                :, roll : half_seq_len + roll
+            ]
 
             self.parent.assertTrue(torch.allclose(output_padded, output_padded_rolled, atol=1e-3))
 
