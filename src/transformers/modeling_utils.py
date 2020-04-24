@@ -346,7 +346,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         return model_embeds
 
-    def _resize_token_embeddings(self, new_num_tokens, padding_idx):
+    def _resize_token_embeddings(self, new_num_tokens, padding_idx=None):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens, padding_idx)
         self.set_input_embeddings(new_embeddings)
