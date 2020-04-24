@@ -29,7 +29,11 @@ class TrainingArguments:
         metadata={"help": "The output directory where the model predictions and checkpoints will be written."}
     )
     overwrite_output_dir: bool = field(
-        default=False, metadata={"help": "Overwrite the content of the output directory, continue training if output_dir points to a checkpoint directory."}
+        default=False, 
+        metadata={
+        	"help": "Overwrite the content of the output directory." 
+        	"continue training if output_dir points to a checkpoint directory."
+        },
     )
 
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
