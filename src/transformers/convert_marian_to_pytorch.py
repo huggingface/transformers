@@ -93,19 +93,19 @@ def parse_readmes(repo_path):
     return results
 
 
-def download_all_sentencepiece_models(repo_path='Opus-MT-train/models'):
+def download_all_sentencepiece_models(repo_path="Opus-MT-train/models"):
     """Requires 300GB"""
-    save_dir = Path('marian_ckpt')
+    save_dir = Path("marian_ckpt")
     if not Path(repo_path).exists():
-        raise ValueError('You must run: git clone git clone git@github.com:Helsinki-NLP/Opus-MT-train.git')
+        raise ValueError("You must run: git clone git clone git@github.com:Helsinki-NLP/Opus-MT-train.git")
     results: dict = parse_readmes(repo_path)
     for k, v in tqdm(list(results.items())):
         if os.path.exists(save_dir / k):
-            print(f'already have path {k}')
+            print(f"already have path {k}")
             continue
-        if 'SentencePiece' not in v['pre-processing']:
+        if "SentencePiece" not in v["pre-processing"]:
             continue
-        download_and_unzip(v['download'], save_dir / k)
+        download_and_unzip(v["download"], save_dir / k)
 
 
 def _parse_readme(lns):
