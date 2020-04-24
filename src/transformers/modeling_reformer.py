@@ -655,13 +655,33 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # free memory
         del value_vectors
 
+        class UnsortLogits(Function):
+            @staticmethod
+            def forward(ctx, out_vectors, logits):
+                out_vectors = out_vectors.detach()
+                logits = logits.detach()
+                expanded_undo_sort_indices = undo_ticker.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
+                out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
+                logits = torch.gather(logits, 2, undo_ticker)
+                return out_vectors, logits
+
+            @staticmethod
+            def backward(ctx, grad_out_vectors, grad_logits):
+                import ipdb
+                ipdb.set_trace()
+                expanded_sort_indices = ticker.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
+                grad_out_vectors = torch.gather(grad_out_vectors, 2, expanded_sort_indices)
+                grad_logits = torch.gather(grad_logits, 2, ticker)
+                return grad_out_vectors, grad_logits
+
         # merge chunk length
         logits = self._merge_by_middle_dim(logits, self.num_attention_heads).squeeze(-1)
         out_vectors = self._merge_by_middle_dim(out_vectors, self.num_attention_heads)
 
-        expanded_undo_sort_indices = undo_ticker.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
-        out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
-        logits = torch.gather(logits, 2, undo_ticker)
+        out_vectors, logits = UnsortLogits.apply(out_vectors, logits)
+
+#        out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
+#        logits = torch.gather(logits, 2, undo_ticker)
 
         return out_vectors, logits, dots
 
