@@ -857,10 +857,13 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        seq_relationship_scores = outputs[0]
 
+        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        encoding = tokenizer.encode_plus(prompt, next_sentence, return_tensors='tf')
+
+        logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
+        assert logits[0][0] < logits[0][1] # the next sentence was random
         """
         outputs = self.bert(inputs, **kwargs)
 
@@ -990,11 +993,15 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForMultipleChoice.from_pretrained('bert-base-uncased')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-        input_ids = tf.constant([tokenizer.encode(s) for s in choices])[None, :]  # Batch size 1, 2 choices
-        outputs = model(input_ids)
-        classification_scores = outputs[0]
 
+        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        choice0 = "It is eaten with a fork and a knife."
+        choice1 = "It is eaten while held in the hand."
+        encoding = tokenizer.batch_encode_plus([[prompt, choice0], [prompt, choice1]], return_tensors='tf', pad_to_max_length=True)
+
+        # linear classifier on the output is not yet trained
+        outputs = model(encoding['input_ids'][None, :])
+        logits = outputs[0]
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
