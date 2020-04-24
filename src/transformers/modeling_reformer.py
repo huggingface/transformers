@@ -401,7 +401,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         assert int(buckets.shape[-1]) == num_hashes * sequence_length
 
         ticker, undo_ticker = self._get_ticker_and_undo_ticker(sequence_length, buckets, num_hashes)
-
         query_key_vectors = self._gather_by_expansion(query_key_vectors, ticker, num_hashes)
         value_vectors = self._gather_by_expansion(value_vectors, ticker, num_hashes)
 
@@ -537,9 +536,16 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         buckets_and_t = sequence_length * buckets + (ticker % sequence_length)
 
+        # remove gradient
+        buckets_and_t.detach()
+
         # Hash-based sort
         sorted_ticker = torch.argsort(buckets_and_t, dim=-1)
         undo_sorted_ticker = torch.argsort(sorted_ticker, dim=-1)
+
+        # remove gradient
+        sorted_ticker.detach()
+        undo_sorted_ticker.detach()
 
         sorted_ticker = sorted_ticker % sequence_length
         return sorted_ticker, undo_sorted_ticker
@@ -999,7 +1005,6 @@ class ReformerLayer(nn.Module):
             # g(Y_1)
             attn_output = self.feed_forward(next_attn_output)
             torch.autograd.backward(attn_output, grad_hidden_states)
-        #            attn_output = self.attention(hidden_states=next_attn_output, head_mask=head_mask, buckets=buckets).hidden_states
 
         with torch.no_grad():
             # X_2 = Y_2 - g(Y_1)
