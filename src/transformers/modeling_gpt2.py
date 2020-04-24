@@ -104,7 +104,7 @@ class Attention(nn.Module):
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
         assert n_state % config.n_head == 0
         self.register_buffer(
-            "bias", torch.tril(torch.ones((n_ctx, n_ctx), dtype=torch.uint8)).view(1, 1, n_ctx, n_ctx)
+            "bias", torch.tril(torch.ones((n_ctx, n_ctx), dtype=torch.bool)).view(1, 1, n_ctx, n_ctx)
         )
         self.register_buffer("masked_bias", torch.tensor(-1e4))
         self.n_head = config.n_head
@@ -149,7 +149,7 @@ class Attention(nn.Module):
 
         if attention_mask is not None:
             # Apply the attention mask
-            w = w + attention_mask
+            w = w + attention_mask.transpose(-1, 0)
 
         w = nn.Softmax(dim=-1)(w)
         w = self.attn_dropout(w)
@@ -425,17 +425,17 @@ class GPT2Model(GPT2PreTrainedModel):
         elif input_ids is not None:
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
-            batch_size = input_ids.shape[0]
+            batch_size = input_ids.size(0)
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            batch_size = inputs_embeds.shape[0]
+            batch_size = inputs_embeds.size(0)
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, input_shape[-1])
+            token_type_ids = token_type_ids.view_as(input_ids)
         if position_ids is not None:
-            position_ids = position_ids.view(-1, input_shape[-1])
+            position_ids = position_ids.view_as(input_ids)
 
         if past is None:
             past_length = 0
@@ -451,6 +451,7 @@ class GPT2Model(GPT2PreTrainedModel):
         if attention_mask is not None:
             assert batch_size > 0, "batch_size has to be defined and > 0"
             attention_mask = attention_mask.view(batch_size, -1)
+
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
@@ -463,7 +464,7 @@ class GPT2Model(GPT2PreTrainedModel):
             # positions we want to attend and -10000.0 for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+            attention_mask = attention_mask.to(self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * -10000.0
 
         # Prepare head mask if needed
@@ -478,7 +479,7 @@ class GPT2Model(GPT2PreTrainedModel):
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
         else:
-            token_type_embeds = 0
+            token_type_embeds = 0.
         hidden_states = inputs_embeds + position_embeds + token_type_embeds
         hidden_states = self.drop(hidden_states)
 
@@ -521,7 +522,7 @@ class GPT2Model(GPT2PreTrainedModel):
         if self.output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + (-1,) + all_attentions[0].shape[-2:]
-            all_attentions = tuple(t.view(*attention_output_shape) for t in all_attentions)
+            all_attentions = tuple([t.view(*attention_output_shape) for t in all_attentions])
             outputs = outputs + (all_attentions,)
         return outputs  # last hidden state, (presents), (all hidden_states), (attentions)
 
@@ -752,6 +753,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
             outputs = (loss,) + outputs
+
         if lm_labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = lm_labels[..., 1:].contiguous()
