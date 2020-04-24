@@ -319,7 +319,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
-    def resize_token_embeddings(self, new_num_tokens=None):
+    def resize_token_embeddings(self, new_num_tokens=None, padding_idx=None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
         Take care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
 
@@ -333,7 +333,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             Pointer to the input tokens Embeddings Module of the model
         """
         base_model = getattr(self, self.base_model_prefix, self)  # get the base model if needed
-        model_embeds = base_model._resize_token_embeddings(new_num_tokens)
+        model_embeds = base_model._resize_token_embeddings(new_num_tokens, padding_idx)
         if new_num_tokens is None:
             return model_embeds
 
@@ -346,13 +346,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         return model_embeds
 
-    def _resize_token_embeddings(self, new_num_tokens):
+    def _resize_token_embeddings(self, new_num_tokens, padding_idx):
         old_embeddings = self.get_input_embeddings()
-        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens, padding_idx)
         self.set_input_embeddings(new_embeddings)
         return self.get_input_embeddings()
 
-    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
+    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None, padding_idx=None):
         """ Build a resized Embedding Module from a provided token Embedding Module.
             Increasing the size will add newly initialized vectors at the end
             Reducing the size will remove vectors from the end
@@ -374,7 +374,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             return old_embeddings
 
         # Build new embeddings
-        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
+        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim, padding_idx=padding_idx)
         new_embeddings.to(old_embeddings.weight.device)
 
         # initialize all new embeddings (in particular added tokens)
