@@ -229,7 +229,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         """
         raise NotImplementedError
 
-    def save_pretrained(self, save_directory):
+    def save_pretrained(self, save_directory, weights_name=None):
         """ Save a model and its configuration file to a directory, so that it
             can be re-loaded using the :func:`~transformers.PreTrainedModel.from_pretrained` class method.
         """
@@ -241,12 +241,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         self.config.save_pretrained(save_directory)
 
         # If we save using the predefined names, we can load using `from_pretrained`
-        output_model_file = os.path.join(save_directory, TF2_WEIGHTS_NAME)
+        weights_name = TF2_WEIGHTS_NAME if weights_name is None else weights_name
+        output_model_file = os.path.join(save_directory, weights_name)
         self.save_weights(output_model_file)
         logger.info("Model weights saved in {}".format(output_model_file))
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, weights_name=None, *model_args, **kwargs):
         r"""Instantiate a pretrained TF 2.0 model from a pre-trained model configuration.
 
         The warning ``Weights from XXX not initialized from pretrained model`` means that the weights of XXX do not come pre-trained with the rest of the model.
@@ -261,6 +262,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
                 - a path or url to a `PyTorch state_dict save file` (e.g. `./pt_model/pytorch_model.bin`). In this case, ``from_pt`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the PyTorch checkpoint in a TensorFlow model using the provided conversion scripts and loading the TensorFlow model afterwards.
+
+            weights_name: (`optional`) str:
+                override the default weights name of the model
 
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
@@ -335,21 +339,24 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         else:
             model_kwargs = kwargs
 
+        tf_weights = WEIGHTS_NAME if weights_name is None else weights_name
+        tf2_weights = TF2_WEIGHTS_NAME if weights_name is None else weights_name
+
         # Load model
         if pretrained_model_name_or_path is not None:
             if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
                 archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
             elif os.path.isdir(pretrained_model_name_or_path):
-                if os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
+                if os.path.isfile(os.path.join(pretrained_model_name_or_path, tf2_weights)):
                     # Load from a TF 2.0 checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
-                elif from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
+                    archive_file = os.path.join(pretrained_model_name_or_path, tf2_weights)
+                elif from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, tf_weights)):
                     # Load from a PyTorch checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+                    archive_file = os.path.join(pretrained_model_name_or_path, tf_weights)
                 else:
                     raise EnvironmentError(
                         "Error no file named {} found in directory {} or `from_pt` set to False".format(
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME], pretrained_model_name_or_path
+                            [tf_weights, tf2_weights], pretrained_model_name_or_path
                         )
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
@@ -358,7 +365,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path, postfix=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME)
+                    pretrained_model_name_or_path, postfix=(tf_weights if from_pt else tf2_weights)
                 )
 
             # redirect to the cache, if necessary

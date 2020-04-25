@@ -57,7 +57,6 @@ def _config_zero_init(config):
 
 @require_tf
 class TFModelTesterMixin:
-
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
@@ -90,6 +89,22 @@ class TFModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname)
                 after_outputs = model(inputs_dict)
 
+                self.assert_outputs_same(after_outputs, outputs)
+
+    def test_named_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            outputs = model(inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                weights_name = "name_override.h5"
+                weights_path = os.path.join(tmpdirname, weights_name)
+                model.save_pretrained(tmpdirname, weights_name=weights_name)
+                self.assertTrue(os.path.exists(weights_path))
+                model = model_class.from_pretrained(tmpdirname, weights_name=weights_name)
+                after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
     def test_keras_save_load(self):

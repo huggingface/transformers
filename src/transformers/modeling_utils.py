@@ -413,12 +413,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def save_pretrained(self, save_directory):
+    def save_pretrained(self, save_directory, weights_name=None):
         """ Save a model and its configuration file to a directory, so that it
             can be re-loaded using the `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
 
             Arguments:
                 save_directory: directory to which to save.
+                weights_name: (`optional`) str:
+                    override the default weights name of the model
         """
         assert os.path.isdir(
             save_directory
@@ -431,7 +433,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
         # If we save using the predefined names, we can load using `from_pretrained`
-        output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
+        weights_name = WEIGHTS_NAME if weights_name is None else weights_name
+        output_model_file = os.path.join(save_directory, weights_name)
 
         if getattr(self.config, "xla_device", False):
             import torch_xla.core.xla_model as xm
@@ -448,7 +451,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         logger.info("Model weights saved in {}".format(output_model_file))
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, weights_name=None, *model_args, **kwargs):
         r"""Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
         The model is set in evaluation mode by default using ``model.eval()`` (Dropout modules are deactivated)
@@ -466,6 +469,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
               - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
               - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
               - None if you are both providing the configuration and state dictionary (resp. with keyword arguments ``config`` and ``state_dict``)
+
+            weights_name: (`optional`) str:
+                override the default weights name of the model
 
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
@@ -545,25 +551,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         else:
             model_kwargs = kwargs
 
+        tf_weights = TF_WEIGHTS_NAME if weights_name is None else weights_name
+        tf2_weights = TF2_WEIGHTS_NAME if weights_name is None else weights_name
+        torch_weights = WEIGHTS_NAME if weights_name is None else weights_name
+
         # Load model
         if pretrained_model_name_or_path is not None:
             if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
                 archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
             elif os.path.isdir(pretrained_model_name_or_path):
-                if from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")):
+                if from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, tf_weights + ".index")):
                     # Load from a TF 1.0 checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")
-                elif from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
+                    archive_file = os.path.join(pretrained_model_name_or_path, tf_weights + ".index")
+                elif from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, tf2_weights)):
                     # Load from a TF 2.0 checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
-                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
+                    archive_file = os.path.join(pretrained_model_name_or_path, tf2_weights)
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, torch_weights)):
                     # Load from a PyTorch checkpoint
-                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+                    archive_file = os.path.join(pretrained_model_name_or_path, torch_weights)
                 else:
                     raise EnvironmentError(
                         "Error no file named {} found in directory {} or `from_tf` set to False".format(
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
-                            pretrained_model_name_or_path,
+                            [torch_weights, tf2_weights, tf_weights + ".index"], pretrained_model_name_or_path,
                         )
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
@@ -577,7 +586,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path, postfix=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
+                    pretrained_model_name_or_path, postfix=(tf2_weights if from_tf else torch_weights),
                 )
 
             # redirect to the cache, if necessary
@@ -601,7 +610,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                             pretrained_model_name_or_path,
                             ", ".join(cls.pretrained_model_archive_map.keys()),
                             archive_file,
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME],
+                            [torch_weights, tf2_weights, tf_weights],
                         )
                     )
                 raise EnvironmentError(msg)

@@ -86,6 +86,19 @@ class ModelTesterMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
+    def test_named_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                weights_name = "name_override.bin"
+                weights_path = os.path.join(tmpdirname, weights_name)
+                model.save_pretrained(tmpdirname, weights_name=weights_name)
+                self.assertTrue(os.path.exists(weights_path))
+                model = model_class.from_pretrained(tmpdirname, weights_name=weights_name)
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
