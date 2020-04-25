@@ -536,15 +536,15 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         scaled_buckets = sequence_length * buckets + (orig_indices % sequence_length)
 
         # remove gradient
-        scaled_buckets.detach()
+        scaled_buckets = scaled_buckets.detach()
 
         # Hash-based sort
         sorted_bucket_idx = torch.argsort(scaled_buckets, dim=-1)
         undo_sorted_bucket_idx = torch.argsort(sorted_bucket_idx, dim=-1)
 
         # remove gradient
-        sorted_bucket_idx.detach()
-        undo_sorted_bucket_idx.detach()
+        sorted_bucket_idx = sorted_bucket_idx.detach()
+        undo_sorted_bucket_idx = undo_sorted_bucket_idx.detach()
 
         sorted_bucket_idx = sorted_bucket_idx % sequence_length
         return sorted_bucket_idx, undo_sorted_bucket_idx
