@@ -34,6 +34,7 @@ from .file_utils import (
     cached_path,
     hf_bucket_url,
     is_remote_url,
+    path_to_str,
 )
 
 
@@ -527,6 +528,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
+
+        pretrained_model_name_or_path = path_to_str(pretrained_model_name_or_path)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):

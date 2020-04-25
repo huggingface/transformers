@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Dict, Optional, Tuple
 
-from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
+from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url, path_to_str
 
 
 logger = logging.getLogger(__name__)
@@ -229,6 +229,8 @@ class PretrainedConfig(object):
 
         if pretrained_config_archive_map is None:
             pretrained_config_archive_map = cls.pretrained_config_archive_map
+
+        pretrained_model_name_or_path = path_to_str(pretrained_model_name_or_path)
 
         if pretrained_model_name_or_path in pretrained_config_archive_map:
             config_file = pretrained_config_archive_map[pretrained_model_name_or_path]

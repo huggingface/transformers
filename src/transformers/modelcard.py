@@ -29,6 +29,7 @@ from .file_utils import (
     cached_path,
     hf_bucket_url,
     is_remote_url,
+    path_to_str,
 )
 
 
@@ -130,6 +131,8 @@ class ModelCard:
         proxies = kwargs.pop("proxies", None)
         find_from_standard_name = kwargs.pop("find_from_standard_name", True)
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+
+        pretrained_model_name_or_path = path_to_str(pretrained_model_name_or_path)
 
         if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             # For simplicity we use the same pretrained url than the configuration files

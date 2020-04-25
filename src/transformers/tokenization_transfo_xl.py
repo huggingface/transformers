@@ -34,7 +34,7 @@ from tokenizers.normalizers import Lowercase, Sequence, Strip, unicode_normalize
 from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
 
-from .file_utils import cached_path, is_torch_available
+from .file_utils import cached_path, is_torch_available, path_to_str
 from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
 
@@ -638,6 +638,8 @@ class TransfoXLCorpus(object):
         """
         Instantiate a pre-processed corpus.
         """
+        pretrained_model_name_or_path = path_to_str(pretrained_model_name_or_path)
+
         vocab = TransfoXLTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         if pretrained_model_name_or_path in PRETRAINED_CORPUS_ARCHIVE_MAP:
             corpus_file = PRETRAINED_CORPUS_ARCHIVE_MAP[pretrained_model_name_or_path]

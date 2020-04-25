@@ -31,7 +31,7 @@ from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
 
-from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
+from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available, path_to_str
 
 
 if is_tf_available():
@@ -874,6 +874,8 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
+
+        pretrained_model_name_or_path = path_to_str(pretrained_model_name_or_path)
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}

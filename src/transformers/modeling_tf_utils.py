@@ -320,6 +320,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
 
+        pretrained_model_name_or_path = path_to_str(pretrained_model_name_or_path)
+
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
             config_path = config if config is not None else pretrained_model_name_or_path

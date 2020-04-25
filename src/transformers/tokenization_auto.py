@@ -38,6 +38,7 @@ from .configuration_auto import (
     XLNetConfig,
 )
 from .configuration_utils import PretrainedConfig
+from .file_utils import path_to_str
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_bart import BartTokenizer
 from .tokenization_bert import BertTokenizer, BertTokenizerFast
@@ -185,6 +186,7 @@ class AutoTokenizer:
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
+        pretrained_model_name_or_path = path_to_str(pretrained_model_name_or_path)
         if "bert-base-japanese" in pretrained_model_name_or_path:
             return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
