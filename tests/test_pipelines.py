@@ -108,7 +108,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         for key in output_keys:
             self.assertIn(key, mono_result[0])
 
-        multi_result = [nlp(input) for input in valid_inputs]
+        multi_result = nlp(valid_inputs)
         self.assertIsInstance(multi_result, list)
         self.assertIsInstance(multi_result[0], (dict, list))
 
