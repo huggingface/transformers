@@ -22,11 +22,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Union
 
-import torch
-from torch import nn
-from torch.utils.data.dataset import Dataset
-
-from transformers import PreTrainedTokenizer, torch_distributed_zero_first
+from transformers import PreTrainedTokenizer, is_torch_available
 
 
 logger = logging.getLogger(__name__)
@@ -68,70 +64,76 @@ class Split(Enum):
     test = "test"
 
 
-class NerDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach
-    soon.
-    """
+if is_torch_available():
+    import torch
+    from torch import nn
+    from torch.utils.data.dataset import Dataset
+    from transformers import torch_distributed_zero_first
 
-    features: List[InputFeatures]
-    pad_token_label_id: int = nn.CrossEntropyLoss().ignore_index
-    # Use cross entropy ignore_index as padding label id so that only
-    # real label ids contribute to the loss later.
+    class NerDataset(Dataset):
+        """
+        This will be superseded by a framework-agnostic approach
+        soon.
+        """
 
-    def __init__(
-        self,
-        data_dir: str,
-        tokenizer: PreTrainedTokenizer,
-        labels: List[str],
-        model_type: str,
-        max_seq_length: Optional[int] = None,
-        overwrite_cache=False,
-        mode: Split = Split.train,
-        local_rank=-1,
-    ):
-        # Load data features from cache or dataset file
-        cached_features_file = os.path.join(
-            data_dir, "cached_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length)),
-        )
+        features: List[InputFeatures]
+        pad_token_label_id: int = nn.CrossEntropyLoss().ignore_index
+        # Use cross entropy ignore_index as padding label id so that only
+        # real label ids contribute to the loss later.
 
-        with torch_distributed_zero_first(local_rank):
-            # Make sure only the first process in distributed training processes the dataset,
-            # and the others will use the cache.
+        def __init__(
+            self,
+            data_dir: str,
+            tokenizer: PreTrainedTokenizer,
+            labels: List[str],
+            model_type: str,
+            max_seq_length: Optional[int] = None,
+            overwrite_cache=False,
+            mode: Split = Split.train,
+            local_rank=-1,
+        ):
+            # Load data features from cache or dataset file
+            cached_features_file = os.path.join(
+                data_dir, "cached_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length)),
+            )
 
-            if os.path.exists(cached_features_file) and not overwrite_cache:
-                logger.info(f"Loading features from cached file {cached_features_file}")
-                self.features = torch.load(cached_features_file)
-            else:
-                logger.info(f"Creating features from dataset file at {data_dir}")
-                examples = read_examples_from_file(data_dir, mode)
-                # TODO clean up all this to leverage built-in features of tokenizers
-                self.features = convert_examples_to_features(
-                    examples,
-                    labels,
-                    max_seq_length,
-                    tokenizer,
-                    cls_token_at_end=bool(model_type in ["xlnet"]),
-                    # xlnet has a cls token at the end
-                    cls_token=tokenizer.cls_token,
-                    cls_token_segment_id=2 if model_type in ["xlnet"] else 0,
-                    sep_token=tokenizer.sep_token,
-                    sep_token_extra=bool(model_type in ["roberta"]),
-                    # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
-                    pad_on_left=bool(tokenizer.padding_side == "left"),
-                    pad_token=tokenizer.pad_token_id,
-                    pad_token_segment_id=tokenizer.pad_token_type_id,
-                    pad_token_label_id=self.pad_token_label_id,
-                )
-                if local_rank in [-1, 0]:
-                    logger.info(f"Saving features into cached file {cached_features_file}")
-                    torch.save(self.features, cached_features_file)
+            with torch_distributed_zero_first(local_rank):
+                # Make sure only the first process in distributed training processes the dataset,
+                # and the others will use the cache.
 
-    def __len__(self):
-        return len(self.features)
+                if os.path.exists(cached_features_file) and not overwrite_cache:
+                    logger.info(f"Loading features from cached file {cached_features_file}")
+                    self.features = torch.load(cached_features_file)
+                else:
+                    logger.info(f"Creating features from dataset file at {data_dir}")
+                    examples = read_examples_from_file(data_dir, mode)
+                    # TODO clean up all this to leverage built-in features of tokenizers
+                    self.features = convert_examples_to_features(
+                        examples,
+                        labels,
+                        max_seq_length,
+                        tokenizer,
+                        cls_token_at_end=bool(model_type in ["xlnet"]),
+                        # xlnet has a cls token at the end
+                        cls_token=tokenizer.cls_token,
+                        cls_token_segment_id=2 if model_type in ["xlnet"] else 0,
+                        sep_token=tokenizer.sep_token,
+                        sep_token_extra=bool(model_type in ["roberta"]),
+                        # roberta uses an extra separator b/w pairs of sentences, cf. github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
+                        pad_on_left=bool(tokenizer.padding_side == "left"),
+                        pad_token=tokenizer.pad_token_id,
+                        pad_token_segment_id=tokenizer.pad_token_type_id,
+                        pad_token_label_id=self.pad_token_label_id,
+                    )
+                    if local_rank in [-1, 0]:
+                        logger.info(f"Saving features into cached file {cached_features_file}")
+                        torch.save(self.features, cached_features_file)
 
-    def __getitem__(self, i) -> InputFeatures:
-        return self.features[i]
+        def __len__(self):
+            return len(self.features)
+
+        def __getitem__(self, i) -> InputFeatures:
+            return self.features[i]
 
 
 def read_examples_from_file(data_dir, mode: Union[Split, str]) -> List[InputExample]:
