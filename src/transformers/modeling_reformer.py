@@ -476,24 +476,25 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
                 rotation_size += num_bucket
                 num_buckets *= num_bucket
 
-        rotations_shape = (vectors.shape[-1], num_hashes, rotation_size // 2)
-
         # TODO: delete later when integration tests are ok
         if self.hash_seed is not None:
+            rotations_shape = (vectors.shape[-1], num_hashes, rotation_size // 2)
             np.random.seed(self.hash_seed)
             random_rotations = torch.tensor(
                 np.random.normal(size=rotations_shape), dtype=torch.float32, device=vectors.device,
             )
+            rotated_vectors = torch.einsum("bmtd,dhr->bmhtr", vectors, random_rotations)
         else:
+            rotations_shape = (self.num_attention_heads, vectors.shape[-1], num_hashes, rotation_size // 2)
             # create a random self.attention_head_size x num_hashes x self.num_buckets/2
             random_rotations = torch.randn(rotations_shape, device=vectors.device)
 
-        # rotated_vectors has dim:
-        # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2
-        # TODO: IMPORTANT: At the moment we use the same random rotation over all batches
-        # and heads -> is that bad? It seems like in original reformer a different random
-        # rotation is used over heads and batches
-        rotated_vectors = torch.einsum("bmtd,dhr->bmhtr", vectors, random_rotations)
+            # rotated_vectors has dim:
+            # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2
+            # TODO: IMPORTANT: At the moment we use the same random rotation over all batches
+            # -> is that bad? It seems like in original reformer a different random
+            # rotation is used batches
+            rotated_vectors = torch.einsum("bmtd,mdhr->bmhtr", vectors, random_rotations)
 
         if isinstance(self.num_buckets, int) or len(self.num_buckets) == 1:
             rotated_vectors = torch.cat([rotated_vectors, -rotated_vectors], dim=-1)
