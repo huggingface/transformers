@@ -402,6 +402,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         sorted_bucket_idx, undo_sorted_bucket_idx = self._get_sorted_bucket_idx_and_undo_sorted_bucket_idx(
             sequence_length, buckets, num_hashes
         )
+
+        # make sure bucket idx is not longer then sequence length
+        sorted_bucket_idx = sorted_bucket_idx % sequence_length
+
         query_key_vectors = self._gather_by_expansion(query_key_vectors, sorted_bucket_idx, num_hashes)
         value_vectors = self._gather_by_expansion(value_vectors, sorted_bucket_idx, num_hashes)
 
@@ -422,12 +426,14 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             key_vectors=key_vectors,
             value_vectors=value_vectors,
             sorted_bucket_idx=sorted_bucket_idx,
-            undo_sorted_bucket_idx=undo_sorted_bucket_idx,
             attention_mask=attention_mask,
             head_mask=head_mask,
         )
         # free memory
         del query_key_vectors, key_vectors, value_vectors
+
+        # gather correct out vectors
+        out_vectors, logits = UndoSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx)
 
         if num_hashes > 1:
             out_vectors = self._split_dim_by(
@@ -546,7 +552,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         sorted_bucket_idx = sorted_bucket_idx.detach()
         undo_sorted_bucket_idx = undo_sorted_bucket_idx.detach()
 
-        sorted_bucket_idx = sorted_bucket_idx % sequence_length
         return sorted_bucket_idx, undo_sorted_bucket_idx
 
     def _set_num_buckets_on_the_fly(self, sequence_length):
@@ -567,7 +572,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         key_vectors,
         value_vectors,
         sorted_bucket_idx,
-        undo_sorted_bucket_idx,
         attention_mask,
         head_mask,
     ):
@@ -658,11 +662,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # merge chunk length
         logits = self._merge_by_middle_dim(logits, self.num_attention_heads).squeeze(-1)
         out_vectors = self._merge_by_middle_dim(out_vectors, self.num_attention_heads)
-
-        out_vectors, logits = UndoSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx)
-
-        #        out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
-        #        logits = torch.gather(logits, 2, undo_sorted_bucket_idx)
 
         return out_vectors, logits, dots
 
@@ -1029,13 +1028,13 @@ class ReformerLayer(nn.Module):
 
             # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
             # g(Y_1)
-            attn_output = self.feed_forward(next_attn_output)
-            torch.autograd.backward(attn_output, grad_hidden_states)
+            res_hidden_states = self.feed_forward(next_attn_output)
+            torch.autograd.backward(res_hidden_states, grad_hidden_states)
 
         with torch.no_grad():
             # X_2 = Y_2 - g(Y_1)
-            hidden_states = hidden_states - attn_output
-            del attn_output
+            hidden_states = hidden_states - res_hidden_states
+            del res_hidden_states
 
             grad_attn_output = grad_attn_output + next_attn_output.grad
             next_attn_output.grad = None
@@ -1106,12 +1105,11 @@ class _ReversibleFunction(Function):
             all_hidden_states.append(hidden_states)
 
         # attach params to ctx for backward
-        ctx.attention_mask = attention_mask
-        ctx.head_mask = head_mask
-        ctx.attn_output = attn_output.detach()
-        ctx.hidden_states = hidden_states.detach()
+        ctx.save_for_backward(attn_output.detach(), hidden_states.detach())
         ctx.layers = layers
         ctx.all_buckets = all_buckets
+        ctx.head_mask = head_mask
+        ctx.attention_mask = attention_mask
 
         # Concatenate 2 RevNet outputs
         return torch.cat([attn_output, hidden_states], dim=-1)
@@ -1121,12 +1119,11 @@ class _ReversibleFunction(Function):
         grad_attn_output, grad_hidden_states = torch.chunk(grad_hidden_states, 2, dim=-1)
 
         # retrieve params from ctx for backward
-        attn_output = ctx.attn_output
-        hidden_states = ctx.hidden_states
-        attention_mask = ctx.attention_mask
-        head_mask = ctx.head_mask
+        attn_output, hidden_states, = ctx.saved_tensors
         layers = ctx.layers
         all_buckets = ctx.all_buckets
+        head_mask = ctx.head_mask
+        attention_mask = ctx.attention_mask
 
         for idx, layer in enumerate(layers[::-1]):
             # pop last buckets from stack
@@ -1143,6 +1140,8 @@ class _ReversibleFunction(Function):
                 attention_mask=attention_mask,
                 buckets=buckets,
             )
+
+        assert all_buckets == (), "buckets have to be empty after backpropagation"
 
         # free memory
         del attn_output, hidden_states
@@ -1225,16 +1224,16 @@ class ReformerPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             if module.weight.requires_grad:
-                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+                torch.nn.init.xavier_uniform_(module.weight)
                 # TODO(PVP): discuss with Thom if necessary here to use different init
-        #                torch.nn.init.xavier_uniform_(module.weight)
+#                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, ReformerLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.data.normal_(mean=0.0, std=1e-6)
             # TODO(PVP): discuss with Thom if necessary here to use different init
-#            module.bias.data.normal_(mean=0.0, std=1e-6)
+#            module.bias.data.zero_()
 
 
 class ReformerModel(ReformerPreTrainedModel):
