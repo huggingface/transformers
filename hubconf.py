@@ -16,7 +16,7 @@ from transformers import (
 )
 
 
-dependencies = ["torch", "numpy", "tokenizers", "boto3", "filelock", "requests", "tqdm", "regex", "sentencepiece", "sacremoses"]
+dependencies = ["torch", "numpy", "tokenizers", "filelock", "requests", "tqdm", "regex", "sentencepiece", "sacremoses"]
 
 
 @add_start_docstrings(AutoConfig.__doc__)
