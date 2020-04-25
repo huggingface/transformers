@@ -165,7 +165,7 @@ def train(args, train_dataset, model, tokenizer, disable_logging=False):
                 model.save_pretrained(output_dir)
 
             model.train()
-            inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
+            inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[-1]}
             if args.model_type != "distilbert":
                 # XLM, DistilBERT and RoBERTa don't use segment_ids
                 inputs["token_type_ids"] = batch[2] if args.model_type in ["bert", "xlnet"] else None
@@ -251,7 +251,7 @@ def evaluate(args, model, tokenizer, prefix="", disable_logging=False):
             model.eval()
 
             with torch.no_grad():
-                inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
+                inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[-1]}
                 if args.model_type != "distilbert":
                     # XLM, DistilBERT and RoBERTa don't use segment_ids
                     inputs["token_type_ids"] = batch[2] if args.model_type in ["bert", "xlnet"] else None
@@ -340,13 +340,17 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     # Convert to Tensors and build dataset
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-    all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+
     if output_mode == "classification":
         all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
     elif output_mode == "regression":
         all_labels = torch.tensor([f.label for f in features], dtype=torch.float)
 
-    dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
+    if "token_type_ids" in features[0]:
+        all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+        dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels)
+    else:
+        dataset = TensorDataset(all_input_ids, all_attention_mask, all_labels)
     return dataset
 
 
