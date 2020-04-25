@@ -1449,7 +1449,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         num_hashes=None,
-        lm_labels=None,
+        labels=None,
         do_output_hidden_states=False,
         do_output_attentions=False,
     ):
@@ -1466,13 +1466,13 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         )
 
         sequence_output = reformer_outputs[0]
-        lm_logits = self.lm_head(sequence_output)
-        outputs = (lm_logits,) + reformer_outputs[1:]
+        logits = self.lm_head(sequence_output)
+        outputs = (logits,) + reformer_outputs[1:]
 
-        if lm_labels is not None:
+        if labels is not None:
             # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = lm_labels[..., 1:].contiguous()
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))

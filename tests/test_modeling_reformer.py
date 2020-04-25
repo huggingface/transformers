@@ -174,7 +174,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             model = ReformerModelWithLMHead(config=config)
             model.to(torch_device)
             model.eval()
-            loss, prediction_scores = model(input_ids, attention_mask=input_mask, lm_labels=input_ids)
+            loss, prediction_scores = model(input_ids, attention_mask=input_mask, labels=input_ids)
             result = {
                 "loss": loss,
                 "prediction_scores": prediction_scores,
@@ -390,7 +390,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             model = ReformerModelWithLMHead(config=config)
             model.to(torch_device)
             model.eval()
-            loss, prediction_scores = model(input_ids, attention_mask=input_mask, lm_labels=input_ids)
+            loss, prediction_scores = model(input_ids, attention_mask=input_mask, labels=input_ids)
             result = {
                 "loss": loss,
                 "prediction_scores": prediction_scores,
@@ -565,7 +565,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         )
 
         model = ReformerModelWithLMHead(config)
-        loss = model(input_ids, lm_labels=input_ids)[0]
+        loss = model(input_ids, labels=input_ids)[0]
         loss.backward()
 
     def test_pretrained_crime_and_punishment_lm_model(self):
