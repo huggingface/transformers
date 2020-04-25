@@ -474,8 +474,8 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class ReformerIntegrationTests(unittest.TestCase):
     def test_lsh_layer(self):
-        config = ReformerConfig()
-        shape = (1, 64, config.hidden_size)  # Batch x SeqLen x hiddenSize
+        config = ReformerConfig(hash_seed=0)
+        shape = (3, 64, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
         trax_layer = self.load_lsh_layer(config)
@@ -500,7 +500,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(hf_output, trax_torch_output, atol=1e-3))
 
     def test_local_layer(self):
-        config = ReformerConfig()
+        config = ReformerConfig(hash_seed=0)
         shape = (1, 64, config.hidden_size)  # Batch x SeqLen x hiddenSize
         np_input = np.random.rand(*shape)
 
