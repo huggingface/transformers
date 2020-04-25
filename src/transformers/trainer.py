@@ -220,7 +220,7 @@ class Trainer:
         if self.args.max_steps > 0:
             t_total = self.args.max_steps
             num_train_epochs = (
-                self.args.max_steps // (len(train_dataloader) // self.args.gradient_accumulation_steps) + 1
+                self.args.max_steps // (len(train_dataloader) // self.args.gradient_accumulation_steps + 1)
             )
         else:
             t_total = int(len(train_dataloader) // self.args.gradient_accumulation_steps * self.args.num_train_epochs)
