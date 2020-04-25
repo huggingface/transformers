@@ -8,6 +8,7 @@ import fnmatch
 import json
 import logging
 import os
+import pathlib
 import shutil
 import sys
 import tarfile
@@ -203,6 +204,20 @@ def filename_to_url(filename, cache_dir=None):
     etag = metadata["etag"]
 
     return url, etag
+
+
+def path_to_str(path_like_or_str):
+    """
+    Attempts to convert a path-like object to a string.
+    """
+    if hasattr(path_like_or_str, "__fspath__"):
+        return path_like_or_str.__fspath__()
+    elif isinstance(path_like_or_str, pathlib.Path):
+        return str(path_like_or_str)
+    elif isinstance(path_like_or_str, str):
+        return path_like_or_str
+    else:
+        raise ValueError("path_like_or_str is not a path-like object or string.")
 
 
 def cached_path(
