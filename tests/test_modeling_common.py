@@ -95,7 +95,7 @@ class ModelTesterMixin:
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     self.assertIn(
-                        ((param.data.mean() * 1e10).round() / 1e10).item(),
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
                         msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
                     )
