@@ -1243,16 +1243,13 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             split_text = text.split(tok)
             for i, sub_text in enumerate(split_text):
                 sub_text = sub_text.rstrip()
+                if sub_text:
+                    result += [sub_text]
                 if i == 0 and not sub_text:
-                    if sub_text: # will never happen
-                        result += [sub_text]
                     result += [tok]
                 elif i == len(split_text) - 1:
-                    if sub_text:
-                        result += [sub_text]
+                    pass
                 else:
-                    if sub_text:
-                        result += [sub_text]
                     result += [tok]
             return result
 
