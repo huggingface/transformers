@@ -347,8 +347,8 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.num_hashes = config.num_hashes
         self.num_buckets = config.num_buckets
         self.chunk_length = config.lsh_attn_chunk_length
-        self.num_chunks_before = config.num_chunks_before
-        self.num_chunks_after = config.num_chunks_after
+        self.num_chunks_before = config.lsh_num_chunks_before
+        self.num_chunks_after = config.lsh_num_chunks_after
         self.is_decoder = config.is_decoder
         self.max_position_embeddings = config.max_position_embeddings
 
@@ -719,8 +719,8 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
 
         self.num_attention_heads = config.num_attention_heads
         self.chunk_length = config.local_attn_chunk_length
-        self.num_chunks_before = config.num_chunks_before
-        self.num_chunks_after = config.num_chunks_after
+        self.num_chunks_before = config.local_num_chunks_before
+        self.num_chunks_after = config.local_num_chunks_after
         self.is_decoder = config.is_decoder
         self.pad_token_id = config.pad_token_id
 
