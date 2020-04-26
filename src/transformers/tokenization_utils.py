@@ -1245,11 +1245,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 sub_text = sub_text.rstrip()
                 if sub_text:
                     result += [sub_text]
-                if i == 0 and not sub_text:
-                    result += [tok]
-                elif i == len(split_text) - 1:
-                    pass
-                else:
+                if i != len(split_text) - 1:
                     result += [tok]
             return result
 
