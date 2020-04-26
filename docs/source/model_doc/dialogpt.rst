@@ -22,7 +22,17 @@ Tips:
   the right rather than the left.
 - DialoGPT was trained with a causal language modeling (CLM) objective on conversational data and is therefore powerful at response generation in open-domain dialogue systems.
 - DialoGPT enables the user to create a chat bot in just 10 lines of code as shown on `DialoGPT's model card <https://huggingface.co/microsoft/DialoGPT-medium>`_.
- 
+
+Training:
+
+In order to train or fine-tune DialoGPT, one can use causal language modeling training. 
+To cite the official paper: 
+*We follow the OpenAI GPT-2 to model a multiturn dialogue session 
+as a long text and frame the generation task as language modeling. We first
+concatenate all dialog turns within a dialogue session into a long text 
+x_1,..., x_N (N is the sequence length), ended by the end-of-text token.* 
+For more information please confer to the original paper.
+    
 
 DialoGPT's architecture is based on the GPT2 model, so one can refer to GPT2's `docstring <https://huggingface.co/transformers/model_doc/gpt2.html>`_.
 
