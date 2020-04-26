@@ -19,7 +19,7 @@ from tqdm import tqdm, trange
 
 from .data.data_collator import DataCollator, DefaultDataCollator
 from .modeling_utils import PreTrainedModel
-from .optimization import AdamW, get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup, get_cosine_with_hard_restarts_schedule_with_warmup
+from .optimization import AdamW, get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup, get_cosine_with_hard_restarts_schedule_with_warmup, get_constant_schedule_with_warmup
 from .training_args import TrainingArguments
 
 
@@ -208,11 +208,11 @@ class Trainer:
             )
         elif self.args.scheduler == "cosine_decay":
             scheduler = get_cosine_schedule_with_warmup(
-                optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps, num_cycles=self.args.num_cycles_cosine
+                optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps, num_cycles=self.args.num_cycles_cosine_decay
             )
         elif self.args.scheduler == "cosine_decay_hard_restarts":
             scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
-                optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps, num_cycles=self.args.num_cycles_cosine
+                optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps, num_cycles=self.args.num_cycles_cosine_decay
             )
         elif self.args.scheduler == "constant":
             scheduler = get_constant_schedule_with_warmup(
