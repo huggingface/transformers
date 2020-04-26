@@ -20,10 +20,11 @@ Training
 ~~~~~~~~~~~~~~~~~~~~
 T5 is an encoder-decoder model and converts all NLP problems into a text-to-text format. It is trained using teacher forcing.
 This means that for training we always need an input sequence and a target sequence. 
-The input sequence is fed to the model using ``input_ids``. The target sequence is shifted to the right, *i.e.* perprended by a start-sequence token and fed to the decoder using the `decoder_input_ids`. In teacher-forcing style, the target sequence is then appended by the EOS token and corresponds to the ``lm_labels``. The PAD token is hereby used as the start-sequence token.
+The input sequence is fed to the model using ``input_ids``. The target sequence is shifted to the right, *i.e.* prepended by a start-sequence token and fed to the decoder using the `decoder_input_ids`. In teacher-forcing style, the target sequence is then appended by the EOS token and corresponds to the ``lm_labels``. The PAD token is hereby used as the start-sequence token.
 T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
 
 - Unsupervised denoising training
+
   In this setup spans of the input sequence are masked by so-called sentinel tokens (*a.k.a* unique mask tokens) 
   and the output sequence is formed as a concatenation of the same sentinel tokens and the *real* masked tokens. 
   Each sentinel tokens represents a unique mask token for this sentence and should start with ``<extra_id_1>``, ``<extrac_id_2>``, ... up to ``<extra_id_100>``. As a default 100 sentinel tokens are available in ``T5Tokenizer``.
