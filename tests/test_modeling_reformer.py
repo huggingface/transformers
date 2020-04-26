@@ -29,7 +29,7 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 if is_torch_available():
-    from transformers import ReformerConfig, ReformerAttention, ReformerModel, ReformerModelWithLMHead
+    from transformers import ReformerConfig, ReformerAttention, ReformerModel, ReformerModelWithLMHead, ReformerLayer
 
     #    from transformers.modeling_reformer import REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
     import torch
@@ -225,6 +225,32 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertTrue(torch.allclose(output_padded, output_padded_rolled, atol=1e-3))
 
+        def create_and_check_reformer_layer_dropout_seed(self, config, input_ids, input_mask, is_decoder):
+            config.is_decoder = is_decoder
+            layer = ReformerLayer(config)
+            layer.train()
+            shape = (self.batch_size, self.seq_length, config.hidden_size)  # Batch x SeqLen x hiddenSize
+
+            # get random tensors
+            hidden_states = floats_tensor(shape)
+            prev_attn_output = floats_tensor(shape)
+
+            # now the random seeds for attention and feed forward is initialized
+            # forward tensors with dropout
+            layer_outputs = layer(prev_attn_output, hidden_states, attention_mask=input_mask)
+
+            next_attn_output = layer_outputs.attn_output
+            next_hidden_states = layer_outputs.hidden_states
+
+            torch.manual_seed(layer.attention_seed)
+            attn_outputs = layer.attention(hidden_states, attention_mask=input_mask)
+            self.parent.assertTrue(torch.allclose(prev_attn_output + attn_outputs.hidden_states, next_attn_output, atol=1e-3))
+
+            torch.manual_seed(layer.feed_forward_seed)
+            feed_forward_hidden_states = layer.feed_forward(next_attn_output)
+            self.parent.assertTrue(torch.allclose(next_hidden_states, hidden_states + feed_forward_hidden_states, atol=1e-3))
+            # TODO(PVP) Should add some tests here for backprop function as well (maybe in different test function though)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask,) = config_and_inputs
@@ -247,9 +273,14 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, True)
         self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, False)
 
-    def test_for_reformer_with_lm(self):
+    def test_reformer_with_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_with_lm(*config_and_inputs)
+
+    def test_reformer_layer_training_dropout(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, True)
+        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, False)
 
 
 @require_torch
@@ -444,6 +475,32 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.parent.assertTrue(torch.allclose(output_padded, output_padded_rolled, atol=1e-3))
 
+        def create_and_check_reformer_layer_dropout_seed(self, config, input_ids, input_mask, is_decoder):
+            config.is_decoder = is_decoder
+            layer = ReformerLayer(config)
+            layer.train()
+            shape = (self.batch_size, self.seq_length, config.hidden_size)  # Batch x SeqLen x hiddenSize
+
+            # get random tensors
+            hidden_states = floats_tensor(shape)
+            prev_attn_output = floats_tensor(shape)
+
+            # now the random seeds for attention and feed forward is initialized
+            # forward tensors with dropout
+            layer_outputs = layer(prev_attn_output, hidden_states, attention_mask=input_mask)
+
+            next_attn_output = layer_outputs.attn_output
+            next_hidden_states = layer_outputs.hidden_states
+
+            torch.manual_seed(layer.attention_seed)
+            attn_outputs = layer.attention(hidden_states, attention_mask=input_mask)
+            self.parent.assertTrue(torch.allclose(prev_attn_output + attn_outputs.hidden_states, next_attn_output, atol=1e-3))
+
+            torch.manual_seed(layer.feed_forward_seed)
+            feed_forward_hidden_states = layer.feed_forward(next_attn_output)
+            self.parent.assertTrue(torch.allclose(next_hidden_states, hidden_states + feed_forward_hidden_states, atol=1e-3))
+            # TODO(PVP) Should add some tests here for backprop function as well (maybe in different test function though)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask,) = config_and_inputs
@@ -466,9 +523,14 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, True)
         self.model_tester.create_and_check_reformer_model_with_attn_mask(*config_and_inputs, False)
 
-    def test_for_reformer_with_lm(self):
+    def test_reformer_with_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_with_lm(*config_and_inputs)
+
+    def test_reformer_layer_training_dropout(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, True)
+        self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, False)
 
 
 @require_torch

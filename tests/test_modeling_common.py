@@ -770,7 +770,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
 
 
 def floats_tensor(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor of the shape within the vocab size."""
+    """Creates a random float32 tensor"""
     if rng is None:
         rng = global_rng
 
