@@ -291,6 +291,7 @@ class Trainer:
         )
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", t_total)
+        logger.info("  Learning rate schedule = %d", self.args.scheduler)
 
         global_step = 0
         epochs_trained = 0
