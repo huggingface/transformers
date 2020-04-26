@@ -615,13 +615,15 @@ def main():
 
         # Load a trained model and vocabulary that you have fine-tuned
         model = model_class.from_pretrained(args.model_name_or_path)
-        tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path)
+        tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name
+                                                    else args.model_name_or_path)
         model.to(args.device)
 
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+        tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name
+                                                    else args.model_name_or_path,
                                                     do_lower_case=args.do_lower_case)
         checkpoints = [args.tokenizer_name if args.tokenizer_name else args.model_name_or_path]
         if args.eval_all_checkpoints:
