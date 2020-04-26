@@ -38,6 +38,7 @@ T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
   model(input_ids=input_ids, lm_labels=lm_labels)
 
 - Supervised training
+
   In this setup the input sequence and output sequence are standard sequence to sequence input output mapping.
   In translation, *e.g.* the input sequence "The house is wonderful." and output sequence "Das Haus ist wunderbar." should 
   be processed as follows:
