@@ -27,7 +27,7 @@ T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
 
   In this setup spans of the input sequence are masked by so-called sentinel tokens (*a.k.a* unique mask tokens) 
   and the output sequence is formed as a concatenation of the same sentinel tokens and the *real* masked tokens. 
-  Each sentinel tokens represents a unique mask token for this sentence and should start with ``<extra_id_1>``, ``<extrac_id_2>``, ... up to ``<extra_id_100>``. As a default 100 sentinel tokens are available in ``T5Tokenizer``.
+  Each sentinel token represents a unique mask token for this sentence and should start with ``<extra_id_1>``, ``<extra_id_2>``, ... up to ``<extra_id_100>``. As a default 100 sentinel tokens are available in ``T5Tokenizer``.
   *E.g.* the sentence "The cute dog walks in the park" with the masks put on "cute dog" and "the" should be processed as follows: 
 
 ::
