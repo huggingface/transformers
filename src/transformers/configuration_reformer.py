@@ -111,8 +111,9 @@ class ReformerConfig(PretrainedConfig):
         chunk_size_feed_forward=0,
         feed_forward_size=128,
         hidden_act="gelu",
-        hidden_dropout_prob=0.3,
-        attention_probs_dropout_prob=0.3,
+        hidden_dropout_prob=0.0,
+        lsh_attention_probs_dropout_prob=0.0,
+        local_attention_probs_dropout_prob=0.0,
         max_position_embeddings=512,
         initializer_range=0.02,
         axial_norm_std=1.0,
@@ -145,7 +146,8 @@ class ReformerConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.feed_forward_size = feed_forward_size
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.lsh_attention_probs_dropout_prob = lsh_attention_probs_dropout_prob
+        self.local_attention_probs_dropout_prob = local_attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps

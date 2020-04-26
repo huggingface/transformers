@@ -15,6 +15,8 @@
 # limitations under the License.
 """PyTorch REFORMER model. """
 
+import sys
+
 import inspect
 import logging
 from collections import namedtuple
@@ -357,7 +359,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.query_key = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
 
-        self.dropout = config.attention_probs_dropout_prob
+        self.dropout = config.lsh_attention_probs_dropout_prob
 
     def forward(
         self,
@@ -534,7 +536,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
     def _get_sorted_bucket_idx_and_undo_sorted_bucket_idx(self, sequence_length, buckets, num_hashes):
         batch_size = buckets.shape[0]
 
-        # TODO: what is sorted_bucket_idx? Is sorted_bucket_idx something like indices?? Ask authors
         orig_indices = torch.arange(num_hashes * sequence_length, device=buckets.device)
         orig_indices = orig_indices.repeat(batch_size, self.num_attention_heads, 1)
 
@@ -731,7 +732,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         self.key = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
 
-        self.dropout = config.attention_probs_dropout_prob
+        self.dropout = config.local_attention_probs_dropout_prob
 
     def forward(self, hidden_states, attention_mask=None, head_mask=None, do_output_attentions=False, **kwargs):
 
@@ -973,6 +974,18 @@ class ReformerLayer(nn.Module):
         super().__init__()
         self.attention = ReformerAttention(config, layer_id)
         self.feed_forward = ChunkReformerFeedForward(config)
+        # dropout requires to have the same
+        # seed for forward and backward pass
+        self.attention_seed = None
+        self.feed_forward_seed = None
+
+    def _init_attention_seed(self):
+        self.attention_seed = torch.randint(sys.maxsize, size=(1, 1)).item()
+        torch.manual_seed(self.attention_seed)
+
+    def _init_feed_forward_seed(self):
+        self.feed_forward_seed = torch.randint(sys.maxsize, size=(1, 1)).item()
+        torch.manual_seed(self.feed_forward_seed)
 
     def forward(
         self,
@@ -985,6 +998,7 @@ class ReformerLayer(nn.Module):
     ):
 
         with torch.no_grad():
+            self._init_attention_seed()
             attn_outputs = self.attention(
                 hidden_states=hidden_states,
                 head_mask=head_mask,
@@ -1002,6 +1016,7 @@ class ReformerLayer(nn.Module):
             del prev_attn_output
 
             # Y_2 = X_2 + g(Y_1)
+            self._init_feed_forward_seed()
             hidden_states = hidden_states + self.feed_forward(attn_output)
 
         return ReformerOutput(
@@ -1028,8 +1043,9 @@ class ReformerLayer(nn.Module):
 
             # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
             # g(Y_1)
+            torch.manual_seed(self.feed_forward_seed)
             res_hidden_states = self.feed_forward(next_attn_output)
-            torch.autograd.backward(res_hidden_states, grad_hidden_states)
+            res_hidden_states.backward(grad_hidden_states, retain_graph=True)
 
         with torch.no_grad():
             # X_2 = Y_2 - g(Y_1)
@@ -1043,10 +1059,11 @@ class ReformerLayer(nn.Module):
             hidden_states.requires_grad = True
             # f(X_2)
             # use cached buckets for backprob if buckets not None for LSHSelfAttention
+            torch.manual_seed(self.attention_seed)
             output = self.attention(
                 hidden_states=hidden_states, head_mask=head_mask, attention_mask=attention_mask, buckets=buckets,
             ).hidden_states
-            torch.autograd.backward(output, grad_attn_output, retain_graph=True)
+            output.backward(grad_attn_output, retain_graph=True)
 
         with torch.no_grad():
             # X_1 = Y_1 - f(X_2)
@@ -1224,16 +1241,16 @@ class ReformerPreTrainedModel(PreTrainedModel):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             if module.weight.requires_grad:
-                torch.nn.init.xavier_uniform_(module.weight)
+                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
                 # TODO(PVP): discuss with Thom if necessary here to use different init
-#                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+#                torch.nn.init.xavier_uniform_(module.weight)
         elif isinstance(module, ReformerLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.normal_(mean=0.0, std=1e-6)
+            module.bias.data.zero_()
             # TODO(PVP): discuss with Thom if necessary here to use different init
-#            module.bias.data.zero_()
+#            module.bias.data.normal_(mean=0.0, std=1e-6)
 
 
 class ReformerModel(ReformerPreTrainedModel):
