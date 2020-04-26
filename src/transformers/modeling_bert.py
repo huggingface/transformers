@@ -957,7 +957,7 @@ class BertForMaskedLM(BertPreTrainedModel):
             ltr_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), lm_labels.view(-1))
             outputs = (ltr_lm_loss,) + outputs
 
-        return outputs  # (masked_lm_loss), (ltr_lm_loss), prediction_scores, (hidden_states), (attentions)
+        return outputs  # (ltr_lm_loss), (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
@@ -1347,7 +1347,7 @@ class BertForTokenClassification(BertPreTrainedModel):
 )
 class BertForQuestionAnswering(BertPreTrainedModel):
     def __init__(self, config):
-        super(BertForQuestionAnswering, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.bert = BertModel(config)

@@ -102,13 +102,13 @@ class SummarizationTrainer(BaseTransformer):
 
         return self.test_end(outputs)
 
-    def get_dataloader(self, type_path: str, batch_size: int) -> DataLoader:
+    def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = SummarizationDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)
-        dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn)
+        dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn, shuffle=shuffle)
         return dataloader
 
     def train_dataloader(self) -> DataLoader:
-        dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size)
+        dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
         t_total = (
             (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.n_gpu)))
             // self.hparams.gradient_accumulation_steps
@@ -159,15 +159,19 @@ def main(args):
 
     # If output_dir not provided, a folder will be generated in pwd
     if not args.output_dir:
-        args.output_dir = os.path.join("./results", f"{args.task}_{args.model_type}_{time.strftime('%Y%m%d_%H%M%S')}",)
+        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
     model = SummarizationTrainer(args)
     trainer = generic_train(model, args)
 
     # Optionally, predict on dev set and write to output_dir
     if args.do_predict:
+        # See https://github.com/huggingface/transformers/issues/3159
+        # pl use this format to create a checkpoint:
+        # https://github.com/PyTorchLightning/pytorch-lightning/blob/master\
+        # /pytorch_lightning/callbacks/model_checkpoint.py#L169
         checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
-        SummarizationTrainer.load_from_checkpoint(checkpoints[-1])
+        model = model.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)
 
 

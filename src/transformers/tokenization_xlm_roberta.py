@@ -20,8 +20,7 @@ import os
 from shutil import copyfile
 from typing import List, Optional
 
-from transformers.tokenization_utils import PreTrainedTokenizer
-
+from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE
 
 
