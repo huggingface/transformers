@@ -221,8 +221,13 @@ def main():
         encoded_prompt = tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors="pt")
     encoded_prompt = encoded_prompt.to(args.device)
 
+    if encoded_prompt.size()[-1] == 0:
+        input_ids = None
+    else:
+        input_ids = encoded_prompt
+
     output_sequences = model.generate(
-        input_ids=encoded_prompt,
+        input_ids=input_ids,
         max_length=args.length + len(encoded_prompt[0]),
         temperature=args.temperature,
         top_k=args.k,
