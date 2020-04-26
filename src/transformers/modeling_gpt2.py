@@ -164,7 +164,7 @@ class Attention(nn.Module):
         return outputs
 
     def merge_heads(self, x):
-        x = x.permute(0, 2, 1, 3).contiguous()
+        x = x.transpose(2, 1).contiguous()
         new_x_shape = x.size()[:-2] + (x.size(-2) * x.size(-1),)
         return x.view(*new_x_shape)  # in Tensorflow implem: fct merge_states
 
@@ -174,7 +174,7 @@ class Attention(nn.Module):
         if k:
             return x.permute(0, 2, 3, 1)  # (batch, head, head_features, seq_length)
         else:
-            return x.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+            return x.transpose(2, 1)  # (batch, head, seq_length, head_features)
 
     def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
         x = self.c_attn(x)
