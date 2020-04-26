@@ -64,7 +64,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             feed_forward_size=32,
             hidden_act="gelu",
             hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
+            local_attention_probs_dropout_prob=0.1,
             max_position_embeddings=512,
             initializer_range=0.02,
             axial_norm_std=1.0,
@@ -94,7 +94,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.hidden_act = hidden_act
             self.feed_forward_size = feed_forward_size
             self.hidden_dropout_prob = hidden_dropout_prob
-            self.attention_probs_dropout_prob = attention_probs_dropout_prob
+            self.local_attention_probs_dropout_prob = local_attention_probs_dropout_prob
             self.max_position_embeddings = max_position_embeddings
             self.initializer_range = initializer_range
             self.layer_norm_eps = layer_norm_eps
@@ -129,7 +129,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 feed_forward_size=self.feed_forward_size,
                 hidden_act=self.hidden_act,
                 hidden_dropout_prob=self.hidden_dropout_prob,
-                attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+                local_attention_probs_dropout_prob=self.local_attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
                 is_decoder=self.is_decoder,
                 axial_pos_embds=self.axial_pos_embds,
@@ -283,7 +283,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             feed_forward_size=32,
             hidden_act="relu",
             hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
+            lsh_attention_probs_dropout_prob=0.1,
             max_position_embeddings=512,
             initializer_range=0.02,
             layer_norm_eps=1e-12,
@@ -313,7 +313,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.hidden_act = hidden_act
             self.feed_forward_size = feed_forward_size
             self.hidden_dropout_prob = hidden_dropout_prob
-            self.attention_probs_dropout_prob = attention_probs_dropout_prob
+            self.lsh_attention_probs_dropout_prob = lsh_attention_probs_dropout_prob
             self.max_position_embeddings = max_position_embeddings
             self.initializer_range = initializer_range
             self.layer_norm_eps = layer_norm_eps
@@ -344,7 +344,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 feed_forward_size=self.feed_forward_size,
                 hidden_act=self.hidden_act,
                 hidden_dropout_prob=self.hidden_dropout_prob,
-                attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+                lsh_attention_probs_dropout_prob=self.lsh_attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
                 is_decoder=self.is_decoder,
                 sinusoidal_pos_embds=self.sinusoidal_pos_embds,
@@ -618,7 +618,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.num_chunks_after,
             config.num_hashes,
             config.num_buckets,
-            config.attention_probs_dropout_prob,
+            config.lsh_attention_probs_dropout_prob,
             config.hidden_dropout_prob,
             config.hash_seed,
             config.is_decoder,
@@ -651,7 +651,7 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.local_attn_chunk_length,
             config.num_chunks_before,
             config.num_chunks_after,
-            config.attention_probs_dropout_prob,
+            config.local_attention_probs_dropout_prob,
             config.hidden_dropout_prob,
             config.is_decoder,
             mask,
