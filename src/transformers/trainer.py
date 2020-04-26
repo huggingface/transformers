@@ -19,7 +19,7 @@ from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, DefaultDataCollator
 from .modeling_utils import PreTrainedModel
-from .optimization import AdamW, get_linear_schedule_with_warmup
+from .optimization import AdamW, get_linear_schedule_with_warmup, get_cosine_schedule_with_warmup, get_cosine_with_hard_restarts_schedule_with_warmup
 from .training_args import TrainingArguments
 
 
@@ -200,10 +200,27 @@ class Trainer:
                 "weight_decay": 0.0,
             },
         ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=self.args.learning_rate, eps=self.args.adam_epsilon)
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
-        )
+        optimizer = AdamW(optimizer_grouped_parameters, lr=self.args.learning_rate, eps=self.args.adam_epsilon, betas=(self.args.adam_beta_1, self.args.adam_beta_2))
+
+        if self.args.scheduler == "linear":
+            scheduler = get_linear_schedule_with_warmup(
+                optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
+            )
+        elif self.args.scheduler == "cosine_decay":
+            scheduler = get_cosine_schedule_with_warmup(
+                optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps, num_cycles=self.args.num_cycles_cosine
+            )
+        elif self.args.scheduler == "cosine_decay_hard_restarts":
+            scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
+                optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps, num_cycles=self.args.num_cycles_cosine
+            )
+        elif self.args.scheduler == "constant":
+            scheduler = get_constant_schedule_with_warmup(
+                optimizer, num_warmup_steps=self.args.warmup_steps
+            )
+        else:
+            raise NotImplementedError("The scheduler {} does not exist. Please choose one of the following schedulers ['linear', 'cosine_decay', 'cosine_decay_hard_restarts', 'constant']".format(self.args.scheduler))
+
         return optimizer, scheduler
 
     def train(self, model_path: Optional[str] = None):
