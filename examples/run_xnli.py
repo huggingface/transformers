@@ -607,25 +607,26 @@ def main():
         model_to_save = (
             model.module if hasattr(model, "module") else model
         )  # Take care of distributed/parallel training
-        model_to_save.save_pretrained(args.output_dir)
-        tokenizer.save_pretrained(args.output_dir)
+        model_to_save.save_pretrained(args.model_name_or_path)
+        tokenizer.save_pretrained(args.tokenizer_name)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(args, os.path.join(args.output_dir, "training_args.bin"))
 
         # Load a trained model and vocabulary that you have fine-tuned
-        model = model_class.from_pretrained(args.output_dir)
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir)
+        model = model_class.from_pretrained(args.model_name_or_path)
+        tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path)
         model.to(args.device)
 
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
-        tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
-        checkpoints = [args.output_dir]
+        tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+                                                    do_lower_case=args.do_lower_case)
+        checkpoints = [args.tokenizer_name if args.tokenizer_name else args.model_name_or_path]
         if args.eval_all_checkpoints:
             checkpoints = list(
-                os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
+                os.path.dirname(c) for c in sorted(glob.glob(args.tokenizer_name + "/**/" + WEIGHTS_NAME, recursive=True))
             )
             logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
