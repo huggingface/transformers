@@ -241,7 +241,7 @@ if is_torch_available():
         BartForConditionalGeneration,
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
-    from .modeling_marian import MarianForConditionalGeneration
+    from .modeling_marian import MarianMTModel
     from .tokenization_marian import MarianSentencePieceTokenizer
     from .modeling_roberta import (
         RobertaForMaskedLM,

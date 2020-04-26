@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch model, ported from the Marian repo."""
+"""PyTorch MarianMTModel model, ported from the Marian C++ repo."""
 
 
 from transformers.modeling_bart import BartForConditionalGeneration
@@ -23,7 +23,7 @@ PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 
-class MarianForConditionalGeneration(BartForConditionalGeneration):
+class MarianMTModel(BartForConditionalGeneration):
     """Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
     Model API is identical to BartForConditionalGeneration"""
 

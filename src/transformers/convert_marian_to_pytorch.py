@@ -10,7 +10,7 @@ import torch
 import yaml
 from tqdm import tqdm
 
-from transformers import MarianConfig, MarianForConditionalGeneration
+from transformers import MarianConfig, MarianMTModel
 from transformers.file_utils import save_json, unzip
 from transformers.tokenization_marian import MarianSentencePieceTokenizer
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
@@ -302,11 +302,11 @@ class OpusState:
     def sub_keys(self, layer_prefix):
         return [remove_prefix(k, layer_prefix) for k in self.state_dict if k.startswith(layer_prefix)]
 
-    def load_marian_model(self) -> MarianForConditionalGeneration:
+    def load_marian_model(self) -> MarianMTModel:
         state_dict, cfg = self.state_dict, self.hf_config
 
         assert cfg.static_position_embeddings
-        model = MarianForConditionalGeneration(cfg)
+        model = MarianMTModel(cfg)
 
         assert "hidden_size" not in cfg.to_dict()
         load_layers_(

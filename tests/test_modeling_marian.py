@@ -24,7 +24,7 @@ from .utils import require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
-    from transformers import MarianForConditionalGeneration, MarianSentencePieceTokenizer
+    from transformers import MarianMTModel, MarianSentencePieceTokenizer
 
 
 @require_torch
@@ -38,7 +38,7 @@ class IntegrationTests(unittest.TestCase):
 
     @cached_property
     def model(self):
-        return MarianForConditionalGeneration.from_pretrained(self.model_name).to(torch_device)
+        return MarianMTModel.from_pretrained(self.model_name).to(torch_device)
 
     @slow
     def test_forward(self):
