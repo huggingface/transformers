@@ -57,8 +57,8 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_size=32,
             num_attention_heads=2,
             local_attn_chunk_length=4,
-            num_chunks_before=1,
-            num_chunks_after=0,
+            local_num_chunks_before=1,
+            local_num_chunks_after=0,
             chunk_size_lm_head=0,
             chunk_size_feed_forward=0,
             feed_forward_size=32,
@@ -89,8 +89,8 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.num_attention_heads = num_attention_heads
             self.num_hidden_layers = len(attn_layers)
             self.local_attn_chunk_length = local_attn_chunk_length
-            self.num_chunks_after = num_chunks_after
-            self.num_chunks_before = num_chunks_before
+            self.local_num_chunks_after = local_num_chunks_after
+            self.local_num_chunks_before = local_num_chunks_before
             self.hidden_act = hidden_act
             self.feed_forward_size = feed_forward_size
             self.hidden_dropout_prob = hidden_dropout_prob
@@ -111,7 +111,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.encoder_seq_length = seq_length // local_attn_chunk_length + (
                 self.seq_length % local_attn_chunk_length != 0
             )
-            self.key_length = (self.num_chunks_before + self.num_chunks_after + 1) * local_attn_chunk_length
+            self.key_length = (self.local_num_chunks_before + self.local_num_chunks_after + 1) * local_attn_chunk_length
             self.chunk_length = local_attn_chunk_length
 
         def prepare_config_and_inputs(self):
@@ -136,8 +136,8 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 axial_pos_shape=self.axial_pos_shape,
                 axial_pos_embds_dim=self.axial_pos_embds_dim,
                 local_attn_chunk_length=self.local_attn_chunk_length,
-                num_chunks_after=self.num_chunks_after,
-                num_chunks_before=self.num_chunks_before,
+                local_num_chunks_after=self.local_num_chunks_after,
+                local_num_chunks_before=self.local_num_chunks_before,
                 attn_layers=self.attn_layers,
                 pad_token_id=self.pad_token_id,
             )
@@ -276,8 +276,8 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             num_buckets=2,
             num_hashes=4,
             lsh_attn_chunk_length=4,
-            num_chunks_before=2,
-            num_chunks_after=3,
+            lsh_num_chunks_before=2,
+            lsh_num_chunks_after=3,
             chunk_size_lm_head=5,
             chunk_size_feed_forward=6,
             feed_forward_size=32,
@@ -308,8 +308,8 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.num_hidden_layers = len(attn_layers)
             self.num_buckets = tuple(num_buckets) if isinstance(num_buckets, list) else num_buckets
             self.lsh_attn_chunk_length = lsh_attn_chunk_length
-            self.num_chunks_after = num_chunks_after
-            self.num_chunks_before = num_chunks_before
+            self.lsh_num_chunks_after = lsh_num_chunks_after
+            self.lsh_num_chunks_before = lsh_num_chunks_before
             self.hidden_act = hidden_act
             self.feed_forward_size = feed_forward_size
             self.hidden_dropout_prob = hidden_dropout_prob
@@ -326,7 +326,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.pad_token_id = pad_token_id
 
             self.encoder_seq_length = seq_length // lsh_attn_chunk_length + (seq_length % lsh_attn_chunk_length != 0)
-            self.key_length = (self.num_chunks_before + self.num_chunks_after + 1) * lsh_attn_chunk_length
+            self.key_length = (self.lsh_num_chunks_before + self.lsh_num_chunks_after + 1) * lsh_attn_chunk_length
             self.chunk_length = lsh_attn_chunk_length
 
         def prepare_config_and_inputs(self):
@@ -351,8 +351,8 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 num_hashes=self.num_hashes,
                 num_buckets=self.num_buckets,
                 lsh_attn_chunk_length=self.lsh_attn_chunk_length,
-                num_chunks_after=self.num_chunks_after,
-                num_chunks_before=self.num_chunks_before,
+                lsh_num_chunks_after=self.lsh_num_chunks_after,
+                lsh_num_chunks_before=self.lsh_num_chunks_before,
                 attn_layers=self.attn_layers,
                 hash_seed=self.hash_seed,
                 pad_token_id=self.pad_token_id,
@@ -614,8 +614,8 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.attention_head_size,
             config.attention_head_size,
             config.lsh_attn_chunk_length,
-            config.num_chunks_before,
-            config.num_chunks_after,
+            config.lsh_num_chunks_before,
+            config.lsh_num_chunks_after,
             config.num_hashes,
             config.num_buckets,
             config.lsh_attention_probs_dropout_prob,
@@ -649,8 +649,8 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.attention_head_size,
             config.attention_head_size,
             config.local_attn_chunk_length,
-            config.num_chunks_before,
-            config.num_chunks_after,
+            config.local_num_chunks_before,
+            config.local_num_chunks_after,
             config.local_attention_probs_dropout_prob,
             config.hidden_dropout_prob,
             config.is_decoder,
@@ -730,15 +730,15 @@ class ReformerIntegrationTests(unittest.TestCase):
             config.lsh_attn_chunk_length,
             config.lsh_attn_chunk_length,
             config.lsh_attn_chunk_length // 2,
-            config.num_chunks_before,
-            config.num_chunks_after,
+            config.lsh_num_chunks_before,
+            config.lsh_num_chunks_after,
             config.num_hashes,
             config.num_buckets,
             config.hash_seed,
             config.is_decoder,
             config.local_attn_chunk_length,
-            config.num_chunks_before,
-            config.num_chunks_after,
+            config.local_num_chunks_before,
+            config.local_num_chunks_after,
             config.is_decoder,
             config.vocab_size,
             config.hidden_size,

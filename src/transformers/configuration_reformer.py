@@ -105,8 +105,10 @@ class ReformerConfig(PretrainedConfig):
         num_hashes=4,
         lsh_attn_chunk_length=64,
         local_attn_chunk_length=64,
-        num_chunks_before=1,
-        num_chunks_after=0,
+        lsh_num_chunks_before=1,
+        lsh_num_chunks_after=0,
+        local_num_chunks_before=1,
+        local_num_chunks_after=0,
         chunk_size_lm_head=0,
         chunk_size_feed_forward=0,
         feed_forward_size=128,
@@ -141,8 +143,10 @@ class ReformerConfig(PretrainedConfig):
         self.num_buckets = tuple(num_buckets) if isinstance(num_buckets, list) else num_buckets
         self.lsh_attn_chunk_length = lsh_attn_chunk_length
         self.local_attn_chunk_length = local_attn_chunk_length
-        self.num_chunks_after = num_chunks_after
-        self.num_chunks_before = num_chunks_before
+        self.lsh_num_chunks_after = lsh_num_chunks_after
+        self.lsh_num_chunks_before = lsh_num_chunks_before
+        self.local_num_chunks_after = local_num_chunks_after
+        self.local_num_chunks_before = local_num_chunks_before
         self.hidden_act = hidden_act
         self.feed_forward_size = feed_forward_size
         self.hidden_dropout_prob = hidden_dropout_prob
