@@ -2,12 +2,12 @@
 language: chinese
 ---
 
-## albert_chinese_small
+## roberta_chinese_large
 
 ### Overview
 
-**Language model:** albert-small
-**Model size:** 18.5M
+**Language model:** roberta-large
+**Model size:** 1.2G
 **Language:** Chinese
 **Training data:** [CLUECorpusSmall](https://github.com/CLUEbenchmark/CLUECorpus2020)
 **Eval data:** [CLUE dataset](https://github.com/CLUEbenchmark/CLUE)
@@ -18,13 +18,13 @@ For results on downstream tasks like text classification, please refer to [this 
 
 ### Usage
 
-**NOTE:**Since sentencepiece is not used in `albert_chinese_small` model, you have to call **BertTokenizer** instead of AlbertTokenizer !!!
+**NOTE:** You have to call **BertTokenizer** instead of RobertaTokenizer !!!
 
 ```
 import torch
-from transformers import BertTokenizer, AlbertModel
-tokenizer = BertTokenizer.from_pretrained("clue/albert_chinese_small")
-albert = AlbertModel.from_pretrained("clue/albert_chinese_small")
+from transformers import BertTokenizer, BertModel
+tokenizer = BertTokenizer.from_pretrained("clue/roberta_chinese_large")
+roberta = BertModel.from_pretrained("clue/roberta_chinese_large")
 ```
 
 ### About CLUE benchmark
