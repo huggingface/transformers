@@ -16,6 +16,7 @@
 
 import argparse
 import logging
+import os
 import sys
 import unittest
 from unittest.mock import patch
@@ -36,6 +37,9 @@ def get_setup_file():
     parser.add_argument("-f")
     args = parser.parse_args()
     return args.f
+
+
+CUDA_AVAILABLE = os.environ.get("USE_CUDA", False)
 
 
 class ExamplesTests(unittest.TestCase):
@@ -66,28 +70,38 @@ class ExamplesTests(unittest.TestCase):
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
 
-    def test_run_language_modeling(self):
+    def _run_language_modeling(self, testargs):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
-
-        testargs = """
-            run_language_modeling.py
-            --model_name_or_path distilroberta-base
-            --model_type roberta
-            --mlm
-            --line_by_line
-            --train_data_file ./tests/fixtures/sample_text.txt
-            --eval_data_file ./tests/fixtures/sample_text.txt
-            --output_dir ./tests/fixtures
-            --overwrite_output_dir
-            --do_train
-            --do_eval
-            --num_train_epochs=1
-            --no_cuda
-            """.split()
         with patch.object(sys, "argv", testargs):
             result = run_language_modeling.main()
             self.assertLess(result["perplexity"], 35)
+
+    @property
+    def lm_args(self):
+        return """
+                    run_language_modeling.py
+                    --model_name_or_path distilroberta-base
+                    --model_type roberta
+                    --mlm
+                    --line_by_line
+                    --train_data_file ./tests/fixtures/sample_text.txt
+                    --eval_data_file ./tests/fixtures/sample_text.txt
+                    --output_dir ./tests/fixtures
+                    --overwrite_output_dir
+                    --do_train
+                    --do_eval
+                    --num_train_epochs=1
+                """.split()
+
+    def test_run_language_modeling_cpu(self):
+        testargs = self.lm_args + ["--no_cuda"]
+        self._run_language_modeling(testargs)
+
+    @unittest.skipUnless(CUDA_AVAILABLE, "Skipping fp16 test. Cuda unavailable")
+    def test_run_language_modeling_fp16(self):
+        testargs = self.lm_args + ["--fp16"]
+        self._run_language_modeling(testargs)
 
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)
