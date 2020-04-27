@@ -1316,9 +1316,9 @@ class BertForTokenClassification(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
         )
-
+        print(outputs)
         sequence_output = outputs[0]
-
+        print(sequence_output)
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 
