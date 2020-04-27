@@ -3,19 +3,27 @@
 import logging
 import math
 import os
-from typing import Optional, NamedTuple, Dict, Callable
+from typing import Optional, Dict, Callable
 
 import numpy as np
 import tensorflow as tf
 from sklearn.metrics import classification_report
 
-from transformers import (
+from .optimization_tf import (
     AdamWeightDecay,
     GradientAccumulator,
-    TFPreTrainedModel,
     WarmUp,
+)
+from .modeling_tf_utils import (
+    TFPreTrainedModel,
     shape_list,
-    TFTrainingArguments
+)
+from .training_tf_args import TFTrainingArguments
+from .trainer_utils import (
+    EvalPrediction,
+    PredictionOutput,
+    PREFIX_CHECKPOINT_DIR,
+    TrainOutput,
 )
 
 
@@ -23,35 +31,12 @@ logger = logging.getLogger(__name__)
 
 
 class TFDataset:
+    TrainOutput,
     """
     Fake superclass to partially imitate the PT Dataset class.
     """
     def get_dataset(self):
         return self.dataset
-
-
-class EvalPrediction(NamedTuple):
-    """
-    Evaluation output (always contains labels), to be used
-    to compute metrics.
-    """
-
-    predictions: np.ndarray
-    label_ids: np.ndarray
-
-
-class PredictionOutput(NamedTuple):
-    predictions: np.ndarray
-    label_ids: Optional[np.ndarray]
-    metrics: Optional[Dict[str, float]]
-
-
-class TrainOutput(NamedTuple):
-    global_step: int
-    training_loss: float
-
-
-PREFIX_CHECKPOINT_DIR = "checkpoint"
 
 
 class TFTrainer:
