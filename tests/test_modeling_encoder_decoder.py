@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import os
 import tempfile
 import unittest
 
@@ -23,11 +22,13 @@ from transformers import is_torch_available
 # this line reruns all the tests in BertModelTest; not sure whether this can be prevented
 # for now only run module with pytest tests/test_modeling_encoder_decoder.py::EncoderDecoderModelTest
 from .test_modeling_bert import BertModelTest
-from .utils import require_torch, slow
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
     from transformers import BertModel, BertForMaskedLM, EncoderDecoderModel
+    import numpy as np
+    import torch
 
 
 @require_torch
@@ -85,7 +86,8 @@ class EncoderDecoderModelTest(unittest.TestCase):
     ):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder_model, decoder_model)
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -120,7 +122,8 @@ class EncoderDecoderModelTest(unittest.TestCase):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
-        enc_dec_model = EncoderDecoderModel.from_pretrained(**kwargs)
+        enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
+        enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -131,18 +134,88 @@ class EncoderDecoderModelTest(unittest.TestCase):
         self.assertEqual(outputs_encoder_decoder[0].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)))
         self.assertEqual(outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,)))
 
-    def create_and_check_save_and_load_encoder_decoder_model(self, config, decoder_config, **kwargs):
+    def create_and_check_save_and_load(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs
+    ):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
-        kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
-        enc_dec_model = EncoderDecoderModel.from_pretrained(**kwargs)
-
-        with tempfile.TemporaryDirectory() as temp_dir_name:
-            enc_dec_model.save_pretrained(temp_dir_name)
-            enc_dec_model.from_pretrained(
-                pretrained_model_name_or_path=os.path.join(temp_dir_name, "encoder"),
-                decoder_pretrained_model_name_or_path=os.path.join(temp_dir_name, "decoder"),
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
+        enc_dec_model.eval()
+        with torch.no_grad():
+            outputs = enc_dec_model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
             )
+            out_2 = outputs[0].cpu().numpy()
+            out_2[np.isnan(out_2)] = 0
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                enc_dec_model.save_pretrained(tmpdirname)
+                EncoderDecoderModel.from_pretrained(tmpdirname)
+
+                after_outputs = enc_dec_model(
+                    input_ids=input_ids,
+                    decoder_input_ids=decoder_input_ids,
+                    attention_mask=attention_mask,
+                    decoder_attention_mask=decoder_attention_mask,
+                )
+                out_1 = after_outputs[0].cpu().numpy()
+                out_1[np.isnan(out_1)] = 0
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 1e-5)
+
+    def create_and_check_save_and_load_encoder_decoder_model(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        **kwargs
+    ):
+        encoder_model = BertModel(config)
+        decoder_model = BertForMaskedLM(decoder_config)
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
+        enc_dec_model.eval()
+        with torch.no_grad():
+            outputs = enc_dec_model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+            )
+            out_2 = outputs[0].cpu().numpy()
+            out_2[np.isnan(out_2)] = 0
+
+            with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+                enc_dec_model.encoder.save_pretrained(encoder_tmp_dirname)
+                enc_dec_model.decoder.save_pretrained(decoder_tmp_dirname)
+                EncoderDecoderModel.from_encoder_decoder_pretrained(encoder_pretrained_model_name_or_path=encoder_tmp_dirname, decoder_pretrained_model_name_or_path=decoder_tmp_dirname)
+
+                after_outputs = enc_dec_model(
+                    input_ids=input_ids,
+                    decoder_input_ids=decoder_input_ids,
+                    attention_mask=attention_mask,
+                    decoder_attention_mask=decoder_attention_mask,
+                )
+                out_1 = after_outputs[0].cpu().numpy()
+                out_1[np.isnan(out_1)] = 0
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 1e-5)
 
     def check_loss_output(self, loss):
         self.assertEqual(loss.size(), ())
@@ -161,7 +234,8 @@ class EncoderDecoderModelTest(unittest.TestCase):
     ):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder_model, decoder_model)
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -192,7 +266,8 @@ class EncoderDecoderModelTest(unittest.TestCase):
     ):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder_model, decoder_model)
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -212,10 +287,11 @@ class EncoderDecoderModelTest(unittest.TestCase):
     def create_and_check_bert_encoder_decoder_model_generate(self, input_ids, config, decoder_config, **kwargs):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder_model, decoder_model)
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
 
         # Bert does not have a bos token id, so use pad_token_id instead
-        generated_output = enc_dec_model.generate(input_ids, decoder_start_token_id=enc_dec_model.config.pad_token_id)
+        generated_output = enc_dec_model.generate(input_ids, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id)
         self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
 
     def test_bert_encoder_decoder_model(self):
@@ -226,7 +302,11 @@ class EncoderDecoderModelTest(unittest.TestCase):
         input_ids_dict = self.prepare_config_and_inputs_bert()
         self.create_and_check_bert_encoder_decoder_model_from_pretrained(**input_ids_dict)
 
-    def test_save_and_load_from_prertained(self):
+    def test_save_and_load_from_pretrained(self):
+        input_ids_dict = self.prepare_config_and_inputs_bert()
+        self.create_and_check_save_and_load(**input_ids_dict)
+
+    def test_save_and_load_from_encoder_decoder_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs_bert()
         self.create_and_check_save_and_load_encoder_decoder_model(**input_ids_dict)
 

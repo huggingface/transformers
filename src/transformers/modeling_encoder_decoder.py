@@ -16,10 +16,10 @@
 
 
 import logging
-import os
 
 from .modeling_auto import AutoModel, AutoModelWithLMHead
 from .modeling_utils import PreTrainedModel
+from .configuration_encoder_decoder import EncoderDecoderConfig
 
 
 logger = logging.getLogger(__name__)
@@ -33,26 +33,32 @@ class EncoderDecoderModel(PreTrainedModel):
         decoder when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
         class method for the encoder and `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
     """
+    config_class = EncoderDecoderConfig
 
-    def __init__(self, encoder, decoder):
-        assert encoder is not None, "The encoder has to be defined"
-        assert decoder is not None, "The decoder has to be defined"
-
-        config = self._init_config(encoder.config, decoder.config)
-        config.is_encoder_decoder = True
+    def __init__(self, config=None, encoder=None, decoder=None):
+        assert config is not None or (encoder is not None and decoder is not None), "Either a configuration or an Encoder and a decoder has to be provided"
+        if config is None:
+            config = EncoderDecoderConfig.from_encoder_decoder_config(encoder.config, decoder.config)
+        else:
+            assert isinstance(config, self.config_class), "config: {} has to be of type {}".format(config, self.config_class)
+        # initialize with config
         super().__init__(config)
 
+        if encoder is None:
+            encoder = AutoModel.from_config(config.encoder)
+
+        if decoder is None:
+            decoder = AutoModelWithLMHead.from_config(config.decoder)
+
         self.encoder = encoder
+        self.decoder = decoder
         assert (
             self.encoder.get_output_embeddings() is None
         ), "The encoder {} should not have a LM Head. Please use a model without LM Head"
-        self.decoder = decoder
 
-    def _init_config(self, encoder_config, decoder_config):
-        # decoder config is used as default config (important for generation)
-        config = decoder_config
-
-        return config
+    def tie_weights(self):
+        # for now no weights tying in encoder-decoder
+        pass
 
     def get_encoder(self):
         return self.encoder
@@ -67,8 +73,8 @@ class EncoderDecoderModel(PreTrainedModel):
         return self.decoder.get_output_embeddings()
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path=None, decoder_pretrained_model_name_or_path=None, *model_args, **kwargs
+    def from_encoder_decoder_pretrained(
+        cls, encoder_pretrained_model_name_or_path=None, decoder_pretrained_model_name_or_path=None, *model_args, **kwargs
     ):
         r""" Instantiates an encoder and a decoder from one or two base classes of the library from pre-trained model checkpoints.
 
@@ -153,9 +159,9 @@ class EncoderDecoderModel(PreTrainedModel):
         encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
             assert (
-                pretrained_model_name_or_path is not None
+                encoder_pretrained_model_name_or_path is not None
             ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
-            encoder = AutoModel.from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs_encoder)
+            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
         encoder.config.is_decoder = False
 
         decoder = kwargs_decoder.pop("model", None)
@@ -166,55 +172,9 @@ class EncoderDecoderModel(PreTrainedModel):
             decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
         decoder.config.is_decoder = True
 
-        model = cls(encoder, decoder)
+        model = cls(encoder=encoder, decoder=decoder)
 
         return model
-
-    def save_pretrained(self, save_directory):
-        """ Save a Seq2Seq model and its configuration file in a format such
-        that it can be loaded using `:func:`~transformers.PreTrainedEncoderDecoder.from_pretrained`
-
-        We save the encoder' and decoder's parameters in two separate directories.
-        """
-
-        # If the root output directory does not exist, create it
-        if not os.path.exists(save_directory):
-            os.mkdir(save_directory)
-
-        # Check whether the output directory is empty or not
-        sub_directories = [
-            directory
-            for directory in os.listdir(save_directory)
-            if os.path.isdir(os.path.join(save_directory, directory))
-        ]
-
-        if len(sub_directories) > 0:
-            if "encoder" in sub_directories and "decoder" in sub_directories:
-                print(
-                    "WARNING: there is an older version of encoder-decoder saved in"
-                    + " the output directory. The default behaviour is to overwrite them."
-                )
-
-            # Empty the output directory
-            for directory_to_remove in sub_directories:
-                # Remove all files into the subdirectory
-                files_to_remove = os.listdir(os.path.join(save_directory, directory_to_remove))
-                for file_to_remove in files_to_remove:
-                    os.remove(os.path.join(save_directory, directory_to_remove, file_to_remove))
-                # Remove the subdirectory itself
-                os.rmdir(os.path.join(save_directory, directory_to_remove))
-
-            assert len(os.listdir(save_directory)) == 0  # sanity check
-
-        # Create the "encoder" directory inside the output directory and save the encoder into it
-        if not os.path.exists(os.path.join(save_directory, "encoder")):
-            os.mkdir(os.path.join(save_directory, "encoder"))
-        self.encoder.save_pretrained(os.path.join(save_directory, "encoder"))
-
-        # Create the "encoder" directory inside the output directory and save the decoder into it
-        if not os.path.exists(os.path.join(save_directory, "decoder")):
-            os.mkdir(os.path.join(save_directory, "decoder"))
-        self.decoder.save_pretrained(os.path.join(save_directory, "decoder"))
 
     def forward(
         self,
