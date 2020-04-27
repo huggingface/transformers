@@ -52,6 +52,44 @@ class InputExample:
         return json.dumps(dataclasses.asdict(self), indent=2) + "\n"
 
 
+class SpanClassificationExample(object):
+    """
+    A single training/test example for simple span classification.
+
+    Args:
+        guid: Unique id for the example.
+        text_a: string. The untokenized text of the first sequence. For single
+            sequence tasks, only this sequence must be specified.
+        spans_a: list. List of tuples corresponding to the character locations in text_a
+            of the spans of interest.
+        text_b: (Optional) string. The untokenized text of the second sequence.
+            Only must be specified for sequence pair tasks.
+        spans_b: TODO
+        label: (Optional) string. The label of the example. This should be
+            specified for train and dev examples, but not for test examples.
+    """
+
+    def __init__(self, guid, text_a, spans_a, text_b=None, spans_b=None, label=None):
+        self.guid = guid
+        self.text_a = text_a
+        self.spans_a = spans_a
+        self.text_b = text_b
+        self.spans_b = spans_b
+        self.label = label
+
+    def __repr__(self):
+        return str(self.to_json_string())
+
+    def to_dict(self):
+        """Serializes this instance to a Python dictionary."""
+        output = copy.deepcopy(self.__dict__)
+        return output
+
+    def to_json_string(self):
+        """Serializes this instance to a JSON string."""
+        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+
+
 @dataclass(frozen=True)
 class InputFeatures:
     """
@@ -77,6 +115,41 @@ class InputFeatures:
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
         return json.dumps(dataclasses.asdict(self)) + "\n"
+
+
+class SpanClassificationFeatures(object):
+    """
+    A single set of features of data.
+
+    Args:
+        guid: Example ID, as a list of ints
+        input_ids: Indices of input sequence tokens in the vocabulary.
+        attention_mask: Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            Usually  ``1`` for tokens that are NOT MASKED, ``0`` for MASKED (padded) tokens.
+        token_type_ids: Segment token indices to indicate first and second portions of the inputs.
+        label: Label corresponding to the input
+    """
+
+    def __init__(self, guid, input_ids, span_locs, attention_mask=None, token_type_ids=None, label=None):
+        self.guid = guid
+        self.input_ids = input_ids
+        self.span_locs = span_locs
+        self.attention_mask = attention_mask
+        self.token_type_ids = token_type_ids
+        self.label = label
+
+    def __repr__(self):
+        return str(self.to_json_string())
+
+    def to_dict(self):
+        """Serializes this instance to a Python dictionary."""
+        output = copy.deepcopy(self.__dict__)
+        return output
+
+    def to_json_string(self):
+        """Serializes this instance to a JSON string."""
+        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
 
 class DataProcessor:

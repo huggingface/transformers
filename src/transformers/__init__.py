@@ -56,6 +56,11 @@ from .data import (
     glue_output_modes,
     glue_processors,
     glue_tasks_num_labels,
+    superglue_convert_examples_to_features,
+    superglue_output_modes,
+    superglue_processors,
+    superglue_tasks_num_labels,
+    superglue_tasks_num_spans,
     is_sklearn_available,
     squad_convert_examples_to_features,
     xnli_output_modes,
@@ -145,7 +150,7 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 if is_sklearn_available():
-    from .data import glue_compute_metrics, xnli_compute_metrics
+    from .data import glue_compute_metrics, superglue_compute_metrics, xnli_compute_metrics
 
 
 # Modeling
@@ -178,6 +183,7 @@ if is_torch_available():
         BertForMultipleChoice,
         BertForTokenClassification,
         BertForQuestionAnswering,
+        BertForSpanClassification,
         load_tf_weights_in_bert,
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         BertLayer,
@@ -244,6 +250,7 @@ if is_torch_available():
         RobertaForMultipleChoice,
         RobertaForTokenClassification,
         RobertaForQuestionAnswering,
+        RobertaForSpanClassification,
         ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_distilbert import (
