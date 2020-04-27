@@ -967,7 +967,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        # if model is does not use a casaul mask then add a dummy token
+        # if model is does not use a causal mask then add a dummy token
         if self.config.is_decoder is False:
             assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
             attention_mask = torch.cat(
