@@ -706,7 +706,7 @@ class ModelTesterMixin:
         # create random bad tokens that are not special tokens
         bad_tokens = []
         while len(bad_tokens) < num_bad_tokens:
-            token = ids_tensor((1, 1), self.model_tester.vocab_size).squeeze(0).numpy()[0]
+            token = ids_tensor((1, 1), self.model_tester.vocab_size).squeeze(0).cpu().numpy()[0]
             if token not in special_tokens:
                 bad_tokens.append(token)
         return bad_tokens
