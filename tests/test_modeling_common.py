@@ -661,10 +661,10 @@ class ModelTesterMixin:
 
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
+        input_ids = (inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]).to(torch_device)
 
         for model_class in self.all_generative_model_classes:
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
 
             if config.bos_token_id is None:
                 # if bos token id is not defined mobel needs input_ids, num_return_sequences = 1
