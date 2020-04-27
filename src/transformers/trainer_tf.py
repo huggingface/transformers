@@ -104,15 +104,22 @@ class TFTrainer:
         """
         Prepare the training, validation and test data.
         """
-        if self.args.max_steps > 0:
-            self.train_steps = self.args.max_steps
-        else:
-            self.train_steps: int = math.ceil(len(self.train_dataset) / self.args.train_batch_size)
+        if self.train_dataset is not None:
+            if self.args.max_steps > 0:
+                self.train_steps = self.args.max_steps
+            else:
+                self.train_steps: int = math.ceil(len(self.train_dataset) / self.args.train_batch_size)
 
-        self.tf_train_dataset: tf.data.Dataset = self.train_dataset.get_dataset().shuffle(128).batch(self.args.train_batch_size).repeat(-1)
-        self.tf_train_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(self.tf_train_dataset)
-        self.validation_steps: int = math.ceil(len(self.eval_dataset) / self.args.eval_batch_size)
-        self.tf_eval_dataset: tf.data.Dataset = self.eval_dataset.get_dataset().batch(self.args.eval_batch_size)
+            self.tf_train_dataset: tf.data.Dataset = self.train_dataset.get_dataset().shuffle(128).batch(self.args.train_batch_size).repeat(-1)
+            self.tf_train_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(self.tf_train_dataset)
+        else:
+            self.train_steps = 0
+
+        if self.eval_dataset is not None:
+            self.validation_steps: int = math.ceil(len(self.eval_dataset) / self.args.eval_batch_size)
+            self.tf_eval_dataset: tf.data.Dataset = self.eval_dataset.get_dataset().batch(self.args.eval_batch_size)
+        else:
+            self.validation_steps = 0
 
     def _create_optimizer(self) -> None:
         """
@@ -140,7 +147,7 @@ class TFTrainer:
         self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, PREFIX_CHECKPOINT_DIR, max_to_keep=max_to_keep)
 
         if load_model:
-            ckpt.restore(self.model.ckpt_manager.latest_checkpoint)
+            ckpt.restore(self.model.ckpt_manager.latest_checkpoint).expect_partial()
 
     def _evaluate_steps(self, per_replica_features: tf.Tensor, per_replica_labels: tf.Tensor):
         """
@@ -164,6 +171,7 @@ class TFTrainer:
 
         step: int = 1
         loss: float = 0.0
+
         distribute_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(dataset)
 
         for features, labels in distribute_dataset:
@@ -178,9 +186,6 @@ class TFTrainer:
                 label_ids = labels.numpy()
             else:
                 label_ids = np.append(label_ids, labels.numpy(), axis=0)
-
-            if step % self.validation_steps == 0:
-                break
 
             step += 1
 
@@ -360,7 +365,7 @@ class TFTrainer:
           test_dataset: something similar to a PT Dataset. This is just
             temporary before to have a framework-agnostic approach for datasets.
         """
-        tf_test_dataset = test_dataset.get_dataset().batch(self.args.train_batch_size)
+        tf_test_dataset = test_dataset.get_dataset().batch(self.args.eval_batch_size)
 
         return self._prediction_loop(tf_test_dataset, description="Prediction")
 

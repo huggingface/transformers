@@ -49,7 +49,6 @@ class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
-
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
@@ -72,7 +71,6 @@ class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
-
     data_dir: str = field(
         metadata={"help": "The input data dir. Should contain the .txt files for a CoNLL-2003-formatted task."}
     )
@@ -95,7 +93,6 @@ def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
-
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -185,9 +182,7 @@ def main():
 
     def align_predictions(predictions: np.ndarray, label_ids: np.ndarray) -> Tuple[List[int], List[int]]:
         preds = np.argmax(predictions, axis=2)
-
         batch_size, seq_len = preds.shape
-
         out_label_list = [[] for _ in range(batch_size)]
         preds_list = [[] for _ in range(batch_size)]
 
@@ -201,6 +196,7 @@ def main():
 
     def compute_metrics(p: EvalPrediction) -> Dict:
         preds_list, out_label_list = align_predictions(p.predictions, p.label_ids)
+
         return {
             "precision": precision_score(out_label_list, preds_list),
             "recall": recall_score(out_label_list, preds_list),
@@ -228,10 +224,11 @@ def main():
         logger.info("*** Evaluate ***")
 
         result = trainer.evaluate()
-
         output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
+
         with open(output_eval_file, "w") as writer:
             logger.info("***** Eval results *****")
+
             for key, value in result.items():
                 logger.info("  %s = %s", key, value)
                 writer.write("%s = %s\n" % (key, value))
@@ -252,27 +249,31 @@ def main():
 
         predictions, label_ids, metrics = trainer.predict(test_dataset)
         preds_list, labels_list = align_predictions(predictions, label_ids)
+        report = classification_report(labels_list, preds_list)
 
-        logger.info("\n%s", classification_report(labels_list, preds_list, target_names=labels))
+        logger.info("\n%s", report)
 
         output_test_results_file = os.path.join(training_args.output_dir, "test_results.txt")
+
         with open(output_test_results_file, "w") as writer:
-            for key, value in metrics.items():
-                logger.info("  %s = %s", key, value)
-                writer.write("%s = %s\n" % (key, value))
+            writer.write("%s\n" % report)
 
         # Save predictions
         output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")
+
         with open(output_test_predictions_file, "w") as writer:
             with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
                 example_id = 0
+
                 for line in f:
                     if line.startswith("-DOCSTART-") or line == "" or line == "\n":
                         writer.write(line)
+
                         if not preds_list[example_id]:
                             example_id += 1
                     elif preds_list[example_id]:
                         output_line = line.split()[0] + " " + preds_list[example_id].pop(0) + "\n"
+
                         writer.write(output_line)
                     else:
                         logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
