@@ -38,10 +38,10 @@ class EncoderDecoderConfig(PretrainedConfig):
 
         Args:
             kwargs: (`optional`) Remaining dictionary of keyword arguments. Notably:
-		encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
-		    An instance of a configuration object that defines the encoder config.
-		encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
-		    An instance of a configuration object that defines the decoder config.
+                encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
+                    An instance of a configuration object that defines the encoder config.
+                encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
+                    An instance of a configuration object that defines the decoder config.
     """
     model_type = "encoder_decoder"
 
