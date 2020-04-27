@@ -632,7 +632,7 @@ class ModelTesterMixin:
             model = model_class(config).to(torch_device)
 
             if config.bos_token_id is None:
-                # if bos token id is not defined mobel needs input_ids
+                # if bos token id is not defined, model needs input_ids
                 with self.assertRaises(AssertionError):
                     model.generate(do_sample=True, max_length=5)
                 # num_return_sequences = 1
