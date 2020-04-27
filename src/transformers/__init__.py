@@ -146,6 +146,7 @@ from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 from .training_args import TrainingArguments
+from .training_tf_args import TFTrainingArguments
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -500,6 +501,9 @@ if is_tf_available():
 
     # Optimization
     from .optimization_tf import WarmUp, create_optimizer, AdamWeightDecay, GradientAccumulator
+
+    # Trainer
+    from .trainer_tf import TFTrainer
 
 
 if not is_tf_available() and not is_torch_available():
