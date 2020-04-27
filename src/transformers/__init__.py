@@ -147,6 +147,7 @@ from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 from .training_args import TrainingArguments
 from .training_tf_args import TFTrainingArguments
+from .trainer_utils import EvalPrediction
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
