@@ -7,15 +7,7 @@ import numpy as np
 
 from transformers import BertConfig
 from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-from transformers.modeling_jax_utils import JaxPreTrainedModel
-
-
-ACT2FN = {
-    "gelu": nn.gelu,
-    "relu": nn.relu,
-    "swish": nn.swish,
-    "gelu_new": nn.gelu,
-}
+from transformers.modeling_flax_utils import FlaxPreTrainedModel
 
 
 @jax.jit
@@ -33,6 +25,14 @@ def gelu(x):
     <https://arxiv.org/abs/1606.08415>`_, section 2.
     """
     return x * 0.5 * (1. + jax.lax.erf(x / jnp.sqrt(2.)))
+
+
+ACT2FN = {
+    "gelu": gelu,
+    "relu": nn.relu,
+    "swish": nn.swish,
+    "gelu_new": gelu,
+}
 
 
 class BertLayerNorm(nn.Module):
@@ -209,7 +209,7 @@ class BertModel(nn.Module):
         return encoder, pooled
 
 
-class FlaxBertModel(JaxPreTrainedModel):
+class FlaxBertModel(FlaxPreTrainedModel):
     """
     BERT implementation using JAX/Flax as backend
     """

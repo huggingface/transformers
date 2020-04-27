@@ -12,13 +12,13 @@ from transformers.file_utils import hf_bucket_url, cached_path, WEIGHTS_NAME, TF
     is_remote_url
 
 
-class JaxPreTrainedModel(ABC):
+class FlaxPreTrainedModel(ABC):
     config_class = None
     pretrained_model_archive_map = {}
     base_model_prefix = ""
     model_class = None
 
-    def __init__(self, config: PretrainedConfig, module: Module, state: Dict):
+    def __init__(self, config: PretrainedConfig, module: Module, state: Dict, seed: int = 0):
         if config is None:
             raise ValueError("config cannot be None")
 
@@ -33,7 +33,7 @@ class JaxPreTrainedModel(ABC):
         self._module = module
 
         # Those are public as their type is generic to every derived classes.
-        self.key = PRNGKey(0)
+        self.key = PRNGKey(seed)
         self.state = state
         self.model = Model(module, state)
 
