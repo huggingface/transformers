@@ -17,9 +17,9 @@
 
 import logging
 
+from .configuration_encoder_decoder import EncoderDecoderConfig
 from .modeling_auto import AutoModel, AutoModelWithLMHead
 from .modeling_utils import PreTrainedModel
-from .configuration_encoder_decoder import EncoderDecoderConfig
 
 
 logger = logging.getLogger(__name__)
@@ -36,11 +36,15 @@ class EncoderDecoderModel(PreTrainedModel):
     config_class = EncoderDecoderConfig
 
     def __init__(self, config=None, encoder=None, decoder=None):
-        assert config is not None or (encoder is not None and decoder is not None), "Either a configuration or an Encoder and a decoder has to be provided"
+        assert config is not None or (
+            encoder is not None and decoder is not None
+        ), "Either a configuration or an Encoder and a decoder has to be provided"
         if config is None:
             config = EncoderDecoderConfig.from_encoder_decoder_pretrained(encoder.config, decoder.config)
         else:
-            assert isinstance(config, self.config_class), "config: {} has to be of type {}".format(config, self.config_class)
+            assert isinstance(config, self.config_class), "config: {} has to be of type {}".format(
+                config, self.config_class
+            )
         # initialize with config
         super().__init__(config)
 
@@ -74,7 +78,11 @@ class EncoderDecoderModel(PreTrainedModel):
 
     @classmethod
     def from_encoder_decoder_pretrained(
-        cls, encoder_pretrained_model_name_or_path=None, decoder_pretrained_model_name_or_path=None, *model_args, **kwargs
+        cls,
+        encoder_pretrained_model_name_or_path=None,
+        decoder_pretrained_model_name_or_path=None,
+        *model_args,
+        **kwargs
     ):
         r""" Instantiates an encoder and a decoder from one or two base classes of the library from pre-trained model checkpoints.
 
@@ -169,9 +177,7 @@ class EncoderDecoderModel(PreTrainedModel):
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
         """
 
-        kwargs_encoder = {
-            argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")
-        }
+        kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
@@ -179,7 +185,11 @@ class EncoderDecoderModel(PreTrainedModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask, **kwargs_encoder
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                **kwargs_encoder,
             )
 
         hidden_states = encoder_outputs[0]
@@ -194,7 +204,7 @@ class EncoderDecoderModel(PreTrainedModel):
             head_mask=decoder_head_mask,
             lm_labels=lm_labels,
             masked_lm_labels=masked_lm_labels,
-            **kwargs_decoder
+            **kwargs_decoder,
         )
 
         return decoder_outputs + encoder_outputs

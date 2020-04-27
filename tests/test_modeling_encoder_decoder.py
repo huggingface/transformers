@@ -204,7 +204,10 @@ class EncoderDecoderModelTest(unittest.TestCase):
             with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
                 enc_dec_model.encoder.save_pretrained(encoder_tmp_dirname)
                 enc_dec_model.decoder.save_pretrained(decoder_tmp_dirname)
-                EncoderDecoderModel.from_encoder_decoder_pretrained(encoder_pretrained_model_name_or_path=encoder_tmp_dirname, decoder_pretrained_model_name_or_path=decoder_tmp_dirname)
+                EncoderDecoderModel.from_encoder_decoder_pretrained(
+                    encoder_pretrained_model_name_or_path=encoder_tmp_dirname,
+                    decoder_pretrained_model_name_or_path=decoder_tmp_dirname,
+                )
 
                 after_outputs = enc_dec_model(
                     input_ids=input_ids,
@@ -291,7 +294,9 @@ class EncoderDecoderModelTest(unittest.TestCase):
         enc_dec_model.to(torch_device)
 
         # Bert does not have a bos token id, so use pad_token_id instead
-        generated_output = enc_dec_model.generate(input_ids, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id)
+        generated_output = enc_dec_model.generate(
+            input_ids, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id
+        )
         self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
 
     def test_bert_encoder_decoder_model(self):

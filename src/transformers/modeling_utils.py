@@ -1013,7 +1013,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # current position and vocab size
         if hasattr(self.config, "vocab_size"):
             vocab_size = self.config.vocab_size
-        elif self.config.is_encoder_decoder and hasattr(self.config, "decoder") and hasattr(self.config.decoder, "vocab_size"):
+        elif (
+            self.config.is_encoder_decoder
+            and hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "vocab_size")
+        ):
             vocab_size = self.config.decoder.vocab_size
 
         # set effective batch size and effective batch multiplier according to do_sample
