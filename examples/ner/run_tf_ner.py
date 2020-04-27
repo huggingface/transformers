@@ -22,23 +22,18 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from seqeval.metrics import (
-    f1_score,
-    precision_score,
-    recall_score,
-    classification_report,
-)
+from seqeval.metrics import classification_report, f1_score, precision_score, recall_score
 
 from transformers import (
     AutoConfig,
-    TFAutoModelForTokenClassification,
     AutoTokenizer,
     EvalPrediction,
     HfArgumentParser,
+    TFAutoModelForTokenClassification,
     TFTrainer,
     TFTrainingArguments,
 )
-from utils_ner import get_labels, Split, TFNerDataset
+from utils_ner import Split, TFNerDataset, get_labels
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +44,7 @@ class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
+
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
@@ -71,6 +67,7 @@ class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
+
     data_dir: str = field(
         metadata={"help": "The input data dir. Should contain the .txt files for a CoNLL-2003-formatted task."}
     )
@@ -174,7 +171,7 @@ def main():
             model_type=config.model_type,
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
-            mode=Split.dev
+            mode=Split.dev,
         )
         if training_args.do_eval
         else None

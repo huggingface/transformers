@@ -130,18 +130,9 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
             )
         return tf.no_op()
 
-    def apply_gradients(self, grads_and_vars, name=None, experimental_aggregate_gradients=True):
+    def apply_gradients(self, grads_and_vars, name=None):
         grads, tvars = list(zip(*grads_and_vars))
-        if experimental_aggregate_gradients:
-            # when experimental_aggregate_gradients = False, apply_gradients() no
-            # longer implicitly allreduce gradients, users manually allreduce gradient
-            # and passed the allreduced grads_and_vars. For now, the
-            # clip_by_global_norm will be moved to before the explicit allreduce to
-            # keep the math the same as TF 1 and pre TF 2.2 implementation.
-            (grads, _) = tf.clip_by_global_norm(grads, clip_norm=1.0)
-        return super(AdamWeightDecay, self).apply_gradients(
-            zip(grads, tvars), name=name, experimental_aggregate_gradients=experimental_aggregate_gradients,
-        )
+        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name,)
 
     def _get_lr(self, var_device, var_dtype, apply_state):
         """Retrieves the learning rate with the given state."""
@@ -215,6 +206,7 @@ class GradientAccumulator(object):
             self._accum_steps = tf.Variable(
                 tf.constant(0, dtype=tf.int64), trainable=False, synchronization=tf.VariableSynchronization.ON_READ,
             )
+
         return self._accum_steps.value()
 
     @property
@@ -241,6 +233,7 @@ class GradientAccumulator(object):
 
         for accum_gradient, gradient in zip(self._gradients, gradients):
             accum_gradient.assign_add(gradient)
+
         self._accum_steps.assign_add(1)
 
     def reset(self):

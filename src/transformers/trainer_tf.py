@@ -3,26 +3,15 @@
 import logging
 import math
 import os
-from typing import Optional, Dict, Callable
+from typing import Callable, Dict, Optional
 
 import numpy as np
 import tensorflow as tf
 
-from .optimization_tf import (
-    GradientAccumulator,
-    create_optimizer,
-)
-from .modeling_tf_utils import (
-    TFPreTrainedModel,
-    shape_list,
-)
+from .modeling_tf_utils import TFPreTrainedModel, shape_list
+from .optimization_tf import GradientAccumulator, create_optimizer
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
 from .training_tf_args import TFTrainingArguments
-from .trainer_utils import (
-    EvalPrediction,
-    PredictionOutput,
-    PREFIX_CHECKPOINT_DIR,
-    TrainOutput,
-)
 
 
 logger = logging.getLogger(__name__)
@@ -33,6 +22,7 @@ class TFDataset:
     """
     Fake superclass to partially imitate the PT Dataset class.
     """
+
     def get_dataset(self):
         return self.dataset
 
@@ -90,9 +80,16 @@ class TFTrainer:
         in the Tensorflow documentation and those contained in the transformers library.
         """
         try:
-            self.loss = tf.keras.losses.get({"class_name": self.args.loss_name, "config": {"from_logits": True, "reduction": tf.keras.losses.Reduction.NONE}})
+            self.loss = tf.keras.losses.get(
+                {
+                    "class_name": self.args.loss_name,
+                    "config": {"from_logits": True, "reduction": tf.keras.losses.Reduction.NONE},
+                }
+            )
         except TypeError:
-            self.loss = tf.keras.losses.get({"class_name": self.args.loss_name, "config": {"reduction": tf.keras.losses.Reduction.NONE}})
+            self.loss = tf.keras.losses.get(
+                {"class_name": self.args.loss_name, "config": {"reduction": tf.keras.losses.Reduction.NONE}}
+            )
 
     def _create_summary_writer(self) -> None:
         """
@@ -110,8 +107,12 @@ class TFTrainer:
             else:
                 self.train_steps: int = math.ceil(len(self.train_dataset) / self.args.train_batch_size)
 
-            self.tf_train_dataset: tf.data.Dataset = self.train_dataset.get_dataset().shuffle(128).batch(self.args.train_batch_size).repeat(-1)
-            self.tf_train_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(self.tf_train_dataset)
+            self.tf_train_dataset: tf.data.Dataset = self.train_dataset.get_dataset().shuffle(128).batch(
+                self.args.train_batch_size
+            ).repeat(-1)
+            self.tf_train_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(
+                self.tf_train_dataset
+            )
         else:
             self.train_steps = 0
 
@@ -130,10 +131,17 @@ class TFTrainer:
             self.optimizer = create_optimizer(self.args.learning_rate, self.train_steps, self.args.warmup_steps)
         else:
             try:
-                self.optimizer = tf.keras.optimizers.get({"class_name": self.args.optimizer_name, "config" : {"learning_rate": self.args.learning_rate, "epsilon": self.args.adam_epsilon}})
+                self.optimizer = tf.keras.optimizers.get(
+                    {
+                        "class_name": self.args.optimizer_name,
+                        "config": {"learning_rate": self.args.learning_rate, "epsilon": self.args.adam_epsilon},
+                    }
+                )
             except TypeError:
                 # This is for the case where the optimizer is not Adam-like such as SGD
-                self.optimizer = tf.keras.optimizers.get({"class_name": self.args.optimizer_name, "config" : {"learning_rate": self.args.learning_rate}})
+                self.optimizer = tf.keras.optimizers.get(
+                    {"class_name": self.args.optimizer_name, "config": {"learning_rate": self.args.learning_rate}}
+                )
 
     def _create_checkpoint_manager(self, max_to_keep: int = 5, load_model: bool = True) -> None:
         """
@@ -158,11 +166,15 @@ class TFTrainer:
         Returns:
           The loss corresponding to the given batch.
         """
-        per_replica_loss: tf.Tensor = self.args.strategy.experimental_run_v2(self._run_model, args=(per_replica_features, per_replica_labels, False))
+        per_replica_loss: tf.Tensor = self.args.strategy.experimental_run_v2(
+            self._run_model, args=(per_replica_features, per_replica_labels, False)
+        )
 
         return self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, None)
 
-    def _prediction_loop(self, dataset: tf.data.Dataset, description: str, prediction_loss_only: Optional[bool] = None) -> PredictionOutput:
+    def _prediction_loop(
+        self, dataset: tf.data.Dataset, description: str, prediction_loss_only: Optional[bool] = None
+    ) -> PredictionOutput:
         logger.info("***** Running %s *****", description)
         logger.info("  Batch size = %d", self.args.eval_batch_size)
 
@@ -201,7 +213,9 @@ class TFTrainer:
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
-    def evaluate(self, eval_dataset: Optional[tf.data.Dataset] = None, prediction_loss_only: Optional[bool] = None) -> Dict[str, float]:
+    def evaluate(
+        self, eval_dataset: Optional[tf.data.Dataset] = None, prediction_loss_only: Optional[bool] = None
+    ) -> Dict[str, float]:
         """
         Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
         """
@@ -287,7 +301,9 @@ class TFTrainer:
     def _step(self):
         """Applies gradients and resets accumulation."""
         gradient_scale = self.gradient_accumulator.step * self.args.strategy.num_replicas_in_sync
-        gradients = [gradient / tf.cast(gradient_scale, gradient.dtype) for gradient in self.gradient_accumulator.gradients]
+        gradients = [
+            gradient / tf.cast(gradient_scale, gradient.dtype) for gradient in self.gradient_accumulator.gradients
+        ]
         gradients = [(tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients]
         vars = self.model.trainable_variables
 
@@ -315,7 +331,9 @@ class TFTrainer:
 
     def _accumulate_gradients(self, per_replica_features, per_replica_labels):
         """Accumulates the gradients across all the replica."""
-        per_replica_loss = self.args.strategy.experimental_run_v2(self._forward, args=(per_replica_features, per_replica_labels))
+        per_replica_loss = self.args.strategy.experimental_run_v2(
+            self._forward, args=(per_replica_features, per_replica_labels)
+        )
 
         return self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, None)
 

@@ -1,9 +1,10 @@
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 from typing import Tuple
 
-from .training_args import TrainingArguments
 from .file_utils import cached_property, is_tf_available, tf_required
+from .training_args import TrainingArguments
+
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,10 @@ if is_tf_available():
 class TFTrainingArguments(TrainingArguments):
     tpu: bool = field(default=False, metadata={"help": "Run the training over TPUs"})
     optimizer_name: str = field(default="adam", metadata={"help": "Name of a Tensorflow optimizer"})
-    mode: str = field(default="sequence-classification", metadata={"help": "Type of task, one of \"sequence-classification\", \"token-classification\" "})
+    mode: str = field(
+        default="sequence-classification",
+        metadata={"help": 'Type of task, one of "sequence-classification", "token-classification" '},
+    )
     loss_name: str = field(default="SparseCategoricalCrossentropy", metadata={"help": "Name of a Tensorflow loss"})
     eval_steps: int = field(default=1000, metadata={"help": "Run an eval every X steps."})
 
@@ -23,7 +27,7 @@ class TFTrainingArguments(TrainingArguments):
     @tf_required
     def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
         logger.info("Tensorflow: setting up strategy")
-        if self.no_cuda or len(tf.config.list_physical_devices('GPU')) == 0:
+        if self.no_cuda or len(tf.config.list_physical_devices("GPU")) == 0:
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
             n_gpu = 0
             """

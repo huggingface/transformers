@@ -20,13 +20,8 @@ from tqdm.auto import tqdm, trange
 from .data.data_collator import DataCollator, DefaultDataCollator
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
 from .training_args import TrainingArguments
-from .trainer_utils import (
-    EvalPrediction,
-    PredictionOutput,
-    PREFIX_CHECKPOINT_DIR,
-    TrainOutput,
-)
 
 
 try:

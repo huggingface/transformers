@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional, Union
 
-from transformers import PreTrainedTokenizer, is_torch_available, is_tf_available
+from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
 
 
 logger = logging.getLogger(__name__)
@@ -135,14 +135,16 @@ if is_torch_available():
         def __getitem__(self, i) -> InputFeatures:
             return self.features[i]
 
+
 if is_tf_available():
     import tensorflow as tf
 
-    class TFNerDataset():
+    class TFNerDataset:
         """
         This will be superseded by a framework-agnostic approach
         soon.
         """
+
         features: List[InputFeatures]
         pad_token_label_id: int = -1
         # Use cross entropy ignore_index as padding label id so that only
@@ -180,12 +182,26 @@ if is_tf_available():
 
             def gen():
                 for ex in self.features:
-                    yield ({"input_ids": ex.input_ids, "attention_mask": ex.attention_mask, "token_type_ids": ex.token_type_ids}, ex.label_ids)
+                    yield (
+                        {
+                            "input_ids": ex.input_ids,
+                            "attention_mask": ex.attention_mask,
+                            "token_type_ids": ex.token_type_ids,
+                        },
+                        ex.label_ids,
+                    )
 
             self.dataset = tf.data.Dataset.from_generator(
                 gen,
                 ({"input_ids": tf.int32, "attention_mask": tf.int32, "token_type_ids": tf.int32}, tf.int64),
-                ({"input_ids": tf.TensorShape([None]), "attention_mask": tf.TensorShape([None]), "token_type_ids": tf.TensorShape([None])}, tf.TensorShape([None])),
+                (
+                    {
+                        "input_ids": tf.TensorShape([None]),
+                        "attention_mask": tf.TensorShape([None]),
+                        "token_type_ids": tf.TensorShape([None]),
+                    },
+                    tf.TensorShape([None]),
+                ),
             )
 
         def get_dataset(self):
