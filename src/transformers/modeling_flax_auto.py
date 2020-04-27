@@ -45,10 +45,10 @@ MODEL_MAPPING = OrderedDict(
 
 class FlaxAutoModel(object):
     r"""
-        :class:`~transformers.AutoModel` is a generic model class
+        :class:`~transformers.FlaxAutoModel` is a generic model class
         that will be instantiated as one of the base model classes of the library
-        when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
-        or the `AutoModel.from_config(config)` class methods.
+        when created with the `FlaxAutoModel.from_pretrained(pretrained_model_name_or_path)`
+        or the `FlaxAutoModel.from_config(config)` class methods.
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
@@ -69,18 +69,18 @@ class FlaxAutoModel(object):
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
 
-                - isInstance of `roberta` configuration class: :class:`~transformers.RobertaModel` (RoBERTa model)
-                - isInstance of `bert` configuration class: :class:`~transformers.BertModel` (Bert model)
+                - isInstance of `roberta` configuration class: :class:`~transformers.FlaxRobertaModel` (RoBERTa model)
+                - isInstance of `bert` configuration class: :class:`~transformers.FlaxBertModel` (Bert model)
         Examples:
 
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            model = AutoModel.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = FlaxAutoModel.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in MODEL_MAPPING.items():
             if isinstance(config, config_class):
                 return model_class(config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Unrecognized configuration class {} for this kind of FlaxAutoModel: {}.\n"
             "Model type should be one of {}.".format(
                 config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
             )
@@ -97,8 +97,8 @@ class FlaxAutoModel(object):
 
         The base model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `roberta`: :class:`~transformers.RobertaModel` (RoBERTa model)
-            - contains `bert`: :class:`~transformers.BertModel` (Bert model)
+            - contains `roberta`: :class:`~transformers.FlaxRobertaModel` (RoBERTa model)
+            - contains `bert`: :class:`~transformers.FlaxBertModel` (Bert model)
 
             The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
             To train the model, you should first set it back in training mode with `model.train()`
@@ -161,7 +161,7 @@ class FlaxAutoModel(object):
             if isinstance(config, config_class):
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Unrecognized configuration class {} for this kind of FlaxAutoModel: {}.\n"
             "Model type should be one of {}.".format(
                 config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
             )
