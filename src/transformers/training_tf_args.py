@@ -21,7 +21,7 @@ class TFTrainingArguments(TrainingArguments):
 
     @cached_property
     @tf_required
-    def _setup_strategy(self) -> Tuple[tf.distribute.Strategy, int]:
+    def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
         logger.info("Tensorflow: setting up strategy")
         if self.no_cuda or len(tf.config.list_physical_devices('GPU')) == 0:
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
@@ -39,7 +39,7 @@ class TFTrainingArguments(TrainingArguments):
 
     @property
     @tf_required
-    def strategy(self) -> tf.distribute.Strategy:
+    def strategy(self) -> "tf.distribute.Strategy":
         return self._setup_strategy[0]
 
     @property
