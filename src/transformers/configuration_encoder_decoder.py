@@ -56,7 +56,7 @@ class EncoderDecoderConfig(PretrainedConfig):
         self.is_encoder_decoder = True
 
     @classmethod
-    def from_encoder_decoder_config(cls, encoder_config, decoder_config):
+    def from_encoder_decoder_pretrained(cls, encoder_config, decoder_config):
         r"""
         Instantiate a :class:`~transformers.EncoderDecoderConfig` (or a derived class) from a pre-trained encoder model configuration and decoder model configuration.
 
