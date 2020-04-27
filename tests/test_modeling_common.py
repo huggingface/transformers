@@ -629,7 +629,7 @@ class ModelTesterMixin:
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:
-            model = model_class(config)
+            model = model_class(config).to(torch_device)
 
             if config.bos_token_id is None:
                 # if bos token id is not defined mobel needs input_ids
