@@ -7,12 +7,10 @@ from typing import Optional, Dict, Callable
 
 import numpy as np
 import tensorflow as tf
-from sklearn.metrics import classification_report
 
 from .optimization_tf import (
-    AdamWeightDecay,
     GradientAccumulator,
-    WarmUp,
+    create_optimizer,
 )
 from .modeling_tf_utils import (
     TFPreTrainedModel,
@@ -106,7 +104,11 @@ class TFTrainer:
         """
         Prepare the training, validation and test data.
         """
-        self.train_steps: int = math.ceil(len(self.train_dataset) / self.args.train_batch_size)
+        if self.args.max_steps > 0:
+            self.train_steps = self.args.max_steps
+        else:
+            self.train_steps: int = math.ceil(len(self.train_dataset) / self.args.train_batch_size)
+
         self.tf_train_dataset: tf.data.Dataset = self.train_dataset.get_dataset().shuffle(128).batch(self.args.train_batch_size).repeat(-1)
         self.tf_train_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(self.tf_train_dataset)
         self.validation_steps: int = math.ceil(len(self.eval_dataset) / self.args.eval_batch_size)
@@ -118,15 +120,7 @@ class TFTrainer:
         in the Tensorflow documentation and those contained in the transformers library.
         """
         if self.args.optimizer_name == "adamw":
-            learning_rate_fn = tf.keras.optimizers.schedules.PolynomialDecay(initial_learning_rate=self.args.learning_rate,
-                                                                             decay_steps=self.train_steps,
-                                                                             end_learning_rate=0.0)
-            if self.args.warmup_steps:
-                learning_rate_fn = WarmUp(initial_learning_rate=self.args.learning_rate, decay_schedule_fn=learning_rate_fn,
-                                          warmup_steps=self.args.warmup_steps)
-
-            self.optimizer = AdamWeightDecay(learning_rate=learning_rate_fn, weight_decay_rate=0.01, epsilon=self.args.adam_epsilon,
-                                             exclude_from_weight_decay=["layer_norm", "bias"])
+            self.optimizer = create_optimizer(self.args.learning_rate, self.train_steps, self.args.warmup_steps)
         else:
             try:
                 self.optimizer = tf.keras.optimizers.get({"class_name": self.args.optimizer_name, "config" : {"learning_rate": self.args.learning_rate, "epsilon": self.args.adam_epsilon}})
@@ -198,7 +192,7 @@ class TFTrainer:
         else:
             metrics = {}
 
-        metrics["loss"] = loss
+        metrics["loss"] = loss.numpy()
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
@@ -223,11 +217,14 @@ class TFTrainer:
         iterations = self.optimizer.iterations
         tf.summary.experimental.set_step(iterations)
 
+        epochs = 1 if self.args.max_steps > 0 else self.args.num_train_epochs
+
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(self.train_dataset))
         logger.info("  Num Epochs = %d", self.args.num_train_epochs)
+        logger.info("  Total optimization steps = %d", self.train_steps)
 
-        for epoch in range(int(self.args.num_train_epochs)):
+        for epoch in range(1, int(epochs + 1)):
             for training_loss in self._training_steps():
                 step = iterations.numpy()
                 training_loss = tf.reduce_mean(training_loss)
@@ -242,16 +239,18 @@ class TFTrainer:
                 if step % self.args.logging_steps == 0:
                     logger.info("Epoch {} Step {} Train Loss {:.4f}".format(epoch, step, training_loss.numpy()))
 
-                    logs = {}
-
-                    if self.args.evaluate_during_training:
+                    if self.args.evaluate_during_training and step % self.args.eval_steps == 0:
+                        logs = {}
                         results = self.evaluate()
 
                         for key, value in results.items():
                             eval_key = "eval_{}".format(key)
                             logs[eval_key] = value
 
-                        logs["learning_rate"] = self.optimizer.learning_rate
+                        if callable(self.optimizer.learning_rate):
+                            logs["learning_rate"] = self.optimizer.learning_rate(step).numpy()
+                        else:
+                            logs["learning_rate"] = self.optimizer.learning_rate.numpy()
 
                         logger.info("Epoch {} Step {} Validation Metrics {}".format(epoch, step, logs))
 

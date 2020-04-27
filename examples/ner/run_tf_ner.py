@@ -22,7 +22,12 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from seqeval.metrics import f1_score, precision_score, recall_score
+from seqeval.metrics import (
+    f1_score,
+    precision_score,
+    recall_score,
+    classification_report,
+)
 
 from transformers import (
     AutoConfig,
@@ -216,7 +221,7 @@ def main():
         trainer.train()
         trainer.save_model()
         tokenizer.save_pretrained(training_args.output_dir)
-    """
+
     # Evaluation
     results = {}
     if training_args.do_eval:
@@ -246,7 +251,9 @@ def main():
         )
 
         predictions, label_ids, metrics = trainer.predict(test_dataset)
-        preds_list, _ = align_predictions(predictions, label_ids)
+        preds_list, labels_list = align_predictions(predictions, label_ids)
+
+        logger.info("\n%s", classification_report(labels_list, preds_list, target_names=labels))
 
         output_test_results_file = os.path.join(training_args.output_dir, "test_results.txt")
         with open(output_test_results_file, "w") as writer:
@@ -271,7 +278,6 @@ def main():
                         logger.warning("Maximum sequence length exceeded: No prediction for '%s'.", line.split()[0])
 
     return results
-    """
 
 
 if __name__ == "__main__":
