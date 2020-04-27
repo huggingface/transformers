@@ -37,24 +37,6 @@ if is_torch_available():
     )
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
-
-@require_torch
-class BertModelTest(ModelTesterMixin, unittest.TestCase):
-
-    all_model_classes = (
-        (
-            BertModel,
-            BertForMaskedLM,
-            BertForNextSentencePrediction,
-            BertForPreTraining,
-            BertForQuestionAnswering,
-            BertForSequenceClassification,
-            BertForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
-
     class BertModelTester(object):
         def __init__(
             self,
@@ -423,8 +405,26 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
             return config, inputs_dict
 
+
+@require_torch
+class BertModelTest(ModelTesterMixin, unittest.TestCase):
+
+    all_model_classes = (
+        (
+            BertModel,
+            BertForMaskedLM,
+            BertForNextSentencePrediction,
+            BertForPreTraining,
+            BertForQuestionAnswering,
+            BertForSequenceClassification,
+            BertForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
+
     def setUp(self):
-        self.model_tester = BertModelTest.BertModelTester(self)
+        self.model_tester = BertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BertConfig, hidden_size=37)
 
     def test_config(self):
