@@ -36,18 +36,21 @@ class EncoderDecoderConfig(PretrainedConfig):
 
 
         Args:
-            encoder_config (:class:`PretrainedConfig`):
-                An instance of a configuration object that defines the encoder config.
-            decoder_config (:class:`PretrainedConfig`):
-                An instance of a configuration object that defines the decoder config.
+            kwargs: (`optional`) Remaining dictionary of keyword arguments. Notably:
+		encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
+		    An instance of a configuration object that defines the encoder config.
+		encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
+		    An instance of a configuration object that defines the decoder config.
     """
     model_type = "encoder_decoder"
 
-    def __init__(self, encoder_config=None, decoder_config=None, **kwargs):
-        assert (encoder_config is not None and decoder_config is not None), "Config has to be initialized with encoder and decoder config"
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        encoder_model_type = encoder_config.pop("model_type")
-        decoder_model_type = decoder_config.pop("model_type")
+        assert "encoder" in kwargs and "decoder" in kwargs, "Config has to be initialized with encoder and decoder config"
+        encoder_config = kwargs.pop('encoder')
+        encoder_model_type = encoder_config.pop('model_type')
+        decoder_config = kwargs.pop('decoder')
+        decoder_model_type = decoder_config.pop('model_type')
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
         self.is_encoder_decoder = True

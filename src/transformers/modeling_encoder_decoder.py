@@ -100,32 +100,6 @@ class EncoderDecoderModel(PreTrainedModel):
             model_args: (`optional`) Sequence of positional arguments:
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method
 
-            config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
-
-                - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a pretrained model), or
-                - the model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded by suppling the save directory.
-                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
-
-            state_dict: (`optional`) dict:
-                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
-                This option can be used if you want to create a model from a pretrained configuration but load your own weights.
-                In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
-
-            cache_dir: (`optional`) string:
-                Path to a directory in which a downloaded pre-trained model
-                configuration should be cached if the standard cache should not be used.
-
-            force_download: (`optional`) boolean, default False:
-                Force to (re-)download the model weights and configuration files and override the cached versions if they exists.
-
-            proxies: (`optional`) dict, default None:
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
-                The proxies are used on each request.
-
-            output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
-
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
                 Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
 
@@ -136,14 +110,8 @@ class EncoderDecoderModel(PreTrainedModel):
 
         Examples::
 
-            # For example purposes. Not runnable.
-            model = PreTrainedEncoderDecoder.from_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
+            model = EncoderDecoder.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
         """
-
-        # keyword arguments come in 3 flavors: encoder-specific (prefixed by
-        # `encoder_`), decoder-specific (prefixed by `decoder_`) and those
-        # that apply to the model as a whole.
-        # We let the specific kwargs override the common ones in case of conflict.
 
         kwargs_encoder = {
             argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
@@ -189,6 +157,7 @@ class EncoderDecoderModel(PreTrainedModel):
         decoder_inputs_embeds=None,
         masked_lm_labels=None,
         lm_labels=None,
+        **kwargs,
     ):
 
         """
@@ -200,9 +169,17 @@ class EncoderDecoderModel(PreTrainedModel):
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
         """
 
+        kwargs_encoder = {
+            argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")
+        }
+
+        kwargs_decoder = {
+            argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
+        }
+
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask, **kwargs_encoder
             )
 
         hidden_states = encoder_outputs[0]
@@ -217,6 +194,7 @@ class EncoderDecoderModel(PreTrainedModel):
             head_mask=decoder_head_mask,
             lm_labels=lm_labels,
             masked_lm_labels=masked_lm_labels,
+            **kwargs_decoder
         )
 
         return decoder_outputs + encoder_outputs
