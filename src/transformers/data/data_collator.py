@@ -142,3 +142,39 @@ class DataCollatorForLanguageModeling(DataCollator):
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
+
+
+@dataclass
+class DataCollatorForLazyLanguageModeling(DataCollatorForLanguageModeling):
+
+    block_size: int = 512
+
+    def collate_batch(self, examples: List[torch.Tensor]) -> Dict[str, torch.Tensor]:
+        batch, attention_mask = self._tensorize_batch(examples)
+        if self.mlm:
+            inputs, labels = self.mask_tokens(batch)
+            label_key = "masked_lm_labels"
+        else:
+            inputs, labels = batch, batch
+            label_key = "labels"
+        labels = labels.masked_fill(attention_mask == 0, -100)
+        return {"input_ids": batch, label_key: labels}
+
+    def _tensorize_batch(self, examples: List[str]) -> torch.Tensor:
+
+        if self.tokenizer._pad_token is None:
+            raise ValueError(
+                "You are attempting to pad samples but the tokenizer you are using"
+                f" ({self.tokenizer.__class__.__name__}) does not have one."
+            )
+
+        tensor_examples = self.tokenizer.batch_encode_plus(
+            [ex for ex in examples if ex],
+            max_length=self.block_size,
+            return_tensors="pt",
+            pad_to_max_length=True,
+            return_attention_mask=True,
+        )
+
+        input_ids, attention_mask = tensor_examples["input_ids"], tensor_examples["attention_mask"]
+        return input_ids, attention_mask

@@ -33,7 +33,9 @@ from transformers import (
     AutoModelWithLMHead,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
+    DataCollatorForLazyLanguageModeling,
     HfArgumentParser,
+    LazyLineByLineTextDataset,
     LineByLineTextDataset,
     PreTrainedTokenizer,
     TextDataset,
@@ -75,6 +77,12 @@ class ModelArguments:
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
+    force_pad_token: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to force the addition of a padding token to tokenizer that does not already have one."
+        },
+    )
 
 
 @dataclass
@@ -93,6 +101,10 @@ class DataTrainingArguments:
     line_by_line: bool = field(
         default=False,
         metadata={"help": "Whether distinct lines of text in the dataset are to be handled as distinct sequences."},
+    )
+    lazy_loading: bool = field(
+        default=False,
+        metadata={"help": "Whether data file should be loaded lazily rather than loading all into memory up-front."},
     )
 
     mlm: bool = field(
@@ -117,7 +129,9 @@ class DataTrainingArguments:
 
 def get_dataset(args: DataTrainingArguments, tokenizer: PreTrainedTokenizer, evaluate=False, local_rank=-1):
     file_path = args.eval_data_file if evaluate else args.train_data_file
-    if args.line_by_line:
+    if args.lazy_loading:
+        return LazyLineByLineTextDataset(file_path)
+    elif args.line_by_line:
         return LineByLineTextDataset(
             tokenizer=tokenizer, file_path=file_path, block_size=args.block_size, local_rank=local_rank
         )
@@ -193,6 +207,16 @@ def main():
             "You are instantiating a new tokenizer from scratch. This is not supported, but you can do it from another script, save it,"
             "and load it from here, using --tokenizer_name"
         )
+    if tokenizer.pad_token_id is None:
+        if model_args.force_pad_token:
+            # See PR 3388. Some tokenizers don't had pad tokens which causes errors at the encoding step in the collate_fn.
+            # We give here the option to force the addition of a pad token. The attention mask is used to ignore this token
+            # when feeding to the model.
+            tokenizer.add_special_tokens({"pad_token": "<pad>"})
+        else:
+            logger.warning(
+                "Attempting to train a model whose tokenizer has no padding token. This may result in errors in the encoding step. Set the --force_pad_token flag to fix this."
+            )
 
     if model_args.model_name_or_path:
         model = AutoModelWithLMHead.from_pretrained(
@@ -230,9 +254,17 @@ def main():
         if training_args.do_eval
         else None
     )
-    data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer, mlm=data_args.mlm, mlm_probability=data_args.mlm_probability
-    )
+    if data_args.lazy_loading:
+        data_collator = DataCollatorForLazyLanguageModeling(
+            tokenizer=tokenizer,
+            mlm=data_args.mlm,
+            mlm_probability=data_args.mlm_probability,
+            block_size=data_args.block_size,
+        )
+    else:
+        data_collator = DataCollatorForLanguageModeling(
+            tokenizer=tokenizer, mlm=data_args.mlm, mlm_probability=data_args.mlm_probability
+        )
 
     # Initialize our Trainer
     trainer = Trainer(

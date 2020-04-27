@@ -1,3 +1,4 @@
+import linecache
 import logging
 import os
 import pickle
@@ -98,3 +99,40 @@ class LineByLineTextDataset(Dataset):
 
     def __getitem__(self, i) -> torch.Tensor:
         return torch.tensor(self.examples[i], dtype=torch.long)
+
+
+class LazyLineByLineTextDataset(Dataset):
+    """
+    Credit: @bramvanroy for this linecache implementation.
+    This will be superseded by a framework-agnostic approach
+    soon.
+    """
+
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.num_entries = self._get_n_lines(self.file_path)
+
+    @staticmethod
+    def _get_n_lines(fin, size=65536):
+        # borrowed from https://stackoverflow.com/a/9631635/1150683
+        def blocks(files):
+            while True:
+                b = files.read(size)
+                if not b:
+                    break
+                yield b
+
+        with open(fin, encoding="utf-8") as fhin:
+            n_lines = sum(bl.count("\n") for bl in blocks(fhin))
+        return n_lines
+
+    def __getitem__(self, idx):
+        """
+        :param idx (int): the index of the line to get
+        :return (str or None): The line as a string (newline removed) or None if there is an exception.
+        """
+        # linecache starts counting from one, not zero, +1 the given index
+        return linecache.getline(self.file_path, idx + 1).rstrip()
+
+    def __len__(self):
+        return self.num_entries
