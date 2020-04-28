@@ -251,6 +251,20 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertTrue(torch.allclose(next_hidden_states, hidden_states + feed_forward_hidden_states, atol=1e-3))
             # TODO(PVP) Should add some tests here for backprop function as well (maybe in different test function though)
 
+        def create_and_check_reformer_model_fp16_forward(self, config, input_ids, input_mask, is_decoder):
+            model = ReformerModel(config=config)
+            model.to(torch_device)
+            model.half()
+            model.eval()
+            model(input_ids, attention_mask=input_mask)
+
+        def create_and_check_reformer_model_fp16_generate(self, config, input_ids, input_mask, is_decoder):
+            model = ReformerModelWithLMHead(config=config)
+            model.to(torch_device)
+            model.half()
+            model.eval()
+            model.generate(input_ids, attention_mask=input_mask, do_sample=False)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask,) = config_and_inputs
@@ -281,6 +295,16 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, True)
         self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, False)
+
+    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    def test_reformer_model_fp16_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_model_fp16_forward(*config_and_inputs)
+
+    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    def test_reformer_model_fp16_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_model_fp16_generate(*config_and_inputs)
 
 
 @require_torch
@@ -501,6 +525,20 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertTrue(torch.allclose(next_hidden_states, hidden_states + feed_forward_hidden_states, atol=1e-3))
             # TODO(PVP) Should add some tests here for backprop function as well (maybe in different test function though)
 
+        def create_and_check_reformer_model_fp16_forward(self, config, input_ids, input_mask, is_decoder):
+            model = ReformerModel(config=config)
+            model.to(torch_device)
+            model.half()
+            model.eval()
+            model(input_ids, attention_mask=input_mask)
+
+        def create_and_check_reformer_model_fp16_generate(self, config, input_ids, input_mask, is_decoder):
+            model = ReformerModelWithLMHead(config=config)
+            model.to(torch_device)
+            model.half()
+            model.eval()
+            model.generate(input_ids, attention_mask=input_mask, do_sample=False)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask,) = config_and_inputs
@@ -531,6 +569,16 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, True)
         self.model_tester.create_and_check_reformer_layer_dropout_seed(*config_and_inputs, False)
+
+    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    def test_reformer_model_fp16_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_model_fp16_forward(*config_and_inputs)
+
+    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    def test_reformer_model_fp16_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_model_fp16_generate(*config_and_inputs)
 
 
 @require_torch
