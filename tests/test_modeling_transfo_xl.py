@@ -21,7 +21,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, default_device
 
 
 if is_torch_available():
@@ -114,7 +114,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
 
         def create_transfo_xl_model(self, config, input_ids_1, input_ids_2, lm_labels):
             model = TransfoXLModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             hidden_states_1, mems_1 = model(input_ids_1)
@@ -145,7 +145,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
 
         def create_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, lm_labels):
             model = TransfoXLLMHeadModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             lm_logits_1, mems_1 = model(input_ids_1)
@@ -365,7 +365,7 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
                 ]
             ],
             dtype=torch.long,
-            device=torch_device,
+            device=default_device,
         )
         #  In 1991 , the remains of Russian Tsar Nicholas II and his family
         #  ( except for Alexei and Maria ) are discovered .

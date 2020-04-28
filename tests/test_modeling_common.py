@@ -22,7 +22,7 @@ import unittest
 
 from transformers import is_torch_available
 
-from .utils import require_torch, slow, torch_device
+from .utils import require_torch, slow, default_device
 
 
 if is_torch_available():
@@ -66,7 +66,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**inputs_dict)
@@ -76,7 +76,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
+                model.to(default_device)
                 with torch.no_grad():
                     after_outputs = model(**inputs_dict)
 
@@ -105,7 +105,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             with torch.no_grad():
                 first = model(**inputs_dict)[0]
@@ -129,7 +129,7 @@ class ModelTesterMixin:
             config.output_attentions = True
             config.output_hidden_states = False
             model = model_class(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**inputs_dict)
@@ -164,7 +164,7 @@ class ModelTesterMixin:
             config.output_attentions = True
             config.output_hidden_states = True
             model = model_class(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**inputs_dict)
@@ -204,7 +204,7 @@ class ModelTesterMixin:
         configs_no_init.torchscript = True
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             inputs = inputs_dict["input_ids"]  # Let's keep only input_ids
 
@@ -226,10 +226,10 @@ class ModelTesterMixin:
                 except Exception:
                     self.fail("Couldn't load module.")
 
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
-            loaded_model.to(torch_device)
+            loaded_model.to(default_device)
             loaded_model.eval()
 
             model_state_dict = model.state_dict()
@@ -258,13 +258,13 @@ class ModelTesterMixin:
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             # Prepare head_mask
             # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
             head_mask = torch.ones(
-                self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads, device=torch_device,
+                self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads, device=default_device,
             )
             head_mask[0, 0] = 0
             head_mask[-1, :-1] = 0
@@ -312,7 +312,7 @@ class ModelTesterMixin:
             config.output_attentions = True
             config.output_hidden_states = False
             model = model_class(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             heads_to_prune = {
                 0: list(range(1, self.model_tester.num_attention_heads)),
@@ -341,7 +341,7 @@ class ModelTesterMixin:
             config.output_attentions = True
             config.output_hidden_states = False
             model = model_class(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             heads_to_prune = {
                 0: list(range(1, self.model_tester.num_attention_heads)),
@@ -352,7 +352,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
                 model = model_class.from_pretrained(temp_dir_name)
-                model.to(torch_device)
+                model.to(default_device)
 
             with torch.no_grad():
                 outputs = model(**inputs_dict)
@@ -381,7 +381,7 @@ class ModelTesterMixin:
             config.pruned_heads = heads_to_prune
 
             model = model_class(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             with torch.no_grad():
@@ -409,7 +409,7 @@ class ModelTesterMixin:
             config.pruned_heads = heads_to_prune
 
             model = model_class(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             with torch.no_grad():
@@ -424,7 +424,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
                 model = model_class.from_pretrained(temp_dir_name)
-                model.to(torch_device)
+                model.to(default_device)
 
             with torch.no_grad():
                 outputs = model(**inputs_dict)
@@ -456,7 +456,7 @@ class ModelTesterMixin:
             config.output_hidden_states = True
             config.output_attentions = False
             model = model_class(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**inputs_dict)
@@ -482,7 +482,7 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config)
-            model.to(torch_device)
+            model.to(default_device)
 
             model_vocab_size = config.vocab_size
             # Retrieve the embeddings and clone theme
@@ -610,7 +610,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             wte = model.get_input_embeddings()
@@ -744,7 +744,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
     for _ in range(total_dims):
         values.append(rng.randint(0, vocab_size - 1))
 
-    return torch.tensor(data=values, dtype=torch.long, device=torch_device).view(shape).contiguous()
+    return torch.tensor(data=values, dtype=torch.long, device=default_device).view(shape).contiguous()
 
 
 def floats_tensor(shape, scale=1.0, rng=None, name=None):
@@ -760,7 +760,7 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
     for _ in range(total_dims):
         values.append(rng.random() * scale)
 
-    return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
+    return torch.tensor(data=values, dtype=torch.float, device=default_device).view(shape).contiguous()
 
 
 @require_torch
@@ -860,13 +860,13 @@ class UtilsFunctionsTest(unittest.TestCase):
                 ],  # cummulative prob of 5 highest values <= 0.6
             ],
             dtype=torch.float,
-            device=torch_device,
+            device=default_device,
         )
 
         non_inf_expected_idx = torch.tensor(
             [[0, 0], [0, 9], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 18], [1, 20], [1, 27]],
             dtype=torch.long,
-            device=torch_device,
+            device=default_device,
         )  # expected non filtered idx as noted above
 
         non_inf_expected_output = torch.tensor(
@@ -883,12 +883,12 @@ class UtilsFunctionsTest(unittest.TestCase):
                 9.6770,
             ],  # expected non filtered values as noted above
             dtype=torch.float,
-            device=torch_device,
+            device=default_device,
         )
 
         output = top_k_top_p_filtering(logits, top_k=10, top_p=0.6, min_tokens_to_keep=4)
-        non_inf_output = output[output != -float("inf")].to(device=torch_device)
-        non_inf_idx = (output != -float("inf")).nonzero().to(device=torch_device)
+        non_inf_output = output[output != -float("inf")].to(device=default_device)
+        non_inf_idx = (output != -float("inf")).nonzero().to(device=default_device)
 
         self.assertTrue(torch.allclose(non_inf_expected_output, non_inf_output, atol=1e-12))
         self.assertTrue(torch.all(torch.eq(non_inf_expected_idx, non_inf_idx)))

@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, default_device
 
 
 if is_torch_available():
@@ -136,7 +136,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = AlbertModel(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
             sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
@@ -155,7 +155,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = AlbertForMaskedLM(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, prediction_scores = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
@@ -173,7 +173,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = AlbertForQuestionAnswering(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, start_logits, end_logits = model(
                 input_ids,
@@ -196,7 +196,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
         ):
             config.num_labels = self.num_labels
             model = AlbertForSequenceClassification(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, logits = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
@@ -213,7 +213,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
         ):
             config.num_labels = self.num_labels
             model = AlbertForTokenClassification(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, logits = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels

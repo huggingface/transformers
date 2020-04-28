@@ -21,7 +21,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, default_device
 
 
 if is_torch_available():
@@ -119,11 +119,11 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             input_ids_q = ids_tensor([self.batch_size, self.seq_length + 1], self.vocab_size)
             perm_mask = torch.zeros(
-                self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float, device=torch_device,
+                self.batch_size, self.seq_length + 1, self.seq_length + 1, dtype=torch.float, device=default_device,
             )
             perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
             target_mapping = torch.zeros(
-                self.batch_size, 1, self.seq_length + 1, dtype=torch.float, device=torch_device,
+                self.batch_size, 1, self.seq_length + 1, dtype=torch.float, device=default_device,
             )
             target_mapping[:, 0, -1] = 1.0  # predict last token
 
@@ -191,7 +191,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             token_labels,
         ):
             model = XLNetModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             _, _ = model(input_ids_1, input_mask=input_mask)
@@ -206,7 +206,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
             config.mem_len = 0
             model = XLNetModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             no_mems_outputs = model(input_ids_1)
             self.parent.assertEqual(len(no_mems_outputs), 1)
@@ -235,7 +235,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             token_labels,
         ):
             model = XLNetModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             _, _, attentions = model(input_ids_1, target_mapping=target_mapping)
@@ -261,7 +261,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             token_labels,
         ):
             model = XLNetLMHeadModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             loss_1, all_logits_1, mems_1 = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
@@ -315,7 +315,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             token_labels,
         ):
             model = XLNetForQuestionAnswering(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             outputs = model(input_ids_1)
@@ -391,7 +391,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             token_labels,
         ):
             model = XLNetForTokenClassification(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             logits, mems_1 = model(input_ids_1)
@@ -428,7 +428,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             token_labels,
         ):
             model = XLNetForSequenceClassification(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             logits, mems_1 = model(input_ids_1)
@@ -684,7 +684,7 @@ class XLNetModelLanguageGenerationTest(unittest.TestCase):
                 ]
             ],
             dtype=torch.long,
-            device=torch_device,
+            device=default_device,
         )
         #  In 1991, the remains of Russian Tsar Nicholas II and his family
         #  (except for Alexei and Maria) are discovered.

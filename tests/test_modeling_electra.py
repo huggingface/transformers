@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, default_device
 
 
 if is_torch_available():
@@ -151,7 +151,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             fake_token_labels,
         ):
             model = ElectraModel(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             (sequence_output,) = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
             (sequence_output,) = model(input_ids, token_type_ids=token_type_ids)
@@ -176,7 +176,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             fake_token_labels,
         ):
             model = ElectraForMaskedLM(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, prediction_scores = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
@@ -203,7 +203,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         ):
             config.num_labels = self.num_labels
             model = ElectraForTokenClassification(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, logits = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
@@ -230,7 +230,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         ):
             config.num_labels = self.num_labels
             model = ElectraForPreTraining(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, logits = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=fake_token_labels

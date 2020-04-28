@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, default_device
 
 
 if is_torch_available():
@@ -133,7 +133,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = RobertaModel(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
             sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
@@ -152,7 +152,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = RobertaForMaskedLM(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, prediction_scores = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
@@ -171,7 +171,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
         ):
             config.num_labels = self.num_labels
             model = RobertaForTokenClassification(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, logits = model(
                 input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
@@ -190,7 +190,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
         ):
             config.num_choices = self.num_choices
             model = RobertaForMultipleChoice(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
             multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
@@ -212,7 +212,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = RobertaForQuestionAnswering(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, start_logits, end_logits = model(
                 input_ids,

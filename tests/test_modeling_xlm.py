@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, default_device
 
 
 if is_torch_available():
@@ -187,7 +187,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             model = XLMModel(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             outputs = model(input_ids, lengths=input_lengths, langs=token_type_ids)
             outputs = model(input_ids, langs=token_type_ids)
@@ -212,7 +212,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             model = XLMWithLMHeadModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             loss, logits = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
@@ -239,7 +239,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             model = XLMForQuestionAnsweringSimple(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             outputs = model(input_ids)
@@ -268,7 +268,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             model = XLMForQuestionAnswering(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             outputs = model(input_ids)
@@ -335,7 +335,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             model = XLMForSequenceClassification(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             (logits,) = model(input_ids)
@@ -364,7 +364,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
         ):
             config.num_labels = self.num_labels
             model = XLMForTokenClassification(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             loss, logits = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -434,7 +434,7 @@ class XLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):
         model = XLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
-        input_ids = torch.tensor([[14, 447]], dtype=torch.long, device=torch_device)  # the president
+        input_ids = torch.tensor([[14, 447]], dtype=torch.long, device=default_device)  # the president
         expected_output_ids = [
             14,
             447,

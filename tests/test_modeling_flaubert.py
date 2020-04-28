@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, default_device
 
 
 if is_torch_available():
@@ -179,7 +179,7 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             model = FlaubertModel(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             outputs = model(input_ids, lengths=input_lengths, langs=token_type_ids)
             outputs = model(input_ids, langs=token_type_ids)
@@ -204,7 +204,7 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             model = FlaubertWithLMHeadModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             loss, logits = model(input_ids, token_type_ids=token_type_ids, labels=token_labels)
@@ -231,7 +231,7 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             model = FlaubertForQuestionAnsweringSimple(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             outputs = model(input_ids)
@@ -260,7 +260,7 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             model = FlaubertForQuestionAnswering(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             outputs = model(input_ids)
@@ -327,7 +327,7 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
         ):
             model = FlaubertForSequenceClassification(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             (logits,) = model(input_ids)

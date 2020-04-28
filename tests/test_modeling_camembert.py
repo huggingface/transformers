@@ -17,7 +17,7 @@ import unittest
 
 from transformers import is_torch_available
 
-from .utils import require_torch, slow, torch_device
+from .utils import require_torch, slow, default_device
 
 
 if is_torch_available():
@@ -32,7 +32,7 @@ class CamembertModelIntegrationTest(unittest.TestCase):
         model = CamembertModel.from_pretrained("camembert-base")
 
         input_ids = torch.tensor(
-            [[5, 121, 11, 660, 16, 730, 25543, 110, 83, 6]], device=torch_device, dtype=torch.long,
+            [[5, 121, 11, 660, 16, 730, 25543, 110, 83, 6]], device=default_device, dtype=torch.long,
         )  # J'aime le camembert !
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 10, 768))
@@ -40,7 +40,7 @@ class CamembertModelIntegrationTest(unittest.TestCase):
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
             [[[-0.0254, 0.0235, 0.1027], [0.0606, -0.1811, -0.0418], [-0.1561, -0.1127, 0.2687]]],
-            device=torch_device,
+            device=default_device,
             dtype=torch.float,
         )
         # camembert = torch.hub.load('pytorch/fairseq', 'camembert.v0')

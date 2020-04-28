@@ -97,8 +97,6 @@ def require_tf(test_case):
     return test_case
 
 
-if _torch_available:
-    # Set the USE_CUDA environment variable to select a GPU.
-    torch_device = "cuda" if parse_flag_from_env("USE_CUDA") else "cpu"
-else:
-    torch_device = None
+
+# Set the USE_CUDA environment variable to select a GPU.
+default_device = "cuda" if parse_flag_from_env("USE_CUDA") else "cpu"

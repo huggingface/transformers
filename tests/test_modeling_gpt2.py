@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, default_device
 
 
 if is_torch_available():
@@ -154,7 +154,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
         def create_and_check_gpt2_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = GPT2Model(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
@@ -172,7 +172,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
         def create_and_check_gpt2_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = GPT2Model(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             # first forward pass
@@ -201,11 +201,11 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, input_mask, head_mask, token_type_ids, *args
         ):
             model = GPT2Model(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             # create attention mask
-            attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+            attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=default_device)
             half_seq_length = self.seq_length // 2
             attn_mask[:, half_seq_length:] = 0
 
@@ -223,7 +223,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             # append to next input_ids and attn_mask
             next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
             attn_mask = torch.cat(
-                [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1,
+                [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=default_device)], dim=1,
             )
 
             # get two different outputs
@@ -240,7 +240,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
         def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
             model = GPT2LMHeadModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             loss, lm_logits, _ = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -256,7 +256,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, *args
         ):
             model = GPT2DoubleHeadsModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
@@ -343,7 +343,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gpt2(self):
         model = GPT2LMHeadModel.from_pretrained("gpt2")
-        input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
+        input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=default_device)  # The dog
         expected_output_ids = [
             464,
             3290,
@@ -372,7 +372,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_distilgpt2(self):
         model = GPT2LMHeadModel.from_pretrained("distilgpt2")
-        input_ids = torch.tensor([[464, 1893]], dtype=torch.long, device=torch_device)  # The president
+        input_ids = torch.tensor([[464, 1893]], dtype=torch.long, device=default_device)  # The president
         expected_output_ids = [
             464,
             1893,

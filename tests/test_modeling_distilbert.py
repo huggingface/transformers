@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import require_torch, torch_device
+from .utils import require_torch, default_device
 
 
 if is_torch_available():
@@ -133,7 +133,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = DistilBertModel(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             (sequence_output,) = model(input_ids, input_mask)
             (sequence_output,) = model(input_ids)
@@ -149,7 +149,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = DistilBertForMaskedLM(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, prediction_scores = model(input_ids, attention_mask=input_mask, masked_lm_labels=token_labels)
             result = {
@@ -165,7 +165,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
             self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = DistilBertForQuestionAnswering(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, start_logits, end_logits = model(
                 input_ids, attention_mask=input_mask, start_positions=sequence_labels, end_positions=sequence_labels
@@ -184,7 +184,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
         ):
             config.num_labels = self.num_labels
             model = DistilBertForSequenceClassification(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
             loss, logits = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
             result = {
@@ -199,7 +199,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
         ):
             config.num_labels = self.num_labels
             model = DistilBertForTokenClassification(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             loss, logits = model(input_ids, attention_mask=input_mask, labels=token_labels)

@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import CACHE_DIR, require_torch, slow, default_device
 
 
 if is_torch_available():
@@ -138,7 +138,7 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
 
         def create_and_check_openai_gpt_model(self, config, input_ids, head_mask, token_type_ids, *args):
             model = OpenAIGPTModel(config=config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
@@ -152,7 +152,7 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
 
         def create_and_check_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
             model = OpenAIGPTLMHeadModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             loss, lm_logits = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
@@ -166,7 +166,7 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
 
         def create_and_check_double_lm_head_model(self, config, input_ids, head_mask, token_type_ids, *args):
             model = OpenAIGPTDoubleHeadsModel(config)
-            model.to(torch_device)
+            model.to(default_device)
             model.eval()
 
             loss, lm_logits, mc_logits = model(input_ids, token_type_ids=token_type_ids, lm_labels=input_ids)
@@ -227,7 +227,7 @@ class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_openai_gpt(self):
         model = OpenAIGPTLMHeadModel.from_pretrained("openai-gpt")
-        input_ids = torch.tensor([[481, 4735, 544]], dtype=torch.long, device=torch_device)  # the president is
+        input_ids = torch.tensor([[481, 4735, 544]], dtype=torch.long, device=default_device)  # the president is
         expected_output_ids = [
             481,
             4735,
