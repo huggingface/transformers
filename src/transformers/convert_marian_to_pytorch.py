@@ -9,11 +9,9 @@ from zipfile import ZipFile
 
 import numpy as np
 import torch
-import yaml
 from tqdm import tqdm
 
 from transformers import MarianConfig, MarianMTModel, MarianSentencePieceTokenizer
-from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 
 
 def remove_prefix(text: str, prefix: str):
@@ -69,6 +67,8 @@ CONFIG_KEY = "special:model.yml"
 
 
 def load_config_from_state_dict(opus_dict):
+    import yaml
+
     cfg_str = "".join([chr(x) for x in opus_dict[CONFIG_KEY]])
     yaml_cfg = yaml.load(cfg_str[:-1], Loader=yaml.BaseLoader)
     return cast_marian_config(yaml_cfg)
@@ -134,7 +134,7 @@ def _parse_readme(lns):
 def write_metadata(dest_dir: Path):
     dname = dest_dir.name.split("-")
     dct = dict(target_lang=dname[-1], source_lang="-".join(dname[:-1]))
-    save_json(dct, dest_dir / TOKENIZER_CONFIG_FILE)
+    save_json(dct, dest_dir / "tokenizer_config.json")
 
 
 def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
@@ -380,6 +380,8 @@ if __name__ == "__main__":
 
 
 def load_yaml(path):
+    import yaml
+
     with open(path) as f:
         return yaml.load(f, Loader=yaml.BaseLoader)
 
