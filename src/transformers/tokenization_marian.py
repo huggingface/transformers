@@ -46,13 +46,9 @@ class MarianSentencePieceTokenizer(PreTrainedTokenizer):
             max_len=max_len,
             eos_token=eos_token,
             unk_token=unk_token,
-            # sep_token=sep_token,
-            # cls_token=cls_token,
             pad_token=pad_token,
-            # mask_token=mask_token,
-            # **kwargs,
         )
-        self.encoder = load_json(vocab)  # {k: int(v) for k, v in load_json(vocab).items()}
+        self.encoder = load_json(vocab)
         assert self.pad_token in self.encoder
         self.decoder = {v: k for k, v in self.encoder.items()}
 

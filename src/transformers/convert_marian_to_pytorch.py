@@ -270,6 +270,7 @@ class OpusState:
             scale_embedding=True,
             normalize_embedding="n" in cfg["transformer-preprocess"],
             static_position_embeddings=not cfg["transformer-train-position-embeddings"],
+            dropout=0.1,  # see opus-mt-train repo/transformer-dropout param.
             # default: add_final_layer_norm=False,
             num_beams=decoder_yml["beam-size"],
         )

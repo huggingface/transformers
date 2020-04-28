@@ -36,7 +36,6 @@ if is_torch_available():
         BartConfig,
         BartTokenizer,
         MBartTokenizer,
-        MarianMTModel,
     )
     from transformers.modeling_bart import (
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -111,7 +110,7 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (BartModel, BartForConditionalGeneration, BartForSequenceClassification) if is_torch_available() else ()
     )
-    all_generative_model_classes = (BartForConditionalGeneration, MarianMTModel) if is_torch_available() else ()
+    all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     # TODO(SS): fix the below in a separate PR
     test_pruning = False

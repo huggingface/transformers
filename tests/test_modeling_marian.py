@@ -102,15 +102,13 @@ class IntegrationTests(unittest.TestCase):
             "Tom bewunderte Marias Mut wirklich.",
             "Umdrehen und die Augen schließen.",
         ]
-        # actual C++ output differences: des Deutschen removed, ""-> "O", tun -> machen
+        # actual C++ output differences: (1) des Deutschen removed, (2) ""-> "O", (3) tun -> machen
         generated_words = self.tokenizer.decode_batch(generated_ids, skip_special_tokens=True)
-        print(generated_words)
         self.assertListEqual(expected, generated_words)
 
     def test_marian_equivalence(self):
         batch = self.tokenizer.prepare_translation_batch(["I am a small frog"]).to(torch_device)
         input_ids = batch["input_ids"][0]
-        self.assertEqual(self.model.device, input_ids.device)
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, input_ids.tolist())
 
