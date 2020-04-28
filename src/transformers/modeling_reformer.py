@@ -187,12 +187,8 @@ class AxialPositionEmbeddings(nn.Module):
             )
             if self.dropout > 0:
                 weights = torch.cat(broadcasted_weights, dim=-1)
-                # permute weights so that 2D correctly drops dims 1 and 2
-                perm_weigthts = weights.permute(0, 3, 2, 1)
-                # drop entire matrix of last two dims (prev dims 1 and 2)
-                drop_perm_weights = nn.functional.dropout2d(perm_weigthts, self.dropout, training=self.training)
-                drop_weights = drop_perm_weights.permute(0, 3, 2, 1)
-                position_encodings = torch.reshape(drop_weights, (batch_size, sequence_length, -1))
+                position_encodings = torch.reshape(weights, (batch_size, sequence_length, -1))
+
             else:
                 position_encodings = torch.cat(
                     [torch.reshape(weight, (batch_size, sequence_length, -1)) for weight in broadcasted_weights],
@@ -489,7 +485,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             rotations_shape = (vectors.shape[-1], num_hashes, rotation_size // 2)
             np.random.seed(self.hash_seed)
             random_rotations = torch.tensor(
-                np.random.normal(size=rotations_shape), dtype=torch.float32, device=vectors.device,
+                np.random.normal(size=rotations_shape), dtype=vectors.dtype, device=vectors.device,
             )
             rotated_vectors = torch.einsum("bmtd,dhr->bmhtr", vectors, random_rotations)
         else:
@@ -669,7 +665,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
     def _len_and_dim_norm(self, vectors):
         vectors = self._len_norm(vectors)
         vectors = vectors / torch.sqrt(
-            torch.tensor(self.attention_head_size, device=vectors.device, dtype=torch.float32)
+            torch.tensor(self.attention_head_size, device=vectors.device, dtype=vectors.dtype)
         )
         return vectors
 
@@ -756,7 +752,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
             assert self.num_chunks_before == 0 and self.num_chunks_after == 0
 
         key_vectors = key_vectors / torch.sqrt(
-            torch.tensor(self.attention_head_size, device=key_vectors.device, dtype=torch.float32)
+            torch.tensor(self.attention_head_size, device=key_vectors.device, dtype=key_vectors.dtype)
         )
 
         # chunk vectors
@@ -1375,7 +1371,7 @@ class ReformerModel(ReformerPreTrainedModel):
             # Extend `attention_mask`
             if attention_mask is not None:
                 attention_mask = torch.cat(
-                    [attention_mask, torch.zeros(input_shape[0], padding_length, device=device, dtype=torch.long,)],
+                    [attention_mask, torch.zeros(input_shape[0], padding_length, device=device, dtype=attention_mask.dtype,)],
                     dim=-1,
                 )
             else:
