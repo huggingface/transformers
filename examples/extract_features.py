@@ -373,14 +373,14 @@ def examples2embeds_bk(examples,tokenizer,model,device,writer,args):
             # sent_set.add(sent)
             if sent not in writer:
                 payload = average_layer_batch[b]
-                payload_cls=cls_embed_batch[b]
+                # payload_cls=cls_embed_batch[b]
                 if type(payload)==type(None):
                     print ('ValueError:',sent)
                 else:
                     payload=numpy.array(payload)
                     try:
                         writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,data=payload)
-                        writer.create_dataset('[CLS]\t'+sent, payload_cls.shape, dtype='float32', compression="gzip", compression_opts=9,data=payload_cls)
+                        # writer.create_dataset('[CLS]\t'+sent, payload_cls.shape, dtype='float32', compression="gzip", compression_opts=9,data=payload_cls)
                     except OSError as e:
                         print(e, sent)
 
