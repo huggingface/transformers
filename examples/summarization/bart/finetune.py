@@ -31,18 +31,18 @@ class SummarizationTrainer(BaseTransformer):
             max_target_length=self.hparams.max_target_length,
         )
 
-    def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
+    def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, labels=None):
         return self.model(
-            input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,
+            input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, labels=labels,
         )
 
     def _step(self, batch):
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = batch["source_ids"], batch["source_mask"], batch["target_ids"]
         y_ids = y[:, :-1].contiguous()
-        lm_labels = y[:, 1:].clone()
-        lm_labels[y[:, 1:] == pad_token_id] = -100
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,)
+        labels = y[:, 1:].clone()
+        labels[y[:, 1:] == pad_token_id] = -100
+        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, labels=labels,)
 
         loss = outputs[0]
 

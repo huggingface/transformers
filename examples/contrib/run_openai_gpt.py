@@ -81,7 +81,7 @@ def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, d
         n_batch = len(dataset)
         input_ids = np.zeros((n_batch, 2, input_len), dtype=np.int64)
         mc_token_ids = np.zeros((n_batch, 2), dtype=np.int64)
-        lm_labels = np.full((n_batch, 2, input_len), fill_value=-100, dtype=np.int64)
+        labels = np.full((n_batch, 2, input_len), fill_value=-100, dtype=np.int64)
         mc_labels = np.zeros((n_batch,), dtype=np.int64)
         for i, (story, cont1, cont2, mc_label), in enumerate(dataset):
             with_cont1 = [start_token] + story[:cap_length] + [delimiter_token] + cont1[:cap_length] + [clf_token]
@@ -90,10 +90,10 @@ def pre_process_datasets(encoded_datasets, input_len, cap_length, start_token, d
             input_ids[i, 1, : len(with_cont2)] = with_cont2
             mc_token_ids[i, 0] = len(with_cont1) - 1
             mc_token_ids[i, 1] = len(with_cont2) - 1
-            lm_labels[i, 0, : len(with_cont1)] = with_cont1
-            lm_labels[i, 1, : len(with_cont2)] = with_cont2
+            labels[i, 0, : len(with_cont1)] = with_cont1
+            labels[i, 1, : len(with_cont2)] = with_cont2
             mc_labels[i] = mc_label
-        all_inputs = (input_ids, mc_token_ids, lm_labels, mc_labels)
+        all_inputs = (input_ids, mc_token_ids, labels, mc_labels)
         tensor_datasets.append(tuple(torch.tensor(t) for t in all_inputs))
     return tensor_datasets
 
@@ -245,8 +245,8 @@ def main():
             tqdm_bar = tqdm(train_dataloader, desc="Training")
             for step, batch in enumerate(tqdm_bar):
                 batch = tuple(t.to(device) for t in batch)
-                input_ids, mc_token_ids, lm_labels, mc_labels = batch
-                losses = model(input_ids, mc_token_ids=mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels)
+                input_ids, mc_token_ids, labels, mc_labels = batch
+                losses = model(input_ids, mc_token_ids=mc_token_ids, labels=labels, mc_labels=mc_labels)
                 loss = args.lm_coef * losses[0] + losses[1]
                 loss.backward()
                 optimizer.step()
@@ -283,10 +283,10 @@ def main():
         nb_eval_steps, nb_eval_examples = 0, 0
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             batch = tuple(t.to(device) for t in batch)
-            input_ids, mc_token_ids, lm_labels, mc_labels = batch
+            input_ids, mc_token_ids, labels, mc_labels = batch
             with torch.no_grad():
                 _, mc_loss, _, mc_logits = model(
-                    input_ids, mc_token_ids=mc_token_ids, lm_labels=lm_labels, mc_labels=mc_labels
+                    input_ids, mc_token_ids=mc_token_ids, labels=labels, mc_labels=mc_labels
                 )
 
             mc_logits = mc_logits.detach().cpu().numpy()

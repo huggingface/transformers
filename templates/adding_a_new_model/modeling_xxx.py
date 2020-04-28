@@ -389,14 +389,14 @@ class XxxModel(XxxPreTrainedModel):
 )
 class XxxForMaskedLM(XxxPreTrainedModel):
     r"""
-        **masked_lm_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
+        **masked_labels**: (`optional`) ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``:
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-1, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
 
     Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
-        **loss**: (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        **loss**: (`optional`, returned when ``masked_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Masked language modeling loss.
         **prediction_scores**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, config.vocab_size)``
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -413,7 +413,7 @@ class XxxForMaskedLM(XxxPreTrainedModel):
         tokenizer = XxxTokenizer.from_pretrained('xxx-base-uncased')
         model = XxxForMaskedLM.from_pretrained('xxx-base-uncased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute")).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, masked_lm_labels=input_ids)
+        outputs = model(input_ids, masked_labels=input_ids)
         loss, prediction_scores = outputs[:2]
 
     """
@@ -437,7 +437,7 @@ class XxxForMaskedLM(XxxPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
+        masked_labels=None,
     ):
 
         outputs = self.transformer(
@@ -453,9 +453,9 @@ class XxxForMaskedLM(XxxPreTrainedModel):
         prediction_scores = self.cls(sequence_output)
 
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
-        if masked_lm_labels is not None:
+        if masked_labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_labels.view(-1))
             outputs = (masked_lm_loss,) + outputs
 
         return outputs  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)

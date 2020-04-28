@@ -200,7 +200,7 @@ class Distiller:
         -------
             token_ids: `torch.tensor(bs, seq_length)` - The token ids after the modifications for MLM.
             attn_mask: `torch.tensor(bs, seq_length)` - The attention mask for the self-attention.
-            mlm_labels: `torch.tensor(bs, seq_length)` - The masked languge modeling labels. There is a -100 where there is nothing to predict.
+            mlabels: `torch.tensor(bs, seq_length)` - The masked languge modeling labels. There is a -100 where there is nothing to predict.
         """
         token_ids, lengths = batch
         token_ids, lengths = self.round_batch(x=token_ids, lengths=lengths)
@@ -209,7 +209,7 @@ class Distiller:
         attn_mask = torch.arange(token_ids.size(1), dtype=torch.long, device=lengths.device) < lengths[:, None]
 
         bs, max_seq_len = token_ids.size()
-        mlm_labels = token_ids.new(token_ids.size()).copy_(token_ids)
+        mlabels = token_ids.new(token_ids.size()).copy_(token_ids)
 
         x_prob = self.token_probs[token_ids.flatten()]
         n_tgt = math.ceil(self.mlm_mask_prop * lengths.sum().item())
@@ -244,12 +244,12 @@ class Distiller:
         )
         token_ids = token_ids.masked_scatter(pred_mask, _token_ids)
 
-        mlm_labels[~pred_mask] = -100  # previously `mlm_labels[1-pred_mask] = -1`, cf pytorch 1.2.0 compatibility
+        mlabels[~pred_mask] = -100  # previously `mlabels[1-pred_mask] = -1`, cf pytorch 1.2.0 compatibility
 
         # sanity checks
         assert 0 <= token_ids.min() <= token_ids.max() < self.vocab_size
 
-        return token_ids, attn_mask, mlm_labels
+        return token_ids, attn_mask, mlabels
 
     def prepare_batch_clm(self, batch):
         """
@@ -265,20 +265,20 @@ class Distiller:
         -------
             token_ids: `torch.tensor(bs, seq_length)` - The token ids after the modifications for MLM.
             attn_mask: `torch.tensor(bs, seq_length)` - The attention mask for the self-attention.
-            clm_labels: `torch.tensor(bs, seq_length)` - The causal languge modeling labels. There is a -100 where there is nothing to predict.
+            clabels: `torch.tensor(bs, seq_length)` - The causal languge modeling labels. There is a -100 where there is nothing to predict.
         """
         token_ids, lengths = batch
         token_ids, lengths = self.round_batch(x=token_ids, lengths=lengths)
         assert token_ids.size(0) == lengths.size(0)
 
         attn_mask = torch.arange(token_ids.size(1), dtype=torch.long, device=lengths.device) < lengths[:, None]
-        clm_labels = token_ids.new(token_ids.size()).copy_(token_ids)
-        clm_labels[~attn_mask] = -100  # previously `clm_labels[1-attn_mask] = -1`, cf pytorch 1.2.0 compatibility
+        clabels = token_ids.new(token_ids.size()).copy_(token_ids)
+        clabels[~attn_mask] = -100  # previously `clabels[1-attn_mask] = -1`, cf pytorch 1.2.0 compatibility
 
         # sanity checks
         assert 0 <= token_ids.min() <= token_ids.max() < self.vocab_size
 
-        return token_ids, attn_mask, clm_labels
+        return token_ids, attn_mask, clabels
 
     def round_batch(self, x: torch.tensor, lengths: torch.tensor):
         """
@@ -349,10 +349,10 @@ class Distiller:
                     batch = tuple(t.to(f"cuda:{self.params.local_rank}") for t in batch)
 
                 if self.mlm:
-                    token_ids, attn_mask, lm_labels = self.prepare_batch_mlm(batch=batch)
+                    token_ids, attn_mask, labels = self.prepare_batch_mlm(batch=batch)
                 else:
-                    token_ids, attn_mask, lm_labels = self.prepare_batch_clm(batch=batch)
-                self.step(input_ids=token_ids, attention_mask=attn_mask, lm_labels=lm_labels)
+                    token_ids, attn_mask, labels = self.prepare_batch_clm(batch=batch)
+                self.step(input_ids=token_ids, attention_mask=attn_mask, labels=labels)
 
                 iter_bar.update()
                 iter_bar.set_postfix(
@@ -369,7 +369,7 @@ class Distiller:
             self.save_checkpoint(checkpoint_name=f"pytorch_model.bin")
             logger.info("Training is finished")
 
-    def step(self, input_ids: torch.tensor, attention_mask: torch.tensor, lm_labels: torch.tensor):
+    def step(self, input_ids: torch.tensor, attention_mask: torch.tensor, labels: torch.tensor):
         """
         One optimization step: forward of student AND teacher, backward on the loss (for gradient accumulation),
         and possibly a parameter update (depending on the gradient accumulation).
@@ -378,7 +378,7 @@ class Distiller:
         ------
         input_ids: `torch.tensor(bs, seq_length)` - The token ids.
         attention_mask: `torch.tensor(bs, seq_length)` - The attention mask for self attention.
-        lm_labels: `torch.tensor(bs, seq_length)` - The language modeling labels (mlm labels for MLM and clm labels for CLM).
+        labels: `torch.tensor(bs, seq_length)` - The language modeling labels (mlm labels for MLM and clm labels for CLM).
         """
         if self.mlm:
             s_logits, s_hidden_states = self.student(
@@ -401,7 +401,7 @@ class Distiller:
         # https://github.com/peterliht/knowledge-distillation-pytorch/blob/master/model/net.py#L100
         # https://github.com/peterliht/knowledge-distillation-pytorch/issues/2
         if self.params.restrict_ce_to_mask:
-            mask = (lm_labels > -1).unsqueeze(-1).expand_as(s_logits)  # (bs, seq_lenth, voc_size)
+            mask = (labels > -1).unsqueeze(-1).expand_as(s_logits)  # (bs, seq_lenth, voc_size)
         else:
             mask = attention_mask.unsqueeze(-1).expand_as(s_logits)  # (bs, seq_lenth, voc_size)
         s_logits_slct = torch.masked_select(s_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
@@ -420,11 +420,11 @@ class Distiller:
         loss = self.alpha_ce * loss_ce
 
         if self.alpha_mlm > 0.0:
-            loss_mlm = self.lm_loss_fct(s_logits.view(-1, s_logits.size(-1)), lm_labels.view(-1))
+            loss_mlm = self.lm_loss_fct(s_logits.view(-1, s_logits.size(-1)), labels.view(-1))
             loss += self.alpha_mlm * loss_mlm
         if self.alpha_clm > 0.0:
             shift_logits = s_logits[..., :-1, :].contiguous()
-            shift_labels = lm_labels[..., 1:].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
             loss_clm = self.lm_loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
             loss += self.alpha_clm * loss_clm
 

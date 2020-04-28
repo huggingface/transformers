@@ -176,8 +176,8 @@ class EncoderDecoderModel(PreTrainedModel):
         decoder_attention_mask=None,
         decoder_head_mask=None,
         decoder_inputs_embeds=None,
-        masked_lm_labels=None,
-        lm_labels=None,
+        masked_labels=None,
+        labels=None,
         **kwargs,
     ):
 
@@ -219,12 +219,12 @@ class EncoderDecoderModel(PreTrainedModel):
                 Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
                 than the model's internal embedding lookup matrix.
-            masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            masked_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
                 Labels for computing the masked language modeling loss for the decoder.
                 Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
                 in ``[0, ..., config.vocab_size]``
-            lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
                 Labels for computing the left-to-right language modeling loss (next word prediction) for the decoder.
                 Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
                 Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
@@ -246,7 +246,7 @@ class EncoderDecoderModel(PreTrainedModel):
             outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
 
             # training
-            loss, outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, lm_labels=input_ids)[:2]
+            loss, outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)[:2]
 
             # generation
             generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
@@ -278,8 +278,8 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
-            lm_labels=lm_labels,
-            masked_lm_labels=masked_lm_labels,
+            labels=labels,
+            masked_labels=masked_labels,
             **kwargs_decoder,
         )
 

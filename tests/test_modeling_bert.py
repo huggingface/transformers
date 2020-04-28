@@ -235,7 +235,7 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_labels=token_labels
             )
             result = {
                 "loss": loss,
@@ -265,7 +265,7 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
                 input_ids,
                 attention_mask=input_mask,
                 token_type_ids=token_type_ids,
-                masked_lm_labels=token_labels,
+                masked_labels=token_labels,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
             )
@@ -273,7 +273,7 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
                 input_ids,
                 attention_mask=input_mask,
                 token_type_ids=token_type_ids,
-                masked_lm_labels=token_labels,
+                masked_labels=token_labels,
                 encoder_hidden_states=encoder_hidden_states,
             )
             result = {
@@ -314,7 +314,7 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
                 input_ids,
                 attention_mask=input_mask,
                 token_type_ids=token_type_ids,
-                masked_lm_labels=token_labels,
+                masked_labels=token_labels,
                 next_sentence_label=sequence_labels,
             )
             result = {

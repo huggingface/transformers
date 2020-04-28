@@ -91,9 +91,9 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
             input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
             input_ids_2 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-            lm_labels = None
+            labels = None
             if self.use_labels:
-                lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+                labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
             config = TransfoXLConfig(
                 vocab_size=self.vocab_size,
@@ -110,13 +110,13 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
                 eos_token_id=self.eos_token_id,
             )
 
-            return (config, input_ids_1, input_ids_2, lm_labels)
+            return (config, input_ids_1, input_ids_2, labels)
 
         def set_seed(self):
             random.seed(self.seed)
             tf.random.set_seed(self.seed)
 
-        def create_and_check_transfo_xl_model(self, config, input_ids_1, input_ids_2, lm_labels):
+        def create_and_check_transfo_xl_model(self, config, input_ids_1, input_ids_2, labels):
             model = TFTransfoXLModel(config)
 
             hidden_states_1, mems_1 = model(input_ids_1)
@@ -147,17 +147,17 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
                 [[self.mem_len, self.batch_size, self.hidden_size]] * self.num_hidden_layers,
             )
 
-        def create_and_check_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, lm_labels):
+        def create_and_check_transfo_xl_lm_head(self, config, input_ids_1, input_ids_2, labels):
             model = TFTransfoXLLMHeadModel(config)
 
             lm_logits_1, mems_1 = model(input_ids_1)
 
-            inputs = {"input_ids": input_ids_1, "labels": lm_labels}
+            inputs = {"input_ids": input_ids_1, "labels": labels}
             _, mems_1 = model(inputs)
 
             lm_logits_2, mems_2 = model([input_ids_2, mems_1])
 
-            inputs = {"input_ids": input_ids_1, "mems": mems_1, "labels": lm_labels}
+            inputs = {"input_ids": input_ids_1, "mems": mems_1, "labels": labels}
 
             _, mems_2 = model(inputs)
 
@@ -186,7 +186,7 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
-            (config, input_ids_1, input_ids_2, lm_labels) = config_and_inputs
+            (config, input_ids_1, input_ids_2, labels) = config_and_inputs
             inputs_dict = {"input_ids": input_ids_1}
             return config, inputs_dict
 

@@ -128,11 +128,11 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             target_mapping[:, 0, -1] = 1.0  # predict last token
 
             sequence_labels = None
-            lm_labels = None
+            labels = None
             is_impossible_labels = None
             token_labels = None
             if self.use_labels:
-                lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+                labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
                 sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
                 is_impossible_labels = ids_tensor([self.batch_size], 2).float()
                 token_labels = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
@@ -165,7 +165,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
                 input_mask,
                 target_mapping,
                 segment_ids,
-                lm_labels,
+                labels,
                 sequence_labels,
                 is_impossible_labels,
                 token_labels,
@@ -185,7 +185,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
             target_mapping,
             segment_ids,
-            lm_labels,
+            labels,
             sequence_labels,
             is_impossible_labels,
             token_labels,
@@ -229,7 +229,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
             target_mapping,
             segment_ids,
-            lm_labels,
+            labels,
             sequence_labels,
             is_impossible_labels,
             token_labels,
@@ -255,7 +255,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
             target_mapping,
             segment_ids,
-            lm_labels,
+            labels,
             sequence_labels,
             is_impossible_labels,
             token_labels,
@@ -264,10 +264,10 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            loss_1, all_logits_1, mems_1 = model(input_ids_1, token_type_ids=segment_ids, labels=lm_labels)
+            loss_1, all_logits_1, mems_1 = model(input_ids_1, token_type_ids=segment_ids, labels=labels)
 
             loss_2, all_logits_2, mems_2 = model(
-                input_ids_2, token_type_ids=segment_ids, labels=lm_labels, mems=mems_1
+                input_ids_2, token_type_ids=segment_ids, labels=labels, mems=mems_1
             )
 
             logits, _ = model(input_ids_q, perm_mask=perm_mask, target_mapping=target_mapping)
@@ -309,7 +309,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
             target_mapping,
             segment_ids,
-            lm_labels,
+            labels,
             sequence_labels,
             is_impossible_labels,
             token_labels,
@@ -385,7 +385,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
             target_mapping,
             segment_ids,
-            lm_labels,
+            labels,
             sequence_labels,
             is_impossible_labels,
             token_labels,
@@ -422,7 +422,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             input_mask,
             target_mapping,
             segment_ids,
-            lm_labels,
+            labels,
             sequence_labels,
             is_impossible_labels,
             token_labels,
@@ -460,7 +460,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
                 input_mask,
                 target_mapping,
                 segment_ids,
-                lm_labels,
+                labels,
                 sequence_labels,
                 is_impossible_labels,
                 token_labels,

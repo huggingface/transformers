@@ -155,7 +155,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_labels=token_labels
             )
             result = {
                 "loss": loss,

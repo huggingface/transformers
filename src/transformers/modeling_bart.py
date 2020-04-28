@@ -869,12 +869,12 @@ class BartForConditionalGeneration(PretrainedBartModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         decoder_cached_states=None,
-        lm_labels=None,
+        labels=None,
         use_cache=False,
         **unused
     ):
         r"""
-        masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        masked_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
             Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
@@ -883,7 +883,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
-        masked_lm_loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        masked_lm_loss (`optional`, returned when ``masked_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -925,10 +925,10 @@ class BartForConditionalGeneration(PretrainedBartModel):
         )
         lm_logits = F.linear(outputs[0], self.model.shared.weight)
         outputs = (lm_logits,) + outputs[1:]  # Add hidden states and attention if they are here
-        if lm_labels is not None:
+        if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
-            # TODO(SS): do we need to ignore pad tokens in lm_labels?
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), lm_labels.view(-1))
+            # TODO(SS): do we need to ignore pad tokens in labels?
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
             outputs = (masked_lm_loss,) + outputs
 
         return outputs

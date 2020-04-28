@@ -612,10 +612,10 @@ class T5PreTrainedModel(PreTrainedModel):
         shifted_input_ids[..., 0] = decoder_start_token_id
 
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
-        # replace possible -100 values in lm_labels by `pad_token_id`
+        # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
-        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `lm_labels` has only positive values and -100"
+        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `labels` has only positive values and -100"
 
         return shifted_input_ids
 
@@ -998,13 +998,13 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         decoder_attention_mask=None,
         decoder_past_key_value_states=None,
         use_cache=True,
-        lm_labels=None,
+        labels=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         head_mask=None,
     ):
         r"""
-        lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
                 Labels for computing the sequence classification/regression loss.
                 Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
                 All labels set to ``-100`` are ignored (masked), the loss is only
@@ -1037,7 +1037,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = T5ForConditionalGeneration.from_pretrained('t5-small')
         input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, lm_labels=input_ids)
+        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
         loss, prediction_scores = outputs[:2]
 
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
@@ -1055,14 +1055,14 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         hidden_states = encoder_outputs[0]
 
-        if lm_labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
+        if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
-            decoder_input_ids = self._shift_right(lm_labels)
+            decoder_input_ids = self._shift_right(labels)
 
         # If decoding with past key value states, only the last tokens
         # should be given as an input
         if decoder_past_key_value_states is not None:
-            assert lm_labels is None, "Decoder should not use cached key value states when training."
+            assert labels is None, "Decoder should not use cached key value states when training."
             if decoder_input_ids is not None:
                 decoder_input_ids = decoder_input_ids[:, -1:]
             if decoder_inputs_embeds is not None:
@@ -1093,9 +1093,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         lm_logits = self.lm_head(sequence_output)
 
         decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
-        if lm_labels is not None:
+        if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
-            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), lm_labels.view(-1))
+            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
             decoder_outputs = (loss,) + decoder_outputs
 

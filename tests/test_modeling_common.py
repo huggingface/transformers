@@ -147,7 +147,7 @@ class ModelTesterMixin:
                 correct_outlen = 4
                 decoder_attention_idx = 1
 
-                if "lm_labels" in inputs_dict:  # loss will come first
+                if "labels" in inputs_dict:  # loss will come first
                     correct_outlen += 1  # compute loss
                     decoder_attention_idx += 1
                 self.assertEqual(out_len, correct_outlen)

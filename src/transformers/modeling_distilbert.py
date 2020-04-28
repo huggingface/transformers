@@ -493,9 +493,9 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         return self.vocab_projector
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, masked_lm_labels=None):
+    def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, masked_labels=None):
         r"""
-        masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        masked_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
@@ -503,7 +503,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
-        loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        loss (`optional`, returned when ``masked_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -527,7 +527,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
         model = DistilBertForMaskedLM.from_pretrained('distilbert-base-cased')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, masked_lm_labels=input_ids)
+        outputs = model(input_ids, masked_labels=input_ids)
         loss, prediction_scores = outputs[:2]
 
         """
@@ -541,9 +541,9 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         prediction_logits = self.vocab_projector(prediction_logits)  # (bs, seq_length, vocab_size)
 
         outputs = (prediction_logits,) + dlbrt_output[1:]
-        if masked_lm_labels is not None:
+        if masked_labels is not None:
             mlm_loss = self.mlm_loss_fct(
-                prediction_logits.view(-1, prediction_logits.size(-1)), masked_lm_labels.view(-1)
+                prediction_logits.view(-1, prediction_logits.size(-1)), masked_labels.view(-1)
             )
             outputs = (mlm_loss,) + outputs
 

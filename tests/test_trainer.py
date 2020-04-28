@@ -74,14 +74,14 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         batch = data_collator.collate_batch(examples)
         self.assertIsInstance(batch, dict)
         self.assertEqual(batch["input_ids"].shape, torch.Size((31, 107)))
-        self.assertEqual(batch["masked_lm_labels"].shape, torch.Size((31, 107)))
+        self.assertEqual(batch["masked_labels"].shape, torch.Size((31, 107)))
 
         dataset = TextDataset(tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=512, overwrite_cache=True)
         examples = [dataset[i] for i in range(len(dataset))]
         batch = data_collator.collate_batch(examples)
         self.assertIsInstance(batch, dict)
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 512)))
-        self.assertEqual(batch["masked_lm_labels"].shape, torch.Size((2, 512)))
+        self.assertEqual(batch["masked_labels"].shape, torch.Size((2, 512)))
 
 
 @require_torch

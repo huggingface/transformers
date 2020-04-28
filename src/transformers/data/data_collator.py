@@ -91,7 +91,7 @@ class DataCollatorForLanguageModeling(DataCollator):
         batch = self._tensorize_batch(examples)
         if self.mlm:
             inputs, labels = self.mask_tokens(batch)
-            return {"input_ids": inputs, "masked_lm_labels": labels}
+            return {"input_ids": inputs, "masked_labels": labels}
         else:
             return {"input_ids": batch, "labels": batch}
 

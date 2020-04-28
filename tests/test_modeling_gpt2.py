@@ -268,7 +268,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 "mc_token_ids": mc_token_ids,
                 "attention_mask": multiple_choice_input_mask,
                 "token_type_ids": multiple_choice_token_type_ids,
-                "lm_labels": multiple_choice_inputs_ids,
+                "labels": multiple_choice_inputs_ids,
             }
 
             loss, lm_logits, mc_logits, _ = model(**inputs)

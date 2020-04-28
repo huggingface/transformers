@@ -127,10 +127,10 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
             # target_mapping[:, 0, -1] = 1.0  # predict last token
 
             sequence_labels = None
-            lm_labels = None
+            labels = None
             is_impossible_labels = None
             if self.use_labels:
-                lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+                labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
                 sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
                 is_impossible_labels = ids_tensor([self.batch_size], 2, dtype=tf.float32)
 
@@ -162,7 +162,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
                 input_mask,
                 target_mapping,
                 segment_ids,
-                lm_labels,
+                labels,
                 sequence_labels,
                 is_impossible_labels,
             )
@@ -181,7 +181,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
             input_mask,
             target_mapping,
             segment_ids,
-            lm_labels,
+            labels,
             sequence_labels,
             is_impossible_labels,
         ):
@@ -223,7 +223,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
             input_mask,
             target_mapping,
             segment_ids,
-            lm_labels,
+            labels,
             sequence_labels,
             is_impossible_labels,
         ):
@@ -274,7 +274,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
             input_mask,
             target_mapping,
             segment_ids,
-            lm_labels,
+            labels,
             sequence_labels,
             is_impossible_labels,
         ):
@@ -306,7 +306,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
             input_mask,
             target_mapping,
             segment_ids,
-            lm_labels,
+            labels,
             sequence_labels,
             is_impossible_labels,
         ):
@@ -335,7 +335,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
             input_mask,
             target_mapping,
             segment_ids,
-            lm_labels,
+            labels,
             sequence_labels,
             is_impossible_labels,
         ):
@@ -370,7 +370,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
                 input_mask,
                 target_mapping,
                 segment_ids,
-                lm_labels,
+                labels,
                 sequence_labels,
                 is_impossible_labels,
             ) = config_and_inputs
