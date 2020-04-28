@@ -488,7 +488,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
             input_ids: (`optional`) `tf.Tensor` of `dtype=tf.int32` of shape `(batch_size, sequence_length)`
                 The sequence used as a prompt for the generation. If `None` the method initializes
-                it as an empty `torch.LongTensor` of shape `(1,)`.
+                it as an empty `tf.Tensor` of shape `(1,)`.
 
             max_length: (`optional`) int
                 The max length of the sequence to be generated.  Between 1 and infinity. Default to 20.
