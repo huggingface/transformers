@@ -38,10 +38,11 @@ logger = logging.getLogger(__name__)
 import h5py
 
 BERT_BASE_CASED='bert-base-cased'
-MODELS=[BERT_BASE_CASED]
+BERT_BASE_UNCASED='bert-base-uncased'
+MODELS=[BERT_BASE_CASED,BERT_BASE_UNCASED]
 
-MODELNAME2MODEL={BERT_BASE_CASED:BertForMaskedLM}
-MODELNAME2TOKENIZERS={BERT_BASE_CASED:BertTokenizer}
+MODELNAME2MODEL={BERT_BASE_CASED:BertModel,BERT_BASE_UNCASED:BertModel}
+MODELNAME2TOKENIZERS={BERT_BASE_CASED:BertTokenizer,BERT_BASE_UNCASED:BertTokenizer}
 
 def produce_key(sent):
     sent='\t'.join(sent.split())
