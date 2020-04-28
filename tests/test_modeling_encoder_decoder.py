@@ -21,7 +21,7 @@ from transformers import is_torch_available
 
 # TODO(PVP): this line reruns all the tests in BertModelTest; not sure whether this can be prevented
 # for now only run module with pytest tests/test_modeling_encoder_decoder.py::EncoderDecoderModelTest
-from .test_modeling_bert import BertModelTest
+from .test_modeling_bert import BertModelTester
 from .utils import require_torch, slow, torch_device
 
 
@@ -34,7 +34,7 @@ if is_torch_available():
 @require_torch
 class EncoderDecoderModelTest(unittest.TestCase):
     def prepare_config_and_inputs_bert(self):
-        bert_model_tester = BertModelTest.BertModelTester(self)
+        bert_model_tester = BertModelTester(self)
         encoder_config_and_inputs = bert_model_tester.prepare_config_and_inputs()
         decoder_config_and_inputs = bert_model_tester.prepare_config_and_inputs_for_decoder()
         (
