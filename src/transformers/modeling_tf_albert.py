@@ -395,6 +395,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
         self.config = config
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
+        self.pre_layer_norm = config.pre_layer_norm
         self.embedding_hidden_mapping_in = tf.keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -404,6 +405,8 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
             TFAlbertLayerGroup(config, name="albert_layer_groups_._{}".format(i))
             for i in range(config.num_hidden_groups)
         ]
+        if self.pre_layer_norm:
+            self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
@@ -436,6 +439,9 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
 
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if self.pre_layer_norm:
+            hidden_states = self.LayerNorm(hidden_states)
 
         outputs = (hidden_states,)
         if self.output_hidden_states:
