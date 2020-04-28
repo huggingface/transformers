@@ -130,7 +130,6 @@ Follow these steps to start contributing:
    ```bash
    $ pip install -U git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
    ```
-
 5. Develop the features on your branch.
 
    As you work on the features, you should make sure that the test suite
