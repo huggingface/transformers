@@ -46,7 +46,7 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder is not None and decoder is not None
         ), "Either a configuration or an Encoder and a decoder has to be provided"
         if config is None:
-            config = EncoderDecoderConfig.from_encoder_decoder_pretrained(encoder.config, decoder.config)
+            config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
         else:
             assert isinstance(config, self.config_class), "config: {} has to be of type {}".format(
                 config, self.config_class

@@ -59,7 +59,7 @@ class EncoderDecoderConfig(PretrainedConfig):
         self.is_encoder_decoder = True
 
     @classmethod
-    def from_encoder_decoder_pretrained(
+    def from_encoder_decoder_configs(
         cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig
     ) -> PretrainedConfig:
         r"""
