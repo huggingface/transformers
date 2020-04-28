@@ -301,6 +301,18 @@ def create_posids(batch):
 
     return pos_ids
 
+def translate_label(trans_dict,labels):
+    newlabels=[]
+    for label in labels:
+        new_label=[]
+        for l in label:
+            if l in trans_dict:
+               new_label.append(trans_dict[l])
+            else:
+                new_label.append(l)
+            newlabels.append(new_label)
+    return torch.tensor(newlabels,dtype=labels.dtype)
+
 def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedTokenizer) -> Tuple[int, float]:
     """ Train the model """
     if args.local_rank in [-1, 0]:
@@ -416,8 +428,10 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
                 continue
+            inputs,attention_mask=batch
+            inputs, labels = mask_tokens(inputs, tokenizer, args) if args.mlm else (inputs, inputs)
 
-            inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else (batch, batch)
+
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
             if args.para_data_file:
@@ -426,10 +440,11 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
                 posids=None
             model.train()
             # logger.info('sample posids {0}',posids[0].__repr__())
-            outputs = model(inputs, position_ids=posids,masked_lm_labels=labels) if args.mlm else model(inputs, position_ids=posids,labels=labels)
+            outputs = model(inputs, attention_mask=attention_mask,position_ids=posids,masked_lm_labels=labels) if args.mlm else model(inputs, attention_mask=attention_mask,position_ids=posids,labels=labels)
 
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
-
+            if args.dict:
+                trans_labels=translate_label(args.dict,labels)
             if args.n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu parallel training
             if args.gradient_accumulation_steps > 1:
@@ -510,9 +525,22 @@ def evaluate(args, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, prefi
     # Note that DistributedSampler samples randomly
 
     def collate(examples: List[torch.Tensor]):
-        if tokenizer._pad_token is None:
-            return pad_sequence(examples, batch_first=True)
-        return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
+        padding_value = 0 if tokenizer._pad_token is None else tokenizer.pad_token_id
+        input_ids=pad_sequence(examples, batch_first=True,padding_value=padding_value)
+        max_length = input_ids.shape[1]
+        attention_mask = torch.stack(
+            [torch.cat([torch.ones(len(t), dtype=torch.long), torch.zeros(max_length - len(t), dtype=torch.long)]) for t
+             in examples])
+
+        return input_ids, attention_mask
+        # if tokenizer._pad_token is None:
+        #     max_length = input_ids.shape[1]
+        #     attention_mask = torch.stack(
+        #         [torch.cat([torch.ones(len(t), dtype=torch.long), torch.zeros(max_length - len(t), dtype=torch.long)])
+        #          for t in examples])
+        #     return pad_sequence(examples, batch_first=True)
+        #
+        # return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
 
     eval_sampler = SequentialSampler(eval_dataset)
     eval_dataloader = DataLoader(
@@ -532,12 +560,13 @@ def evaluate(args, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, prefi
     model.eval()
 
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
-        inputs, labels = mask_tokens(batch, tokenizer, args) if args.mlm else (batch, batch)
+        inputs,attention_mask=batch
+        inputs, labels = mask_tokens(inputs, tokenizer, args) if args.mlm else (inputs, inputs)
         inputs = inputs.to(args.device)
         labels = labels.to(args.device)
 
         with torch.no_grad():
-            outputs = model(inputs, masked_lm_labels=labels) if args.mlm else model(inputs, labels=labels)
+            outputs = model(inputs, masked_lm_labels=labels,attention_mask=attention_mask) if args.mlm else model(inputs, attention_mask=attention_mask,labels=labels)
             lm_loss = outputs[0]
             eval_loss += lm_loss.mean().item()
         nb_eval_steps += 1
@@ -704,6 +733,7 @@ def main():
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
+    parser.add_argument('--dict',type=str,help='dictionary file location')
     args = parser.parse_args()
 
     if args.model_type in ["bert", "roberta", "distilbert", "camembert"] and not args.mlm:
