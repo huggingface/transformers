@@ -110,7 +110,9 @@ def download_all_sentencepiece_models(repo_path="Opus-MT-train/models"):
 from durbango import tqdm_nice
 def convert_whole_dir(path=Path('marian_ckpt/')):
     for subdir in tqdm_nice(list(path.ls())):
-        dest_dir = f"converted-{subdir.name}"
+        dest_dir = f"marian_converted/{subdir.name}"
+        if (dest_dir / 'pytorch_model.bin').exists():
+            continue
         main(source_dir, dest_dir)
 
 
