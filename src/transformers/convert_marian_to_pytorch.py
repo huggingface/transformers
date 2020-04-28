@@ -9,12 +9,11 @@ from zipfile import ZipFile
 
 import numpy as np
 import torch
-import yaml
 from tqdm import tqdm
+import yaml
 
 from transformers import MarianConfig, MarianMTModel, MarianSentencePieceTokenizer
-
-from .tokenization_utils import TOKENIZER_CONFIG_FILE
+from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 
 
 def remove_prefix(text: str, prefix: str):
