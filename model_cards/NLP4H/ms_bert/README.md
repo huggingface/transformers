@@ -1,4 +1,4 @@
-# MS-bert
+# MS-BERT
 
 ## Introduction
 
@@ -44,11 +44,11 @@ The hyperparameters can be found in the config file in this repository or [here]
 
 ## Acknowledgements
 
-We would like to thank the researchers and staff at the Data Science and Advanced Analytics (DSAA) team, St. Michael’s hospital, for providing consistent support and guidance throughout this project.
+We would like to thank the researchers and staff at the Data Science and Advanced Analytics (DSAA) department, St. Michael’s Hospital, for providing consistent support and guidance throughout this project.
 We would also like to thank Dr. Marzyeh Ghassemi, Taylor Killan, Nathan Ng and Haoran Zhang for providing us the opportunity to work on this exciting project.
 
 ## Disclaimer
 
-MS-BERT shows the results of research conducted at the Data Science and Advanced Analytics (DSAA) team, St. Michael’s hospital. The results produced by MS-BERT are not intended for direct diagnostic use or medical decision-making without review and oversight by a clinical professional. Individuals should not make decisions about their health solely on the basis of the results produced by MS-BERT. St. Michael’s hospital does not independently verify the validity or utility of the results produced by MS-BERT. If you have questions about the results produced by MS-BERT please consult a healthcare professional. More information about St. Michael’s hospital’s disclaimer policy can be found <here>. 
+MS-BERT shows the results of research conducted at the Data Science and Advanced Analytics (DSAA) department, St. Michael’s Hospital. The results produced by MS-BERT are not intended for direct diagnostic use or medical decision-making without review and oversight by a clinical professional. Individuals should not make decisions about their health solely on the basis of the results produced by MS-BERT. St. Michael’s Hospital does not independently verify the validity or utility of the results produced by MS-BERT. If you have questions about the results produced by MS-BERT please consult a healthcare professional. If you would like more information about the research conducted at DSAA please contact [Zhen Yang](mailto:zhen.yang@unityhealth.to). If you would like more information on neurological examination notes please contact [Dr. Tony Antoniou](mailto:tony.antoniou@unityhealth.to) or [Dr. Jiwon Oh](mailto:jiwon.oh@unityhealth.to) from the MS clinic at St. Michael's Hospital.
 
 [1]: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3707353/
