@@ -9,8 +9,8 @@ from zipfile import ZipFile
 
 import numpy as np
 import torch
-from tqdm import tqdm
 import yaml
+from tqdm import tqdm
 
 from transformers import MarianConfig, MarianMTModel, MarianSentencePieceTokenizer
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
