@@ -31,7 +31,7 @@ if is_torch_available():
 class IntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.model_name = "opus/marian-en-de"
+        cls.model_name = "Helsinki-NLP/opus-mt-en-de"
         cls.tokenizer = MarianSentencePieceTokenizer.from_pretrained(cls.model_name)
         cls.eos_token_id = cls.tokenizer.eos_token_id
         return cls

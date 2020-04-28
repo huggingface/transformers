@@ -14,7 +14,7 @@ vocab_files_names = {
     "vocab": "vocab.json",
     "tokenizer_config_file": "tokenizer_config.json",
 }
-MODEL_NAMES = ("opus-marian-en-de",)
+MODEL_NAMES = ("opus-mt-en-de",)
 PRETRAINED_VOCAB_FILES_MAP = {
     k: {m: f"{S3_BUCKET_PREFIX}/Helsinki-NLP/{m}/{fname}" for m in MODEL_NAMES}
     for k, fname in vocab_files_names.items()

@@ -9,8 +9,8 @@ from zipfile import ZipFile
 
 import numpy as np
 import torch
-from tqdm import tqdm
 import yaml
+from tqdm import tqdm
 
 from transformers import MarianConfig, MarianMTModel, MarianSentencePieceTokenizer
 
@@ -359,7 +359,8 @@ def main(source_dir, dest_dir):
 
     opus_state = OpusState(source_dir)
     assert opus_state.cfg["vocab_size"] == len(tokenizer.encoder)
-    save_json(opus_state.cfg, dest_dir / "marian_original_config.json")  # Save human readable marian config
+    # save_json(opus_state.cfg, dest_dir / "marian_original_config.json")
+    # ^^ Save human readable marian config for debugging
 
     model = opus_state.load_marian_model()
     model.save_pretrained(dest_dir)
