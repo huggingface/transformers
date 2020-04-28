@@ -1,5 +1,7 @@
 ---
 language: french
+
+license: mit
 ---
 
 # CamemBERT: a Tasty French Language Model
