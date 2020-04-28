@@ -80,32 +80,32 @@ class IntegrationTests(unittest.TestCase):
             "Tom really admired Mary's courage.",
             "Turn around and close your eyes.",
         ]
-        expected = [
-            "Ich bin ein kleiner Frosch.",
-            "Jetzt kann ich die 100 Wörter vergessen, die ich kenne.",
-            "O",
-            "Tom bat seinen Lehrer um Rat.",
-            "So würde ich das machen.",
-            "Tom bewunderte Marias Mut wirklich.",
-            "Umdrehen und die Augen schließen.",
-        ]
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src).to(torch_device)
+        self.assertEqual(self.model.device, model_inputs["input_ids"].device)
         generated_ids = self.model.generate(
             model_inputs["input_ids"],
             length_penalty=1.0,
-            # num_beams=6, by default
+            num_beams=2,  # 6 is the default
             bad_words_ids=[[self.tokenizer.pad_token_id]],
         )
+        expected = [
+            "Ich bin ein kleiner Frosch.",
+            "Jetzt kann ich die 100 Wörter des Deutschen vergessen, die ich kenne.",
+            "",
+            "Tom bat seinen Lehrer um Rat.",
+            "So würde ich das tun.",
+            "Tom bewunderte Marias Mut wirklich.",
+            "Umdrehen und die Augen schließen.",
+        ]
+        # actual C++ output differences: des Deutschen removed, ""-> "O", tun -> machen
         generated_words = self.tokenizer.decode_batch(generated_ids, skip_special_tokens=True)
         print(generated_words)
-        # self.assertListEqual(expected, generated_words)
-        # Better traceback than assertlistequal
-        self.assertEqual(len(expected), len(generated_words))
-        for i, generated in enumerate(generated_words):
-            self.assertEqual(expected[i], generated)
+        self.assertListEqual(expected, generated_words)
 
     def test_marian_equivalence(self):
-        input_ids = self.tokenizer.prepare_translation_batch(["I am a small frog"])["input_ids"][0].to(torch_device)
+        batch = self.tokenizer.prepare_translation_batch(["I am a small frog"]).to(torch_device)
+        input_ids = batch["input_ids"][0]
+        self.assertEqual(self.model.device, input_ids.device)
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, input_ids.tolist())
 

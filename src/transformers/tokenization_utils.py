@@ -461,9 +461,7 @@ class BatchEncoding(UserDict):
     @torch_required
     def to(self, device: str):
         """Send all values to device by calling v.to(device)"""
-        assert is_torch_available(), "This function requires pytorch"
-        for k, v in self.items():
-            v.to(device)
+        self.data = {k: v.to(device) for k, v in self.data.items()}
         return self
 
 
