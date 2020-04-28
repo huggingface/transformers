@@ -27,18 +27,35 @@ class EncoderDecoderConfig(PretrainedConfig):
     r"""
         :class:`~transformers.EncoderDecoderConfig` is the configuration class to store the configuration of a `EncoderDecoderModel`.
 
-            It is used to instantiate an Encoder Decoder model according to the specified arguments, defining the encoder and decoder configs.
-            Configuration objects inherit from  :class:`~transformers.PretrainedConfig`
-            and can be used to control the model outputs.
-            See the documentation for :class:`~transformers.PretrainedConfig` for more information.
+        It is used to instantiate an Encoder Decoder model according to the specified arguments, defining the encoder and decoder configs.
+        Configuration objects inherit from  :class:`~transformers.PretrainedConfig`
+        and can be used to control the model outputs.
+        See the documentation for :class:`~transformers.PretrainedConfig` for more information.
 
+        Args:
+            kwargs (`optional`):
+                Remaining dictionary of keyword arguments. Notably:
+                    encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
+                        An instance of a configuration object that defines the encoder config.
+                    encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
+                        An instance of a configuration object that defines the decoder config.
 
-        Arguments:
-            kwargs: (`optional`) Remaining dictionary of keyword arguments. Notably:
-                encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
-                    An instance of a configuration object that defines the encoder config.
-                encoder (:class:`PretrainedConfig`, optional, defaults to `None`):
-                    An instance of a configuration object that defines the decoder config.
+        Example::
+
+            from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
+
+            # Initializing a BERT bert-base-uncased style configuration
+            config_encoder = BertConfig()
+            config_decoder = BertConfig()
+
+            config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+
+            # Initializing a Bert2Bert model from the bert-base-uncased style configurations
+            model = EncoderDecoderModel(config=config)
+
+            # Accessing the model configuration
+            config_encoder = model.config.encoder
+            config_decoder  = model.config.decoder
     """
     model_type = "encoder_decoder"
 

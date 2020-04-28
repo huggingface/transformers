@@ -125,6 +125,8 @@ class EncoderDecoderModel(PreTrainedModel):
 
         Examples::
 
+            from tranformers import EncoderDecoder
+
             model = EncoderDecoder.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
         """
 
@@ -230,6 +232,25 @@ class EncoderDecoderModel(PreTrainedModel):
             kwargs: (`optional`) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
                 - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
                 - With a `decoder_` prefix which will be input as `**decoder_kwargs` for the decoder forward function.
+
+        Examples::
+
+            from transformers import EncoderDecoderModel, BertTokenizer
+            import torch
+
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            model = EncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
+
+            # forward
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+
+            # training
+            loss, outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, lm_labels=input_ids)[:2]
+
+            # generation
+            generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
+
         """
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
