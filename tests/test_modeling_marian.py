@@ -38,14 +38,18 @@ class IntegrationTests(unittest.TestCase):
 
     @cached_property
     def model(self):
-        return MarianMTModel.from_pretrained(self.model_name).to(torch_device)
+        model = MarianMTModel.from_pretrained(self.model_name).to(torch_device)
+        if torch_device == "cuda":
+            return model.half()
+        else:
+            return model
 
     @slow
     def test_forward(self):
         src, tgt = ["I am a small frog"], ["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
         expected = [38, 121, 14, 697, 38848, 0]
 
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt)
+        model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt).to(torch_device)
         self.assertListEqual(expected, model_inputs["input_ids"][0].tolist())
 
         desired_keys = {
@@ -64,6 +68,7 @@ class IntegrationTests(unittest.TestCase):
     def test_repl_generate_one(self):
         src = ["I am a small frog.", "Hello"]
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src).to(torch_device)
+        self.assertEqual(self.model.device, model_inputs["input_ids"].device)
         generated_ids = self.model.generate(model_inputs["input_ids"], num_beams=6,)
         generated_words = self.tokenizer.decode_batch(generated_ids)[0]
         expected_words = "Ich bin ein kleiner Frosch."
