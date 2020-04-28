@@ -195,7 +195,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             # set all position encodings to zero so that postions don't matter
             with torch.no_grad():
                 embedding = model.embeddings.position_embeddings.embedding
-                embedding.weight = torch.nn.Parameter(torch.zeros(embedding.weight.shape))
+                embedding.weight = torch.nn.Parameter(torch.zeros(embedding.weight.shape).to(torch_device))
                 embedding.weight.requires_grad = False
 
             half_seq_len = self.seq_length // 2
@@ -227,7 +227,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
 
         def create_and_check_reformer_layer_dropout_seed(self, config, input_ids, input_mask, is_decoder):
             config.is_decoder = is_decoder
-            layer = ReformerLayer(config)
+            layer = ReformerLayer(config).to(torch_device)
             layer.train()
             shape = (self.batch_size, self.seq_length, config.hidden_size)  # Batch x SeqLen x hiddenSize
 
@@ -251,14 +251,14 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertTrue(torch.allclose(next_hidden_states, hidden_states + feed_forward_hidden_states, atol=1e-3))
             # TODO(PVP) Should add some tests here for backprop function as well (maybe in different test function though)
 
-        def create_and_check_reformer_model_fp16_forward(self, config, input_ids, input_mask, is_decoder):
+        def create_and_check_reformer_model_fp16_forward(self, config, input_ids, input_mask):
             model = ReformerModel(config=config)
             model.to(torch_device)
             model.half()
             model.eval()
             model(input_ids, attention_mask=input_mask)
 
-        def create_and_check_reformer_model_fp16_generate(self, config, input_ids, input_mask, is_decoder):
+        def create_and_check_reformer_model_fp16_generate(self, config, input_ids, input_mask):
             model = ReformerModelWithLMHead(config=config)
             model.to(torch_device)
             model.half()
@@ -300,11 +300,6 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
     def test_reformer_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model_fp16_forward(*config_and_inputs)
-
-    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
-    def test_reformer_model_fp16_generate(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_reformer_model_fp16_generate(*config_and_inputs)
 
 
 @require_torch
@@ -467,9 +462,10 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             # set all position encodings to zero so that postions don't matter
+
             with torch.no_grad():
                 embedding = model.embeddings.position_embeddings.embedding
-                embedding.weight = torch.nn.Parameter(torch.zeros(embedding.weight.shape))
+                embedding.weight = torch.nn.Parameter(torch.zeros(embedding.weight.shape).to(torch_device))
                 embedding.weight.requires_grad = False
 
             half_seq_len = self.seq_length // 2
@@ -490,8 +486,6 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             input_ids_roll = torch.roll(input_ids_roll, roll, dims=-1)
             attn_mask_roll = torch.roll(attn_mask, roll, dims=-1)
 
-            #            input_ids_padded_begin = torch.cat([torch.full_like(input_ids[:, :half_seq_len], self.pad_token_id), input_ids[:, :half_seq_len],], dim=-1)
-
             output_padded = model(input_ids_padded, attention_mask=attn_mask)[0][:, :half_seq_len]
             output_padded_rolled = model(input_ids_roll, attention_mask=attn_mask_roll)[0][
                 :, roll : half_seq_len + roll
@@ -501,7 +495,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
 
         def create_and_check_reformer_layer_dropout_seed(self, config, input_ids, input_mask, is_decoder):
             config.is_decoder = is_decoder
-            layer = ReformerLayer(config)
+            layer = ReformerLayer(config).to(torch_device)
             layer.train()
             shape = (self.batch_size, self.seq_length, config.hidden_size)  # Batch x SeqLen x hiddenSize
 
@@ -525,14 +519,14 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertTrue(torch.allclose(next_hidden_states, hidden_states + feed_forward_hidden_states, atol=1e-3))
             # TODO(PVP) Should add some tests here for backprop function as well (maybe in different test function though)
 
-        def create_and_check_reformer_model_fp16_forward(self, config, input_ids, input_mask, is_decoder):
+        def create_and_check_reformer_model_fp16_forward(self, config, input_ids, input_mask):
             model = ReformerModel(config=config)
             model.to(torch_device)
             model.half()
             model.eval()
             model(input_ids, attention_mask=input_mask)
 
-        def create_and_check_reformer_model_fp16_generate(self, config, input_ids, input_mask, is_decoder):
+        def create_and_check_reformer_model_fp16_generate(self, config, input_ids, input_mask):
             model = ReformerModelWithLMHead(config=config)
             model.to(torch_device)
             model.half()
