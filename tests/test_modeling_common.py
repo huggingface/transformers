@@ -18,8 +18,8 @@ import logging
 import os.path
 import random
 import tempfile
-from typing import List
 import unittest
+from typing import List
 
 from transformers import is_torch_available
 
