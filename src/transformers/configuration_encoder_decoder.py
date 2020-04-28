@@ -17,7 +17,6 @@
 import copy
 import logging
 
-
 from .configuration_utils import PretrainedConfig
 
 
@@ -54,12 +53,15 @@ class EncoderDecoderConfig(PretrainedConfig):
         decoder_model_type = decoder_config.pop("model_type")
 
         from transformers import AutoConfig
+
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
         self.is_encoder_decoder = True
 
     @classmethod
-    def from_encoder_decoder_pretrained(cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig) -> PretrainedConfig:
+    def from_encoder_decoder_pretrained(
+        cls, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig
+    ) -> PretrainedConfig:
         r"""
         Instantiate a :class:`~transformers.EncoderDecoderConfig` (or a derived class) from a pre-trained encoder model configuration and decoder model configuration.
 

@@ -36,7 +36,12 @@ class EncoderDecoderModel(PreTrainedModel):
     """
     config_class = EncoderDecoderConfig
 
-    def __init__(self, config: Optional[PretrainedConfig] = None, encoder: Optional[PreTrainedModel] = None, decoder: Optional[PreTrainedModel] = None):
+    def __init__(
+        self,
+        config: Optional[PretrainedConfig] = None,
+        encoder: Optional[PreTrainedModel] = None,
+        decoder: Optional[PreTrainedModel] = None,
+    ):
         assert config is not None or (
             encoder is not None and decoder is not None
         ), "Either a configuration or an Encoder and a decoder has to be provided"
@@ -51,10 +56,12 @@ class EncoderDecoderModel(PreTrainedModel):
 
         if encoder is None:
             from transformers import AutoModel
+
             encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
             from transformers import AutoModelWithLMHead
+
             decoder = AutoModelWithLMHead.from_config(config.decoder)
 
         self.encoder = encoder
@@ -138,6 +145,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 encoder_pretrained_model_name_or_path is not None
             ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
             from .modeling_auto import AutoModel
+
             encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
         encoder.config.is_decoder = False
 
@@ -147,6 +155,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 decoder_pretrained_model_name_or_path is not None
             ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
             from .modeling_auto import AutoModelWithLMHead
+
             decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
         decoder.config.is_decoder = True
 

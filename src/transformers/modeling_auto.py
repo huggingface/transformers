@@ -80,7 +80,6 @@ from .modeling_distilbert import (
     DistilBertForTokenClassification,
     DistilBertModel,
 )
-from .modeling_encoder_decoder import EncoderDecoderModel
 from .modeling_electra import (
     ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     ElectraForMaskedLM,
@@ -88,6 +87,7 @@ from .modeling_electra import (
     ElectraForTokenClassification,
     ElectraModel,
 )
+from .modeling_encoder_decoder import EncoderDecoderModel
 from .modeling_flaubert import (
     FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     FlaubertForQuestionAnsweringSimple,
