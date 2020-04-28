@@ -146,7 +146,6 @@ class Attention(nn.Module):
             w = w / math.sqrt(v.size(-1))
         nd, ns = w.size(-2), w.size(-1)
         mask = self.bias[:, :, ns - nd : ns, :ns]
-        import ipdb; ipdb.set_trace()
         w = torch.where(mask, w, self.masked_bias)
 
         if attention_mask is not None:
