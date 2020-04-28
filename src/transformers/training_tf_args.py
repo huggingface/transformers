@@ -30,10 +30,10 @@ class TFTrainingArguments(TrainingArguments):
         if self.no_cuda or len(tf.config.list_physical_devices("GPU")) == 0:
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
             n_gpu = 0
-        elif len(tf.config.list_physical_devices('GPU')) > 1:
+        elif len(tf.config.list_physical_devices("GPU")) > 1:
             # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
             strategy = tf.distribute.MirroredStrategy()
-            n_gpu = len(tf.config.list_physical_devices('GPU'))
+            n_gpu = len(tf.config.list_physical_devices("GPU"))
         else:
             strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
             n_gpu = 1

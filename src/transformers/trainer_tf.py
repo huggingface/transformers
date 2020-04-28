@@ -118,7 +118,9 @@ class TFTrainer:
 
         if self.eval_dataset is not None:
             self.tf_eval_dataset: tf.data.Dataset = self.eval_dataset.get_dataset().batch(self.args.eval_batch_size)
-            self.tf_eval_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(self.tf_eval_dataset)
+            self.tf_eval_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(
+                self.tf_eval_dataset
+            )
 
     def _create_optimizer(self) -> None:
         """
