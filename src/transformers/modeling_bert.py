@@ -963,7 +963,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
 
-        # if model is used as a decoder in encoder-decoder model decoder attention mask is created on the fly
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 

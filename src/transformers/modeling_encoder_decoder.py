@@ -16,9 +16,10 @@
 
 
 import logging
+from typing import Optional
 
 from .configuration_encoder_decoder import EncoderDecoderConfig
-from .modeling_auto import AutoModel, AutoModelWithLMHead
+from .configuration_utils import PretrainedConfig
 from .modeling_utils import PreTrainedModel
 
 
@@ -35,7 +36,7 @@ class EncoderDecoderModel(PreTrainedModel):
     """
     config_class = EncoderDecoderConfig
 
-    def __init__(self, config=None, encoder=None, decoder=None):
+    def __init__(self, config: Optional[PretrainedConfig] = None, encoder: Optional[PreTrainedModel] = None, decoder: Optional[PreTrainedModel] = None):
         assert config is not None or (
             encoder is not None and decoder is not None
         ), "Either a configuration or an Encoder and a decoder has to be provided"
@@ -49,9 +50,11 @@ class EncoderDecoderModel(PreTrainedModel):
         super().__init__(config)
 
         if encoder is None:
+            from transformers import AutoModel
             encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
+            from transformers import AutoModelWithLMHead
             decoder = AutoModelWithLMHead.from_config(config.decoder)
 
         self.encoder = encoder
@@ -79,26 +82,28 @@ class EncoderDecoderModel(PreTrainedModel):
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
-        encoder_pretrained_model_name_or_path=None,
-        decoder_pretrained_model_name_or_path=None,
+        encoder_pretrained_model_name_or_path: str = None,
+        decoder_pretrained_model_name_or_path: str = None,
         *model_args,
         **kwargs
-    ):
+    ) -> PreTrainedModel:
         r""" Instantiates an encoder and a decoder from one or two base classes of the library from pre-trained model checkpoints.
 
 
-        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
-        To train the model, you need to first set it back in training mode with `model.train()`
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated).
+        To train the model, you need to first set it back in training mode with `model.train()`.
 
         Params:
-            encoder_pretrained_model_name_or_path: information necessary to initiate the encoder. Either:
+            encoder_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+                information necessary to initiate the encoder. Either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using :func:`~transformers.PreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/encoder``.
                 - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
-            decoder_pretrained_model_name_or_path: information necessary to initiate the decoder. Either:
+            decoder_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+                information necessary to initiate the decoder. Either:
 
                 - a string with the `shortcut name` of a pre-trained model to load from cache or download, e.g.: ``bert-base-uncased``.
                 - a string with the `identifier name` of a pre-trained model that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
@@ -110,11 +115,6 @@ class EncoderDecoderModel(PreTrainedModel):
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments.
                 Can be used to update the configuration object (after it being loaded) and initiate the model. (e.g. ``output_attention=True``). Behave differently depending on whether a `config` is provided or automatically loaded:
-
-                - If a configuration is provided with ``config``, ``**kwargs`` will be directly passed to the underlying model's ``__init__`` method (we assume all relevant updates to the configuration have already been done)
-                - If a configuration is not provided, ``kwargs`` will be first passed to the configuration class initialization function (:func:`~transformers.PretrainedConfig.from_pretrained`). Each key of ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration attribute will be passed to the underlying model's ``__init__`` function.
-
-                You can specify kwargs sepcific for the encoder and decoder by prefixing the key with `encoder_` and `decoder_` respectively. (e.g. ``decoder_output_attention=True``). The remaining kwargs will be passed to both encoders and decoders.
 
         Examples::
 
@@ -137,6 +137,7 @@ class EncoderDecoderModel(PreTrainedModel):
             assert (
                 encoder_pretrained_model_name_or_path is not None
             ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
+            from .modeling_auto import AutoModel
             encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
         encoder.config.is_decoder = False
 
@@ -145,6 +146,7 @@ class EncoderDecoderModel(PreTrainedModel):
             assert (
                 decoder_pretrained_model_name_or_path is not None
             ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+            from .modeling_auto import AutoModelWithLMHead
             decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
         decoder.config.is_decoder = True
 
@@ -169,12 +171,56 @@ class EncoderDecoderModel(PreTrainedModel):
     ):
 
         """
-        Params:
-            encoder_input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
-                Indices of encoder input sequence tokens in the vocabulary.
-            decoder_input_ids: ``torch.LongTensor`` of shape ``(batch_size, sequence_length)``
-                Indices of decoder input sequence tokens in the vocabulary.
-            kwargs: (`optional`) Remaining dictionary of keyword arguments.
+        Args:
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary for the encoder.
+                Indices can be obtained using :class:`transformers.PretrainedTokenizer`.
+                See :func:`transformers.PreTrainedTokenizer.encode` and
+                :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Mask to avoid performing attention on padding token indices for the encoder.
+                Mask values selected in ``[0, 1]``:
+                ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+            head_mask: (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+                Mask to nullify selected heads of the self-attention modules for the encoder.
+                Mask values selected in ``[0, 1]``:
+                ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+            encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`, defaults to :obj:`None`):
+                Tuple consists of (`last_hidden_state`, `optional`: `hidden_states`, `optional`: `attentions`)
+                `last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`) is a sequence of hidden-states at the output of the last layer of the encoder.
+                Used in the cross-attention of the decoder.
+            decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`, defaults to :obj:`None`):
+                Provide for sequence to sequence training to the decoder.
+                Indices can be obtained using :class:`transformers.PretrainedTokenizer`.
+                See :func:`transformers.PreTrainedTokenizer.encode` and
+                :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
+            decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
+                Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
+            decoder_head_mask: (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+                Mask to nullify selected heads of the self-attention modules for the decoder.
+                Mask values selected in ``[0, 1]``:
+                ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
+            decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+                Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the masked language modeling loss for the decoder.
+                Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+                in ``[0, ..., config.vocab_size]``
+            lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the left-to-right language modeling loss (next word prediction) for the decoder.
+                Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+                Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+                in ``[0, ..., config.vocab_size]``
+            kwargs: (`optional`) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
+                - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
+                - With a `decoder_` prefix which will be input as `**decoder_kwargs` for the decoder forward function.
         """
 
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
