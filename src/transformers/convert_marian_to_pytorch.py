@@ -107,6 +107,12 @@ def download_all_sentencepiece_models(repo_path="Opus-MT-train/models"):
             continue
         download_and_unzip(v["download"], save_dir / k)
 
+from durbango import tqdm_nice
+def convert_whole_dir(path=Path('marian_ckpt/')):
+    for subdir in tqdm_nice(list(path.ls())):
+        dest_dir = f"converted-{subdir.name}"
+        main(source_dir, dest_dir)
+
 
 def _parse_readme(lns):
     """Get link and metadata from opus model card equivalent."""
