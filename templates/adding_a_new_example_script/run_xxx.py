@@ -44,6 +44,7 @@ from utils_squad import (
     write_predictions,
     write_predictions_extended,
 )
+
 # The follwing import is the official SQuAD evaluation script (2.0).
 # You can remove it from the dependencies if you are using this script outside of the library
 # We've added it here for automated tests (see examples/test_examples.py file)
