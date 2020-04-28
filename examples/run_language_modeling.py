@@ -321,9 +321,14 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
 
     def collate(examples: List[torch.Tensor]):
-        if tokenizer._pad_token is None:
-            return pad_sequence(examples, batch_first=True)
-        return pad_sequence(examples, batch_first=True, padding_value=tokenizer.pad_token_id)
+        padding_value = 0 if tokenizer._pad_token is None else tokenizer.pad_token_id
+        input_ids = pad_sequence(examples, batch_first=True, padding_value=padding_value)
+        max_length = input_ids.shape[1]
+        attention_mask = torch.stack(
+            [torch.cat([torch.ones(len(t), dtype=torch.long), torch.zeros(max_length - len(t), dtype=torch.long)]) for t
+             in examples])
+
+        return input_ids, attention_mask
 
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(
