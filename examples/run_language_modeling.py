@@ -436,7 +436,7 @@ def train(args, train_dataset, model: PreTrainedModel, tokenizer: PreTrainedToke
             inputs,attention_mask=batch
             inputs, labels = mask_tokens(inputs, tokenizer, args) if args.mlm else (inputs, inputs)
 
-
+            attention_mask=attention_mask.to(args.device)
             inputs = inputs.to(args.device)
             labels = labels.to(args.device)
             if args.para_data_file:
@@ -569,6 +569,7 @@ def evaluate(args, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, prefi
         inputs, labels = mask_tokens(inputs, tokenizer, args) if args.mlm else (inputs, inputs)
         inputs = inputs.to(args.device)
         labels = labels.to(args.device)
+        attention_mask=attention_mask.to(args.device)
 
         with torch.no_grad():
             outputs = model(inputs, masked_lm_labels=labels,attention_mask=attention_mask) if args.mlm else model(inputs, attention_mask=attention_mask,labels=labels)
