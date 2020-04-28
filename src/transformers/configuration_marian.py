@@ -18,7 +18,7 @@ from .configuration_bart import BartConfig
 
 
 PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "marian-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/opus/marian-en-de/config.json",
+    "marian-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/config.json",
 }
 
 
