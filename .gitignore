@@ -1,7 +1,6 @@
 # Initially taken from Github's Python gitignore file
 
 # Byte-compiled / optimized / DLL files
-tests/fixtures
 __pycache__/
 *.py[cod]
 *$py.class
@@ -133,6 +132,8 @@ proc_data
 runs
 /runs_old
 examples/runs
+tests/fixtures
+lightning_logs/
 
 # data
 /data
