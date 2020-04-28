@@ -89,6 +89,7 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     :caption: Package Reference
 
     model_doc/auto
+    model_doc/encoderdecoder
     model_doc/bert
     model_doc/gpt
     model_doc/transformerxl

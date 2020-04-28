@@ -27,6 +27,7 @@ from .configuration_auto import (
     CTRLConfig,
     DistilBertConfig,
     ElectraConfig,
+    EncoderDecoderConfig,
     FlaubertConfig,
     GPT2Config,
     OpenAIGPTConfig,
@@ -86,6 +87,7 @@ from .modeling_electra import (
     ElectraForTokenClassification,
     ElectraModel,
 )
+from .modeling_encoder_decoder import EncoderDecoderModel
 from .modeling_flaubert import (
     FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     FlaubertForQuestionAnsweringSimple,
@@ -219,6 +221,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForMaskedLM),
+        (EncoderDecoderConfig, EncoderDecoderModel),
     ]
 )
 

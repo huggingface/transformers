@@ -1,3 +1,7 @@
+---
+language: chinese
+---
+
 ## albert_chinese_small
 
 ### Overview
