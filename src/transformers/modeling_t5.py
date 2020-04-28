@@ -37,11 +37,11 @@ logger = logging.getLogger(__name__)
 # for the pretrained weights provided with the models
 ####################################################
 T5_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-pytorch_model.bin",
-    "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-pytorch_model.bin",
-    "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-pytorch_model.bin",
-    "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-3b-pytorch_model.bin",
-    "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-11b-pytorch_model.bin",
+    "t5-small": "https://cdn.huggingface.co/t5-small-pytorch_model.bin",
+    "t5-base": "https://cdn.huggingface.co/t5-base-pytorch_model.bin",
+    "t5-large": "https://cdn.huggingface.co/t5-large-pytorch_model.bin",
+    "t5-3b": "https://cdn.huggingface.co/t5-3b-pytorch_model.bin",
+    "t5-11b": "https://cdn.huggingface.co/t5-11b-pytorch_model.bin",
 }
 
 

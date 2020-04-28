@@ -34,7 +34,7 @@ from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv
 logger = logging.getLogger(__name__)
 
 OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-pytorch_model.bin"
+    "openai-gpt": "https://cdn.huggingface.co/openai-gpt-pytorch_model.bin"
 }
 
 
