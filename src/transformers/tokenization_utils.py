@@ -973,7 +973,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             )
 
         for file_id, file_path in vocab_files.items():
-            if file_path == resolved_vocab_files[file_id]:
+            if file_path == resolved_vocab_files[file_id] and file_path is not None:
                 logger.info("loading file {}".format(file_path))
             else:
                 logger.info("loading file {} from cache at {}".format(file_path, resolved_vocab_files[file_id]))
