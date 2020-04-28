@@ -701,7 +701,7 @@ class ModelTesterMixin:
             generated_ids = output_tokens[:, input_ids.shape[-1] :]
             self.assertFalse(self._check_match_tokens(generated_ids.tolist(), bad_words_ids))
 
-    def _generate_random_bad_tokens(self, num_bad_tokens: int, config: PretrainedConfig) -> List[int]:
+    def _generate_random_bad_tokens(self, num_bad_tokens: int, config) -> List[int]:
         # special tokens cannot be bad tokens
         special_tokens = [x for x in [config.bos_token_id, config.eos_token_id, config.pad_token_id] if x is not None]
         # create random bad tokens that are not special tokens
