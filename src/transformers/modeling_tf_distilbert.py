@@ -235,7 +235,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
         v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
 
-        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
+        q = q * tf.rsqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, q_length, k_length)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         # scores.masked_fill_(mask, -float('inf'))            # (bs, n_heads, q_length, k_length)

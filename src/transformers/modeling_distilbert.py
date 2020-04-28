@@ -172,7 +172,7 @@ class MultiHeadSelfAttention(nn.Module):
         k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
         v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
 
-        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
+        q = q * torch.rsqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
         scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
         mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
         scores.masked_fill_(mask, -float("inf"))  # (bs, n_heads, q_length, k_length)

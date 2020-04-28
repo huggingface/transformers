@@ -54,7 +54,7 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
     matmul_qk = tf.matmul(q, k, transpose_b=True)
 
     dk = tf.cast(shape_list(k)[-1], tf.float32)
-    scaled_attention_logits = matmul_qk / tf.math.sqrt(dk)
+    scaled_attention_logits = matmul_qk / tf.rsqrt(dk)
 
     if mask is not None:
         scaled_attention_logits += mask * -1e4

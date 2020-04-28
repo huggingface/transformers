@@ -143,6 +143,7 @@ class Attention(nn.Module):
         w = torch.matmul(q, k)
         if self.scale:
             w = w / (float(v.size(-1)) ** 0.5)
+
         nd, ns = w.size(-2), w.size(-1)
         mask = self.bias[:, :, ns - nd : ns, :ns]
         w = torch.where(mask.bool(), w, self.masked_bias.to(w.dtype))

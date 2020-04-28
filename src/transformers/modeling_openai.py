@@ -157,7 +157,7 @@ class Attention(nn.Module):
     def _attn(self, q, k, v, attention_mask=None, head_mask=None):
         w = torch.matmul(q, k)
         if self.scale:
-            w = w / math.sqrt(v.size(-1))
+            w = w * torch.rsqrt(v.size(-1))
         # w = w * self.bias + -1e9 * (1 - self.bias)  # TF implem method: mask_attn_weights
         # XD: self.b may be larger than w, so we need to crop it
         b = self.bias[:, :, : w.size(-2), : w.size(-1)]

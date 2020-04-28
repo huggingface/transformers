@@ -58,7 +58,7 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
     matmul_qk = torch.matmul(q, k.permute(0, 1, 3, 2))
 
     dk = k.shape[-1]
-    scaled_attention_logits = matmul_qk / np.sqrt(dk)
+    scaled_attention_logits = matmul_qk * torch.sqrt(dk)
 
     if mask is not None:
         nd, ns = scaled_attention_logits.size(-2), scaled_attention_logits.size(-1)
