@@ -319,6 +319,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
+        use_cdn = kwargs.pop("use_cdn", True)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -358,7 +359,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path, postfix=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME)
+                    pretrained_model_name_or_path,
+                    filename=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME),
+                    use_cdn=use_cdn,
                 )
 
             # redirect to the cache, if necessary
