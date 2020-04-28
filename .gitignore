@@ -132,7 +132,15 @@ proc_data
 runs
 /runs_old
 examples/runs
-tests/fixtures
+
+tests/fixtures/config.json
+tests/fixtures/eval_results_lm.txt
+tests/fixtures/merges.txt
+tests/fixtures/pytorch_model.bin
+tests/fixtures/special_tokens_map.json
+tests/fixtures/tokenizer_config.json
+tests/fixtures/training_args.bin
+tests/fixtures/vocab.json
 lightning_logs/
 
 # data
