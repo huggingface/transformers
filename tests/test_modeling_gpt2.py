@@ -239,9 +239,12 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
         def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+
             model = GPT2LMHeadModel(config)
             model.to(torch_device)
             model.eval()
+            if torch_device == 'cuda':
+                model = model.half()
 
             loss, lm_logits, _ = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
 
