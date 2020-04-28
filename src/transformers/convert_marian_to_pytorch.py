@@ -1,9 +1,11 @@
 import argparse
+import json
 import os
 import shutil
 import warnings
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Union
+from zipfile import ZipFile
 
 import numpy as np
 import torch
@@ -11,7 +13,6 @@ import yaml
 from tqdm import tqdm
 
 from transformers import MarianConfig, MarianMTModel
-from transformers.file_utils import save_json, unzip
 from transformers.tokenization_marian import MarianSentencePieceTokenizer
 from transformers.tokenization_utils import TOKENIZER_CONFIG_FILE
 
@@ -381,3 +382,13 @@ if __name__ == "__main__":
 def load_yaml(path):
     with open(path) as f:
         return yaml.load(f, Loader=yaml.BaseLoader)
+
+
+def save_json(content: Union[Dict, List], path: str) -> None:
+    with open(path, "w") as f:
+        json.dump(content, f)
+
+
+def unzip(zip_path: str, dest_dir: str) -> None:
+    with ZipFile(zip_path, "r") as zipObj:
+        zipObj.extractall(dest_dir)

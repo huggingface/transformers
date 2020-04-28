@@ -230,17 +230,6 @@ class EncoderLayer(nn.Module):
         return x, attn_weights
 
 
-def log_tensor(msg, x):
-    sq = x.squeeze()
-    if sq.ndim == 2:
-        slice = x[:3, :4]
-    elif sq.ndim == 3:
-        slice = x[:, 0, :6]
-    else:
-        slice = x[:5]
-    print(f"{msg}: shape: {x.shape} min: {x.min(): .4f} max: {x.max(): .4f} slice: {slice}")
-
-
 class BartEncoder(nn.Module):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer

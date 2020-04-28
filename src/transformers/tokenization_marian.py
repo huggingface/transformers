@@ -1,9 +1,10 @@
+import json
 import warnings
-from typing import List, Optional
+from typing import Dict, List, Optional, Union
 
 import sentencepiece
 
-from .file_utils import S3_BUCKET_PREFIX, load_json
+from .file_utils import S3_BUCKET_PREFIX
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 
 
@@ -155,3 +156,8 @@ class MarianSentencePieceTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self) -> int:
         return len(self.encoder)
+
+
+def load_json(path: str) -> Union[Dict, List]:
+    with open(path, "r") as f:
+        return json.load(f)

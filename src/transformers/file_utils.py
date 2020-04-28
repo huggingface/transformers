@@ -15,7 +15,7 @@ import tempfile
 from contextlib import contextmanager
 from functools import partial, wraps
 from hashlib import sha256
-from typing import Dict, List, Optional, Union
+from typing import Optional
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
@@ -486,18 +486,3 @@ def tf_required(func):
             raise ImportError(f"Method `{func.__name__}` requires TF.")
 
     return wrapper
-
-
-def unzip(zip_path: str, dest_dir: str) -> None:
-    with ZipFile(zip_path, "r") as zipObj:
-        zipObj.extractall(dest_dir)
-
-
-def save_json(content: Union[Dict, List], path: str) -> None:
-    with open(path, "w") as f:
-        json.dump(content, f)
-
-
-def load_json(path: str) -> Union[Dict, List]:
-    with open(path, "r") as f:
-        return json.load(f)
