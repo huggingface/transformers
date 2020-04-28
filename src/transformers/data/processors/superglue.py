@@ -44,7 +44,7 @@ def tokenize_tracking_span(tokenizer, text, spans):
     Returns:
 
     """
-    toks = tokenizer.encode_plus(text)
+    toks = tokenizer.encode_plus(text, return_token_type_ids=True)
     full_toks = toks["input_ids"]
     prefix_len = len(tokenizer.decode(full_toks[:1])) + 1 # add a space
     len_covers = []
@@ -141,7 +141,7 @@ def superglue_convert_examples_to_features(
 
                 # TODO(AW): assumption is same number of non-special tokens + sos + eos
                 #   This handles varying number of intervening tokens (e.g. different models)
-                inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length,)
+                inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length, return_token_type_ids=True)
                 num_joiner_specials = len(inputs["input_ids"]) - num_non_special_tokens - 2
                 offset = len(inputs_a["input_ids"]) - 1 + num_joiner_specials - 1
                 span_locs_b = [(s + offset, e + offset) for s, e in span_locs_b]
@@ -164,7 +164,7 @@ def superglue_convert_examples_to_features(
                 span_locs = span_locs_a
 
         else:
-            inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length,)
+            inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length, return_token_type_ids=True)
             input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
 
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
@@ -417,6 +417,10 @@ class MultircProcessor(DataProcessor):
                     guid = [passage_id, question_id, answer_id]
                     answer = answer_dict["text"]
                     label = answer_dict["label"]
+                    assert passage_and_question, "Empty passage and question!"
+                    if answer == "":
+                        # training data has a few blank answers
+                        continue
                     examples.append(InputExample(guid=guid, text_a=passage_and_question, text_b=answer, label=label))
         return examples
 

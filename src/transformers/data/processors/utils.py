@@ -97,6 +97,7 @@ class InputFeatures:
     Property names are the same names as the corresponding inputs to a model.
 
     Args:
+        guid: Example ID, as a list of ints
         input_ids: Indices of input sequence tokens in the vocabulary.
         attention_mask: Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -107,6 +108,7 @@ class InputFeatures:
             float for regression problems.
     """
 
+    guid: List[int]
     input_ids: List[int]
     attention_mask: Optional[List[int]] = None
     token_type_ids: Optional[List[int]] = None
@@ -191,6 +193,12 @@ class DataProcessor:
         """Reads a tab separated value file."""
         with open(input_file, "r", encoding="utf-8-sig") as f:
             return list(csv.reader(f, delimiter="\t", quotechar=quotechar))
+
+    @classmethod
+    def _read_jsonl(cls, input_file, quotechar=None):
+        """Reads a tab separated value file."""
+        with open(input_file, "r", encoding="utf-8-sig") as f:
+            return [json.loads(l) for l in f]
 
 
 class SingleSentenceClassificationProcessor(DataProcessor):

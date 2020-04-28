@@ -14,9 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import re
+import string
+from collections import defaultdict, Counter
 try:
     from scipy.stats import pearsonr, spearmanr
     from sklearn.metrics import matthews_corrcoef, f1_score
+    import numpy as np
+    from scipy.special import softmax
 
     _has_sklearn = True
 except (AttributeError, ImportError):

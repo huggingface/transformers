@@ -130,8 +130,9 @@ def train(args, train_dataset, model, tokenizer):
     if args.max_steps > 0:
         t_total = args.max_steps
         args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
-    else:
+    else: # number of training steps = number of epochs * number of batches
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
+        num_warmup_steps = int(args.warmup_ratio * t_total)
 
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ["bias", "LayerNorm.weight"]
@@ -145,7 +146,7 @@ def train(args, train_dataset, model, tokenizer):
 
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
+        optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=t_total
     )
 
     # Check if saved optimizer or scheduler states exist
@@ -258,10 +259,19 @@ def train(args, train_dataset, model, tokenizer):
                 model.zero_grad()
                 global_step += 1
 
+                results = None
+                logs = {}
+                if args.evaluate_steps > 0 and global_step % args.evaluate_steps == 0 and args.local_rank == -1:
+                    # Only evaluate when single GPU otherwise metrics may not average well
+                    results = evaluate(args, model, tokenizer, use_tqdm=False)
+                    for key, value in results.items():
+                        eval_key = "eval_{}".format(key)
+                        logs[eval_key] = value
+                    logging.info(json.dumps({**logs, **{"step": global_step}}))
+
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
-                    logs = {}
                     if (
-                        args.local_rank == -1 and args.evaluate_during_training
+                        args.local_rank == -1 and args.log_evaluate_during_training and results is None
                     ):  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer, use_tqdm=False)
                         for key, value in results.items():
@@ -528,8 +538,9 @@ def main():
     )
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
+
     parser.add_argument(
-        "--evaluate_during_training", action="store_true", help="Run evaluation during training at each logging step.",
+        "--log_evaluate_during_training", action="store_true", help="Run evaluation during training at each logging step.",
     )
     parser.add_argument(
         "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model.",
@@ -550,6 +561,8 @@ def main():
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
+    parser.add_argument("--adam_beta1", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
+    parser.add_argument("--adam_beta2", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument(
         "--num_train_epochs", default=3.0, type=float, help="Total number of training epochs to perform.",
@@ -561,8 +574,10 @@ def main():
         help="If > 0: set total number of training steps to perform. Override num_train_epochs.",
     )
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
+    parser.add_argument("--warmup_ratio", default=0, type=float, help="Linear warmup over warmup_steps as a float.")
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
+    parser.add_argument("--evaluate_steps", type=int, default=500, help="Evaluate every X updates steps.")
     parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
     parser.add_argument(
         "--eval_all_checkpoints",
