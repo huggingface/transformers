@@ -117,10 +117,8 @@ class TFTrainer:
             self.train_steps = 0
 
         if self.eval_dataset is not None:
-            self.validation_steps: int = math.ceil(len(self.eval_dataset) / self.args.eval_batch_size)
             self.tf_eval_dataset: tf.data.Dataset = self.eval_dataset.get_dataset().batch(self.args.eval_batch_size)
-        else:
-            self.validation_steps = 0
+            self.tf_eval_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(self.tf_eval_dataset)
 
     def _create_optimizer(self) -> None:
         """
@@ -157,7 +155,8 @@ class TFTrainer:
         if load_model:
             ckpt.restore(self.model.ckpt_manager.latest_checkpoint).expect_partial()
 
-    def _evaluate_steps(self, per_replica_features: tf.Tensor, per_replica_labels: tf.Tensor):
+    @tf.function
+    def _evaluate_steps(self, per_replica_features, per_replica_labels):
         """
         One step evaluation across replica.
         Args:
@@ -166,11 +165,11 @@ class TFTrainer:
         Returns:
           The loss corresponding to the given batch.
         """
-        per_replica_loss: tf.Tensor = self.args.strategy.experimental_run_v2(
+        per_replica_loss, per_replica_logits = self.args.strategy.experimental_run_v2(
             self._run_model, args=(per_replica_features, per_replica_labels, False)
         )
 
-        return self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, None)
+        return self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, axis=0), per_replica_logits
 
     def _prediction_loop(
         self, dataset: tf.data.Dataset, description: str, prediction_loss_only: Optional[bool] = None
@@ -184,25 +183,36 @@ class TFTrainer:
         step: int = 1
         loss: float = 0.0
 
-        distribute_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(dataset)
-
-        for features, labels in distribute_dataset:
+        for features, labels in dataset:
             step = tf.convert_to_tensor(step, dtype=tf.int64)
-
-            if description == "Evaluation":
-                loss = self._evaluate_steps(features, labels)
-
+            loss, logits = self._evaluate_steps(features, labels)
             loss = tf.reduce_mean(loss)
 
-            if label_ids is None:
-                label_ids = labels.numpy()
-            else:
-                label_ids = np.append(label_ids, labels.numpy(), axis=0)
+            if not prediction_loss_only:
+                if self.args.n_gpu > 1:
+                    for val in logits.values:
+                        if preds is None:
+                            preds = val.numpy()
+                        else:
+                            preds = np.append(preds, val.numpy(), axis=0)
+
+                    for val in labels.values:
+                        if label_ids is None:
+                            label_ids = val.numpy()
+                        else:
+                            label_ids = np.append(label_ids, val.numpy(), axis=0)
+                else:
+                    if preds is None:
+                        preds = logits.numpy()
+                    else:
+                        preds = np.append(preds, logits.numpy(), axis=0)
+
+                    if label_ids is None:
+                        label_ids = labels.numpy()
+                    else:
+                        label_ids = np.append(label_ids, labels.numpy(), axis=0)
 
             step += 1
-
-        if not prediction_loss_only:
-            preds = self.model.predict(dataset)[0]
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
@@ -335,11 +345,11 @@ class TFTrainer:
             self._forward, args=(per_replica_features, per_replica_labels)
         )
 
-        return self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, None)
+        return self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, axis=0)
 
     def _forward(self, features, labels):
         """Forwards a training example and accumulates the gradients."""
-        per_example_loss = self._run_model(features, labels, True)
+        per_example_loss, _ = self._run_model(features, labels, True)
         loss = tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.args.train_batch_size)
         vars = self.model.trainable_variables
 
@@ -367,12 +377,12 @@ class TFTrainer:
 
         if self.args.mode == "token-classification":
             active_loss = tf.reshape(labels, (-1,)) != -1
-            logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+            reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
             labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
 
-        loss = self.loss(labels, logits)
+        loss = self.loss(labels, reduced_logits)
 
-        return loss
+        return loss, logits
 
     def predict(self, test_dataset: TFDataset) -> PredictionOutput:
         """
@@ -384,6 +394,7 @@ class TFTrainer:
             temporary before to have a framework-agnostic approach for datasets.
         """
         tf_test_dataset = test_dataset.get_dataset().batch(self.args.eval_batch_size)
+        tf_test_dataset = self.args.strategy.experimental_distribute_dataset(tf_test_dataset)
 
         return self._prediction_loop(tf_test_dataset, description="Prediction")
 
@@ -397,4 +408,3 @@ class TFTrainer:
 
         os.makedirs(path, exist_ok=True)
         self.model.save_pretrained(self.args.output_dir)
-        tf.saved_model.save(self.model, path)
