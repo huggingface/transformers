@@ -491,7 +491,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         else:
             rotations_shape = (self.num_attention_heads, vectors.shape[-1], num_hashes, rotation_size // 2)
             # create a random self.attention_head_size x num_hashes x self.num_buckets/2
-            random_rotations = torch.randn(rotations_shape, device=vectors.device)
+            random_rotations = torch.randn(rotations_shape, device=vectors.device).to(vectors.dtype)
 
             # rotated_vectors has dim:
             # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2
