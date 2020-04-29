@@ -29,9 +29,33 @@ if is_torch_available():
 
 @require_torch
 class IntegrationTests(unittest.TestCase):
+    src = 'en'
+    tgt = 'de'
+    sample_text = ''
+    src_text = [
+        "I am a small frog.",
+        "Now I can forget the 100 words of german that I know.",
+        "O",
+        "Tom asked his teacher for advice.",
+        "That's how I would do it.",
+        "Tom really admired Mary's courage.",
+        "Turn around and close your eyes.",
+    ]
+    expected_text = [
+        "Ich bin ein kleiner Frosch.",
+        "Jetzt kann ich die 100 Wörter des Deutschen vergessen, die ich kenne.",
+        "",
+        "Tom bat seinen Lehrer um Rat.",
+        "So würde ich das tun.",
+        "Tom bewunderte Marias Mut wirklich.",
+        "Umdrehen und die Augen schließen.",
+    ]
+    # ^^ actual C++ output differs slightly: (1) des Deutschen removed, (2) ""-> "O", (3) tun -> machen
+
     @classmethod
     def setUpClass(cls) -> None:
-        cls.model_name = "Helsinki-NLP/opus-mt-en-de"
+
+        cls.model_name = f"Helsinki-NLP/opus-mt-{cls.src}-{cls.tgt}"
         cls.tokenizer = MarianSentencePieceTokenizer.from_pretrained(cls.model_name)
         cls.eos_token_id = cls.tokenizer.eos_token_id
         return cls
@@ -85,14 +109,6 @@ class IntegrationTests(unittest.TestCase):
             "Tom really admired Mary's courage.",
             "Turn around and close your eyes.",
         ]
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src).to(torch_device)
-        self.assertEqual(self.model.device, model_inputs["input_ids"].device)
-        generated_ids = self.model.generate(
-            model_inputs["input_ids"],
-            length_penalty=1.0,
-            num_beams=2,  # 6 is the default
-            bad_words_ids=[[self.tokenizer.pad_token_id]],
-        )
         expected = [
             "Ich bin ein kleiner Frosch.",
             "Jetzt kann ich die 100 Wörter des Deutschen vergessen, die ich kenne.",
@@ -102,9 +118,17 @@ class IntegrationTests(unittest.TestCase):
             "Tom bewunderte Marias Mut wirklich.",
             "Umdrehen und die Augen schließen.",
         ]
-        # actual C++ output differences: (1) des Deutschen removed, (2) ""-> "O", (3) tun -> machen
+
+        model_inputs: dict = self.tokenizer.prepare_translation_batch(src_texts=self.src_text).to(torch_device)
+        self.assertEqual(self.model.device, model_inputs["input_ids"].device)
+        generated_ids = self.model.generate(
+            model_inputs["input_ids"],
+            length_penalty=1.0,
+            num_beams=2,  # 6 is the default
+            bad_words_ids=[[self.tokenizer.pad_token_id]],
+        )
         generated_words = self.tokenizer.decode_batch(generated_ids, skip_special_tokens=True)
-        self.assertListEqual(expected, generated_words)
+        self.assertListEqual(self.expected_text, generated_words)
 
     def test_marian_equivalence(self):
         batch = self.tokenizer.prepare_translation_batch(["I am a small frog"]).to(torch_device)
