@@ -36,9 +36,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
-TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "openai-gpt": "https://cdn.huggingface.co/openai-gpt-tf_model.h5"
-}
+TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP = {"openai-gpt": "https://cdn.huggingface.co/openai-gpt-tf_model.h5"}
 
 
 def gelu(x):
