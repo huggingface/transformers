@@ -286,7 +286,7 @@ class FlaxBertModel(FlaxPreTrainedModel):
 
         return jax_state
 
-    def __init__(self, config: BertConfig, state: dict, **kwargs):
+    def __init__(self, config: BertConfig, state: dict, seed: int, **kwargs):
         model_def = BertModel.partial(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
@@ -296,10 +296,10 @@ class FlaxBertModel(FlaxPreTrainedModel):
             num_heads=config.num_attention_heads,
             head_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
-            padding_idx=config.pad_token_id
+            padding_idx=config.pad_token_id,
         )
 
-        super().__init__(config, model_def, state)
+        super().__init__(config, model_def, state, seed)
 
     @property
     def module(self) -> BertModel:
