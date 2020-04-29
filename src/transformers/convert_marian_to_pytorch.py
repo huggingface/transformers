@@ -92,6 +92,7 @@ def parse_readmes(repo_path):
             results[p.name] = _parse_readme(lns)
     return results
 
+import shutil
 
 def download_all_sentencepiece_models(repo_path="Opus-MT-train/models"):
     """Requires 300GB"""
@@ -106,6 +107,8 @@ def download_all_sentencepiece_models(repo_path="Opus-MT-train/models"):
         if "SentencePiece" not in v["pre-processing"]:
             continue
         download_and_unzip(v["download"], save_dir / k)
+        dest_dir = Path("marian_converted")/k
+        main(save_dir /k, dest_dir)
 
 from durbango import tqdm_nice
 def convert_whole_dir(path=Path('marian_ckpt/')):
