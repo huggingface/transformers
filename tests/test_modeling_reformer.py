@@ -631,7 +631,7 @@ class ReformerIntegrationTests(unittest.TestCase):
     def test_reformer_lm_model(self):
         config = ReformerConfig(axial_pos_embds=True, hash_seed=0, is_decoder=True)
 
-        shape = (1, 64)  # Batch x SeqLen x ModelDimPerHead
+        shape = (1, 512)  # Batch x SeqLen x ModelDimPerHead
 
         np_input = np.random.randint(0, config.vocab_size, size=shape)
         np_input_2 = np.asarray(np_input, np.float32)
