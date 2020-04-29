@@ -76,6 +76,7 @@ class IntegrationTests(unittest.TestCase):
             length_penalty=1.0,
             num_beams=2,  # 6 is the default
             bad_words_ids=[[self.tokenizer.pad_token_id]],
+            decoder_start_token_id=self.tokenizer.bos_token_id,
         )
         generated_words = self.tokenizer.decode_batch(generated_ids, skip_special_tokens=True)
         self.assertListEqual(self.expected_text, generated_words)
@@ -132,11 +133,10 @@ class TestMarian_FR_EN(IntegrationTests):
     src = 'fr'
     tgt = 'en'
     src_text = [
-        'Je suis une petite grenouille.',
-        "Maintenant je peux oublier les 100 mots d'allemand que je connais."
+        "Donnez moi le micro",
+        "Tom et Mary étaient assis à une table dans le coin.",  # Accents
     ]
     expected_text = [
-        "I am a small frog.",
-        "Now I can forget the 100 words of german that I know.",
+        "Give me the microphone",
+        "Tom and Mary were sitting at a table in the corner.",
     ]
-
