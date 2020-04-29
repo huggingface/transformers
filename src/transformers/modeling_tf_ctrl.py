@@ -29,7 +29,7 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
-TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP = {"ctrl": "https://s3.amazonaws.com/models.huggingface.co/bert/ctrl-tf_model.h5"}
+TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP = {"ctrl": "https://cdn.huggingface.co/ctrl-tf_model.h5"}
 
 
 def angle_defn(pos, i, d_model_size):

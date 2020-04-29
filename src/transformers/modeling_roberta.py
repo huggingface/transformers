@@ -31,12 +31,12 @@ from .modeling_utils import create_position_ids_from_input_ids
 logger = logging.getLogger(__name__)
 
 ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-pytorch_model.bin",
-    "roberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-pytorch_model.bin",
-    "roberta-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-pytorch_model.bin",
-    "distilroberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-pytorch_model.bin",
-    "roberta-base-openai-detector": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-openai-detector-pytorch_model.bin",
-    "roberta-large-openai-detector": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-openai-detector-pytorch_model.bin",
+    "roberta-base": "https://cdn.huggingface.co/roberta-base-pytorch_model.bin",
+    "roberta-large": "https://cdn.huggingface.co/roberta-large-pytorch_model.bin",
+    "roberta-large-mnli": "https://cdn.huggingface.co/roberta-large-mnli-pytorch_model.bin",
+    "distilroberta-base": "https://cdn.huggingface.co/distilroberta-base-pytorch_model.bin",
+    "roberta-base-openai-detector": "https://cdn.huggingface.co/roberta-base-openai-detector-pytorch_model.bin",
+    "roberta-large-openai-detector": "https://cdn.huggingface.co/roberta-large-openai-detector-pytorch_model.bin",
 }
 
 
