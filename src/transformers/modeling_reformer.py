@@ -31,7 +31,7 @@ from torch import nn
 from torch.autograd.function import Function
 from torch.nn import CrossEntropyLoss
 
-from .activations import gelu, gelu_new, swish
+from .activations import gelu, gelu_new, swish, gelu_fast
 from .configuration_reformer import ReformerConfig
 from .modeling_utils import PreTrainedModel
 
@@ -55,6 +55,7 @@ ACT2FN = {
     "relu": torch.nn.functional.relu,
     "swish": swish,
     "gelu_new": gelu_new,
+    "gelu_fast": gelu_fast,
     "mish": mish,
 }
 ReformerLayerNorm = torch.nn.LayerNorm
@@ -1505,8 +1506,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         if labels is not None:
             # Shift so that tokens < n predict n
             # Uncomment this line for integration test with Trax
-            shift_logits = logits.contiguous()
-#            shift_logits = logits[..., :-1, :].contiguous()
+#            shift_logits = logits.contiguous()
+            shift_logits = logits[..., :-1, :].contiguous()
 
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
