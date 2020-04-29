@@ -38,10 +38,11 @@ logger = logging.getLogger(__name__)
 import h5py
 
 BERT_BASE_CASED='bert-base-cased'
-MODELS=[BERT_BASE_CASED]
+BERT_BASE_UNCASED='bert-base-uncased'
+MODELS=[BERT_BASE_CASED,BERT_BASE_UNCASED]
 
-MODELNAME2MODEL={BERT_BASE_CASED:BertForMaskedLM}
-MODELNAME2TOKENIZERS={BERT_BASE_CASED:BertTokenizer}
+MODELNAME2MODEL={BERT_BASE_CASED:BertModel,BERT_BASE_UNCASED:BertModel}
+MODELNAME2TOKENIZERS={BERT_BASE_CASED:BertTokenizer,BERT_BASE_UNCASED:BertTokenizer}
 
 def produce_key(sent):
     sent='\t'.join(sent.split())
@@ -291,9 +292,9 @@ def tokenid2wordid(input_ids,tokenizer,examples):
 
 
 def examples2embeds(examples,tokenizer,model,device,writer,args):
-    input=torch.tensor(tokenizer.batch_encode_plus(examples,max_length=args.max_seq_length,return_attention_masks=True,add_special_tokens=True,pad_to_max_length='right'))
-    input_ids=input['input_ids']
-    attention_mask=input['attention_mask'].to(device)
+    input=tokenizer.batch_encode_plus(examples,max_length=args.max_seq_length,return_attention_masks=True,add_special_tokens=True,pad_to_max_length='right')
+    input_ids=torch.tensor(input['input_ids'])
+    attention_mask=torch.tensor(input['attention_mask']).to(device)
     input_ids=input_ids.to(device)
     model.eval()
     with torch.no_grad():
@@ -376,14 +377,14 @@ def examples2embeds_bk(examples,tokenizer,model,device,writer,args):
             # sent_set.add(sent)
             if sent not in writer:
                 payload = average_layer_batch[b]
-                payload_cls=cls_embed_batch[b]
+                # payload_cls=cls_embed_batch[b]
                 if type(payload)==type(None):
                     print ('ValueError:',sent)
                 else:
                     payload=numpy.array(payload)
                     try:
                         writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,data=payload)
-                        writer.create_dataset('[CLS]\t'+sent, payload_cls.shape, dtype='float32', compression="gzip", compression_opts=9,data=payload_cls)
+                        # writer.create_dataset('[CLS]\t'+sent, payload_cls.shape, dtype='float32', compression="gzip", compression_opts=9,data=payload_cls)
                     except OSError as e:
                         print(e, sent)
 
