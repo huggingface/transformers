@@ -2,7 +2,7 @@
 name: "\U0001F31F New model addition"
 about: Submit a proposal/request to implement a new Transformer-based model
 title: ''
-labels: ''
+labels: New model
 assignees: ''
 
 ---
