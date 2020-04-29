@@ -25,7 +25,21 @@ PRETRAINED_MODEL_ARCHIVE_MAP = {
 
 class MarianMTModel(BartForConditionalGeneration):
     """Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
-    Model API is identical to BartForConditionalGeneration"""
+    Model API is identical to BartForConditionalGeneration
+
+    Examples:
+        src = 'fr'
+        trg = 'en'
+        sample_text = "où est l'arrêt de bus ?"
+        mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'
+
+        model = MarianMTModel.from_pretrained(mname)
+        tok = MarianSentencePieceTokenizer.from_pretrained(mname)
+        batch = tok.prepare_translation_batch(src_texts=[sample_text])
+        outs = model(**batch)  # forward pass
+        gen = model.generate(**batch)
+        tok.decode_batch(gen, skip_special_tokens=True)
+    """
 
     pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
 

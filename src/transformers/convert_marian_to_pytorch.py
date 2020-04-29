@@ -82,7 +82,9 @@ def find_model_file(dest_dir):  # this one better
     return model_file
 
 
-def parse_readmes(repo_path):
+def make_registry(repo_path="Opus-MT-train/models"):
+    if not Path(repo_path).exists():
+        raise ValueError("You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git")
     results = {}
     for p in Path(repo_path).ls():
         n_dash = p.name.count("-")
@@ -91,24 +93,24 @@ def parse_readmes(repo_path):
         else:
             lns = list(open(p / "README.md").readlines())
             results[p.name] = _parse_readme(lns)
-    return results
+    return [(k, v['pre-processing'], v['download']) for k,v in results.items()]
 
+from .marian_registry import MODELS
 
-def download_all_sentencepiece_models(repo_path="Opus-MT-train/models"):
+def download_all_sentencepiece_models(model_list=MODELS, repo_path=None):
     """Requires 300GB"""
     save_dir = Path("marian_ckpt")
-    if not Path(repo_path).exists():
-        raise ValueError("You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git")
-    results: dict = parse_readmes(repo_path)
-    for k, v in tqdm(list(results.items())):
+    if model_list is None:
+        model_list: list = make_registry(repo_path=repo_path)
+    for k, prepro, download in tqdm(model_list):
         if os.path.exists(save_dir / k):
             print(f"already have path {k}")
             continue
-        if "SentencePiece" not in v["pre-processing"]:
+        if "SentencePiece" in prepro:
             continue
-        download_and_unzip(v["download"], save_dir / k)
-        dest_dir = Path("marian_converted") / k
-        main(save_dir / k, dest_dir)
+        download_and_unzip(download, save_dir / k)
+        dest_dir = Path("marian_converted_bpe") / k
+        convert(save_dir / k, dest_dir)
 
 
 def convert_whole_dir(path=Path("marian_ckpt/")):
@@ -116,7 +118,7 @@ def convert_whole_dir(path=Path("marian_ckpt/")):
         dest_dir = f"marian_converted/{subdir.name}"
         if (dest_dir / "pytorch_model.bin").exists():
             continue
-        main(source_dir, dest_dir)
+        convert(source_dir, dest_dir)
 
 
 def _parse_readme(lns):
@@ -362,7 +364,7 @@ def download_and_unzip(url, dest_dir):
     os.remove(filename)
 
 
-def main(source_dir, dest_dir):
+def convert(source_dir, dest_dir):
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(exist_ok=True)
 
@@ -390,7 +392,7 @@ if __name__ == "__main__":
     source_dir = Path(args.src)
     assert source_dir.exists()
     dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
-    main(source_dir, dest_dir)
+    convert(source_dir, dest_dir)
 
 
 def load_yaml(path):
