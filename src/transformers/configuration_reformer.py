@@ -102,7 +102,7 @@ class ReformerConfig(PretrainedConfig):
         hidden_size=64,
         num_attention_heads=1,
         num_buckets=[2, 4],
-        num_hashes=8,
+        num_hashes=4,
         lsh_attn_chunk_length=64,
         local_attn_chunk_length=64,
         lsh_num_chunks_before=1,

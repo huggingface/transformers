@@ -491,7 +491,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # TODO: delete later when integration tests are ok
         if self.hash_seed is not None:
             rotations_shape = (vectors.shape[-1], num_hashes, rotation_size // 2)
-            np.random.seed(self.hash_seed)
+            torch.manual_seed(self.hash_seed)
             random_rotations = torch.tensor(
                 np.random.normal(size=rotations_shape), dtype=vectors.dtype, device=vectors.device,
             )
@@ -1511,10 +1511,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
         if labels is not None:
             # Shift so that tokens < n predict n
-            # Uncomment this line for integration test with Trax
-#            shift_logits = logits.contiguous()
             shift_logits = logits[..., :-1, :].contiguous()
-
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
