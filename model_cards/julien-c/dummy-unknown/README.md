@@ -1,3 +1,10 @@
+---
+tags:
+- ci
+---
+
+## Dummy model used for unit testing and CI
+
 
 ```python
 import json

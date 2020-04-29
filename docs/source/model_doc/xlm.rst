@@ -30,6 +30,8 @@ Tips:
 - XLM has multilingual checkpoints which leverage a specific `lang` parameter. Check out the
   `multi-lingual <../multilingual.html>`__ page for more information.
 
+The original code can be found `here <https://github.com/facebookresearch/XLM/>`_.
+
 
 XLMConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -41,7 +43,8 @@ XLMTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLMTokenizer
-    :members:
+    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
+        create_token_type_ids_from_sequences, save_vocabulary
 
 XLMModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

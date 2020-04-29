@@ -28,6 +28,9 @@ Tips:
 - This implementation is the same as RoBERTa. Refer to the `documentation of RoBERTa <./roberta.html>`__ for usage
   examples as well as the information relative to the inputs and outputs.
 
+The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/xlmr>`_.
+
+
 XLMRobertaConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -39,7 +42,8 @@ XLMRobertaTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLMRobertaTokenizer
-    :members:
+    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
+        create_token_type_ids_from_sequences, save_vocabulary
 
 
 XLMRobertaModel

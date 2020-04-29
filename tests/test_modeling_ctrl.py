@@ -23,6 +23,7 @@ from .utils import CACHE_DIR, require_torch, slow, torch_device
 
 
 if is_torch_available():
+    import torch
     from transformers import CTRLConfig, CTRLModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, CTRLLMHeadModel
 
 
@@ -30,6 +31,7 @@ if is_torch_available():
 class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (CTRLModel, CTRLLMHeadModel) if is_torch_available() else ()
+    all_generative_model_classes = (CTRLLMHeadModel,) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
@@ -211,3 +213,37 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in list(CTRL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = CTRLModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
             self.assertIsNotNone(model)
+
+
+class CTRLModelLanguageGenerationTest(unittest.TestCase):
+    @slow
+    def test_lm_generate_ctrl(self):
+        model = CTRLLMHeadModel.from_pretrained("ctrl")
+        input_ids = torch.tensor(
+            [[11859, 0, 1611, 8]], dtype=torch.long, device=torch_device
+        )  # Legal the president is
+        expected_output_ids = [
+            11859,
+            0,
+            1611,
+            8,
+            5,
+            150,
+            26449,
+            2,
+            19,
+            348,
+            469,
+            3,
+            2595,
+            48,
+            20740,
+            246533,
+            246533,
+            19,
+            30,
+            5,
+        ]  # Legal the president is a good guy and I don't want to lose my job. \n \n I have a
+
+        output_ids = model.generate(input_ids, do_sample=False)
+        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

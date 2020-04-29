@@ -60,7 +60,7 @@ class DistilBertConfig(PretrainedConfig):
                 Number of attention heads for each attention layer in the Transformer encoder.
             dim (:obj:`int`, optional, defaults to 768):
                 Dimensionality of the encoder layers and the pooler layer.
-            intermediate_size (:obj:`int`, optional, defaults to 3072):
+            hidden_dim (:obj:`int`, optional, defaults to 3072):
                 The size of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
             dropout (:obj:`float`, optional, defaults to 0.1):
                 The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
@@ -113,9 +113,10 @@ class DistilBertConfig(PretrainedConfig):
         initializer_range=0.02,
         qa_dropout=0.1,
         seq_classif_dropout=0.2,
+        pad_token_id=0,
         **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, pad_token_id=pad_token_id)
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.sinusoidal_pos_embds = sinusoidal_pos_embds

@@ -32,6 +32,8 @@ Tips:
   `target_mapping` inputs to control the attention span and outputs (see examples in `examples/run_generation.py`)
 - XLNet is one of the few models that has no sequence length limit.
 
+The original code can be found `here <https://github.com/zihangdai/xlnet/>`_.
+
 
 XLNetConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -44,7 +46,8 @@ XLNetTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.XLNetTokenizer
-    :members:
+    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
+        create_token_type_ids_from_sequences, save_vocabulary
 
 
 XLNetModel

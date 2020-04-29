@@ -30,6 +30,8 @@ Tips:
   similar to a BERT-like architecture with the same number of hidden layers as it has to iterate through the same
   number of (repeating) layers.
 
+The original code can be found `here <https://github.com/google-research/ALBERT>`_.
+
 AlbertConfig
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -41,7 +43,8 @@ AlbertTokenizer
 ~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.AlbertTokenizer
-    :members:
+    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
+        create_token_type_ids_from_sequences, save_vocabulary
 
 
 AlbertModel

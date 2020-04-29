@@ -24,13 +24,14 @@ import tensorflow as tf
 from .configuration_transfo_xl import TransfoXLConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
+from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
 
 TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-tf_model.h5",
+    "transfo-xl-wt103": "https://cdn.huggingface.co/transfo-xl-wt103-tf_model.h5",
 }
 
 
@@ -378,7 +379,10 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
         return embed
 
 
+@keras_serializable
 class TFTransfoXLMainLayer(tf.keras.layers.Layer):
+    config_class = TransfoXLConfig
+
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
@@ -485,7 +489,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         else:
             return None
 
-    def _update_mems(self, hids, mems, qlen, mlen):
+    def _update_mems(self, hids, mems, mlen, qlen):
         # does not deal with None
         if mems is None:
             return None
@@ -516,7 +520,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
             inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
             assert len(inputs) <= 4, "Too many inputs."
-        elif isinstance(inputs, dict):
+        elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             mems = inputs.get("mems", mems)
             head_mask = inputs.get("head_mask", head_mask)
@@ -730,6 +734,25 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         return outputs
 
 
+class TFTransfoXLLMHead(tf.keras.layers.Layer):
+    def __init__(self, config, input_embeddings, **kwargs):
+        super().__init__(**kwargs)
+        self.vocab_size = config.vocab_size
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.input_embeddings = input_embeddings
+
+    def build(self, input_shape):
+        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        super().build(input_shape)
+
+    def call(self, hidden_states):
+        hidden_states = self.input_embeddings(hidden_states, mode="linear")
+        hidden_states = hidden_states + self.bias
+        return hidden_states
+
+
 @add_start_docstrings(
     """The Transformer-XL Model with a language modeling head on top
     (adaptive softmax with weights tied to the adaptive input embeddings)""",
@@ -740,14 +763,20 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         super().__init__(config)
         self.transformer = TFTransfoXLMainLayer(config, name="transformer")
         self.sample_softmax = config.sample_softmax
-        # use sampled softmax
-        if config.sample_softmax > 0:
-            raise NotImplementedError
-        # use adaptive softmax (including standard softmax)
-        else:
-            self.crit = TFAdaptiveSoftmaxMask(
-                config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val, name="crit"
-            )
+        assert (
+            self.sample_softmax <= 0
+        ), "Sampling from the softmax is not implemented yet. Please look at issue: #3310: https://github.com/huggingface/transformers/issues/3310"
+
+        self.crit = TFAdaptiveSoftmaxMask(
+            config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val, name="crit"
+        )
+
+    def get_output_embeddings(self):
+        """ Double-check if you are using adaptive softmax.
+        """
+        if len(self.crit.out_layers) > 0:
+            return self.crit.out_layers[-1]
+        return None
 
     def reset_length(self, tgt_len, ext_len, mem_len):
         self.transformer.reset_length(tgt_len, ext_len, mem_len)
@@ -817,12 +846,17 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]
         outputs = transformer_outputs[1:]
-        if self.sample_softmax > 0 and training:
-            raise NotImplementedError
-        else:
-            # pred_hid = tf.reshape(pred_hid, (-1, shape_list(pred_hid)[-1]))
-            softmax_output = self.crit([pred_hid, labels], training=training)
-            # softmax_output = tf.reshape(softmax_output, (bsz, tgt_len, -1))
-            outputs = [softmax_output] + outputs
+
+        softmax_output = self.crit([pred_hid, labels], training=training)
+        outputs = [softmax_output] + outputs
 
         return outputs  # logits, new_mems, (all hidden states), (all attentions)
+
+    def prepare_inputs_for_generation(self, inputs, past, **model_kwargs):
+        inputs = {"inputs": inputs}
+
+        # if past is defined in model kwargs then use it for faster decoding
+        if past:
+            inputs["mems"] = past
+
+        return inputs

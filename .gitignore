@@ -130,6 +130,7 @@ proc_data
 
 # examples
 runs
+/runs_old
 examples/runs
 
 # data
@@ -139,3 +140,9 @@ serialization_dir
 # emacs
 *.*~
 debug.env
+
+# vim
+.*.swp
+
+#ctags
+tags

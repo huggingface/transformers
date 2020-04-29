@@ -29,10 +29,10 @@ from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 logger = logging.getLogger(__name__)
 
 TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-tf_model.h5",
-    "roberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-tf_model.h5",
-    "roberta-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-tf_model.h5",
-    "distilroberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-tf_model.h5",
+    "roberta-base": "https://cdn.huggingface.co/roberta-base-tf_model.h5",
+    "roberta-large": "https://cdn.huggingface.co/roberta-large-tf_model.h5",
+    "roberta-large-mnli": "https://cdn.huggingface.co/roberta-large-mnli-tf_model.h5",
+    "distilroberta-base": "https://cdn.huggingface.co/distilroberta-base-tf_model.h5",
 }
 
 
@@ -442,3 +442,68 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel):
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
 
         return outputs  # scores, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
+    """RoBERTa Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    ROBERTA_START_DOCSTRING,
+)
+class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.roberta = TFRobertaMainLayer(config, name="roberta")
+        self.qa_outputs = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
+        )
+
+    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    def call(self, inputs, **kwargs):
+        r"""
+    Return:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
+        start_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-start scores (before SoftMax).
+        end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-end scores (before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        # The checkpoint roberta-base is not fine-tuned for question answering. Please see the
+        # examples/run_squad.py example to see how to fine-tune a model to a question answering task.
+
+        import tensorflow as tf
+        from transformers import RobertaTokenizer, TFRobertaForQuestionAnswering
+
+        tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+        model = TFRobertaForQuestionAnswering.from_pretrained('roberta-base')
+        input_ids = tokenizer.encode("Who was Jim Henson?", "Jim Henson was a nice puppet")
+        start_scores, end_scores = model(tf.constant(input_ids)[None, :]) # Batch size 1
+
+        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
+
+        """
+        outputs = self.roberta(inputs, **kwargs)
+
+        sequence_output = outputs[0]
+
+        logits = self.qa_outputs(sequence_output)
+        start_logits, end_logits = tf.split(logits, 2, axis=-1)
+        start_logits = tf.squeeze(start_logits, axis=-1)
+        end_logits = tf.squeeze(end_logits, axis=-1)
+
+        outputs = (start_logits, end_logits,) + outputs[2:]
+
+        return outputs  # start_logits, end_logits, (hidden_states), (attentions)

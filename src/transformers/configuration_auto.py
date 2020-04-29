@@ -19,10 +19,13 @@ import logging
 from collections import OrderedDict
 
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
+from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
+from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
@@ -42,6 +45,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -55,6 +59,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -67,6 +72,7 @@ CONFIG_MAPPING = OrderedDict(
         ("albert", AlbertConfig,),
         ("camembert", CamembertConfig,),
         ("xlm-roberta", XLMRobertaConfig,),
+        ("bart", BartConfig,),
         ("roberta", RobertaConfig,),
         ("flaubert", FlaubertConfig,),
         ("bert", BertConfig,),
@@ -76,6 +82,8 @@ CONFIG_MAPPING = OrderedDict(
         ("xlnet", XLNetConfig,),
         ("xlm", XLMConfig,),
         ("ctrl", CTRLConfig,),
+        ("electra", ElectraConfig,),
+        ("encoder-decoder", EncoderDecoderConfig,),
     ]
 )
 
@@ -130,6 +138,7 @@ class AutoConfig:
             - contains `xlm`: :class:`~transformers.XLMConfig` (XLM model)
             - contains `ctrl` : :class:`~transformers.CTRLConfig` (CTRL model)
             - contains `flaubert` : :class:`~transformers.FlaubertConfig` (Flaubert model)
+            - contains `electra` : :class:`~transformers.ElectraConfig` (ELECTRA model)
 
 
         Args:

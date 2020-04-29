@@ -20,6 +20,8 @@ of the time they outperform other pre-training approaches. Different versions of
 evaluation protocol for the downstream tasks, called FLUE (French Language Understanding Evaluation), are shared
 to the research community for further reproducible experiments in French NLP.*
 
+The original code can be found `here <https://github.com/getalp/Flaubert>`_.
+
 
 FlaubertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

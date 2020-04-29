@@ -275,6 +275,24 @@ For a list that includes community-uploaded models, refer to `https://huggingfac
 |                   |                                                            | | FlauBERT large architecture                                                                                                         |
 |                   |                                                            | (see `details <https://github.com/getalp/Flaubert>`__)                                                                                |
 +-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-
-
-.. <https://huggingface.co/transformers/examples.html>`__
+| Bart              | ``bart-large``                                             | | 12-layer, 1024-hidden, 16-heads, 406M parameters                                                                                    |
+|                   |                                                            | (see `details <https://github.com/pytorch/fairseq/tree/master/examples/bart>`_)                                                       |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bart-large-mnli``                                        | | Adds a 2 layer classification head with 1 million parameters                                                                        |
+|                   |                                                            | | bart-large base architecture with a classification head, finetuned on MNLI                                                          |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``bart-large-cnn``                                         | | 12-layer, 1024-hidden, 16-heads, 406M parameters       (same as base)                                                               |
+|                   |                                                            | | bart-large base architecture finetuned on cnn summarization task                                                                    |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``mbart-large-en-ro``                                      | | 12-layer, 1024-hidden, 16-heads, 880M parameters                                                                                    |
+|                   |                                                            | | bart-large architecture pretrained on cc25 multilingual data , finetuned on WMT english romanian translation.                       |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| DialoGPT          | ``DialoGPT-small``                                         | | 12-layer, 768-hidden, 12-heads, 124M parameters                                                                                     |
+|                   |                                                            | | Trained on English text: 147M conversation-like exchanges extracted from Reddit.                                                    |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``DialoGPT-medium``                                        | | 24-layer, 1024-hidden, 16-heads, 355M parameters                                                                                    |
+|                   |                                                            | | Trained on English text: 147M conversation-like exchanges extracted from Reddit.                                                    |
+|                   +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                   | ``DialoGPT-large``                                         | | 36-layer, 1280-hidden, 20-heads, 774M parameters                                                                                    |
+|                   |                                                            | | Trained on English text: 147M conversation-like exchanges extracted from Reddit.                                                    |
++-------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+

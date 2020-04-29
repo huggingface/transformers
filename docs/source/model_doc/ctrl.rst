@@ -31,6 +31,8 @@ Tips:
   See `reusing the past in generative models <../quickstart.html#using-the-past>`_ for more information on the usage
   of this argument.
 
+The original code can be found `here <https://github.com/salesforce/ctrl>`_.
+
 
 CTRLConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -43,7 +45,7 @@ CTRLTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.CTRLTokenizer
-    :members:
+    :members: save_vocabulary
 
 
 CTRLModel
