@@ -99,8 +99,6 @@ setup(
         "tokenizers == 0.7.0",
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
-        # accessing files from S3 directly
-        "boto3",
         # filesystem locks e.g. to prevent parallel downloads
         "filelock",
         # for downloading models over HTTPS

@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 # for the pretrained weights provided with the models
 ####################################################
 TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xxx-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-base-uncased-tf_model.h5",
-    "xxx-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/xxx-large-uncased-tf_model.h5",
+    "xxx-base-uncased": "https://cdn.huggingface.co/xxx-base-uncased-tf_model.h5",
+    "xxx-large-uncased": "https://cdn.huggingface.co/xxx-large-uncased-tf_model.h5",
 }
 
 
