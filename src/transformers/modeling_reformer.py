@@ -430,8 +430,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # free memory
         del query_key_vectors, key_vectors, value_vectors
 
-        # gather correct out vectors
-        out_vectors, logits = UndoSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx)
+        # calculate total concatenad chunks to split gradients correctly
+        num_neighboored_concatenated_chunks = self.num_chunks_after + self.num_chunks_before + 1
+        out_vectors, logits = UndoSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, num_neighboored_concatenated_chunks)
 
         if num_hashes > 1:
             out_vectors = self._split_dim_by(
@@ -682,13 +683,13 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
 class UndoSort(Function):
     @staticmethod
-    def forward(ctx, out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx):
+    def forward(ctx, out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, num_neighboored_concatenated_chunks):
         # save sorted_bucket_idx for backprop
         ctx.sorted_bucket_idx = sorted_bucket_idx
+        ctx.num_neighboored_concatenated_chunks = num_neighboored_concatenated_chunks
 
         out_vectors = out_vectors.detach()
         logits = logits.detach()
-
         # undo sort to have correct order for next layer
         expanded_undo_sort_indices = undo_sorted_bucket_idx.unsqueeze(-1).expand(out_vectors.shape)
         out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
@@ -697,16 +698,35 @@ class UndoSort(Function):
 
     @staticmethod
     def backward(ctx, grad_out_vectors, grad_logits):
-        # get sorted_bucket_idx
+        # get parameters saved in ctx
         sorted_bucket_idx = ctx.sorted_bucket_idx
+        num_neighboored_concatenated_chunks = ctx.num_neighboored_concatenated_chunks
+
+        # get real gradient shape
+        # shape is BatchSize x NumAttnHeads x ChunkLen*(num_chunk_before + num_chunk_after + 1)
+        grad_logits_shape = grad_logits.shape
+        # shape is BatchSize x NumAttnHeads x ChunkLen*(num_chunk_before + num_chunk_after + 1) x ChunkLen
+        grad_out_vectors_shape = grad_out_vectors.shape
+
+        # split gradient vectors and sorted bucket idxs by concatenated chunk dimension to gather correct indices
+        # shape is BatchSize x NumAttnHeads x (num_chunk_before + num_chunk_after + 1) x ChunkLen
+        grad_logits = torch.reshape(grad_logits, (grad_logits_shape[:2] + (num_neighboored_concatenated_chunks, -1)))
+        # shape is BatchSize x NumAttnHeads x (num_chunk_before + num_chunk_after + 1) x ChunkLen x ChunkLen
+        grad_out_vectors = torch.reshape(grad_out_vectors, (grad_out_vectors_shape[:2] + (num_neighboored_concatenated_chunks, -1) + grad_out_vectors_shape[-1:]))
+
+        sorted_bucket_idx = torch.reshape(sorted_bucket_idx, (sorted_bucket_idx.shape[:2] + (num_neighboored_concatenated_chunks, -1)))
 
         # reverse sort of forward
         expanded_sort_indices = sorted_bucket_idx.unsqueeze(-1).expand(grad_out_vectors.shape)
-        grad_out_vectors = torch.gather(grad_out_vectors, 2, expanded_sort_indices)
-        grad_logits = torch.gather(grad_logits, 2, sorted_bucket_idx)
+        grad_out_vectors = torch.gather(grad_out_vectors, 3, expanded_sort_indices)
+        grad_logits = torch.gather(grad_logits, 3, sorted_bucket_idx)
 
-        # return grad and `None` fillers for last 2 forward args
-        return grad_out_vectors, grad_logits, None, None
+        # reshape into correct shape
+        grad_logits = torch.reshape(grad_logits, grad_logits_shape)
+        grad_out_vectors = torch.reshape(grad_out_vectors, grad_out_vectors_shape)
+
+        # return grad and `None` fillers for last 3 forward args
+        return grad_out_vectors, grad_logits, None, None, None
 
 
 class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
@@ -1484,7 +1504,10 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
         if labels is not None:
             # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
+            # Uncomment this line for integration test with Trax
+            shift_logits = logits.contiguous()
+#            shift_logits = logits[..., :-1, :].contiguous()
+
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
