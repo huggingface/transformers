@@ -475,7 +475,6 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
         hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.decoder(hidden_states, mode="linear") + self.decoder_bias
-        hidden_states = hidden_states + self.bias
         return hidden_states
 
 
