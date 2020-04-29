@@ -291,8 +291,6 @@ def evaluate(args, model, tokenizer, criterion, prefix=""):
     out_label_ids = None
     for batch in tqdm(eval_dataloader, desc="Evaluating"):
         model.eval()
-        batch = tuple(t.to(args.device) for t in batch)
-
         with torch.no_grad():
             batch = tuple(t.to(args.device) for t in batch)
             labels = batch[5]
