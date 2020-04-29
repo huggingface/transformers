@@ -312,7 +312,7 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
             print (payload.shape)
             try:
                 if sent in writer:
-                    print ('already exist',sent)
+                    print ('already exist',sent.encode('utf-8'))
                 else:
                     writer.create_dataset(sent, payload.shape, dtype='float32', compression="gzip", compression_opts=9,
                                       data=payload)
