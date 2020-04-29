@@ -272,9 +272,13 @@ def tokenid2wordid(input_ids,tokenizer,examples):
         w2token=[]
         input_id=input_ids[i]
         input_start=0
-
         for w in example.split():
+
             w_ids=tokenizer.encode(w,add_special_tokens=False)
+            if len(w_ids)==0:
+                print (w_ids)
+                continue
+
             while int(w_ids[0])!=int(input_id[input_start]):
                 input_start+=1
             input_end=input_start+len(w_ids)
