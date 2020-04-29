@@ -188,7 +188,12 @@ class AxialPositionEmbeddings(nn.Module):
             )
             if self.dropout > 0:
                 weights = torch.cat(broadcasted_weights, dim=-1)
-                position_encodings = torch.reshape(weights, (batch_size, sequence_length, -1))
+                # permute weights so that 2D correctly drops dims 1 and 2
+                perm_weigthts = weights.permute(0, 3, 2, 1)
+                # drop entire matrix of last two dims (prev dims 1 and 2)
+                drop_perm_weights = nn.functional.dropout2d(perm_weigthts, self.dropout, training=self.training)
+                drop_weights = drop_perm_weights.permute(0, 3, 2, 1)
+                position_encodings = torch.reshape(drop_weights, (batch_size, sequence_length, -1))
 
             else:
                 position_encodings = torch.cat(
