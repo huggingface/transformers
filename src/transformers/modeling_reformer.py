@@ -437,8 +437,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         del query_key_vectors, key_vectors, value_vectors
 
         # calculate total concatenad chunks to split gradients correctly
-        num_neighboored_concatenated_chunks = self.num_chunks_after + self.num_chunks_before + 1
-        out_vectors, logits = UndoSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, num_neighboored_concatenated_chunks)
+        out_vectors, logits = UndoSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, self.num_hashes)
 
         if num_hashes > 1:
             out_vectors = self._split_dim_by(
@@ -691,10 +690,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
 class UndoSort(Function):
     @staticmethod
-    def forward(ctx, out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, num_neighboored_concatenated_chunks):
+    def forward(ctx, out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, num_hashes):
         # save sorted_bucket_idx for backprop
         ctx.sorted_bucket_idx = sorted_bucket_idx
-        ctx.num_neighboored_concatenated_chunks = num_neighboored_concatenated_chunks
+        ctx.num_hashes = num_hashes
 
         out_vectors = out_vectors.detach()
         logits = logits.detach()
@@ -708,21 +707,21 @@ class UndoSort(Function):
     def backward(ctx, grad_out_vectors, grad_logits):
         # get parameters saved in ctx
         sorted_bucket_idx = ctx.sorted_bucket_idx
-        num_neighboored_concatenated_chunks = ctx.num_neighboored_concatenated_chunks
+        num_hashes = ctx.num_hashes
 
         # get real gradient shape
-        # shape is BatchSize x NumAttnHeads x ChunkLen*(num_chunk_before + num_chunk_after + 1)
+        # shape is BatchSize x NumAttnHeads x ChunkLen * NumHashes
         grad_logits_shape = grad_logits.shape
-        # shape is BatchSize x NumAttnHeads x ChunkLen*(num_chunk_before + num_chunk_after + 1) x ChunkLen
+        # shape is BatchSize x NumAttnHeads x ChunkLen * NumHashes x ChunkLen
         grad_out_vectors_shape = grad_out_vectors.shape
 
         # split gradient vectors and sorted bucket idxs by concatenated chunk dimension to gather correct indices
-        # shape is BatchSize x NumAttnHeads x (num_chunk_before + num_chunk_after + 1) x ChunkLen
-        grad_logits = torch.reshape(grad_logits, (grad_logits_shape[:2] + (num_neighboored_concatenated_chunks, -1)))
-        # shape is BatchSize x NumAttnHeads x (num_chunk_before + num_chunk_after + 1) x ChunkLen x ChunkLen
-        grad_out_vectors = torch.reshape(grad_out_vectors, (grad_out_vectors_shape[:2] + (num_neighboored_concatenated_chunks, -1) + grad_out_vectors_shape[-1:]))
+        # shape is BatchSize x NumAttnHeads x NumHashes x ChunkLen
+        grad_logits = torch.reshape(grad_logits, (grad_logits_shape[:2] + (num_hashes, -1)))
+        # shape is BatchSize x NumAttnHeads x NumHashes x ChunkLen x ChunkLen
+        grad_out_vectors = torch.reshape(grad_out_vectors, (grad_out_vectors_shape[:2] + (num_hashes, -1) + grad_out_vectors_shape[-1:]))
 
-        sorted_bucket_idx = torch.reshape(sorted_bucket_idx, (sorted_bucket_idx.shape[:2] + (num_neighboored_concatenated_chunks, -1)))
+        sorted_bucket_idx = torch.reshape(sorted_bucket_idx, (sorted_bucket_idx.shape[:2] + (num_hashes, -1)))
 
         # reverse sort of forward
         expanded_sort_indices = sorted_bucket_idx.unsqueeze(-1).expand(grad_out_vectors.shape)
