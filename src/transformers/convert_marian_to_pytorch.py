@@ -11,6 +11,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+from durbango import tqdm_nice
 from transformers import MarianConfig, MarianMTModel, MarianSentencePieceTokenizer
 
 
@@ -92,7 +93,6 @@ def parse_readmes(repo_path):
             results[p.name] = _parse_readme(lns)
     return results
 
-import shutil
 
 def download_all_sentencepiece_models(repo_path="Opus-MT-train/models"):
     """Requires 300GB"""
@@ -107,14 +107,14 @@ def download_all_sentencepiece_models(repo_path="Opus-MT-train/models"):
         if "SentencePiece" not in v["pre-processing"]:
             continue
         download_and_unzip(v["download"], save_dir / k)
-        dest_dir = Path("marian_converted")/k
-        main(save_dir /k, dest_dir)
+        dest_dir = Path("marian_converted") / k
+        main(save_dir / k, dest_dir)
 
-from durbango import tqdm_nice
-def convert_whole_dir(path=Path('marian_ckpt/')):
+
+def convert_whole_dir(path=Path("marian_ckpt/")):
     for subdir in tqdm_nice(list(path.ls())):
         dest_dir = f"marian_converted/{subdir.name}"
-        if (dest_dir / 'pytorch_model.bin').exists():
+        if (dest_dir / "pytorch_model.bin").exists():
             continue
         main(source_dir, dest_dir)
 
@@ -158,9 +158,11 @@ def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
         added += 1
     return added
 
+def find_vocab_file(model_dir):
+    return list(model_dir.glob('*vocab.yml'))[0]
 
 def add_special_tokens_to_vocab(model_dir: Path) -> None:
-    vocab = load_yaml(model_dir / "opus.spm32k-spm32k.vocab.yml")
+    vocab = load_yaml(find_vocab_file(model_dir))
     vocab = {k: int(v) for k, v in vocab.items()}
     num_added = add_to_vocab_(vocab, ["<pad>"])
     print(f"added {num_added} tokens to vocab")
