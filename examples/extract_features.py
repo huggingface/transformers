@@ -278,7 +278,7 @@ def tokenid2wordid(input_ids,tokenizer,examples):
         input_start=0
         for w in example.split():
 
-            w_ids=tokenizer.encode(w,add_special_tokens=False)
+            w_ids=tokenizer.encode(w,add_special_tokens=False,add_prefix_space=True)
             if len(w_ids)==0:
                 print (w_ids)
                 continue
