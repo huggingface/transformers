@@ -471,6 +471,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # See https://arxiv.org/pdf/1509.02897.pdf
         # We sample a different random rotation for each round of hashing to
         # decrease the probability of hash misses.
+
         if isinstance(self.num_buckets, int):
             assert (
                 self.num_buckets % 2 == 0
@@ -480,12 +481,13 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         else:
             # Factorize the hash if self.num_buckets is a list or tuple
             rotation_size, num_buckets = 0, 1
-            for num_bucket in self.num_buckets:
-                assert num_bucket % 2 == 0, "The number of buckets should be even, but `num_bucket`: {}".format(
-                    num_bucket
-                )
-                rotation_size += num_bucket
-                num_buckets *= num_bucket
+            for bucket_factor in self.num_buckets:
+                assert bucket_factor % 2 == 0, "The number of buckets should be even, but `num_bucket`: {}".format(bucket_factor)
+                rotation_size = rotation_size + bucket_factor
+                num_buckets = num_buckets * bucket_factor
+
+        # remove gradient
+        vectors = vectors.detach()
 
         # TODO: delete later when integration tests are ok
         if self.hash_seed is not None:
@@ -497,7 +499,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             rotated_vectors = torch.einsum("bmtd,dhr->bmhtr", vectors, random_rotations)
         else:
             rotations_shape = (self.num_attention_heads, vectors.shape[-1], num_hashes, rotation_size // 2)
-            # create a random self.attention_head_size x num_hashes x self.num_buckets/2
+            # create a random self.attention_head_size x num_hashes x num_buckets/2
             random_rotations = torch.randn(rotations_shape, device=vectors.device).to(vectors.dtype)
 
             # rotated_vectors has dim:
@@ -513,17 +515,17 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         else:
             # Get the buckets for them and combine.
             buckets, cur_sum, cur_product = None, 0, 1
-            for num_bucket in self.num_buckets:
-                rotated_vectors = rotated_vectors[..., cur_sum : cur_sum + (num_bucket // 2)]
-                cur_sum += num_bucket // 2
-                rotated_vectors = torch.cat([rotated_vectors, -rotated_vectors], dim=-1)
+            for bucket_factor in self.num_buckets:
+                rotated_vectors_factor = rotated_vectors[..., cur_sum : cur_sum + (bucket_factor // 2)]
+                cur_sum = cur_sum + bucket_factor // 2
+                rotated_vectors_factor = torch.cat([rotated_vectors_factor, -rotated_vectors_factor], dim=-1)
 
                 if buckets is None:
-                    buckets = torch.argmax(rotated_vectors, dim=-1)
+                    buckets = torch.argmax(rotated_vectors_factor, dim=-1)
                 else:
-                    buckets += cur_product * torch.argmax(rotated_vectors, dim=-1)
+                    buckets = buckets + (cur_product * torch.argmax(rotated_vectors_factor, dim=-1))
 
-                cur_product *= num_bucket
+                cur_product = cur_product * bucket_factor
 
         # buckets is now (Batch_size x Num_Attn_Heads x Num_Hashes x Seq_Len).
         # Next we add offsets so that bucket numbers from different hashing rounds don't overlap.
@@ -1511,8 +1513,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         if labels is not None:
             # Shift so that tokens < n predict n
             # Uncomment this line for integration test with Trax
-#            shift_logits = logits.contiguous()
-            shift_logits = logits[..., :-1, :].contiguous()
+            shift_logits = logits.contiguous()
+#            shift_logits = logits[..., :-1, :].contiguous()
 
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
