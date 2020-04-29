@@ -112,7 +112,7 @@ class FlaxAutoModel(object):
                 - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this case, ``from_tf`` should be set to True and a configuration object should be provided as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             model_args: (`optional`) Sequence of positional arguments:
-                All remaning positional arguments will be passed to the underlying model's ``__init__`` method
+                All remaining positional arguments will be passed to the underlying model's ``__init__`` method
 
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can be automatically loaded when:
@@ -166,5 +166,4 @@ class FlaxAutoModel(object):
                 config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
             )
         )
-
 
