@@ -171,7 +171,12 @@ class TFTrainer:
             self._run_model, args=(per_replica_features, per_replica_labels, False)
         )
 
-        return self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, axis=0), per_replica_logits
+        try:
+            reduced_loss = self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, axis=0)
+        except ValueError:
+            reduced_loss = self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, None)
+
+        return reduced_loss, per_replica_logits
 
     def _prediction_loop(
         self, dataset: tf.data.Dataset, description: str, prediction_loss_only: Optional[bool] = None
@@ -381,8 +386,9 @@ class TFTrainer:
             active_loss = tf.reshape(labels, (-1,)) != -1
             reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
             labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
-
-        loss = self.loss(labels, reduced_logits)
+            loss = self.loss(labels, reduced_logits)
+        else:
+            loss = self.loss(labels, logits)
 
         return loss, logits
 

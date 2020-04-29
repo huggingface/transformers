@@ -1,105 +1,240 @@
-import os
+# coding=utf-8
+""" Fine-tuning the library models for named entity recognition."""
 
-import tensorflow as tf
-import tensorflow_datasets
+
+import logging
+import os
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Dict, Optional
+
+import numpy as np
+import tensorflow_datasets as tfds
 
 from transformers import (
-    BertConfig,
-    BertForSequenceClassification,
-    BertTokenizer,
-    TFBertForSequenceClassification,
+    AutoConfig,
+    AutoTokenizer,
+    EvalPrediction,
+    HfArgumentParser,
+    PreTrainedTokenizer,
+    TFAutoModelForSequenceClassification,
+    TFTrainer,
+    TFTrainingArguments,
+    glue_compute_metrics,
     glue_convert_examples_to_features,
+    glue_output_modes,
     glue_processors,
+    glue_tasks_num_labels,
 )
 
 
-# script parameters
-BATCH_SIZE = 32
-EVAL_BATCH_SIZE = BATCH_SIZE * 2
-USE_XLA = False
-USE_AMP = False
-EPOCHS = 3
-
-TASK = "mrpc"
-
-if TASK == "sst-2":
-    TFDS_TASK = "sst2"
-elif TASK == "sts-b":
-    TFDS_TASK = "stsb"
-else:
-    TFDS_TASK = TASK
-
-num_labels = len(glue_processors[TASK]().get_labels())
-print(num_labels)
-
-tf.config.optimizer.set_jit(USE_XLA)
-tf.config.optimizer.set_experimental_options({"auto_mixed_precision": USE_AMP})
-
-# Load tokenizer and model from pretrained model/vocabulary. Specify the number of labels to classify (2+: classification, 1: regression)
-config = BertConfig.from_pretrained("bert-base-cased", num_labels=num_labels)
-tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
-model = TFBertForSequenceClassification.from_pretrained("bert-base-cased", config=config)
-
-# Load dataset via TensorFlow Datasets
-data, info = tensorflow_datasets.load(f"glue/{TFDS_TASK}", with_info=True)
-train_examples = info.splits["train"].num_examples
-
-# MNLI expects either validation_matched or validation_mismatched
-valid_examples = info.splits["validation"].num_examples
-
-# Prepare dataset for GLUE as a tf.data.Dataset instance
-train_dataset = glue_convert_examples_to_features(data["train"], tokenizer, max_length=128, task=TASK)
-
-# MNLI expects either validation_matched or validation_mismatched
-valid_dataset = glue_convert_examples_to_features(data["validation"], tokenizer, max_length=128, task=TASK)
-train_dataset = train_dataset.shuffle(128).batch(BATCH_SIZE).repeat(-1)
-valid_dataset = valid_dataset.batch(EVAL_BATCH_SIZE)
-
-# Prepare training: Compile tf.keras model with optimizer, loss and learning rate schedule
-opt = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08)
-if USE_AMP:
-    # loss scaling is currently required when using mixed precision
-    opt = tf.keras.mixed_precision.experimental.LossScaleOptimizer(opt, "dynamic")
+class Split(Enum):
+    train = "train"
+    dev = "validation"
+    test = "test"
 
 
-if num_labels == 1:
-    loss = tf.keras.losses.MeanSquaredError()
-else:
-    loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+class TFGlueDataset:
+    """
+    This will be superseded by a framework-agnostic approach
+    soon.
+    """
 
-metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-model.compile(optimizer=opt, loss=loss, metrics=[metric])
+    def __init__(
+        self,
+        task_name: str,
+        tokenizer: PreTrainedTokenizer,
+        max_seq_length: Optional[int] = None,
+        mode: Split = Split.train,
+    ):
+        if task_name == "mnli-mm" and mode == Split.dev:
+            task_name = "validation_mismatched"
+        elif task_name == "mnli-mm" and mode == Split.train:
+            task_name = "mnli"
+        elif task_name == "mnli" and mode == Split.dev:
+            task_name = "validation_matched"
 
-# Train and evaluate using tf.keras.Model.fit()
-train_steps = train_examples // BATCH_SIZE
-valid_steps = valid_examples // EVAL_BATCH_SIZE
+        ds, info = tfds.load("glue/" + task_name, split=mode.value, with_info=True)
+        self.features = [0] * info.splits[mode.value].num_examples
+        # TODO clean up all this to leverage built-in features of tokenizers
+        self.dataset = glue_convert_examples_to_features(ds, tokenizer, max_seq_length, task_name)
 
-history = model.fit(
-    train_dataset,
-    epochs=EPOCHS,
-    steps_per_epoch=train_steps,
-    validation_data=valid_dataset,
-    validation_steps=valid_steps,
-)
+    def get_dataset(self):
+        return self.dataset
 
-# Save TF2 model
-os.makedirs("./save/", exist_ok=True)
-model.save_pretrained("./save/")
+    def __len__(self):
+        return len(self.features)
 
-if TASK == "mrpc":
-    # Load the TensorFlow model in PyTorch for inspection
-    # This is to demo the interoperability between the two frameworks, you don't have to
-    # do this in real life (you can run the inference on the TF model).
-    pytorch_model = BertForSequenceClassification.from_pretrained("./save/", from_tf=True)
 
-    # Quickly test a few predictions - MRPC is a paraphrasing task, let's see if our model learned the task
-    sentence_0 = "This research was consistent with his findings."
-    sentence_1 = "His findings were compatible with this research."
-    sentence_2 = "His findings were not compatible with this research."
-    inputs_1 = tokenizer.encode_plus(sentence_0, sentence_1, add_special_tokens=True, return_tensors="pt")
-    inputs_2 = tokenizer.encode_plus(sentence_0, sentence_2, add_special_tokens=True, return_tensors="pt")
+logger = logging.getLogger(__name__)
 
-    pred_1 = pytorch_model(**inputs_1)[0].argmax().item()
-    pred_2 = pytorch_model(**inputs_2)[0].argmax().item()
-    print("sentence_1 is", "a paraphrase" if pred_1 else "not a paraphrase", "of sentence_0")
-    print("sentence_2 is", "a paraphrase" if pred_2 else "not a paraphrase", "of sentence_0")
+
+@dataclass
+class GlueDataTrainingArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
+    """
+
+    task_name: str = field(metadata={"help": "The name of the task to train on: " + ", ".join(glue_processors.keys())})
+    max_seq_length: int = field(
+        default=128,
+        metadata={
+            "help": "The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
+    overwrite_cache: bool = field(
+        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    )
+
+    def __post_init__(self):
+        self.task_name = self.task_name.lower()
+
+
+@dataclass
+class ModelArguments:
+    """
+    Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
+    """
+
+    model_name_or_path: str = field(
+        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+    )
+    config_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+    )
+    tokenizer_name: Optional[str] = field(
+        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+    )
+    use_fast: bool = field(default=False, metadata={"help": "Set this flag to use fast tokenization."})
+    # If you want to tweak more attributes on your tokenizer, you should do it in a distinct script,
+    # or just modify its tokenizer_config.json.
+    cache_dir: Optional[str] = field(
+        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+    )
+
+
+def main():
+    # See all possible arguments in src/transformers/training_args.py
+    # or by passing the --help flag to this script.
+    # We now keep distinct sets of args, for a cleaner separation of concerns.
+    parser = HfArgumentParser((ModelArguments, GlueDataTrainingArguments, TFTrainingArguments))
+    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    if (
+        os.path.exists(training_args.output_dir)
+        and os.listdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
+        raise ValueError(
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
+        )
+
+    # Setup logging
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
+    )
+    logger.info(
+        "n_gpu: %s, distributed training: %s, 16-bits training: %s",
+        training_args.n_gpu,
+        bool(training_args.n_gpu > 1),
+        training_args.fp16,
+    )
+    logger.info("Training/evaluation parameters %s", training_args)
+
+    try:
+        num_labels = glue_tasks_num_labels[data_args.task_name]
+        output_mode = glue_output_modes[data_args.task_name]
+    except KeyError:
+        raise ValueError("Task not found: %s" % (data_args.task_name))
+
+    # Load pretrained model and tokenizer
+    #
+    # Distributed training:
+    # The .from_pretrained methods guarantee that only one local process can concurrently
+    # download model & vocab.
+
+    config = AutoConfig.from_pretrained(
+        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        num_labels=num_labels,
+        finetuning_task=data_args.task_name,
+        cache_dir=model_args.cache_dir,
+    )
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+    )
+
+    with training_args.strategy.scope():
+        model = TFAutoModelForSequenceClassification.from_pretrained(
+            model_args.model_name_or_path,
+            from_pt=bool(".bin" in model_args.model_name_or_path),
+            config=config,
+            cache_dir=model_args.cache_dir,
+        )
+
+    # Get datasets
+    train_dataset = (
+        TFGlueDataset(task_name=data_args.task_name, tokenizer=tokenizer, max_seq_length=data_args.max_seq_length)
+        if training_args.do_train
+        else None
+    )
+    eval_dataset = (
+        TFGlueDataset(
+            task_name=data_args.task_name, tokenizer=tokenizer, max_seq_length=data_args.max_seq_length, mode=Split.dev
+        )
+        if training_args.do_eval
+        else None
+    )
+
+    def compute_metrics(p: EvalPrediction) -> Dict:
+        if output_mode == "classification":
+            preds = np.argmax(p.predictions, axis=1)
+        elif output_mode == "regression":
+            preds = np.squeeze(p.predictions)
+        return glue_compute_metrics(data_args.task_name, preds, p.label_ids)
+
+    # Initialize our Trainer
+    trainer = TFTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        compute_metrics=compute_metrics,
+    )
+
+    # Training
+    if training_args.do_train:
+        trainer.train()
+        trainer.save_model()
+        tokenizer.save_pretrained(training_args.output_dir)
+
+    # Evaluation
+    results = {}
+    if training_args.do_eval:
+        logger.info("*** Evaluate ***")
+
+        result = trainer.evaluate()
+        output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
+
+        with open(output_eval_file, "w") as writer:
+            logger.info("***** Eval results *****")
+
+            for key, value in result.items():
+                logger.info("  %s = %s", key, value)
+                writer.write("%s = %s\n" % (key, value))
+
+            results.update(result)
+
+    return results
+
+
+if __name__ == "__main__":
+    main()
