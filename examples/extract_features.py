@@ -46,6 +46,7 @@ MODELS=[BERT_BASE_CASED,BERT_BASE_UNCASED,ROBERTA_LARGE_CASED,BERT_LARGE_CASED]
 MODELNAME2MODEL={BERT_BASE_CASED:BertModel,BERT_BASE_UNCASED:BertModel,BERT_LARGE_CASED:BertModel,ROBERTA_LARGE_CASED:RobertaModel}
 MODELNAME2TOKENIZERS={BERT_BASE_CASED:BertTokenizer,BERT_BASE_UNCASED:BertTokenizer,BERT_LARGE_CASED:BertTokenizer, ROBERTA_LARGE_CASED:RobertaTokenizer}
 
+
 def produce_key(sent):
     sent='\t'.join(sent.split())
     sent = sent.replace('.', '$period$')
@@ -275,9 +276,13 @@ def tokenid2wordid(input_ids,tokenizer,examples):
         w2token=[]
         input_id=input_ids[i]
         input_start=0
-
         for w in example.split():
+
             w_ids=tokenizer.encode(w,add_special_tokens=False)
+            if len(w_ids)==0:
+                print (w_ids)
+                continue
+
             while int(w_ids[0])!=int(input_id[input_start]):
                 input_start+=1
             input_end=input_start+len(w_ids)
