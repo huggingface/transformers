@@ -31,7 +31,7 @@ from .tokenization_utils import BatchEncoding
 logger = logging.getLogger(__name__)
 
 TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-tf_model.h5",
+    "transfo-xl-wt103": "https://cdn.huggingface.co/transfo-xl-wt103-tf_model.h5",
 }
 
 

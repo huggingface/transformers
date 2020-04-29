@@ -29,10 +29,10 @@ from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 logger = logging.getLogger(__name__)
 
 TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-tf_model.h5",
-    "roberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-tf_model.h5",
-    "roberta-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-tf_model.h5",
-    "distilroberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-tf_model.h5",
+    "roberta-base": "https://cdn.huggingface.co/roberta-base-tf_model.h5",
+    "roberta-large": "https://cdn.huggingface.co/roberta-large-tf_model.h5",
+    "roberta-large-mnli": "https://cdn.huggingface.co/roberta-large-mnli-tf_model.h5",
+    "distilroberta-base": "https://cdn.huggingface.co/distilroberta-base-tf_model.h5",
 }
 
 
