@@ -54,7 +54,6 @@ class IntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-
         cls.model_name = f"Helsinki-NLP/opus-mt-{cls.src}-{cls.tgt}"
         cls.tokenizer = MarianSentencePieceTokenizer.from_pretrained(cls.model_name)
         cls.eos_token_id = cls.tokenizer.eos_token_id
@@ -67,6 +66,22 @@ class IntegrationTests(unittest.TestCase):
             return model.half()
         else:
             return model
+
+    @slow
+    def test_repl_generate_batch(self):
+        model_inputs: dict = self.tokenizer.prepare_translation_batch(src_texts=self.src_text).to(torch_device)
+        self.assertEqual(self.model.device, model_inputs["input_ids"].device)
+        generated_ids = self.model.generate(
+            model_inputs["input_ids"],
+            length_penalty=1.0,
+            num_beams=2,  # 6 is the default
+            bad_words_ids=[[self.tokenizer.pad_token_id]],
+        )
+        generated_words = self.tokenizer.decode_batch(generated_ids, skip_special_tokens=True)
+        self.assertListEqual(self.expected_text, generated_words)
+
+
+class TestMarianEnDe(IntegrationTests):
 
     @slow
     def test_forward(self):
@@ -88,49 +103,7 @@ class IntegrationTests(unittest.TestCase):
         max_indices = logits.argmax(-1)
         self.tokenizer.decode_batch(max_indices)
 
-    @slow
-    def test_repl_generate_one(self):
-        src = ["I am a small frog.", "Hello"]
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src).to(torch_device)
-        self.assertEqual(self.model.device, model_inputs["input_ids"].device)
-        generated_ids = self.model.generate(model_inputs["input_ids"], num_beams=6,)
-        generated_words = self.tokenizer.decode_batch(generated_ids)[0]
-        expected_words = "Ich bin ein kleiner Frosch."
-        self.assertEqual(expected_words, generated_words)
-
-    @slow
-    def test_repl_generate_batch(self):
-        src = [
-            "I am a small frog.",
-            "Now I can forget the 100 words of german that I know.",
-            "O",
-            "Tom asked his teacher for advice.",
-            "That's how I would do it.",
-            "Tom really admired Mary's courage.",
-            "Turn around and close your eyes.",
-        ]
-        expected = [
-            "Ich bin ein kleiner Frosch.",
-            "Jetzt kann ich die 100 Wörter des Deutschen vergessen, die ich kenne.",
-            "",
-            "Tom bat seinen Lehrer um Rat.",
-            "So würde ich das tun.",
-            "Tom bewunderte Marias Mut wirklich.",
-            "Umdrehen und die Augen schließen.",
-        ]
-
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src_texts=self.src_text).to(torch_device)
-        self.assertEqual(self.model.device, model_inputs["input_ids"].device)
-        generated_ids = self.model.generate(
-            model_inputs["input_ids"],
-            length_penalty=1.0,
-            num_beams=2,  # 6 is the default
-            bad_words_ids=[[self.tokenizer.pad_token_id]],
-        )
-        generated_words = self.tokenizer.decode_batch(generated_ids, skip_special_tokens=True)
-        self.assertListEqual(self.expected_text, generated_words)
-
-    def test_marian_equivalence(self):
+    def test_tokenizer_equivalence(self):
         batch = self.tokenizer.prepare_translation_batch(["I am a small frog"]).to(torch_device)
         input_ids = batch["input_ids"][0]
         expected = [38, 121, 14, 697, 38848, 0]
@@ -140,3 +113,30 @@ class IntegrationTests(unittest.TestCase):
         input_ids_w_pad = self.tokenizer.prepare_translation_batch(["I am a small frog <pad>"])["input_ids"][0]
         expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad
         self.assertListEqual(expected_w_pad, input_ids_w_pad.tolist())
+
+
+class TestMarian_EN_FR(IntegrationTests):
+    src = 'en'
+    tgt = 'fr'
+    src_text = [
+        "I am a small frog.",
+        "Now I can forget the 100 words of german that I know.",
+    ]
+    expected_text = [
+        'Je suis une petite grenouille.',
+        "Maintenant je peux oublier les 100 mots d'allemand que je connais."
+    ]
+
+
+class TestMarian_FR_EN(IntegrationTests):
+    src = 'fr'
+    tgt = 'en'
+    src_text = [
+        'Je suis une petite grenouille.',
+        "Maintenant je peux oublier les 100 mots d'allemand que je connais."
+    ]
+    expected_text = [
+        "I am a small frog.",
+        "Now I can forget the 100 words of german that I know.",
+    ]
+
