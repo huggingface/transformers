@@ -1513,8 +1513,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         if labels is not None:
             # Shift so that tokens < n predict n
             # Uncomment this line for integration test with Trax
-            shift_logits = logits.contiguous()
-#            shift_logits = logits[..., :-1, :].contiguous()
+#            shift_logits = logits.contiguous()
+            shift_logits = logits[..., :-1, :].contiguous()
 
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
