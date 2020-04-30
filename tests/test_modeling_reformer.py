@@ -812,7 +812,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in list(REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = ReformerModelWithLMHead.from_pretrained(model_name, cache_dir=CACHE_DIR)
+            model = ReformerModelWithLMHead.from_pretrained(model_name, cache_dir=CACHE_DIR).to(torch_device)
             self.assertIsNotNone(model)
 
 
