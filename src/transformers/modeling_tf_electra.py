@@ -675,14 +675,19 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel):
     Examples::
 
         import tensorflow as tf
-        from transformers import BertTokenizer, TFBertForMultipleChoice
+        from transformers import ElectraTokenizer, TFElectraForMultipleChoice
 
-        tokenizer = ElectraTokenizer.from_pretrained('bert-base-uncased')
-        model = TFElectraForMultipleChoice.from_pretrained('bert-base-uncased')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-        input_ids = tf.constant([tokenizer.encode(s) for s in choices])[None, :]  # Batch size 1, 2 choices
-        outputs = model(input_ids)
-        classification_scores = outputs[0]
+        tokenizer = ElectraTokenizer.from_pretrained('google/electra-base-discriminator')
+        model = TFElectraForMultipleChoice.from_pretrained('google/electra-base-discriminator')
+        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        choice0 = "It is eaten with a fork and a knife."
+        choice1 = "It is eaten while held in the hand."
+        choice3 = "It is eaten while not held in the hand."
+        encoding = tokenizer.batch_encode_plus([[prompt, choice0], [prompt, choice1], [prompt, choice3]], return_tensors='tf', pad_to_max_length=True)
+        # linear classifier on the output is not yet trained
+        outputs = model(encoding['input_ids'][None, :])
+        logits = outputs[0]
+        logits
 
         """
         if isinstance(inputs, (tuple, list)):
@@ -730,8 +735,6 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel):
         first_token_tensor = outputs[0][:, 0]
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
-
-        #pooled_output = outputs[1]
 
         pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
