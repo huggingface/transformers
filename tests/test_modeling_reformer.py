@@ -304,7 +304,26 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
                     atol=1e-3,
                 )
             )
-            # TODO(PVP) Should add some tests here for backprop function as well (maybe in different test function though)
+
+        def create_and_check_reformer_feed_forward_chunking(
+            self, config, input_ids, input_mask
+        ):
+            torch.manual_seed(0)
+            model = ReformerModel(config=config)
+            model.to(torch_device)
+            model.eval()
+            hidden_states_no_chunk = model(input_ids, attention_mask=input_mask)[0]
+
+            config.chunk_size_lm_head = input_ids.shape[-1]
+            config.chunk_size_feed_forward = input_ids.shape[-1]
+
+            torch.manual_seed(0)
+            model = ReformerModel(config=config)
+            model.to(torch_device)
+            model.eval()
+
+            hidden_states_with_chunk = model(input_ids, attention_mask=input_mask)[0]
+            self.parent.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
 
         def create_and_check_reformer_model_fp16_forward(
             self, config, input_ids, input_mask
@@ -373,6 +392,10 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             *config_and_inputs, False
         )
 
+    def test_reformer_chunking_forward_equality(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_feed_forward_chunking(*config_and_inputs)
+
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_reformer_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -418,6 +441,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             initializer_range=0.02,
             layer_norm_eps=1e-12,
             sinusoidal_pos_embds=True,
+            axial_pos_embds=True,
             attn_layers=["lsh", "lsh", "lsh", "lsh"],
             pad_token_id=0,
             eos_token_id=2,
@@ -449,13 +473,13 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.max_position_embeddings = max_position_embeddings
             self.initializer_range = initializer_range
             self.layer_norm_eps = layer_norm_eps
-            self.sinusoidal_pos_embds = sinusoidal_pos_embds
             self.chunk_size_lm_head = chunk_size_lm_head
             self.chunk_size_feed_forward = chunk_size_feed_forward
             self.scope = scope
             self.attn_layers = attn_layers
             self.hash_seed = hash_seed
             self.pad_token_id = pad_token_id
+            self.axial_pos_embds = axial_pos_embds
 
             self.encoder_seq_length = seq_length // lsh_attn_chunk_length + (
                 seq_length % lsh_attn_chunk_length != 0
@@ -485,7 +509,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 lsh_attention_probs_dropout_prob=self.lsh_attention_probs_dropout_prob,
                 max_position_embeddings=self.max_position_embeddings,
                 is_decoder=self.is_decoder,
-                sinusoidal_pos_embds=self.sinusoidal_pos_embds,
+                axial_pos_embds=self.axial_pos_embds,
                 num_hashes=self.num_hashes,
                 num_buckets=self.num_buckets,
                 lsh_attn_chunk_length=self.lsh_attn_chunk_length,
@@ -657,25 +681,54 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
                     atol=1e-3,
                 )
             )
-            # TODO(PVP) Should add some tests here for backprop function as well (maybe in different test function though)
 
-        def create_and_check_reformer_model_fp16_forward(
+        def create_and_check_reformer_feed_backward_chunking(
             self, config, input_ids, input_mask
         ):
-            model = ReformerModel(config=config)
-            model.to(torch_device)
-            model.half()
-            model.eval()
-            model(input_ids, attention_mask=input_mask)
-
-        def create_and_check_reformer_model_fp16_generate(
-            self, config, input_ids, input_mask
-        ):
+            torch.manual_seed(0)
             model = ReformerModelWithLMHead(config=config)
             model.to(torch_device)
-            model.half()
-            model.eval()
-            model.generate(input_ids, attention_mask=input_mask, do_sample=False)
+            model.train()
+            model.zero_grad()
+            loss_no_chunk = model(input_ids, labels=input_ids, attention_mask=input_mask)[0]
+            loss_no_chunk.backward()
+            grad_slice_word_no_chunk = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
+            grad_slice_position_factor_1_no_chunk = model.reformer.embeddings.position_embeddings.weights[
+                0
+            ][
+                1, 0, -5:
+            ]
+            grad_slice_position_factor_2_no_chunk = model.reformer.embeddings.position_embeddings.weights[
+                1
+            ][
+                0, 1, :5
+            ]
+
+            config.chunk_size_lm_head = input_ids.shape[-1]
+            config.chunk_size_feed_forward = input_ids.shape[-1]
+
+            torch.manual_seed(0)
+            model = ReformerModelWithLMHead(config=config)
+            model.to(torch_device)
+            model.train()
+            model.zero_grad()
+            loss_chunk = model(input_ids, labels=input_ids, attention_mask=input_mask)[0]
+            loss_chunk.backward()
+            grad_slice_word_chunk = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]
+            grad_slice_position_factor_1_chunk = model.reformer.embeddings.position_embeddings.weights[
+                0
+            ][
+                1, 0, -5:
+            ]
+            grad_slice_position_factor_2_chunk = model.reformer.embeddings.position_embeddings.weights[
+                1
+            ][
+                0, 1, :5
+            ]
+            self.parent.assertTrue(torch.allclose(loss_chunk, loss_no_chunk, atol=1e-3))
+            self.parent.assertTrue(torch.allclose(grad_slice_word_no_chunk, grad_slice_word_chunk, atol=1e-3))
+            self.parent.assertTrue(torch.allclose(grad_slice_position_factor_1_chunk, grad_slice_position_factor_1_no_chunk, atol=1e-3))
+            self.parent.assertTrue(torch.allclose(grad_slice_position_factor_2_chunk, grad_slice_position_factor_2_no_chunk, atol=1e-3))
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
