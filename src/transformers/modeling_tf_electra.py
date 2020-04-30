@@ -615,7 +615,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel):
 
         return output  # (loss), scores, (hidden_states), (attentions)
 @add_start_docstrings(
-    """Albert Model with a multiple choice classification head on top (a linear layer on top of
+    """Electra Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     BERT_START_DOCSTRING,
 )
@@ -623,7 +623,7 @@ class TFElectraForMultipleChoice(TFBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.electra = TFElectraMainLayer(config, name="albert")
+        self.electra = TFElectraMainLayer(config, name="electra")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
