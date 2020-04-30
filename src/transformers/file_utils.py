@@ -75,7 +75,7 @@ try:
         import flax
 
         logger.info("JAX version {}, Flax: available".format(jax.__version__))
-
+        logger.info("Flax available: {}".format(flax))
         _flax_available = True
     else:
         _flax_available = False

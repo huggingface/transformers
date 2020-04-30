@@ -29,11 +29,11 @@ logger = logging.getLogger(__name__)
 
 ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
     (key, value)
-    for pretrained_map in [FlaxBertModel.pretrained_model_archive_map, FlaxRobertaModel.pretrained_model_archive_map,]
+    for pretrained_map in [FlaxBertModel.pretrained_model_archive_map, FlaxRobertaModel.pretrained_model_archive_map, ]
     for key, value, in pretrained_map.items()
 )
 
-MODEL_MAPPING = OrderedDict([(RobertaConfig, FlaxRobertaModel), (BertConfig, FlaxBertModel),])
+MODEL_MAPPING = OrderedDict([(RobertaConfig, FlaxRobertaModel), (BertConfig, FlaxBertModel), ])
 
 
 class FlaxAutoModel(object):
