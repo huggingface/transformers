@@ -794,7 +794,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
     def call(
         self,
         inputs,
