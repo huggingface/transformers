@@ -79,6 +79,15 @@ class HfApiEndpointsTest(HfApiCommonTest):
         urls = self._api.presign(token=self._token, filename="nested/valid_org.txt", organization="valid_org")
         self.assertIsInstance(urls, PresignedUrl)
 
+    def test_presign_invalid(self):
+        try:
+            _ = self._api.presign(token=self._token, filename="non_nested.json")
+        except HTTPError as e:
+            self.assertIsNotNone(e.response.text)
+            self.assertTrue("Filename invalid" in e.response.text)
+        else:
+            self.fail("Expected an exception")
+
     def test_presign(self):
         for FILE_KEY, FILE_PATH in FILES:
             urls = self._api.presign(token=self._token, filename=FILE_KEY)
