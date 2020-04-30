@@ -707,7 +707,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 hidden_states = layer_outputs.hidden_states
                 torch.manual_seed(layer.attention_seed)
                 seeds.append(layer.attention_seed)
-            self.parent.assertGreater(len(set(seeds)), 50)
+            self.parent.assertGreater(len(set(seeds)), 70)
 
             seeds = []
             for _ in range(100):
@@ -718,7 +718,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 hidden_states = layer_outputs.hidden_states
                 torch.manual_seed(layer.feed_forward_seed)
                 seeds.append(layer.feed_forward_seed)
-            self.parent.assertGreater(len(set(seeds)), 50)
+            self.parent.assertGreater(len(set(seeds)), 70)
 
         def create_and_check_reformer_feed_backward_chunking(
             self, config, input_ids, input_mask
