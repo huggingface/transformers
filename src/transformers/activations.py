@@ -26,22 +26,13 @@ def gelu_new(x):
     """ Implementation of the gelu activation function currently in Google Bert repo (identical to OpenAI GPT).
         Also see https://arxiv.org/abs/1606.08415
     """
-    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3.0))))
 
 
 if torch.__version__ < "1.4.0":
     gelu = _gelu_python
 else:
     gelu = F.gelu
-    try:
-        import torch_xla  # noqa F401
-
-        logger.warning(
-            "The torch_xla package was detected in the python environment. PyTorch/XLA and JIT is untested,"
-            " no activation function will be traced with JIT."
-        )
-    except ImportError:
-        gelu_new = torch.jit.script(gelu_new)
 
 ACT2FN = {
     "relu": F.relu,

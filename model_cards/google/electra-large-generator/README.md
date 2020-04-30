@@ -1,6 +1,8 @@
 ---
 language: english
 thumbnail: https://huggingface.co/front/thumbnails/google.png
+
+license: apache-2.0
 ---
 
 ## ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators

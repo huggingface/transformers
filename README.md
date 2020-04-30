@@ -22,14 +22,11 @@
 <p>State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch
 </h3>
 
-🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides state-of-the-art general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet, CTRL...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between TensorFlow 2.0 and PyTorch.
+🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides state-of-the-art general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet, T5, CTRL...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over thousands of pretrained models in 100+ languages and deep interoperability between TensorFlow 2.0 and PyTorch.
 
 [![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/0)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/0)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/1)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/1)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/2)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/2)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/3)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/3)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/4)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/4)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/5)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/5)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/6)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/6)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/7)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/7)
 
 ### Features
-
-- As easy to use as pytorch-transformers
-- As powerful and concise as Keras
 - High performance on NLU and NLG tasks
 - Low barrier to entry for educators and practitioners
 
@@ -41,7 +38,7 @@ State-of-the-art NLP for everyone
 Lower compute costs, smaller carbon footprint
 - Researchers can share trained models instead of always retraining
 - Practitioners can reduce compute time and production costs
-- 10 architectures with over 30 pretrained models, some in more than 100 languages
+- Dozens of architectures with over 1,000 pretrained models, some in more than 100 languages
 
 Choose the right framework for every part of a model's lifetime
 - Train state-of-the-art models in 3 lines of code
@@ -306,8 +303,9 @@ setup your environment to run the examples.
 
 The library comprises several example scripts with SOTA performances for NLU and NLG tasks:
 
-- `run_glue.py`: an example fine-tuning Bert, XLNet and XLM on nine different GLUE tasks (*sequence-level classification*)
-- `run_squad.py`: an example fine-tuning Bert, XLNet and XLM on the question answering dataset SQuAD 2.0 (*token-level classification*)
+- `run_glue.py`: an example fine-tuning sequence classification models on nine different GLUE tasks (*sequence-level classification*)
+- `run_squad.py`: an example fine-tuning question answering models on the question answering dataset SQuAD 2.0 (*token-level classification*)
+- `run_ner.py`: an example fine-tuning token classification models on named entity recognition (*token-level classification*)
 - `run_generation.py`: an example using GPT, GPT-2, CTRL, Transformer-XL and XLNet for conditional language generation
 - other model-specific examples (see the documentation).
 
@@ -317,7 +315,7 @@ Here are three quick usage examples for these scripts:
 
 The [General Language Understanding Evaluation (GLUE) benchmark](https://gluebenchmark.com/) is a collection of nine sentence- or sentence-pair language understanding tasks for evaluating and analyzing natural language understanding systems.
 
-Before running anyone of these GLUE tasks you should download the
+Before running any of these GLUE tasks you should download the
 [GLUE data](https://gluebenchmark.com/tasks) by running
 [this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
 and unpack it to some directory `$GLUE_DIR`.
@@ -333,7 +331,6 @@ export GLUE_DIR=/path/to/glue
 export TASK_NAME=MRPC
 
 python ./examples/run_glue.py \
-    --model_type bert \
     --model_name_or_path bert-base-uncased \
     --task_name $TASK_NAME \
     --do_train \
@@ -360,7 +357,6 @@ Parallel training is a simple way to use several GPUs (but is slower and less fl
 export GLUE_DIR=/path/to/glue
 
 python ./examples/run_glue.py \
-    --model_type xlnet \
     --model_name_or_path xlnet-large-cased \
     --do_train  \
     --do_eval   \
@@ -386,7 +382,6 @@ This example code fine-tunes the Bert Whole Word Masking model on the Microsoft 
 
 ```bash
 python -m torch.distributed.launch --nproc_per_node 8 ./examples/run_glue.py   \
-    --model_type bert \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --task_name MRPC \
     --do_train   \

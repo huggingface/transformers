@@ -2,6 +2,7 @@
 thumbnail: https://huggingface.co/front/thumbnails/dialogpt.png
 tags:
 - conversational
+license: mit
 ---
 
 ## A State-of-the-Art Large-scale Pretrained Response generation model (DialoGPT)

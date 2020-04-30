@@ -19,10 +19,7 @@ from typing import Optional
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
-import boto3
 import requests
-from botocore.config import Config
-from botocore.exceptions import ClientError
 from filelock import FileLock
 from tqdm.auto import tqdm
 
@@ -97,7 +94,7 @@ DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
-CLOUDFRONT_DISTRIB_PREFIX = "https://d2ws9o8vfrpkyk.cloudfront.net"
+CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
 
 
 def is_torch_available():
@@ -144,15 +141,31 @@ def add_end_docstrings(*docstr):
 
 def is_remote_url(url_or_filename):
     parsed = urlparse(url_or_filename)
-    return parsed.scheme in ("http", "https", "s3")
+    return parsed.scheme in ("http", "https")
 
 
-def hf_bucket_url(identifier, postfix=None, cdn=False) -> str:
-    endpoint = CLOUDFRONT_DISTRIB_PREFIX if cdn else S3_BUCKET_PREFIX
-    if postfix is None:
-        return "/".join((endpoint, identifier))
+def hf_bucket_url(model_id: str, filename: str, use_cdn=True) -> str:
+    """
+    Resolve a model identifier, and a file name, to a HF-hosted url
+    on either S3 or Cloudfront (a Content Delivery Network, or CDN).
+
+    Cloudfront is replicated over the globe so downloads are way faster
+    for the end user (and it also lowers our bandwidth costs). However, it
+    is more aggressively cached by default, so may not always reflect the
+    latest changes to the underlying file (default TTL is 24 hours).
+
+    In terms of client-side caching from this library, even though
+    Cloudfront relays the ETags from S3, using one or the other
+    (or switching from one to the other) will affect caching: cached files
+    are not shared between the two because the cached file's name contains
+    a hash of the url.
+    """
+    endpoint = CLOUDFRONT_DISTRIB_PREFIX if use_cdn else S3_BUCKET_PREFIX
+    legacy_format = "/" not in model_id
+    if legacy_format:
+        return f"{endpoint}/{model_id}-{filename}"
     else:
-        return "/".join((endpoint, identifier, postfix))
+        return f"{endpoint}/{model_id}/{filename}"
 
 
 def url_to_filename(url, etag=None):
@@ -297,55 +310,6 @@ def cached_path(
     return output_path
 
 
-def split_s3_path(url):
-    """Split a full s3 path into the bucket name and path."""
-    parsed = urlparse(url)
-    if not parsed.netloc or not parsed.path:
-        raise ValueError("bad s3 path {}".format(url))
-    bucket_name = parsed.netloc
-    s3_path = parsed.path
-    # Remove '/' at beginning of path.
-    if s3_path.startswith("/"):
-        s3_path = s3_path[1:]
-    return bucket_name, s3_path
-
-
-def s3_request(func):
-    """
-    Wrapper function for s3 requests in order to create more helpful error
-    messages.
-    """
-
-    @wraps(func)
-    def wrapper(url, *args, **kwargs):
-        try:
-            return func(url, *args, **kwargs)
-        except ClientError as exc:
-            if int(exc.response["Error"]["Code"]) == 404:
-                raise EnvironmentError("file {} not found".format(url))
-            else:
-                raise
-
-    return wrapper
-
-
-@s3_request
-def s3_etag(url, proxies=None):
-    """Check ETag on S3 object."""
-    s3_resource = boto3.resource("s3", config=Config(proxies=proxies))
-    bucket_name, s3_path = split_s3_path(url)
-    s3_object = s3_resource.Object(bucket_name, s3_path)
-    return s3_object.e_tag
-
-
-@s3_request
-def s3_get(url, temp_file, proxies=None):
-    """Pull a file directly from S3."""
-    s3_resource = boto3.resource("s3", config=Config(proxies=proxies))
-    bucket_name, s3_path = split_s3_path(url)
-    s3_resource.Bucket(bucket_name).download_fileobj(s3_path, temp_file)
-
-
 def http_get(url, temp_file, proxies=None, resume_size=0, user_agent=None):
     ua = "transformers/{}; python/{}".format(__version__, sys.version.split()[0])
     if is_torch_available():
@@ -406,17 +370,13 @@ def get_from_cache(
 
     etag = None
     if not local_files_only:
-        # Get eTag to add to filename, if it exists.
-        if url.startswith("s3://"):
-            etag = s3_etag(url, proxies=proxies)
-        else:
-            try:
-                response = requests.head(url, allow_redirects=True, proxies=proxies, timeout=etag_timeout)
-                if response.status_code == 200:
-                    etag = response.headers.get("ETag")
-            except (EnvironmentError, requests.exceptions.Timeout):
-                # etag is already None
-                pass
+        try:
+            response = requests.head(url, allow_redirects=True, proxies=proxies, timeout=etag_timeout)
+            if response.status_code == 200:
+                etag = response.headers.get("ETag")
+        except (EnvironmentError, requests.exceptions.Timeout):
+            # etag is already None
+            pass
 
     filename = url_to_filename(url, etag)
 
@@ -456,6 +416,11 @@ def get_from_cache(
     lock_path = cache_path + ".lock"
     with FileLock(lock_path):
 
+        # If the download just completed while the lock was activated.
+        if os.path.exists(cache_path) and not force_download:
+            # Even if returning early like here, the lock will be released.
+            return cache_path
+
         if resume_download:
             incomplete_path = cache_path + ".incomplete"
 
@@ -478,13 +443,7 @@ def get_from_cache(
         with temp_file_manager() as temp_file:
             logger.info("%s not found in cache or force_download set to True, downloading to %s", url, temp_file.name)
 
-            # GET file object
-            if url.startswith("s3://"):
-                if resume_download:
-                    logger.warn('Warning: resumable downloads are not implemented for "s3://" urls')
-                s3_get(url, temp_file, proxies=proxies)
-            else:
-                http_get(url, temp_file, proxies=proxies, resume_size=resume_size, user_agent=user_agent)
+            http_get(url, temp_file, proxies=proxies, resume_size=resume_size, user_agent=user_agent)
 
         logger.info("storing %s in cache at %s", url, cache_path)
         os.replace(temp_file.name, cache_path)
@@ -496,3 +455,50 @@ def get_from_cache(
             json.dump(meta, meta_file)
 
     return cache_path
+
+
+class cached_property(property):
+    """
+    Descriptor that mimics @property but caches output in member variable.
+
+    From tensorflow_datasets
+
+    Built-in in functools from Python 3.8.
+    """
+
+    def __get__(self, obj, objtype=None):
+        # See docs.python.org/3/howto/descriptor.html#properties
+        if obj is None:
+            return self
+        if self.fget is None:
+            raise AttributeError("unreadable attribute")
+        attr = "__cached_" + self.fget.__name__
+        cached = getattr(obj, attr, None)
+        if cached is None:
+            cached = self.fget(obj)
+            setattr(obj, attr, cached)
+        return cached
+
+
+def torch_required(func):
+    # Chose a different decorator name than in tests so it's clear they are not the same.
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if is_torch_available():
+            return func(*args, **kwargs)
+        else:
+            raise ImportError(f"Method `{func.__name__}` requires PyTorch.")
+
+    return wrapper
+
+
+def tf_required(func):
+    # Chose a different decorator name than in tests so it's clear they are not the same.
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if is_tf_available():
+            return func(*args, **kwargs)
+        else:
+            raise ImportError(f"Method `{func.__name__}` requires TF.")
+
+    return wrapper

@@ -17,7 +17,6 @@
 
 
 import logging
-import math
 import os
 
 import torch
@@ -33,11 +32,11 @@ from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv
 logger = logging.getLogger(__name__)
 
 GPT2_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-pytorch_model.bin",
-    "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-pytorch_model.bin",
-    "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-pytorch_model.bin",
-    "gpt2-xl": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-pytorch_model.bin",
-    "distilgpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-pytorch_model.bin",
+    "gpt2": "https://cdn.huggingface.co/gpt2-pytorch_model.bin",
+    "gpt2-medium": "https://cdn.huggingface.co/gpt2-medium-pytorch_model.bin",
+    "gpt2-large": "https://cdn.huggingface.co/gpt2-large-pytorch_model.bin",
+    "gpt2-xl": "https://cdn.huggingface.co/gpt2-xl-pytorch_model.bin",
+    "distilgpt2": "https://cdn.huggingface.co/distilgpt2-pytorch_model.bin",
 }
 
 
@@ -143,7 +142,7 @@ class Attention(nn.Module):
     def _attn(self, q, k, v, attention_mask=None, head_mask=None):
         w = torch.matmul(q, k)
         if self.scale:
-            w = w / math.sqrt(v.size(-1))
+            w = w / (v.size(-1) ** 0.5)
         nd, ns = w.size(-2), w.size(-1)
         mask = self.bias[:, :, ns - nd : ns, :ns]
         w = torch.where(mask, w, self.masked_bias)

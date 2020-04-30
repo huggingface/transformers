@@ -17,6 +17,7 @@
 
 import logging
 import os
+from enum import Enum
 from typing import List, Optional, Union
 
 from ...file_utils import is_tf_available
@@ -151,6 +152,11 @@ def _glue_convert_examples_to_features(
         logger.info("features: %s" % features[i])
 
     return features
+
+
+class OutputMode(Enum):
+    classification = "classification"
+    regression = "regression"
 
 
 class MrpcProcessor(DataProcessor):

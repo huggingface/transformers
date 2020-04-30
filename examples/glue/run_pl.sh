@@ -11,7 +11,6 @@ export DATA_DIR=./glue_data/MRPC/
 export MAX_LENGTH=128
 export LEARNING_RATE=2e-5
 export BERT_MODEL=bert-base-cased
-export MODEL_TYPE=bert
 export BATCH_SIZE=32
 export NUM_EPOCHS=3
 export SEED=2
@@ -25,7 +24,6 @@ mkdir -p $OUTPUT_DIR
 export PYTHONPATH="../":"${PYTHONPATH}"
 
 python3 run_pl_glue.py --data_dir $DATA_DIR \
---model_type $MODEL_TYPE \
 --task $TASK \
 --model_name_or_path $BERT_MODEL \
 --output_dir $OUTPUT_DIR \
