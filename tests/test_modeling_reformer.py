@@ -730,6 +730,24 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertTrue(torch.allclose(grad_slice_position_factor_1_chunk, grad_slice_position_factor_1_no_chunk, atol=1e-3))
             self.parent.assertTrue(torch.allclose(grad_slice_position_factor_2_chunk, grad_slice_position_factor_2_no_chunk, atol=1e-3))
 
+        def create_and_check_reformer_model_fp16_forward(
+            self, config, input_ids, input_mask
+        ):
+            model = ReformerModel(config=config)
+            model.to(torch_device)
+            model.half()
+            model.eval()
+            model(input_ids, attention_mask=input_mask)
+
+        def create_and_check_reformer_model_fp16_generate(
+            self, config, input_ids, input_mask
+        ):
+            model = ReformerModelWithLMHead(config=config)
+            model.to(torch_device)
+            model.half()
+            model.eval()
+            model.generate(input_ids, attention_mask=input_mask, do_sample=False)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (config, input_ids, input_mask,) = config_and_inputs
