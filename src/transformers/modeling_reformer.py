@@ -997,11 +997,12 @@ class ReformerLayer(nn.Module):
         self.feed_forward_seed = None
 
     def _init_attention_seed(self):
-        self.attention_seed = torch.randint(sys.maxsize, size=(1, 1)).item()
+        # randomize seeds
+        self.attention_seed = int(torch.random.seed() % sys.maxsize)
         torch.manual_seed(self.attention_seed)
 
     def _init_feed_forward_seed(self):
-        self.feed_forward_seed = torch.randint(sys.maxsize, size=(1, 1)).item()
+        self.feed_forward_seed = int(torch.random.seed() % sys.maxsize)
         torch.manual_seed(self.feed_forward_seed)
 
     def forward(
@@ -1013,10 +1014,9 @@ class ReformerLayer(nn.Module):
         num_hashes=None,
         do_output_attentions=False,
     ):
-
         with torch.no_grad():
             # every forward pass we sample a different seed
-            # for dropout and save seed for forward fn in backward 
+            # for dropout and save seed for forward fn in backward
             # to have correct dropout
             self._init_attention_seed()
             attn_outputs = self.attention(
@@ -1035,8 +1035,8 @@ class ReformerLayer(nn.Module):
             # free memory
             del prev_attn_output
 
-            # every forward pass we sample a different seed 
-            # for dropout and save seed for forward fn in backward 
+            # every forward pass we sample a different seed
+            # for dropout and save seed for forward fn in backward
             # to have correct dropout
             self._init_feed_forward_seed()
             # Y_2 = X_2 + g(Y_1)
@@ -1170,7 +1170,7 @@ class _ReversibleFunction(Function):
         attn_output, hidden_states = ctx.saved_tensors
 
         # create tuple
-        output = ReformerBackwardOutput(attn_output=attn_output, 
+        output = ReformerBackwardOutput(attn_output=attn_output,
             hidden_states=hidden_states,
             grad_attn_output=grad_attn_output,
             grad_hidden_states=grad_hidden_states,
