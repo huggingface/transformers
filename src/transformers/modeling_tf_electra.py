@@ -617,7 +617,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel):
 @add_start_docstrings(
     """Electra Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    BERT_START_DOCSTRING,
+    ELECTRA_START_DOCSTRING,
 )
 class TFElectraForMultipleChoice(TFBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
