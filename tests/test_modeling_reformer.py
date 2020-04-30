@@ -1103,7 +1103,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         layer = ReformerLayer(ReformerConfig(**config))
         layer.eval()
         reformer_output = layer(
-            prev_attn_output=hidden_states, hidden_states=hidden_states
+            prev_attn_output=hidden_states.clone(), hidden_states=hidden_states
         )
         output_slice = reformer_output.hidden_states[0, 0, :5]
         expected_output_slice = torch.tensor(
@@ -1112,7 +1112,6 @@ class ReformerIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output_slice, expected_output_slice, atol=1e-3))
-        pass
 
     def test_lsh_layer_forward_complex(self):
         config = self._get_basic_config_and_input()
@@ -1124,7 +1123,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         layer = ReformerLayer(ReformerConfig(**config))
         layer.eval()
         reformer_output = layer(
-            prev_attn_output=hidden_states,
+            prev_attn_output=hidden_states.clone(),
             hidden_states=hidden_states,
             attention_mask=attn_mask,
         )
