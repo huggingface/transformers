@@ -41,10 +41,10 @@ from .configuration_utils import PretrainedConfig
 from .modeling_albert import (
     ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     AlbertForMaskedLM,
+    AlbertForMultipleChoice,
     AlbertForQuestionAnswering,
     AlbertForSequenceClassification,
     AlbertForTokenClassification,
-    AlbertForMultipleChoice,
     AlbertModel,
 )
 from .modeling_bart import (

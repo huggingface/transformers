@@ -31,6 +31,7 @@ if is_torch_available():
         AlbertForSequenceClassification,
         AlbertForTokenClassification,
         AlbertForQuestionAnswering,
+        AlbertForMultipleChoice,
     )
     from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -38,7 +39,18 @@ if is_torch_available():
 @require_torch
 class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (AlbertModel, AlbertForMaskedLM) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            AlbertModel,
+            AlbertForMaskedLM,
+            AlbertForSequenceClassification,
+            AlbertForTokenClassification,
+            AlbertForQuestionAnswering,
+            AlbertForMultipleChoice,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     class AlbertModelTester(object):
         def __init__(
@@ -191,6 +203,29 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
             self.check_loss_output(result)
 
+        def create_and_check_albert_for_multiple_choice(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            config.num_choices = self.num_choices
+            model = AlbertForMultipleChoice(config=config)
+            model.to(torch_device)
+            model.eval()
+            multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            loss, logits = model(
+                multiple_choice_inputs_ids,
+                attention_mask=multiple_choice_input_mask,
+                token_type_ids=multiple_choice_token_type_ids,
+                labels=choice_labels,
+            )
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
+            self.check_loss_output(result)
+
         def create_and_check_albert_for_sequence_classification(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
@@ -259,6 +294,10 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_albert_for_question_answering(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_albert_for_multiple_choice(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

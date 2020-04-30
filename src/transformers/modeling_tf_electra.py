@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from transformers import ElectraConfig
 
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, MULTIPLE_CHOICE_DUMMY_INPUTS
+from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_utils import get_initializer, shape_list
 from .tokenization_utils import BatchEncoding
@@ -614,6 +614,8 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel):
         output += discriminator_hidden_states[1:]
 
         return output  # (loss), scores, (hidden_states), (attentions)
+
+
 @add_start_docstrings(
     """Electra Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
@@ -631,8 +633,8 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel):
         self.dense = tf.keras.layers.Dense(config.hidden_size, name="dense")
         self.activation = tf.keras.layers.Activation("tanh")
 
-        #self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        #self.activation = nn.Tanh()
+        # self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        # self.activation = nn.Tanh()
 
     @property
     def dummy_inputs(self):

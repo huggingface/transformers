@@ -22,9 +22,9 @@ from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
     BertConfig,
-    ElectraConfig,
     CTRLConfig,
     DistilBertConfig,
+    ElectraConfig,
     GPT2Config,
     OpenAIGPTConfig,
     RobertaConfig,
@@ -37,24 +37,18 @@ from .configuration_utils import PretrainedConfig
 from .modeling_tf_albert import (
     TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFAlbertForMaskedLM,
+    TFAlbertForMultipleChoice,
     TFAlbertForQuestionAnswering,
     TFAlbertForSequenceClassification,
-    TFAlbertForMultipleChoice,
     TFAlbertModel,
-)
-from .modeling_tf_electra import (
-    TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
-    TFElectraForMaskedLM,
-    TFElectraForMultipleChoice,
-    TFElectraModel,
 )
 from .modeling_tf_bert import (
     TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFBertForMaskedLM,
+    TFBertForMultipleChoice,
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
-    TFBertForMultipleChoice,
     TFBertForTokenClassification,
     TFBertModel,
 )
@@ -66,6 +60,12 @@ from .modeling_tf_distilbert import (
     TFDistilBertForSequenceClassification,
     TFDistilBertForTokenClassification,
     TFDistilBertModel,
+)
+from .modeling_tf_electra import (
+    TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    TFElectraForMaskedLM,
+    TFElectraForMultipleChoice,
+    TFElectraModel,
 )
 from .modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, TFGPT2LMHeadModel, TFGPT2Model
 from .modeling_tf_openai import TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel

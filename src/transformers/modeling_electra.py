@@ -4,6 +4,7 @@ import os
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
+
 from .activations import get_activation
 from .configuration_electra import ElectraConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
@@ -610,6 +611,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
         return output  # (loss), scores, (hidden_states), (attentions)
 
+
 @add_start_docstrings(
     """Electra Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
@@ -626,7 +628,6 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
         self.init_weights()
-
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
     def forward(
@@ -687,7 +688,6 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
-
 
         outputs = self.electra(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds)
 
