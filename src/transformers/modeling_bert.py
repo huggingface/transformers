@@ -1200,7 +1200,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         import torch
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = BertForMultipleCzhoice.from_pretrained('bert-base-uncased')
+        model = BertForMultipleChoice.from_pretrained('bert-base-uncased')
         choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
 
         input_ids = torch.tensor([tokenizer.encode(s, add_special_tokens=True) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
@@ -1225,13 +1225,11 @@ class BertForMultipleChoice(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
         )
-        print(outputs)
+
         pooled_output = outputs[1]
-        print(pooled_output)
 
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
-
         reshaped_logits = logits.view(-1, num_choices)
 
         outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
@@ -1318,9 +1316,9 @@ class BertForTokenClassification(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
         )
-        print(outputs)
+
         sequence_output = outputs[0]
-        print(sequence_output)
+
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 

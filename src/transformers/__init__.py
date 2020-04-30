@@ -308,6 +308,7 @@ if is_torch_available():
         ElectraForPreTraining,
         ElectraForMaskedLM,
         ElectraForTokenClassification,
+        ElectraForMultipleChoice,
         ElectraModel,
         load_tf_weights_in_electra,
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -473,6 +474,7 @@ if is_tf_available():
         TFAlbertMainLayer,
         TFAlbertModel,
         TFAlbertForMaskedLM,
+        TFAlbertForMultipleChoice,
         TFAlbertForSequenceClassification,
         TFAlbertForQuestionAnswering,
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -488,6 +490,7 @@ if is_tf_available():
     from .modeling_tf_electra import (
         TFElectraPreTrainedModel,
         TFElectraModel,
+        TFElectraForMultipleChoice,
         TFElectraForPreTraining,
         TFElectraForMaskedLM,
         TFElectraForTokenClassification,

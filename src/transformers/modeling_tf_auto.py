@@ -22,6 +22,7 @@ from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
     BertConfig,
+    ElectraConfig,
     CTRLConfig,
     DistilBertConfig,
     GPT2Config,
@@ -38,7 +39,14 @@ from .modeling_tf_albert import (
     TFAlbertForMaskedLM,
     TFAlbertForQuestionAnswering,
     TFAlbertForSequenceClassification,
+    TFAlbertForMultipleChoice,
     TFAlbertModel,
+)
+from .modeling_tf_electra import (
+    TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    TFElectraForMaskedLM,
+    TFElectraForMultipleChoice,
+    TFElectraModel,
 )
 from .modeling_tf_bert import (
     TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -46,6 +54,7 @@ from .modeling_tf_bert import (
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
+    TFBertForMultipleChoice,
     TFBertForTokenClassification,
     TFBertModel,
 )
@@ -107,6 +116,7 @@ TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
         TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
         TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
@@ -125,6 +135,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (XLNetConfig, TFXLNetModel),
         (XLMConfig, TFXLMModel),
         (CTRLConfig, TFCTRLModel),
+        (ElectraConfig, TFElectraModel),
     ]
 )
 
@@ -179,6 +190,14 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (BertConfig, TFBertForQuestionAnswering),
         (XLNetConfig, TFXLNetForQuestionAnsweringSimple),
         (XLMConfig, TFXLMForQuestionAnsweringSimple),
+    ]
+)
+
+TF_MODEL_FOR_MULITPLE_CHOICE_MAPPING = OrderedDict(
+    [
+        (ElectraConfig, TFElectraForQuestionAnswering),
+        (AlbertConfig, TFAlbertForQuestionAnswering),
+        (BertConfig, TFBertForQuestionAnswering),
     ]
 )
 

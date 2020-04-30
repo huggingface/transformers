@@ -44,6 +44,7 @@ from .modeling_albert import (
     AlbertForQuestionAnswering,
     AlbertForSequenceClassification,
     AlbertForTokenClassification,
+    AlbertForMultipleChoice,
     AlbertModel,
 )
 from .modeling_bart import (
@@ -82,6 +83,7 @@ from .modeling_distilbert import (
 from .modeling_electra import (
     ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     ElectraForMaskedLM,
+    ElectraForMultipleChoice,
     ElectraForPreTraining,
     ElectraForTokenClassification,
     ElectraModel,
@@ -271,6 +273,8 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForMultipleChoice),
         (BertConfig, BertForMultipleChoice),
         (XLNetConfig, XLNetForMultipleChoice),
+        (ElectraConfig, ElectraForMultipleChoice),
+        (AlbertConfig, AlbertForMultipleChoice),
     ]
 )
 
