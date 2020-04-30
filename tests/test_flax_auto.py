@@ -1,8 +1,8 @@
 import unittest
 
+from tests.utils import require_flax, slow
 from transformers import AutoConfig, is_flax_available
 
-from tests.utils import require_flax, slow
 
 if is_flax_available():
     from transformers.modeling_flax_auto import FlaxAutoModel, MODEL_MAPPING
