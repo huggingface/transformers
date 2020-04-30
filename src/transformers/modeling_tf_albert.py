@@ -775,7 +775,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     ALBERT_START_DOCSTRING,
 )
-class TFAlbertForMultipleChoice(TFBertPreTrainedModel):
+class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
