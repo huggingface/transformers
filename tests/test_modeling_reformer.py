@@ -1100,7 +1100,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         config["is_decoder"] = False
         hidden_states = self._get_hidden_states()
         torch.manual_seed(0)
-        layer = ReformerLayer(ReformerConfig(**config))
+        layer = ReformerLayer(ReformerConfig(**config)).to(torch_device)
         layer.eval()
         reformer_output = layer(
             prev_attn_output=hidden_states.clone(), hidden_states=hidden_states
@@ -1120,7 +1120,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         attn_mask = self._get_attn_mask()
         hidden_states = self._get_hidden_states()
         torch.manual_seed(0)
-        layer = ReformerLayer(ReformerConfig(**config))
+        layer = ReformerLayer(ReformerConfig(**config)).to(torch_device)
         layer.eval()
         reformer_output = layer(
             prev_attn_output=hidden_states.clone(),
@@ -1141,7 +1141,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         config["is_decoder"] = False
         hidden_states = self._get_hidden_states()
         torch.manual_seed(0)
-        layer = ReformerLayer(ReformerConfig(**config))
+        layer = ReformerLayer(ReformerConfig(**config)).to(torch_device)
         layer.eval()
         reformer_output = layer(
             prev_attn_output=hidden_states, hidden_states=hidden_states
@@ -1160,7 +1160,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         attn_mask = self._get_attn_mask()
         hidden_states = self._get_hidden_states()
         torch.manual_seed(0)
-        layer = ReformerLayer(ReformerConfig(**config))
+        layer = ReformerLayer(ReformerConfig(**config)).to(torch_device)
         layer.eval()
         reformer_output = layer(
             prev_attn_output=hidden_states,
@@ -1180,7 +1180,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         config["attn_layers"] = ["lsh", "lsh", "lsh", "lsh"]
         config["num_buckets"] = [2, 4]
         torch.manual_seed(0)
-        model = ReformerModel(ReformerConfig(**config))
+        model = ReformerModel(ReformerConfig(**config)).to(torch_device)
         model.eval()
         input_ids, attn_mask = self._get_input_ids_and_mask()
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
@@ -1196,7 +1196,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         config = self._get_basic_config_and_input()
         config["attn_layers"] = ["local", "local", "local", "local"]
         torch.manual_seed(0)
-        model = ReformerModel(ReformerConfig(**config))
+        model = ReformerModel(ReformerConfig(**config)).to(torch_device)
         model.eval()
         input_ids, attn_mask = self._get_input_ids_and_mask()
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
@@ -1214,7 +1214,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         config["num_buckets"] = [2, 4]
         config["is_decoder"] = False
         torch.manual_seed(0)
-        model = ReformerModelWithLMHead(ReformerConfig(**config))
+        model = ReformerModelWithLMHead(ReformerConfig(**config)).to(torch_device)
         model.eval()
         input_ids, attn_mask = self._get_input_ids_and_mask()
         hidden_states = model(input_ids=input_ids, attention_mask=attn_mask)[0]
@@ -1232,7 +1232,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         config["hidden_dropout_prob"] = 0.0
         config["local_attention_probs_dropout_prob"] = 0.0
         torch.manual_seed(0)
-        model = ReformerModelWithLMHead(ReformerConfig(**config))
+        model = ReformerModelWithLMHead(ReformerConfig(**config)).to(torch_device)
         model.train()
         model.zero_grad()
         input_ids, _ = self._get_input_ids_and_mask()
@@ -1290,7 +1290,7 @@ class ReformerIntegrationTests(unittest.TestCase):
         config["num_buckets"] = [2, 4]
         config["num_hashes"] = 6
         torch.manual_seed(0)
-        model = ReformerModelWithLMHead(ReformerConfig(**config))
+        model = ReformerModelWithLMHead(ReformerConfig(**config)).to(torch_device)
         model.train()
         model.zero_grad()
         input_ids, _ = self._get_input_ids_and_mask()
@@ -1341,7 +1341,7 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     @slow
     def test_pretrained_generate_crime_and_punish(self):
-        model = ReformerModelWithLMHead.from_pretrained("patrickvonplaten/reformer-crime-and-punish", cache_dir=CACHE_DIR)
+        model = ReformerModelWithLMHead.from_pretrained("patrickvonplaten/reformer-crime-and-punish", cache_dir=CACHE_DIR).to(torch_device)
         tokenizer = ReformerTokenizer.from_pretrained("patrickvonplaten/reformer-crime-and-punish")
         model.eval()
 
