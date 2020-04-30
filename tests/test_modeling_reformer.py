@@ -682,6 +682,44 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 )
             )
 
+        @slow
+        def create_and_check_reformer_random_seed(
+            self, config, input_ids, input_mask
+        ):
+            layer = ReformerLayer(config).to(torch_device)
+            layer.train()
+
+            shape = (
+                self.batch_size,
+                self.seq_length,
+                config.hidden_size,
+            )  # Batch x SeqLen x hiddenSize
+
+            hidden_states = floats_tensor(shape)
+            attn_output = floats_tensor(shape)
+
+            seeds = []
+            for _ in range(100):
+                layer_outputs = layer(
+                    attn_output, hidden_states, attention_mask=input_mask
+                )
+                attn_output = layer_outputs.attn_output
+                hidden_states = layer_outputs.hidden_states
+                torch.manual_seed(layer.attention_seed)
+                seeds.append(layer.attention_seed)
+            self.parent.assertGreater(len(set(seeds)), 50)
+
+            seeds = []
+            for _ in range(100):
+                layer_outputs = layer(
+                    attn_output, hidden_states, attention_mask=input_mask
+                )
+                attn_output = layer_outputs.attn_output
+                hidden_states = layer_outputs.hidden_states
+                torch.manual_seed(layer.feed_forward_seed)
+                seeds.append(layer.feed_forward_seed)
+            self.parent.assertGreater(len(set(seeds)), 50)
+
         def create_and_check_reformer_feed_backward_chunking(
             self, config, input_ids, input_mask
         ):
@@ -793,6 +831,12 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
         )
         self.model_tester.create_and_check_reformer_layer_dropout_seed(
             *config_and_inputs, False
+        )
+
+    def test_dropout_random_seed_is_changing(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_reformer_random_seed(
+            *config_and_inputs
         )
 
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
