@@ -23,24 +23,17 @@ from .configuration_utils import PretrainedConfig
 from .modeling_flax_bert import FlaxBertModel
 from .modeling_flax_roberta import FlaxRobertaModel
 
+
 logger = logging.getLogger(__name__)
 
 
 ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
     (key, value)
-    for pretrained_map in [
-        FlaxBertModel.pretrained_model_archive_map,
-        FlaxRobertaModel.pretrained_model_archive_map,
-    ]
+    for pretrained_map in [FlaxBertModel.pretrained_model_archive_map, FlaxRobertaModel.pretrained_model_archive_map,]
     for key, value, in pretrained_map.items()
 )
 
-MODEL_MAPPING = OrderedDict(
-    [
-        (RobertaConfig, FlaxRobertaModel),
-        (BertConfig, FlaxBertModel),
-    ]
-)
+MODEL_MAPPING = OrderedDict([(RobertaConfig, FlaxRobertaModel), (BertConfig, FlaxBertModel),])
 
 
 class FlaxAutoModel(object):
@@ -166,4 +159,3 @@ class FlaxAutoModel(object):
                 config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
             )
         )
-

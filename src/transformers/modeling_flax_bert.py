@@ -1,10 +1,10 @@
 from typing import Callable, Dict
 
+import numpy as np
+
 import flax.nn as nn
 import jax
 import jax.numpy as jnp
-import numpy as np
-
 from transformers import BertConfig
 from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 from transformers.modeling_flax_utils import FlaxPreTrainedModel
@@ -24,7 +24,7 @@ def gelu(x):
     speed. For more information, see `Gaussian Error Linear Units (GELUs)
     <https://arxiv.org/abs/1606.08415>`_, section 2.
     """
-    return x * 0.5 * (1. + jax.lax.erf(x / jnp.sqrt(2.)))
+    return x * 0.5 * (1.0 + jax.lax.erf(x / jnp.sqrt(2.0)))
 
 
 ACT2FN = {
@@ -40,14 +40,16 @@ class BertLayerNorm(nn.Module):
     Operates on the last axis of the input data.
     """
 
-    def apply(self,
-              x,
-              epsilon=1e-6,
-              dtype=jnp.float32,
-              bias=True,
-              scale=True,
-              bias_init=nn.initializers.zeros,
-              scale_init=nn.initializers.ones):
+    def apply(
+        self,
+        x,
+        epsilon=1e-6,
+        dtype=jnp.float32,
+        bias=True,
+        scale=True,
+        bias_init=nn.initializers.zeros,
+        scale_init=nn.initializers.ones,
+    ):
         """Applies layer normalization on the input.
         It normalizes the activations of the layer for each given example in a
         batch independently, rather than across a batch like Batch Normalization.
@@ -72,10 +74,10 @@ class BertLayerNorm(nn.Module):
         var = mean2 - jnp.lax.square(mean)
         mul = jnp.lax.rsqrt(var + epsilon)
         if scale:
-            mul = mul * jnp.asarray(self.param('gamma', (features,), scale_init), dtype)
+            mul = mul * jnp.asarray(self.param("gamma", (features,), scale_init), dtype)
         y = (x - mean) * mul
         if bias:
-            y = y + jnp.asarray(self.param('beta', (features,), bias_init), dtype)
+            y = y + jnp.asarray(self.param("beta", (features,), bias_init), dtype)
         return y
 
 
@@ -86,21 +88,39 @@ class BertEmbedding(nn.Module):
     and PyTorch use 'weight'
     """
 
-    def apply(self, input, vocab_size: int, hidden_size: int,
-              emb_init: Callable[..., np.ndarray] = nn.initializers.normal(stddev=0.1)):
+    def apply(
+        self,
+        input,
+        vocab_size: int,
+        hidden_size: int,
+        emb_init: Callable[..., np.ndarray] = nn.initializers.normal(stddev=0.1),
+    ):
 
-        embedding = self.param('weight', (vocab_size, hidden_size), emb_init)
+        embedding = self.param("weight", (vocab_size, hidden_size), emb_init)
         return jnp.take(embedding, input, axis=0)
 
 
 class BertEmbeddings(nn.Module):
-    def apply(self, input_ids, token_type_ids, position_ids, attention_mask,
-              vocab_size: int, hidden_size: int, type_vocab_size: int, max_length: int):
+    def apply(
+        self,
+        input_ids,
+        token_type_ids,
+        position_ids,
+        attention_mask,
+        vocab_size: int,
+        hidden_size: int,
+        type_vocab_size: int,
+        max_length: int,
+    ):
 
         # Embed
-        w_emb = BertEmbedding(jnp.atleast_2d(input_ids.astype('i4')), vocab_size, hidden_size, name="word_embeddings")
-        p_emb = BertEmbedding(jnp.atleast_2d(position_ids.astype('i4')), max_length, hidden_size, name="position_embeddings")
-        t_emb = BertEmbedding(jnp.atleast_2d(token_type_ids.astype('i4')), type_vocab_size, hidden_size, name="token_type_embeddings")
+        w_emb = BertEmbedding(jnp.atleast_2d(input_ids.astype("i4")), vocab_size, hidden_size, name="word_embeddings")
+        p_emb = BertEmbedding(
+            jnp.atleast_2d(position_ids.astype("i4")), max_length, hidden_size, name="position_embeddings"
+        )
+        t_emb = BertEmbedding(
+            jnp.atleast_2d(token_type_ids.astype("i4")), type_vocab_size, hidden_size, name="token_type_embeddings"
+        )
 
         # Sum all embeddings
         summed_emb = w_emb + jnp.broadcast_to(p_emb, w_emb.shape) + t_emb
@@ -112,23 +132,17 @@ class BertEmbeddings(nn.Module):
 
 
 class BertAttention(nn.Module):
-
-    def apply(self, hidden_state, attention_mask, num_heads: int, head_size: int, output_size: int):
+    def apply(self, hidden_state, attention_mask, num_heads: int, head_size: int):
         self_att = nn.attention.SelfAttention(
-            hidden_state,
-            num_heads=num_heads,
-            qkv_features=head_size,
-            padding_mask=attention_mask,
-            name="self"
+            hidden_state, num_heads=num_heads, qkv_features=head_size, padding_mask=attention_mask, name="self"
         )
 
         return BertLayerNorm(self_att + hidden_state, name="layer_norm")
 
 
 class BertIntermediate(nn.Module):
-
     def apply(self, hidden_state, output_size: int):
-        # TODO: Had ACT2FN reference to change activation function
+        # TODO: Add ACT2FN reference to change activation function
         h = nn.Dense(hidden_state, features=output_size, name="dense")
         return gelu(h)
 
@@ -142,9 +156,10 @@ class BertOutput(nn.Module):
 
 
 class BertLayer(nn.Module):
-
     def apply(self, hidden_state, attention_mask, num_heads: int, head_size: int, intermediate_size: int):
-        attention = BertAttention(hidden_state, attention_mask, num_heads, head_size, intermediate_size, name="attention")
+        attention = BertAttention(
+            hidden_state, attention_mask, num_heads, head_size, intermediate_size, name="attention"
+        )
         intermediate = BertIntermediate(attention, intermediate_size, name="intermediate")
         output = BertOutput(intermediate, attention, name="output")
 
@@ -155,6 +170,7 @@ class BertLayerCollection(nn.Module):
     """
     Stores N BertLayer(s)
     """
+
     def apply(self, input, attention_mask, num_layers: int, num_heads: int, head_size: int, intermediate_size: int):
         assert num_layers > 0, "num_layers should be >= 1, got ({})".format(num_layers)
 
@@ -169,14 +185,16 @@ class BertLayerCollection(nn.Module):
 
 
 class BertEncoder(nn.Module):
-
-    def apply(self, hidden_state, attention_mask, num_layers: int, num_heads: int, head_size: int, intermediate_size: int):
-        encodings = BertLayerCollection(hidden_state, attention_mask, num_layers, num_heads, head_size, intermediate_size, name="layer")
+    def apply(
+        self, hidden_state, attention_mask, num_layers: int, num_heads: int, head_size: int, intermediate_size: int
+    ):
+        encodings = BertLayerCollection(
+            hidden_state, attention_mask, num_layers, num_heads, head_size, intermediate_size, name="layer"
+        )
         return encodings
 
 
 class BertPooler(nn.Module):
-
     def apply(self, hidden_state):
         first_token = hidden_state[:, 0]
         out = nn.Dense(first_token, hidden_state.shape[-1], name="dense")
@@ -184,25 +202,40 @@ class BertPooler(nn.Module):
 
 
 class BertModel(nn.Module):
-
-    def apply(self, input_ids, token_type_ids, position_ids, attention_mask,
-              vocab_size: int, hidden_size: int, type_vocab_size: int,
-              max_length: int, num_encoder_layers: int, num_heads: int,
-              head_size: int, intermediate_size: int, padding_idx: int,
-              emb_init: Callable[..., np.ndarray] = nn.initializers.normal(stddev=0.1)):
+    def apply(
+        self,
+        input_ids,
+        token_type_ids,
+        position_ids,
+        attention_mask,
+        vocab_size: int,
+        hidden_size: int,
+        type_vocab_size: int,
+        max_length: int,
+        num_encoder_layers: int,
+        num_heads: int,
+        head_size: int,
+        intermediate_size: int,
+        padding_idx: int,
+        emb_init: Callable[..., np.ndarray] = nn.initializers.normal(stddev=0.1),
+    ):
 
         # Embedding
         embeddings = BertEmbeddings(
-            input_ids, token_type_ids, position_ids, attention_mask,
-            vocab_size, hidden_size, type_vocab_size, max_length,
-            name="embeddings"
+            input_ids,
+            token_type_ids,
+            position_ids,
+            attention_mask,
+            vocab_size,
+            hidden_size,
+            type_vocab_size,
+            max_length,
+            name="embeddings",
         )
 
         # N stacked encoding layers
         encoder = BertEncoder(
-            embeddings, attention_mask, num_encoder_layers,
-            num_heads, head_size, intermediate_size,
-            name="encoder"
+            embeddings, attention_mask, num_encoder_layers, num_heads, head_size, intermediate_size, name="encoder"
         )
 
         pooled = BertPooler(encoder, name="pooler")
@@ -264,7 +297,9 @@ class FlaxBertModel(FlaxPreTrainedModel):
 
             # Self Attention output projection needs to be transposed
             if "out.kernel" in key:
-                jax_state[key] = tensor.reshape((config.hidden_size, config.num_attention_heads, -1)).transpose(1, 2, 0)
+                jax_state[key] = tensor.reshape((config.hidden_size, config.num_attention_heads, -1)).transpose(
+                    1, 2, 0
+                )
 
             # Pooler needs to transpose its kernel
             if "pooler.dense.kernel" in key:
@@ -310,14 +345,13 @@ class FlaxBertModel(FlaxPreTrainedModel):
         return self._config
 
     def __call__(self, input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
-
         @jax.jit
         def predict(input_ids, token_type_ids=None, position_ids=None, attention_mask=None):
             return self.model(
-                jnp.array(input_ids, dtype='i4'),
-                jnp.array(token_type_ids, dtype='i4'),
-                jnp.array(position_ids, dtype='i4'),
-                jnp.array(attention_mask, dtype='i4')
+                jnp.array(input_ids, dtype="i4"),
+                jnp.array(token_type_ids, dtype="i4"),
+                jnp.array(position_ids, dtype="i4"),
+                jnp.array(attention_mask, dtype="i4"),
             )
 
         if token_type_ids is None:
