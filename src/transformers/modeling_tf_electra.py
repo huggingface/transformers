@@ -4,9 +4,9 @@ import tensorflow as tf
 
 from transformers import ElectraConfig
 
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, MULTIPLE_CHOICE_DUMMY_INPUTS
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
-from .modeling_tf_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, get_initializer, shape_list
+from .modeling_tf_utils import get_initializer, shape_list
 from .tokenization_utils import BatchEncoding
 
 

@@ -21,7 +21,7 @@ import logging
 import tensorflow as tf
 
 from .configuration_albert import AlbertConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable, MULTIPLE_CHOICE_DUMMY_INPUTS
 from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
 from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 from .tokenization_utils import BatchEncoding
