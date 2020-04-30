@@ -628,9 +628,8 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel):
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
-
-        self.dense = self.dense(discriminator_hidden_states)
-        self.activation = tf.keras.activations.tanh(a)
+        self.dense = tf.keras.layers.Dense(config.hidden_size, name="dense")
+        self.activation = tf.keras.layers.Activation("tanh")
 
         #self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         #self.activation = nn.Tanh()
