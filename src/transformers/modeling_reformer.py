@@ -1237,6 +1237,8 @@ class ReformerModel(ReformerPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        assert len(input_shape) == 2, "`input_ids` have be of shape `[batch_size, sequence_length]`, but got shape: {}".format(input_shape)
+
         device = input_ids.device if input_ids is not None else inputs_embeds.device  # noqa: F841
         real_sequence_length = input_shape[-1]
 

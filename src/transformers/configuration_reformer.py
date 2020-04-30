@@ -93,7 +93,7 @@ class ReformerConfig(PretrainedConfig):
                 A dictionary containing all the available pre-trained checkpoints.
     """
     pretrained_config_archive_map = REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP
-    model_type = "bert"
+    model_type = "reformer"
 
     def __init__(
         self,
