@@ -12,7 +12,7 @@ if is_flax_available():
 
 if is_torch_available():
     import torch
-    from transformers.modeling_bert import RobertaModel
+    from transformers.modeling_roberta import RobertaModel
 
 
 @require_flax
