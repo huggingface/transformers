@@ -7,10 +7,10 @@ from transformers import is_flax_available, is_torch_available
 from transformers.tokenization_bert import BertTokenizerFast
 
 
-if is_flax_available:
+if is_flax_available():
     from transformers.modeling_flax_bert import FlaxBertModel
 
-if is_torch_available:
+if is_torch_available():
     import torch
     from transformers.modeling_bert import BertModel
 
