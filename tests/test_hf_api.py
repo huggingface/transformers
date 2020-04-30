@@ -28,11 +28,11 @@ USER = "__DUMMY_TRANSFORMERS_USER__"
 PASS = "__DUMMY_TRANSFORMERS_PASS__"
 FILES = [
     (
-        "Test-{}.txt".format(int(time.time())),
+        "nested/Test-{}.txt".format(int(time.time())),
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/input.txt"),
     ),
     (
-        "yoyo {}.txt".format(int(time.time())),  # space is intentional
+        "nested/yoyo {}.txt".format(int(time.time())),  # space is intentional
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/empty.txt"),
     ),
 ]
@@ -73,10 +73,10 @@ class HfApiEndpointsTest(HfApiCommonTest):
 
     def test_presign_invalid_org(self):
         with self.assertRaises(HTTPError):
-            _ = self._api.presign(token=self._token, filename="fake_org.txt", organization="fake")
+            _ = self._api.presign(token=self._token, filename="nested/fake_org.txt", organization="fake")
 
     def test_presign_valid_org(self):
-        urls = self._api.presign(token=self._token, filename="valid_org.txt", organization="valid_org")
+        urls = self._api.presign(token=self._token, filename="nested/valid_org.txt", organization="valid_org")
         self.assertIsInstance(urls, PresignedUrl)
 
     def test_presign(self):
