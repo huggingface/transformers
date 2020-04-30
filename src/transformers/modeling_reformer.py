@@ -65,6 +65,7 @@ LSHSelfAttentionOutput = namedtuple("LSHSelfAttentionOutput", ["hidden_states", 
 LocalSelfAttentionOutput = namedtuple("LocalSelfAttentionOutput", ["hidden_states", "attention_probs"])
 AttentionOutput = namedtuple("AttentionOutput", ["hidden_states", "attention_probs", "buckets"])
 ReformerOutput = namedtuple("ReformerOutput", ["hidden_states", "attn_output", "attention_probs", "buckets"])
+ReformerBackwardOutput = namedtuple("ReformerBackwardOutput", ["attn_output", "hidden_states", "grad_attn_output", "grad_hidden_states"])
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -358,6 +359,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.hidden_size = config.hidden_size
 
+        # projection matrices
         self.query_key = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
 
@@ -437,7 +439,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         del query_key_vectors, key_vectors, value_vectors
 
         # calculate total concatenad chunks to split gradients correctly
-        out_vectors, logits = UndoSort.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, self.num_hashes)
+        out_vectors, logits = GatherSorted.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, self.num_hashes)
 
         if num_hashes > 1:
             out_vectors = self._split_dim_by(
@@ -491,7 +493,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # TODO: delete later when integration tests are ok
         if self.hash_seed is not None:
             rotations_shape = (vectors.shape[-1], num_hashes, rotation_size // 2)
-            torch.manual_seed(self.hash_seed)
+            np.random.seed(self.hash_seed)
             random_rotations = torch.tensor(
                 np.random.normal(size=rotations_shape), dtype=vectors.dtype, device=vectors.device,
             )
@@ -507,6 +509,17 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             # -> is that bad? It seems like in original reformer a different random
             # rotation is used batches
             rotated_vectors = torch.einsum("bmtd,mdhr->bmhtr", vectors, random_rotations)
+
+#        if self.hash_seed is not None:
+            # for determinism
+#            torch.manual_seed(self.hash_seed)
+#
+#        rotations_shape = (self.num_attention_heads, vectors.shape[-1], num_hashes, rotation_size // 2)
+        # create a random self.attention_head_size x num_hashes x num_buckets/2
+#        random_rotations = torch.randn(rotations_shape, device=vectors.device).to(vectors.dtype)
+#
+        # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2
+#        rotated_vectors = torch.einsum("bmtd,mdhr->bmhtr", vectors, random_rotations)
 
         if isinstance(self.num_buckets, int) or len(self.num_buckets) == 1:
             rotated_vectors = torch.cat([rotated_vectors, -rotated_vectors], dim=-1)
@@ -688,7 +701,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         return torch.gather(vectors, 2, expanded_idxs)
 
 
-class UndoSort(Function):
+class GatherSorted(Function):
     @staticmethod
     def forward(ctx, out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, num_hashes):
         # save sorted_bucket_idx for backprop
@@ -751,6 +764,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.hidden_size = config.hidden_size
 
+        # projection matrices
         self.query = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.key = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
@@ -1021,6 +1035,9 @@ class ReformerLayer(nn.Module):
     ):
 
         with torch.no_grad():
+            # every forward pass we sample a different seed
+            # for dropout and save seed for forward fn in backward 
+            # to have correct dropout
             self._init_attention_seed()
             attn_outputs = self.attention(
                 hidden_states=hidden_states,
@@ -1038,8 +1055,11 @@ class ReformerLayer(nn.Module):
             # free memory
             del prev_attn_output
 
-            # Y_2 = X_2 + g(Y_1)
+            # every forward pass we sample a different seed 
+            # for dropout and save seed for forward fn in backward 
+            # to have correct dropout
             self._init_feed_forward_seed()
+            # Y_2 = X_2 + g(Y_1)
             hidden_states = hidden_states + self.feed_forward(attn_output)
 
         return ReformerOutput(
@@ -1064,9 +1084,10 @@ class ReformerLayer(nn.Module):
         with torch.enable_grad():
             next_attn_output.requires_grad = True
 
+            # set seed to have correct dropout
+            torch.manual_seed(self.feed_forward_seed)
             # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
             # g(Y_1)
-            torch.manual_seed(self.feed_forward_seed)
             res_hidden_states = self.feed_forward(next_attn_output)
             res_hidden_states.backward(grad_hidden_states, retain_graph=True)
 
@@ -1080,9 +1101,11 @@ class ReformerLayer(nn.Module):
 
         with torch.enable_grad():
             hidden_states.requires_grad = True
+
+            # set seed to have correct dropout
+            torch.manual_seed(self.attention_seed)
             # f(X_2)
             # use cached buckets for backprob if buckets not None for LSHSelfAttention
-            torch.manual_seed(self.attention_seed)
             output = self.attention(
                 hidden_states=hidden_states, head_mask=head_mask, attention_mask=attention_mask, buckets=buckets,
             ).hidden_states
@@ -1097,7 +1120,12 @@ class ReformerLayer(nn.Module):
             hidden_states.grad = None
             hidden_states = hidden_states.detach()
 
-        return attn_output, hidden_states, grad_attn_output, grad_hidden_states
+        return ReformerBackwardOutput(
+            attn_output=attn_output,
+            hidden_states=hidden_states,
+            grad_attn_output=grad_attn_output,
+            grad_hidden_states=grad_hidden_states,
+        )
 
 
 class _ReversibleFunction(Function):
@@ -1159,7 +1187,18 @@ class _ReversibleFunction(Function):
         grad_attn_output, grad_hidden_states = torch.chunk(grad_hidden_states, 2, dim=-1)
 
         # retrieve params from ctx for backward
-        attn_output, hidden_states, = ctx.saved_tensors
+        attn_output, hidden_states = ctx.saved_tensors
+
+        # create tuple
+        output = ReformerBackwardOutput(attn_output=attn_output, 
+            hidden_states=hidden_states,
+            grad_attn_output=grad_attn_output,
+            grad_hidden_states=grad_hidden_states,
+        )
+
+        # free memory
+        del grad_attn_output, grad_hidden_states, attn_output, hidden_states
+
         layers = ctx.layers
         all_buckets = ctx.all_buckets
         head_mask = ctx.head_mask
@@ -1171,22 +1210,18 @@ class _ReversibleFunction(Function):
             all_buckets = all_buckets[:-1]
 
             # backprop
-            (attn_output, hidden_states, grad_attn_output, grad_hidden_states,) = layer.backward_pass(
-                next_attn_output=attn_output,
-                hidden_states=hidden_states,
-                grad_attn_output=grad_attn_output,
-                grad_hidden_states=grad_hidden_states,
+            output = layer.backward_pass(
+                next_attn_output=output.attn_output,
+                hidden_states=output.hidden_states,
+                grad_attn_output=output.grad_attn_output,
+                grad_hidden_states=output.grad_hidden_states,
                 head_mask=head_mask[len(layers) - idx - 1],
                 attention_mask=attention_mask,
                 buckets=buckets,
             )
 
         assert all_buckets == (), "buckets have to be empty after backpropagation"
-
-        # free memory
-        del attn_output, hidden_states
-
-        grad_hidden_states = torch.cat([grad_attn_output, grad_hidden_states], dim=-1)
+        grad_hidden_states = torch.cat([output.grad_attn_output, output.grad_hidden_states], dim=-1)
 
         # num of return vars has to match num of forward() args
         # return gradient for hidden_states arg and None for other args
@@ -1511,8 +1546,10 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
         if labels is not None:
             # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
+#            shift_logits = logits[..., :-1, :].contiguous()
+#            shift_labels = labels[..., 1:].contiguous()
+            shift_logits = logits.contiguous()
+            shift_labels = labels.contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
