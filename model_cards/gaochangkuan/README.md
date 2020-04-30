@@ -1,8 +1,11 @@
+## Generating Chinese poetry by topic.
+
+
 from transformers import *
 
-tokenizer = BertTokenizer.from_pretrained("gaochangkuan")
+tokenizer = BertTokenizer.from_pretrained("gaochangkuan/model_dir")
 
-model = AutoModelWithLMHead.from_pretrained("gaochangkuan")
+model = AutoModelWithLMHead.from_pretrained("gaochangkuan/model_dir")
 
 
 prompt= '''<s>田园躬耕'''
