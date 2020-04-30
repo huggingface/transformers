@@ -1,5 +1,6 @@
 import os
 from abc import ABC, abstractmethod
+from pickle import UnpicklingError
 from typing import Dict
 
 from flax.nn import Model, Module
@@ -53,12 +54,12 @@ class FlaxPreTrainedModel(ABC):
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
         """
         config = kwargs.pop("config", None)
-        state_dict = kwargs.pop("state_dict", None)
+        # state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
-        output_loading_info = kwargs.pop("output_loading_info", False)
+        # output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
 
         # Load config if we don't provide a configuration
@@ -122,11 +123,12 @@ class FlaxPreTrainedModel(ABC):
 
         # Instantiate model.
         with open(resolved_archive_file, "rb") as state_f:
+            from msgpack.exceptions import UnpackException
             try:
                 from flax.serialization import from_bytes
 
                 state = from_bytes(cls.model_class, state_f)
-            except:
+            except UnpackException:
                 try:
                     import torch
 
@@ -134,7 +136,7 @@ class FlaxPreTrainedModel(ABC):
                     state = {k: v.numpy() for k, v in state.items()}
                     state = cls.convert_from_pytorch(state, config)
                     state = unflatten_dict({tuple(k.split(".")[1:]): v for k, v in state.items()})
-                except:
+                except UnpicklingError:
                     raise EnvironmentError(
                         "Unable to convert model {} to Flax deserializable object. "
                         "Supported format are PyTorch archive or Flax msgpack".format(archive_file)
