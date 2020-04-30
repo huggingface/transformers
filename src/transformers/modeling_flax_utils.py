@@ -6,10 +6,15 @@ from flax.nn import Model, Module
 from flax.serialization import to_bytes
 from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
-
 from transformers import PretrainedConfig, logger
-from transformers.file_utils import hf_bucket_url, cached_path, WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME, \
-    is_remote_url
+from transformers.file_utils import (
+    TF2_WEIGHTS_NAME,
+    TF_WEIGHTS_NAME,
+    WEIGHTS_NAME,
+    cached_path,
+    hf_bucket_url,
+    is_remote_url,
+)
 
 
 class FlaxPreTrainedModel(ABC):
@@ -116,21 +121,24 @@ class FlaxPreTrainedModel(ABC):
             resolved_archive_file = None
 
         # Instantiate model.
-        with open(resolved_archive_file, 'rb') as state_f:
+        with open(resolved_archive_file, "rb") as state_f:
             try:
                 from flax.serialization import from_bytes
+
                 state = from_bytes(cls.model_class, state_f)
             except:
                 try:
                     import torch
+
                     state = torch.load(state_f)
                     state = {k: v.numpy() for k, v in state.items()}
                     state = cls.convert_from_pytorch(state, config)
-                    state = unflatten_dict({tuple(k.split('.')[1:]): v for k, v in state.items()})
+                    state = unflatten_dict({tuple(k.split(".")[1:]): v for k, v in state.items()})
                 except:
-                    raise EnvironmentError("Unable to convert model {} to Flax deserializable object. "
-                                           "Supported format are PyTorch archive or Flax msgpack"
-                                           .format(archive_file))
+                    raise EnvironmentError(
+                        "Unable to convert model {} to Flax deserializable object. "
+                        "Supported format are PyTorch archive or Flax msgpack".format(archive_file)
+                    )
 
         return cls(config, state, *model_args, **model_kwargs)
 

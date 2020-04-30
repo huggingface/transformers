@@ -1,11 +1,10 @@
-import jax
 import numpy as np
-import jax.numpy as jnp
-from transformers import BertConfig
 
-from transformers import RobertaConfig
-from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+import jax
+import jax.numpy as jnp
+from transformers import BertConfig, RobertaConfig
 from transformers.modeling_flax_bert import FlaxBertModel
+from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 class FlaxRobertaModel(FlaxBertModel):
@@ -32,18 +31,17 @@ class FlaxRobertaModel(FlaxBertModel):
 
             if position_ids is None:
                 position_ids = np.arange(
-                    self.config.pad_token_id + 1,
-                    np.atleast_2d(input_ids).shape[-1] + self.config.pad_token_id + 1
+                    self.config.pad_token_id + 1, np.atleast_2d(input_ids).shape[-1] + self.config.pad_token_id + 1
                 )
 
             if attention_mask is None:
                 attention_mask = np.ones_like(input_ids)
 
             return self.model(
-                jnp.array(input_ids, dtype='i4'),
-                jnp.array(token_type_ids, dtype='i4'),
-                jnp.array(position_ids, dtype='i4'),
-                jnp.array(attention_mask, dtype='i4')
+                jnp.array(input_ids, dtype="i4"),
+                jnp.array(token_type_ids, dtype="i4"),
+                jnp.array(position_ids, dtype="i4"),
+                jnp.array(attention_mask, dtype="i4"),
             )
 
         return predict(input_ids, token_type_ids, position_ids, attention_mask)
