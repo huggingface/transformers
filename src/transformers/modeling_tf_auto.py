@@ -195,9 +195,9 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_MULITPLE_CHOICE_MAPPING = OrderedDict(
     [
-        (ElectraConfig, TFElectraForQuestionAnswering),
-        (AlbertConfig, TFAlbertForQuestionAnswering),
-        (BertConfig, TFBertForQuestionAnswering),
+        (ElectraConfig, TFElectraForMultipleChoice),
+        (AlbertConfig, TFAlbertForMultipleChoice),
+        (BertConfig, TFBertForMultipleChoice),
     ]
 )
 
