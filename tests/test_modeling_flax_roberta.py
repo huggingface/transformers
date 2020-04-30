@@ -1,9 +1,11 @@
 import unittest
 
 from numpy import ndarray
+
 from tests.utils import require_flax, require_torch
 from transformers import is_flax_available, is_torch_available
 from transformers.tokenization_roberta import RobertaTokenizerFast
+
 
 if is_flax_available:
     from transformers.modeling_flax_roberta import FlaxRobertaModel
@@ -16,7 +18,6 @@ if is_torch_available:
 @require_flax
 @require_torch
 class FlaxBertModelTest(unittest.TestCase):
-
     def test_from_pytorch(self):
         torch.set_grad_enabled(False)
 
