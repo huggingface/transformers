@@ -320,7 +320,7 @@ if is_torch_available():
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
-    from .modeling_reformer import ReformerAttention, ReformerLayer, ReformerModel, ReformerModelWithLMHead
+    from .modeling_reformer import ReformerAttention, ReformerLayer, ReformerModel, ReformerModelWithLMHead, REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
 
     # Optimization
     from .optimization import (
