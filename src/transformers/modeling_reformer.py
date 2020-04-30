@@ -998,11 +998,16 @@ class ReformerLayer(nn.Module):
 
     def _init_attention_seed(self):
         # randomize seeds
-        self.attention_seed = int(torch.random.seed() % sys.maxsize)
+        torch.random.seed()
+        # set new random seed
+        self.attention_seed = torch.randint(sys.maxsize, size=(1, 1)).item()
         torch.manual_seed(self.attention_seed)
 
     def _init_feed_forward_seed(self):
-        self.feed_forward_seed = int(torch.random.seed() % sys.maxsize)
+        # randomize seeds
+        torch.random.seed()
+        # set new random seed
+        self.feed_forward_seed = torch.randint(sys.maxsize, size=(1, 1)).item()
         torch.manual_seed(self.feed_forward_seed)
 
     def forward(
