@@ -1560,7 +1560,8 @@ class ReformerModel(ReformerPreTrainedModel):
         # if needs padding
         least_common_mult_chunk_length = _get_least_common_mult_chunk_len(self.config)
         has_to_pad_to_match_chunk_length = input_shape[-1] % least_common_mult_chunk_length != 0
-        if has_to_pad_to_match_chunk_length is True:
+
+        if has_to_pad_to_match_chunk_length:
             # pad input
             input_ids, inputs_embeds, attention_mask, position_ids, input_shape = self._pad_to_mult_of_chunk_length(
                 input_ids,
@@ -1585,7 +1586,7 @@ class ReformerModel(ReformerPreTrainedModel):
         sequence_output = encoder_outputs.hidden_states
 
         # if padding was applied
-        if has_to_pad_to_match_chunk_length is True:
+        if has_to_pad_to_match_chunk_length:
             sequence_output = sequence_output[:, :orig_sequence_length]
 
         outputs = (sequence_output,)

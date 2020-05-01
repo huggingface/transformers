@@ -789,7 +789,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
-        num_hashes=None,
         **model_specific_kwargs
     ):
         r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.

@@ -1111,7 +1111,9 @@ class ReformerIntegrationTests(unittest.TestCase):
         model.eval()
 
         input_ids = tokenizer.encode("A few months later", return_tensors="pt").to(torch_device)
-        output_ids = model.generate(input_ids, max_length=50, num_beams=4, early_stopping=True, do_sample=False)
+        output_ids = model.generate(
+            input_ids, max_length=50, num_beams=4, early_stopping=True, do_sample=False, num_hashes=8
+        )
         output_text = tokenizer.decode(output_ids[0])
         self.assertEqual(
             output_text,
