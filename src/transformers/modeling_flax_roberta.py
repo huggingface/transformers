@@ -1,7 +1,5 @@
 import numpy as np
 
-import jax
-import jax.numpy as jnp
 from transformers import BertConfig, RobertaConfig
 from transformers.modeling_flax_bert import FlaxBertModel
 from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
