@@ -73,16 +73,17 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.model.device, model_inputs["input_ids"].device)
         generated_ids = self.model.generate(
             model_inputs["input_ids"],
-            length_penalty=1.0,
+            attention_mask=model_inputs['attention_mask'],
+            length_penalty=1.0,  # same as C++
             num_beams=2,  # 6 is the default
             bad_words_ids=[[self.tokenizer.pad_token_id]],
-            decoder_start_token_id=self.tokenizer.bos_token_id,
+            decoder_start_token_id=self.tokenizer.pad_token_id,  # mimics 0 embedding at first step.
         )
         generated_words = self.tokenizer.decode_batch(generated_ids, skip_special_tokens=True)
         self.assertListEqual(self.expected_text, generated_words)
 
 
-class TestMarianEnDe(IntegrationTests):
+class TestMarian_EN_DE(IntegrationTests):
 
     @slow
     def test_forward(self):
