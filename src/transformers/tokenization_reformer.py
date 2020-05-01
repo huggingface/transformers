@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Reformer Authors and HuggingFace Inc. team.
+# Copyright 2020 The Trax Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,10 +25,6 @@ from .tokenization_utils import PreTrainedTokenizer
 logger = logging.getLogger(__name__)
 
 SPIECE_UNDERLINE = "▁"
-
-
-# IMPORTANT: This is just a copy-paste from T5 and not compared to the original Reformer
-# Tokenizer yet!!!!
 
 
 ####################################################
