@@ -59,6 +59,7 @@ ACT2FN = {
 ReformerLayerNorm = torch.nn.LayerNorm
 
 
+# Define named tuples for nn.Modules here
 LSHSelfAttentionOutput = namedtuple("LSHSelfAttentionOutput", ["hidden_states", "attention_probs", "buckets"])
 LocalSelfAttentionOutput = namedtuple("LocalSelfAttentionOutput", ["hidden_states", "attention_probs"])
 AttentionOutput = namedtuple("AttentionOutput", ["hidden_states", "attention_probs", "buckets"])
@@ -153,9 +154,10 @@ class AxialPositionEmbeddings(nn.Module):
         super().__init__()
         self.axial_pos_shape = config.axial_pos_shape
         self.axial_pos_embds_dim = config.axial_pos_embds_dim
+        self.dropout = config.hidden_dropout_prob
+
         self.least_common_mult_chunk_length = _get_least_common_mult_chunk_len(config)
         self.weights = nn.ParameterList()
-        self.dropout = config.hidden_dropout_prob
 
         assert (
             sum(self.axial_pos_embds_dim) == config.hidden_size
@@ -195,6 +197,7 @@ class AxialPositionEmbeddings(nn.Module):
                 # drop entire matrix of last two dims (prev dims 1 and 2)
                 drop_perm_weights = nn.functional.dropout2d(perm_weigthts, self.dropout, training=self.training)
                 drop_weights = drop_perm_weights.permute(0, 3, 2, 1)
+
                 position_encodings = torch.reshape(drop_weights, (batch_size, sequence_length, -1))
 
             else:
@@ -209,6 +212,7 @@ class AxialPositionEmbeddings(nn.Module):
             ), "Make sure that config.axial_pos_shape factors: {} multiply at least to max(sequence_length, least_common_mult_chunk_length): max({}, {})".format(
                 self.axial_pos_shape, sequence_length, self.least_common_mult_chunk_length,
             )
+
             # reshape axial encodings and use only until sequence_length
             position_encodings = torch.cat(broadcasted_weights, dim=-1)
             position_encodings = position_encodings.view(batch_size, -1, position_encodings.shape[-1])[
@@ -224,17 +228,18 @@ class PositionEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.dropout = config.hidden_dropout_prob
+        self.is_sinusoidal_pos_embds = config.sinusoidal_pos_embds
+
         self.embedding = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        if self.config.sinusoidal_pos_embds is True:
+        if config.sinusoidal_pos_embds is True:
             create_sinusoidal_embeddings(
                 n_pos=config.max_position_embeddings, dim=config.hidden_size, out=self.embedding.weight,
             )
 
     def forward(self, position_ids):
         position_embeddings = self.embedding(position_ids)
-        if self.config.sinusoidal_pos_embds is False:
+        if self.is_sinusoidal_pos_embds is False:
             position_embeddings = nn.functional.dropout(position_embeddings, self.dropout, self.training)
         return position_embeddings
 
@@ -245,6 +250,9 @@ class ReformerEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        self.max_position_embeddings = config.max_position_embeddings
+        self.dropout = config.hidden_dropout_prob
+
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.position_embeddings = (
             AxialPositionEmbeddings(config) if config.axial_pos_embds else PositionEmbeddings(config)
@@ -252,18 +260,16 @@ class ReformerEmbeddings(nn.Module):
         assert not (
             config.sinusoidal_pos_embds and config.axial_pos_embds
         ), "Select either config.sinusoidal_pos_embds or config.axial_pos_embds"
-        self.max_position_embeddings = config.max_position_embeddings
-        self.dropout = config.hidden_dropout_prob
 
     def forward(self, input_ids=None, position_ids=None, inputs_embeds=None):
-
         if input_ids is not None:
             input_shape = input_ids.size()
+            device = input_ids.device
         else:
             input_shape = inputs_embeds.size()[:-1]
+            device = inputs_embeds.device
 
         seq_length = input_shape[1]
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
         if position_ids is None:
             position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).expand(input_shape)
@@ -276,8 +282,8 @@ class ReformerEmbeddings(nn.Module):
         ), "Sequence Length: {} has to be larger equal than config.max_position_embeddings: {}".format(
             position_ids.shape[-1], self.max_position_embeddings
         )
-        embeddings = nn.functional.dropout(inputs_embeds, self.dropout, self.training)
 
+        embeddings = nn.functional.dropout(inputs_embeds, self.dropout, self.training)
         position_embeddings = self.position_embeddings(position_ids)
 
         embeddings = embeddings + position_embeddings
@@ -295,9 +301,12 @@ class EfficientAttentionUtils(object):
 
             Args:
                 vectors: array of shape [batch_size, num_attention_heads, n_chunks, chunk_len, ...]
+                num_chunks_before: chunks before current chunk to include in attention
+                num_chunks_after: chunks after current chunk to include in attention
+
             Returns:
-                array of shape [n_chunks, N * chunk_len, ...], where
-                N = (1 + n_chunks_before + n_chunks_after).
+                array of shape [num_chunks, N * chunk_length, ...], where
+                N = (1 + num_chunks_before + num_chunks_after).
         """
         if num_chunks_before == 0 and num_chunks_after == 0:
             return vectors
@@ -310,16 +319,25 @@ class EfficientAttentionUtils(object):
                 slices.append(torch.cat([vectors[:, :, i:, ...], vectors[:, :, :i, ...]], dim=2))
         return torch.cat(slices, dim=3)
 
-    def _transpose_for_scores(self, x, num_attn_heads, attn_head_size):
+    def _split_hidden_size_dim(self, x, num_attn_heads, attn_head_size):
+        """
+            splits hidden_size dim into attn_head_size and num_attn_heads
+        """
         new_x_shape = x.size()[:-1] + (num_attn_heads, attn_head_size)
         x = x.view(*new_x_shape)
         return x.transpose(2, 1)
 
-    def _transpose_for_output(self, x, num_attn_heads, attn_head_size):
+    def _merge_hidden_size_dims(self, x, num_attn_heads, attn_head_size):
+        """
+            merges attn_head_size dim and num_attn_heads dim into hidden_size
+        """
         x = x.permute(0, 2, 1, 3)
         return torch.reshape(x, (x.size()[0], -1, num_attn_heads * attn_head_size))
 
-    def _split_dim_by(self, vectors, dim_factor_1, dim_factor_2, num_attn_heads, attn_head_size=None):
+    def _split_seq_length_dim_to(self, vectors, dim_factor_1, dim_factor_2, num_attn_heads, attn_head_size=None):
+        """
+            splits sequence length dim of vectors into `dim_factor_1` and `dim_factor_2` dims
+        """
         batch_size = vectors.shape[0]
         split_dim_shape = (batch_size, num_attn_heads, dim_factor_1, dim_factor_2)
 
@@ -330,7 +348,10 @@ class EfficientAttentionUtils(object):
         else:
             raise ValueError("Input vector rank should be one of [3, 4], but is: {}".format(len(vectors.shape)))
 
-    def _merge_by_middle_dim(self, vectors, num_attn_heads):
+    def _merge_seq_length_dims(self, vectors, num_attn_heads):
+        """
+            merges factorized sequence length dims into one dim
+        """
         batch_size = vectors.shape[0]
         new_dim_shape = (batch_size, num_attn_heads, -1)
 
@@ -345,7 +366,6 @@ class EfficientAttentionUtils(object):
 class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
     def __init__(self, config):
         super().__init__()
-
         self.num_attention_heads = config.num_attention_heads
         self.hash_seed = config.hash_seed
         self.num_hashes = config.num_hashes
@@ -356,6 +376,8 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.is_decoder = config.is_decoder
         self.max_position_embeddings = config.max_position_embeddings
 
+        self.dropout = config.lsh_attention_probs_dropout_prob
+
         self.attention_head_size = config.attention_head_size
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.hidden_size = config.hidden_size
@@ -363,8 +385,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # projection matrices
         self.query_key = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
-
-        self.dropout = config.lsh_attention_probs_dropout_prob
 
         # save mask value here
         self.register_buffer("self_mask_value_float16", torch.tensor(-1e3))
@@ -382,28 +402,29 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         buckets=None,
         **kwargs
     ):
-        # get SeqLen and BatchSize
         sequence_length = hidden_states.shape[1]
         batch_size = hidden_states.shape[0]
+
         # num hashes can optionally be overwritten by user
         num_hashes = num_hashes if num_hashes is not None else self.num_hashes
 
+        # project hidden_states to query_key and value
         query_key_vectors = self.query_key(hidden_states)
         value_vectors = self.value(hidden_states)
 
         # free memory
         del hidden_states
 
-        query_key_vectors = self._transpose_for_scores(
+        query_key_vectors = self._split_hidden_size_dim(
             query_key_vectors, self.num_attention_heads, self.attention_head_size
         )
-        value_vectors = self._transpose_for_scores(value_vectors, self.num_attention_heads, self.attention_head_size)
+        value_vectors = self._split_hidden_size_dim(value_vectors, self.num_attention_heads, self.attention_head_size)
 
         assert query_key_vectors.shape[-1] == self.attention_head_size
         assert value_vectors.shape[-1] == self.attention_head_size
 
+        # set `num_buckets` on the fly, recommended way to do it
         if self.num_buckets is None:
-            # set `num_buckets` on the fly
             self._set_num_buckets_on_the_fly(sequence_length)
 
         # use cached buckets for backprop only
@@ -423,10 +444,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         query_key_vectors = self._gather_by_expansion(query_key_vectors, sorted_bucket_idx, num_hashes)
         value_vectors = self._gather_by_expansion(value_vectors, sorted_bucket_idx, num_hashes)
 
-        query_key_vectors = self._split_dim_by(
+        query_key_vectors = self._split_seq_length_dim_to(
             query_key_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
         )
-        value_vectors = self._split_dim_by(
+        value_vectors = self._split_seq_length_dim_to(
             value_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
         )
 
@@ -452,10 +473,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         )
 
         if num_hashes > 1:
-            out_vectors = self._split_dim_by(
+            out_vectors = self._split_seq_length_dim_to(
                 out_vectors, num_hashes, sequence_length, self.num_attention_heads, self.attention_head_size,
             )
-            logits = self._split_dim_by(
+            logits = self._split_seq_length_dim_to(
                 logits, num_hashes, sequence_length, self.num_attention_heads, self.attention_head_size,
             ).unsqueeze(-1)
 
@@ -469,7 +490,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size,)
 
-        out_vectors = self._transpose_for_output(out_vectors, self.num_attention_heads, self.attention_head_size)
+        out_vectors = self._merge_hidden_size_dims(out_vectors, self.num_attention_heads, self.attention_head_size)
 
         if do_output_attentions is False:
             attention_probs = ()
@@ -538,7 +559,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         # repeat same values for Batch_size and Num_Attn_Heads
         offsets = offsets.repeat(batch_size, self.num_attention_heads, 1, 1)
-        offset_buckets = self._merge_by_middle_dim(buckets + offsets, self.num_attention_heads)
+        offset_buckets = self._merge_seq_length_dims(buckets + offsets, self.num_attention_heads)
 
         return offset_buckets
 
@@ -587,7 +608,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # free memory
         del query_vectors, key_vectors
 
-        query_bucket_idx = self._split_dim_by(sorted_bucket_idx, -1, self.chunk_length, self.num_attention_heads)
+        query_bucket_idx = self._split_seq_length_dim_to(sorted_bucket_idx, -1, self.chunk_length, self.num_attention_heads)
         key_value_bucket_idx = self._look_adjacent(query_bucket_idx, self.num_chunks_before, self.num_chunks_after)
 
         mask = None
@@ -666,8 +687,8 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         del value_vectors
 
         # merge chunk length
-        logits = self._merge_by_middle_dim(logits, self.num_attention_heads).squeeze(-1)
-        out_vectors = self._merge_by_middle_dim(out_vectors, self.num_attention_heads)
+        logits = self._merge_seq_length_dims(logits, self.num_attention_heads).squeeze(-1)
+        out_vectors = self._merge_seq_length_dims(out_vectors, self.num_attention_heads)
 
         return out_vectors, logits, attention_probs
 
@@ -775,9 +796,9 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         key_vectors = self.key(hidden_states)
         value_vectors = self.value(hidden_states)
 
-        query_vectors = self._transpose_for_scores(query_vectors, self.num_attention_heads, self.attention_head_size)
-        key_vectors = self._transpose_for_scores(key_vectors, self.num_attention_heads, self.attention_head_size)
-        value_vectors = self._transpose_for_scores(value_vectors, self.num_attention_heads, self.attention_head_size)
+        query_vectors = self._split_hidden_size_dim(query_vectors, self.num_attention_heads, self.attention_head_size)
+        key_vectors = self._split_hidden_size_dim(key_vectors, self.num_attention_heads, self.attention_head_size)
+        value_vectors = self._split_hidden_size_dim(value_vectors, self.num_attention_heads, self.attention_head_size)
 
         assert query_vectors.shape[-1] == self.attention_head_size
         assert key_vectors.shape[-1] == self.attention_head_size
@@ -791,13 +812,13 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         )
 
         # chunk vectors
-        query_vectors = self._split_dim_by(
+        query_vectors = self._split_seq_length_dim_to(
             query_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
         )  # B x Num_Attn_Head x Seq_Len // chunk_len x chunk_len  x  attn_head_size
-        key_vectors = self._split_dim_by(
+        key_vectors = self._split_seq_length_dim_to(
             key_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
         )  # B x Num_Attn_Head x Seq_Len // chunk_len x chunk_len  x  attn_head_size
-        value_vectors = self._split_dim_by(
+        value_vectors = self._split_seq_length_dim_to(
             value_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
         )  # B x Num_Attn_Head x Seq_Len // chunk_len x chunk_len  x  attn_head_size
 
@@ -805,8 +826,8 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         indices = torch.arange(sequence_length, device=query_vectors.device).repeat(
             batch_size, self.num_attention_heads, 1
         )
-        query_indices = self._split_dim_by(indices, -1, self.chunk_length, self.num_attention_heads)
-        key_value_indices = self._split_dim_by(indices, -1, self.chunk_length, self.num_attention_heads)
+        query_indices = self._split_seq_length_dim_to(indices, -1, self.chunk_length, self.num_attention_heads)
+        key_value_indices = self._split_seq_length_dim_to(indices, -1, self.chunk_length, self.num_attention_heads)
 
         # append chunks before and after
         key_vectors = self._look_adjacent(key_vectors, self.num_chunks_before, self.num_chunks_after)
@@ -816,7 +837,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         # chunk attention mask and look before and after
         if attention_mask is not None:
             attention_mask = attention_mask.to(torch.uint8)[:, None, :]
-            attention_mask = self._split_dim_by(attention_mask, -1, self.chunk_length, 1)
+            attention_mask = self._split_seq_length_dim_to(attention_mask, -1, self.chunk_length, 1)
             attention_mask_key = self._look_adjacent(attention_mask, self.num_chunks_before, self.num_chunks_after)
 
         # get logits and dots
@@ -876,11 +897,11 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         del value_vectors
 
         # merge chunk length
-        out_vectors = self._merge_by_middle_dim(out_vectors, self.num_attention_heads)
+        out_vectors = self._merge_seq_length_dims(out_vectors, self.num_attention_heads)
 
         assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size,)
 
-        out_vectors = self._transpose_for_output(out_vectors, self.num_attention_heads, self.attention_head_size)
+        out_vectors = self._merge_hidden_size_dims(out_vectors, self.num_attention_heads, self.attention_head_size)
 
         if do_output_attentions is False:
             attention_probs = ()
