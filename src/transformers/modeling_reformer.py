@@ -31,17 +31,15 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import gelu, gelu_fast, gelu_new, swish
 from .configuration_reformer import ReformerConfig
+from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
-REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {}
-# TODO: fill with pretrained model weights
-#    "reformer-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/reformer/reformer-base-uncased-pytorch_model.bin",
-#    "reformer-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/reformer/reformer-large-uncased-pytorch_model.bin",
-#    "reformer-base-cased": "https://s3.amazonaws.com/models.huggingface.co/reformer/reformer-base-cased-pytorch_model.bin",
-#    "reformer-large-cased": "https://s3.amazonaws.com/models.huggingface.co/reformer/reformer-large-cased-pytorch_model.bin",
+REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {
+    "google/reformer-crime-and-punishment": "https://cdn.huggingface.co/google/reformer-crime-and-punishment/pytorch_model.bin"
+}
 
 
 def mish(x):
@@ -420,8 +418,16 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         )
         value_vectors = self._split_hidden_size_dim(value_vectors, self.num_attention_heads, self.attention_head_size)
 
-        assert query_key_vectors.shape[-1] == self.attention_head_size, "last dim of query_key_vectors is {} but should be {}.".format(query_key_vectors.shape[-1], self.attention_head_size)
-        assert value_vectors.shape[-1] == self.attention_head_size, "last dim of query_key_vectors is {} but should be {}.".format(value_vectors.shape[-1], self.attention_head_size)
+        assert (
+            query_key_vectors.shape[-1] == self.attention_head_size
+        ), "last dim of query_key_vectors is {} but should be {}.".format(
+            query_key_vectors.shape[-1], self.attention_head_size
+        )
+        assert (
+            value_vectors.shape[-1] == self.attention_head_size
+        ), "last dim of query_key_vectors is {} but should be {}.".format(
+            value_vectors.shape[-1], self.attention_head_size
+        )
 
         # set `num_buckets` on the fly, recommended way to do it
         if self.num_buckets is None:
@@ -432,7 +438,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             # hash query key vectors into buckets
             buckets = self._hash_vectors(query_key_vectors, num_hashes)
 
-        assert int(buckets.shape[-1]) == num_hashes * sequence_length, "lash dim of buckets is {}, but should be {}".format(buckets.shape[-1], num_hashes * sequence_length)
+        assert (
+            int(buckets.shape[-1]) == num_hashes * sequence_length
+        ), "lash dim of buckets is {}, but should be {}".format(buckets.shape[-1], num_hashes * sequence_length)
 
         sorted_bucket_idx, undo_sorted_bucket_idx = self._get_sorted_bucket_idx_and_undo_sorted_bucket_idx(
             sequence_length, buckets, num_hashes
@@ -453,7 +461,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         )
 
         if self.chunk_length is None:
-            assert self.num_chunks_before == 0 and self.num_chunks_after == 0, "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+            assert (
+                self.num_chunks_before == 0 and self.num_chunks_after == 0
+            ), "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
 
         # scale key vectors
         key_vectors = self._len_and_dim_norm(query_key_vectors)
@@ -492,7 +502,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # free memory
         del logits
 
-        assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size,), "out_vectors have be of shape `[batch_size, config.num_attention_heads, sequence_length, config.attention_head_size]`."
+        assert out_vectors.shape == (
+            batch_size,
+            self.num_attention_heads,
+            sequence_length,
+            self.attention_head_size,
+        ), "out_vectors have be of shape `[batch_size, config.num_attention_heads, sequence_length, config.attention_head_size]`."
 
         out_vectors = self._merge_hidden_size_dims(out_vectors, self.num_attention_heads, self.attention_head_size)
 
@@ -612,7 +627,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # free memory
         del query_vectors, key_vectors
 
-        query_bucket_idx = self._split_seq_length_dim_to(sorted_bucket_idx, -1, self.chunk_length, self.num_attention_heads)
+        query_bucket_idx = self._split_seq_length_dim_to(
+            sorted_bucket_idx, -1, self.chunk_length, self.num_attention_heads
+        )
         key_value_bucket_idx = self._look_adjacent(query_bucket_idx, self.num_chunks_before, self.num_chunks_after)
 
         # get correct mask values depending on precision
@@ -641,7 +658,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # to forbid a token from attending to itself, except in situations
         # where a token has no other valid attention targets (e.g. the first token in a sequence) "
 
-        self_mask = torch.ne(query_bucket_idx.unsqueeze(-1), key_value_bucket_idx.unsqueeze(-2)).to(query_bucket_idx.device)
+        self_mask = torch.ne(query_bucket_idx.unsqueeze(-1), key_value_bucket_idx.unsqueeze(-2)).to(
+            query_bucket_idx.device
+        )
 
         # apply self_mask
         query_key_dots = torch.where(self_mask, query_key_dots, self_mask_value)
@@ -680,9 +699,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         # Causal mask
         if self.is_decoder:
-            mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2)).to(
-                query_indices.device
-            )
+            mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2)).to(query_indices.device)
 
         # Attention mask: chunk, look up correct mask value from key_value_bucket_idx
         # IMPORTANT: official trax code does not use a mask for LSH Atttention. Not sure why.
@@ -740,6 +757,7 @@ class ReverseSort(Function):
         the gradients of the output vectors have to be explicitely
         sorted here.
     """
+
     @staticmethod
     def forward(ctx, out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, num_hashes):
         # save sorted_bucket_idx for backprop
@@ -829,12 +847,26 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         key_vectors = self._split_hidden_size_dim(key_vectors, self.num_attention_heads, self.attention_head_size)
         value_vectors = self._split_hidden_size_dim(value_vectors, self.num_attention_heads, self.attention_head_size)
 
-        assert query_vectors.shape[-1] == self.attention_head_size, "last dim of query_key_vectors is {} but should be {}.".format(query_vectors.shape[-1], self.attention_head_size)
-        assert key_vectors.shape[-1] == self.attention_head_size, "last dim of query_key_vectors is {} but should be {}.".format(key_vectors.shape[-1], self.attention_head_size)
-        assert value_vectors.shape[-1] == self.attention_head_size, "last dim of query_key_vectors is {} but should be {}.".format(value_vectors.shape[-1], self.attention_head_size)
+        assert (
+            query_vectors.shape[-1] == self.attention_head_size
+        ), "last dim of query_key_vectors is {} but should be {}.".format(
+            query_vectors.shape[-1], self.attention_head_size
+        )
+        assert (
+            key_vectors.shape[-1] == self.attention_head_size
+        ), "last dim of query_key_vectors is {} but should be {}.".format(
+            key_vectors.shape[-1], self.attention_head_size
+        )
+        assert (
+            value_vectors.shape[-1] == self.attention_head_size
+        ), "last dim of query_key_vectors is {} but should be {}.".format(
+            value_vectors.shape[-1], self.attention_head_size
+        )
 
         if self.chunk_length is None:
-            assert self.num_chunks_before == 0 and self.num_chunks_after == 0, "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
+            assert (
+                self.num_chunks_before == 0 and self.num_chunks_after == 0
+            ), "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
 
         # normalize key vectors
         key_vectors = key_vectors / torch.sqrt(
@@ -1172,6 +1204,9 @@ class ReformerLayer(nn.Module):
         head_mask=None,
         buckets=None,
     ):
+        # Implements the backward pass for reversible ResNets.
+        # A good blog post on how this works can be found here:
+        # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
         # This code is heavily inspired by https://github.com/lucidrains/reformer-pytorch/blob/master/reformer_pytorch/reversible.py
 
         with torch.enable_grad():
@@ -1179,7 +1214,6 @@ class ReformerLayer(nn.Module):
 
             # set seed to have correct dropout
             torch.manual_seed(self.feed_forward_seed)
-            # Implementation of RevNet (see Fig. 6 in https://towardsdatascience.com/illustrating-the-reformer-393575ac6ba0)
             # g(Y_1)
             res_hidden_states = self.feed_forward(next_attn_output)
             res_hidden_states.backward(grad_hidden_states, retain_graph=True)
@@ -1223,6 +1257,10 @@ class ReformerLayer(nn.Module):
 
 class _ReversibleFunction(Function):
     """
+    To prevent PyTorch from performing the usual backpropagation, 
+    a customized backward function is implemented here. This way 
+    it is made sure that no memory expensive activations are 
+    saved during the forward pass.
     This function is heavily inspired by https://github.com/lucidrains/reformer-pytorch/blob/master/reformer_pytorch/reversible.py
     """
 
@@ -1239,9 +1277,11 @@ class _ReversibleFunction(Function):
         do_output_hidden_states,
         do_output_attentions,
     ):
-
         all_buckets = ()
+
+        # split duplicated tensor
         hidden_states, attn_output = torch.chunk(hidden_states, 2, dim=-1)
+
         for layer, layer_head_mask in zip(layers, head_mask):
             if do_output_hidden_states is True:
                 all_hidden_states.append(hidden_states)
@@ -1325,11 +1365,12 @@ class _ReversibleFunction(Function):
 class ReformerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.dropout = config.hidden_dropout_prob
+
         self.layers = nn.ModuleList([ReformerLayer(config, i) for i in range(config.num_hidden_layers)])
         # Reformer is using Rev Nets, thus last layer outputs are concatenated and
         # Layer Norm is done over 2 * hidden_size
         self.layer_norm = ReformerLayerNorm(2 * config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = config.hidden_dropout_prob
 
     def forward(
         self,
@@ -1344,7 +1385,7 @@ class ReformerEncoder(nn.Module):
         all_hidden_states = []
         all_attentions = []
 
-        # Make this work
+        # concat same tensor for reversible ResNet
         hidden_states = torch.cat([hidden_states, hidden_states], dim=-1)
         hidden_states = _ReversibleFunction.apply(
             hidden_states,
@@ -1369,6 +1410,27 @@ class ReformerEncoder(nn.Module):
         )
 
 
+class ReformerOnlyLMHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        # Reformer is using Rev Nets, thus last layer outputs are concatenated and
+        # Layer Norm is done over 2 * hidden_size
+        self.seq_len_dim = 1
+        self.chunk_size_lm_head = config.chunk_size_lm_head
+        self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def forward(self, hidden_states):
+        return apply_chunking_to_forward(self.chunk_size_lm_head, self.seq_len_dim, self.forward_chunk, hidden_states)
+
+    def forward_chunk(self, hidden_states):
+        hidden_states = self.decoder(hidden_states)
+        return hidden_states
+
+
 class ReformerPreTrainedModel(PreTrainedModel):
     """ An abstract class to handle weights initialization and
         a simple interface for downloading and loading pretrained models.
@@ -1377,6 +1439,16 @@ class ReformerPreTrainedModel(PreTrainedModel):
     config_class = ReformerConfig
     pretrained_model_archive_map = REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "reformer"
+
+    @property
+    def dummy_inputs(self):
+        input_ids = torch.tensor(DUMMY_INPUTS)
+        input_mask = torch.tensor(DUMMY_MASK)
+        dummy_inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+        }
+        return dummy_inputs
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -1392,35 +1464,79 @@ class ReformerPreTrainedModel(PreTrainedModel):
             if module.weight.requires_grad:
                 module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
                 # TODO(PVP): discuss with Thom if necessary here to use different init
-        #                torch.nn.init.xavier_uniform_(module.weight)
+                # torch.nn.init.xavier_uniform_(module.weight)
         elif isinstance(module, ReformerLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
             # TODO(PVP): discuss with Thom if necessary here to use different init
+            # module.bias.data.normal_(mean=0.0, std=1e-6)
 
 
-#            module.bias.data.normal_(mean=0.0, std=1e-6)
+REFORMER_START_DOCSTRING = r"""
+    Reformer was proposed in
+    `Reformer: The Efficient Transformer`_
+    by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
+
+    .. _`Reformer: The Efficient Transformer`:
+        https://arxiv.org/abs/2001.04451
+
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
+    usage and behavior.
+
+    Parameters:
+        config (:class:`~transformers.ReformerConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+"""
+
+REFORMER_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+            During training the input_ids sequence_length has to be a multiple of the relevant model's 
+            chunk lengths (lsh's, local's or both). During evaluation, the indices are automatically
+            padded to be a multiple of the chunk length.
+
+            Indices can be obtained using :class:`transformers.ReformerTokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+
+            `What are position IDs? <../glossary.html#position-ids>`_
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+            Mask to nullify selected heads of the self-attention modules.
+            Mask values selected in ``[0, 1]``:
+            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+        num_hashes (:obj:`int`, `optional`, defaults to :obj:`None`):
+            `num_hashes` is the number of hashing rounds that should be performed during 
+            bucketing. Setting `num_hashes` overwrites the default `num_hashes` defined 
+            in `config.num_hashes`. 
+            For more information, see `num_hashes` in :class:`transformers.ReformerConfig`.
+"""
 
 
+@add_start_docstrings(
+    "The bare Reformer Model transformer outputting raw hidden-states" "without any specific head on top.",
+    REFORMER_START_DOCSTRING,
+)
 class ReformerModel(ReformerPreTrainedModel):
-    """
-
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is all you need`_ by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the
-    :obj:`is_decoder` argument of the configuration set to :obj:`True`; an
-    :obj:`encoder_hidden_states` is expected as an input to the forward pass.
-
-    .. _`Attention is all you need`:
-        https://arxiv.org/abs/1706.03762
-
-    """
-
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -1447,6 +1563,7 @@ class ReformerModel(ReformerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
+    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -1463,12 +1580,12 @@ class ReformerModel(ReformerPreTrainedModel):
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``do_output_attentions=True``):
+        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``do_output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1477,7 +1594,18 @@ class ReformerModel(ReformerPreTrainedModel):
 
     Examples::
 
+        from transformers import ReformerModel, ReformerTokenizer
+        import torch
+
+        tokenizer = ReformerTokenizer.from_pretrained('bert-base-uncased')
+        model = ReformerModel.from_pretrained('bert-base-uncased')
+
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids)
+
+        last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
+
         # TODO(PVP): delete when PR to change output_attentions is made
         do_output_attentions = self.config.output_attentions
         do_output_hidden_states = self.config.output_hidden_states
@@ -1535,7 +1663,6 @@ class ReformerModel(ReformerPreTrainedModel):
             sequence_output = sequence_output[:, :orig_sequence_length]
 
         outputs = (sequence_output,)
-
         # TODO(PVP): Replace by named tuple after namedtuples are introduced in the library.
         if do_output_hidden_states is True:
             outputs = outputs + (encoder_outputs.all_hidden_states,)
@@ -1597,35 +1724,13 @@ class ReformerModel(ReformerPreTrainedModel):
             padded_inputs_embeds = self.embeddings(padded_input_ids, position_ids)
             inputs_embeds = torch.cat([inputs_embeds, padded_inputs_embeds], dim=-2)
             input_shape = inputs_embeds.size()
-
         return input_ids, inputs_embeds, attention_mask, position_ids, input_shape
 
 
-class ReformerOnlyLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        # Reformer is using Rev Nets, thus last layer outputs are concatenated and
-        # Layer Norm is done over 2 * hidden_size
-        self.seq_len_dim = 1
-        self.chunk_size_lm_head = config.chunk_size_lm_head
-        self.decoder = nn.Linear(2 * config.hidden_size, config.vocab_size, bias=False)
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        return apply_chunking_to_forward(self.chunk_size_lm_head, self.seq_len_dim, self.forward_chunk, hidden_states)
-
-    def forward_chunk(self, hidden_states):
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
+@add_start_docstrings("""Reformer Model with a `language modeling` head on top. """, REFORMER_START_DOCSTRING)
 class ReformerModelWithLMHead(ReformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
         self.reformer = ReformerModel(config)
         self.lm_head = ReformerOnlyLMHead(config)
 
@@ -1635,8 +1740,10 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         return self.lm_head.decoder
 
     def tie_weights(self):
+        # word embeddings are not tied in Reformer
         pass
 
+    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids=None,
@@ -1649,6 +1756,44 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         do_output_hidden_states=False,
         do_output_attentions=False,
     ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+                Labels for computing the sequence classification/regression loss.
+                Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
+                All labels set to ``-100`` are ignored (masked), the loss is only
+                computed for labels in ``[0, ..., config.vocab_size]``
+
+    Return:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`lm_label` is provided):
+            Classification loss (cross entropy).
+        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``do_output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
+
+        from transformers import ReformerModel, ReformerTokenizer
+        import torch
+
+        tokenizer = ReformerTokenizer.from_pretrained('bert-base-uncased')
+        model = ReformerModel.from_pretrained('bert-base-uncased')
+
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=input_ids)
+
+        loss, prediction_scores = outputs[:2]
+        """
 
         reformer_outputs = self.reformer(
             input_ids,
@@ -1673,7 +1818,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
             outputs = (loss,) + outputs
-
         return outputs  # (lm_loss), lm_logits, (hidden_states), (attentions)
 
     def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
