@@ -489,7 +489,7 @@ class ModelTesterMixin:
                 seq_length = self.model_tester.seq_length
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size,],
+                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
 
     def test_resize_tokens_embeddings(self):

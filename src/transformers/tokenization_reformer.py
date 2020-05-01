@@ -37,12 +37,18 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 # Mapping from the keyword arguments names of Tokenizer `__init__`
 # to pretrained vocabulary URL for all the model shortcut names.
 ####################################################
-PRETRAINED_VOCAB_FILES_MAP = {"vocab_file": {}}
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "google/reformer-crime-and-punishment": "https://cdn.huggingface.co/google/reformer-crime-and-punishment/spiece.model"
+    }
+}
 
 ####################################################
 # Mapping from model shortcut names to max length of inputs
 ####################################################
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "google/reformer-crime-and-punishment": 524288,
+}
 
 
 class ReformerTokenizer(PreTrainedTokenizer):
