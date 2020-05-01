@@ -96,10 +96,10 @@ class BaseTransformer(pl.LightningModule):
         optimizer.zero_grad()
         self.lr_scheduler.step()
 
-    def get_tqdm_dict(self):
-        avg_loss = getattr(self.trainer, "avg_loss", 0.0)
-        tqdm_dict = {"loss": "{:.3f}".format(avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
-        return tqdm_dict
+    def get_progress_bar_dict(self):
+        progress_bar_dict = super().get_progress_bar_dict()
+        progress_bar_dict.update({"lr": self.lr_scheduler.get_last_lr()[-1]})
+        return progress_bar_dict
 
     def test_step(self, batch, batch_nb):
         return self.validation_step(batch, batch_nb)
