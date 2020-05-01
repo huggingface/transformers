@@ -70,6 +70,7 @@ extras["tf-cpu"] = ["tensorflow-cpu"]
 extras["torch"] = ["torch==1.4.0"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
+extras["torchserve"] = ["torchserve", "torch-model-archiver"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 
 extras["testing"] = ["pytest", "pytest-xdist"]
