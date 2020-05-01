@@ -11,6 +11,21 @@ if is_torch_available():
     import torch
 
 
+try:
+    import torch_xla.core.xla_model as xm
+    import torch_xla.debug.metrics as met
+    import torch_xla.distributed.parallel_loader as pl
+    import torch_xla.distributed.xla_multiprocessing as xmp
+
+    _has_tpu = True
+except ImportError:
+    _has_tpu = False
+
+
+def is_tpu_available():
+    return _has_tpu
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,6 +133,9 @@ class TrainingArguments:
         logger.info("PyTorch: setting up devices")
         if self.no_cuda:
             device = torch.device("cpu")
+            n_gpu = 0
+        elif self.use_tpu and is_tpu_available():
+            device = xm.xla_device()
             n_gpu = 0
         elif self.local_rank == -1:
             # if n_gpu is > 1 we'll use nn.DataParallel.

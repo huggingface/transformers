@@ -21,7 +21,7 @@ from .data.data_collator import DataCollator, DefaultDataCollator
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
-from .training_args import TrainingArguments
+from .training_args import TrainingArguments, is_tpu_available
 
 
 try:
@@ -32,23 +32,15 @@ except ImportError:
     _has_apex = False
 
 
-try:
-    import torch_xla.core.xla_model as xm
-    import torch_xla.debug.metrics as met
-    import torch_xla.distributed.parallel_loader as pl
-    import torch_xla.distributed.xla_multiprocessing as xmp
-
-    _has_tpu = True
-except ImportError:
-    _has_tpu = False
-
-
 def is_apex_available():
     return _has_apex
 
 
-def is_tpu_available():
-    return _has_tpu
+if is_tpu_available():
+    import torch_xla.core.xla_model as xm
+    import torch_xla.debug.metrics as met
+    import torch_xla.distributed.parallel_loader as pl
+    import torch_xla.distributed.xla_multiprocessing as xmp
 
 
 try:
@@ -170,9 +162,6 @@ class Trainer:
         if self.is_local_master():
             os.makedirs(self.args.output_dir, exist_ok=True)
 
-        if is_tpu_available():
-            self.args.device = xm.xla_device()
-
     def is_local_master(self):
         return xm.is_master_ordinal() if is_tpu_available() else self.args.local_rank in [-1, 0]
 
@@ -272,7 +261,6 @@ class Trainer:
                 If present, we will try reloading the optimizer/scheduler states from there.
         """
         train_dataloader = self.get_train_dataloader()
-
         if self.args.max_steps > 0:
             t_total = self.args.max_steps
             num_train_epochs = (
@@ -322,7 +310,7 @@ class Trainer:
 
         # Train!
         logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", len(train_dataloader.dataset))
+        logger.info("  Num examples = %d", len(train_dataloader) * self.args.train_batch_size)
         logger.info("  Num Epochs = %d", num_train_epochs)
         logger.info("  Instantaneous batch size per GPU = %d", self.args.per_gpu_train_batch_size)
         logger.info(
