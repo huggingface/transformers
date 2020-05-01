@@ -527,6 +527,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_cdn = kwargs.pop("use_cdn", True)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -577,7 +578,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path, postfix=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
+                    pretrained_model_name_or_path,
+                    filename=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
+                    use_cdn=use_cdn,
                 )
 
             # redirect to the cache, if necessary

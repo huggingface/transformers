@@ -19,7 +19,7 @@ from transformers.modeling_bart import BartForConditionalGeneration
 
 
 PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "opus-mt-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/pytorch_model.bin",
+    "opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/pytorch_model.bin",
 }
 
 

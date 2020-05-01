@@ -33,11 +33,11 @@ logger = logging.getLogger(__name__)
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/pytorch_model.bin",
-    "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/pytorch_model.bin",
-    "bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/pytorch_model.bin",
-    "bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/pytorch_model.bin",
-    "mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/pytorch_model.bin",
+    "bart-large": "https://cdn.huggingface.co/facebook/bart-large/pytorch_model.bin",
+    "bart-large-mnli": "https://cdn.huggingface.co/facebook/bart-large-mnli/pytorch_model.bin",
+    "bart-large-cnn": "https://cdn.huggingface.co/facebook/bart-large-cnn/pytorch_model.bin",
+    "bart-large-xsum": "https://cdn.huggingface.co/facebook/bart-large-xsum/pytorch_model.bin",
+    "mbart-large-en-ro": "https://cdn.huggingface.co/facebook/mbart-large-en-ro/pytorch_model.bin",
 }
 
 BART_START_DOCSTRING = r"""

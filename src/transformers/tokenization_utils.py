@@ -785,6 +785,30 @@ class PreTrainedTokenizer(SpecialTokensMixin):
     def max_len_sentences_pair(self):
         return self.model_max_length - self.num_special_tokens_to_add(pair=True)
 
+    @max_len_single_sentence.setter
+    def max_len_single_sentence(self, value):
+        """ For backward compatibility, allow to try to setup 'max_len_single_sentence' """
+        if value == self.model_max_length - self.num_special_tokens_to_add(pair=False):
+            logger.warning(
+                "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
+            )
+        else:
+            raise ValueError(
+                "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
+            )
+
+    @max_len_sentences_pair.setter
+    def max_len_sentences_pair(self, value):
+        """ For backward compatibility, allow to try to setup 'max_len_sentences_pair' """
+        if value == self.model_max_length - self.num_special_tokens_to_add(pair=True):
+            logger.warning(
+                "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
+            )
+        else:
+            raise ValueError(
+                "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
+            )
+
     def get_vocab(self):
         """ Returns the vocabulary as a dict of {token: index} pairs. `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the vocab. """
         raise NotImplementedError()
@@ -930,7 +954,9 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                             logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
                             full_file_name = None
                     else:
-                        full_file_name = hf_bucket_url(pretrained_model_name_or_path, postfix=file_name)
+                        full_file_name = hf_bucket_url(
+                            pretrained_model_name_or_path, filename=file_name, use_cdn=False
+                        )
 
                     vocab_files[file_id] = full_file_name
 
