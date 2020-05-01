@@ -28,6 +28,9 @@ Tips:
 - RoBERTa doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just separate your segments with the separation token `tokenizer.sep_token` (or `</s>`)
 - `Camembert <./camembert.html>`__ is a wrapper around RoBERTa. Refer to this page for usage examples.
 
+The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_.
+
+
 RobertaConfig
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -41,6 +44,13 @@ RobertaTokenizer
 .. autoclass:: transformers.RobertaTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
+
+
+RobertaTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.RobertaTokenizerFast
+    :members: build_inputs_with_special_tokens
 
 
 RobertaModel

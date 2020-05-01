@@ -38,8 +38,8 @@ from .tokenization_utils import BatchEncoding
 logger = logging.getLogger(__name__)
 
 TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-tf_model.h5",
-    "xlnet-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-tf_model.h5",
+    "xlnet-base-cased": "https://cdn.huggingface.co/xlnet-base-cased-tf_model.h5",
+    "xlnet-large-cased": "https://cdn.huggingface.co/xlnet-large-cased-tf_model.h5",
 }
 
 

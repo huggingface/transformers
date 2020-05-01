@@ -22,8 +22,7 @@ from typing import List, Optional
 
 import sentencepiece as spm
 
-from transformers.tokenization_utils import PreTrainedTokenizer
-
+from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE
 
 
@@ -129,8 +128,6 @@ class CamembertTokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file

@@ -9,6 +9,7 @@ import re
 import numpy as np
 import tensorflow as tf
 from absl import app, flags, logging
+from fastprogress import master_bar, progress_bar
 from seqeval import metrics
 
 from transformers import (
@@ -17,34 +18,23 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     GradientAccumulator,
+    PreTrainedTokenizer,
     TFAutoModelForTokenClassification,
     create_optimizer,
 )
 from utils_ner import convert_examples_to_features, get_labels, read_examples_from_file
 
 
-try:
-    from fastprogress import master_bar, progress_bar
-except ImportError:
-    from fastprogress.fastprogress import master_bar, progress_bar
-
-
 MODEL_CONFIG_CLASSES = list(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
-ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in MODEL_CONFIG_CLASSES), (),)
-
 
 flags.DEFINE_string(
-    "data_dir", None, "The input data dir. Should contain the .conll files (or other data files) " "for the task."
+    "data_dir", None, "The input data dir. Should contain the .conll files (or other data files) for the task."
 )
 
-flags.DEFINE_string("model_type", None, "Model type selected in the list: " + ", ".join(MODEL_TYPES))
-
 flags.DEFINE_string(
-    "model_name_or_path",
-    None,
-    "Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS),
+    "model_name_or_path", None, "Path to pretrained model or model identifier from huggingface.co/models",
 )
 
 flags.DEFINE_string("output_dir", None, "The output directory where the model checkpoints will be written.")
@@ -53,11 +43,11 @@ flags.DEFINE_string(
     "labels", "", "Path to a file containing all labels. If not specified, CoNLL-2003 labels are used."
 )
 
-flags.DEFINE_string("config_name", "", "Pretrained config name or path if not the same as model_name")
+flags.DEFINE_string("config_name", None, "Pretrained config name or path if not the same as model_name")
 
-flags.DEFINE_string("tokenizer_name", "", "Pretrained tokenizer name or path if not the same as model_name")
+flags.DEFINE_string("tokenizer_name", None, "Pretrained tokenizer name or path if not the same as model_name")
 
-flags.DEFINE_string("cache_dir", "", "Where do you want to store the pre-trained models downloaded from s3")
+flags.DEFINE_string("cache_dir", None, "Where do you want to store the pre-trained models downloaded from s3")
 
 flags.DEFINE_integer(
     "max_seq_length",
@@ -123,7 +113,7 @@ flags.DEFINE_boolean(
     "Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number",
 )
 
-flags.DEFINE_boolean("no_cuda", False, "Avoid using CUDA when available")
+flags.DEFINE_boolean("no_cuda", False, "Avoid using CUDA even if it is available")
 
 flags.DEFINE_boolean("overwrite_output_dir", False, "Overwrite the content of the output directory")
 
@@ -198,12 +188,10 @@ def train(
     @tf.function
     def train_step(train_features, train_labels):
         def step_fn(train_features, train_labels):
-            inputs = {"attention_mask": train_features["input_mask"], "training": True}
+            inputs = {"attention_mask": train_features["attention_mask"], "training": True}
 
-            if args["model_type"] != "distilbert":
-                inputs["token_type_ids"] = (
-                    train_features["segment_ids"] if args["model_type"] in ["bert", "xlnet"] else None
-                )
+            if "token_type_ids" in train_features:
+                inputs["token_type_ids"] = train_features["token_type_ids"]
 
             with tf.GradientTape() as tape:
                 logits = model(train_features["input_ids"], **inputs)[0]
@@ -320,12 +308,10 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
     logging.info("  Batch size = %d", eval_batch_size)
 
     for eval_features, eval_labels in eval_iterator:
-        inputs = {"attention_mask": eval_features["input_mask"], "training": False}
+        inputs = {"attention_mask": eval_features["attention_mask"], "training": False}
 
-        if args["model_type"] != "distilbert":
-            inputs["token_type_ids"] = (
-                eval_features["segment_ids"] if args["model_type"] in ["bert", "xlnet"] else None
-            )
+        if "token_type_ids" in eval_features:
+            inputs["token_type_ids"] = eval_features["token_type_ids"]
 
         with strategy.scope():
             logits = model(eval_features["input_ids"], **inputs)[0]
@@ -356,20 +342,23 @@ def evaluate(args, strategy, model, tokenizer, labels, pad_token_label_id, mode)
     return y_true, y_pred, loss.numpy()
 
 
-def load_cache(cached_file, max_seq_length):
+def load_cache(cached_file, tokenizer: PreTrainedTokenizer, max_seq_length):
     name_to_features = {
         "input_ids": tf.io.FixedLenFeature([max_seq_length], tf.int64),
-        "input_mask": tf.io.FixedLenFeature([max_seq_length], tf.int64),
-        "segment_ids": tf.io.FixedLenFeature([max_seq_length], tf.int64),
+        "attention_mask": tf.io.FixedLenFeature([max_seq_length], tf.int64),
         "label_ids": tf.io.FixedLenFeature([max_seq_length], tf.int64),
     }
+    # TODO Find a cleaner way to do this.
+    if "token_type_ids" in tokenizer.model_input_names:
+        name_to_features["token_type_ids"] = tf.io.FixedLenFeature([max_seq_length], tf.int64)
 
     def _decode_record(record):
         example = tf.io.parse_single_example(record, name_to_features)
         features = {}
         features["input_ids"] = example["input_ids"]
-        features["input_mask"] = example["input_mask"]
-        features["segment_ids"] = example["segment_ids"]
+        features["attention_mask"] = example["attention_mask"]
+        if "token_type_ids" in example:
+            features["token_type_ids"] = example["token_type_ids"]
 
         return features, example["label_ids"]
 
@@ -393,8 +382,9 @@ def save_cache(features, cached_features_file):
 
         record_feature = collections.OrderedDict()
         record_feature["input_ids"] = create_int_feature(feature.input_ids)
-        record_feature["input_mask"] = create_int_feature(feature.input_mask)
-        record_feature["segment_ids"] = create_int_feature(feature.segment_ids)
+        record_feature["attention_mask"] = create_int_feature(feature.attention_mask)
+        if feature.token_type_ids is not None:
+            record_feature["token_type_ids"] = create_int_feature(feature.token_type_ids)
         record_feature["label_ids"] = create_int_feature(feature.label_ids)
 
         tf_example = tf.train.Example(features=tf.train.Features(feature=record_feature))
@@ -410,13 +400,11 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, batch_s
     # Load data features from cache or dataset file
     cached_features_file = os.path.join(
         args["data_dir"],
-        "cached_{}_{}_{}.tf_record".format(
-            mode, list(filter(None, args["model_name_or_path"].split("/"))).pop(), str(args["max_seq_length"])
-        ),
+        "cached_{}_{}_{}.tf_record".format(mode, tokenizer.__class__.__name__, str(args["max_seq_length"])),
     )
     if os.path.exists(cached_features_file) and not args["overwrite_cache"]:
         logging.info("Loading features from cached file %s", cached_features_file)
-        dataset, size = load_cache(cached_features_file, args["max_seq_length"])
+        dataset, size = load_cache(cached_features_file, tokenizer, args["max_seq_length"])
     else:
         logging.info("Creating features from dataset file at %s", args["data_dir"])
         examples = read_examples_from_file(args["data_dir"], mode)
@@ -440,7 +428,7 @@ def load_and_cache_examples(args, tokenizer, labels, pad_token_label_id, batch_s
         )
         logging.info("Saving features into cached file %s", cached_features_file)
         save_cache(features, cached_features_file)
-        dataset, size = load_cache(cached_features_file, args["max_seq_length"])
+        dataset, size = load_cache(cached_features_file, tokenizer, args["max_seq_length"])
 
     if mode == "train":
         dataset = dataset.repeat()
@@ -500,17 +488,18 @@ def main(_):
     config = AutoConfig.from_pretrained(
         args["config_name"] if args["config_name"] else args["model_name_or_path"],
         num_labels=num_labels,
-        cache_dir=args["cache_dir"] if args["cache_dir"] else None,
+        cache_dir=args["cache_dir"],
     )
 
     logging.info("Training/evaluation parameters %s", args)
+    args["model_type"] = config.model_type
 
     # Training
     if args["do_train"]:
         tokenizer = AutoTokenizer.from_pretrained(
             args["tokenizer_name"] if args["tokenizer_name"] else args["model_name_or_path"],
             do_lower_case=args["do_lower_case"],
-            cache_dir=args["cache_dir"] if args["cache_dir"] else None,
+            cache_dir=args["cache_dir"],
         )
 
         with strategy.scope():
@@ -518,7 +507,7 @@ def main(_):
                 args["model_name_or_path"],
                 from_pt=bool(".bin" in args["model_name_or_path"]),
                 config=config,
-                cache_dir=args["cache_dir"] if args["cache_dir"] else None,
+                cache_dir=args["cache_dir"],
             )
 
         train_batch_size = args["per_device_train_batch_size"] * args["n_device"]
@@ -538,8 +527,7 @@ def main(_):
             pad_token_label_id,
         )
 
-        if not os.path.exists(args["output_dir"]):
-            os.makedirs(args["output_dir"])
+        os.makedirs(args["output_dir"], exist_ok=True)
 
         logging.info("Saving model to %s", args["output_dir"])
 
@@ -637,5 +625,4 @@ if __name__ == "__main__":
     flags.mark_flag_as_required("data_dir")
     flags.mark_flag_as_required("output_dir")
     flags.mark_flag_as_required("model_name_or_path")
-    flags.mark_flag_as_required("model_type")
     app.run(main)

@@ -8,18 +8,28 @@ import torch
 from torch.utils.data import DataLoader
 
 from transformer_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
-from utils import SummarizationDataset
+
+
+try:
+    from .utils import SummarizationDataset
+except ImportError:
+    from utils import SummarizationDataset
 
 
 logger = logging.getLogger(__name__)
 
 
-class BartSystem(BaseTransformer):
+class SummarizationTrainer(BaseTransformer):
 
     mode = "language-modeling"
 
     def __init__(self, hparams):
         super().__init__(hparams, num_labels=None, mode=self.mode)
+        self.dataset_kwargs: dict = dict(
+            data_dir=self.hparams.data_dir,
+            max_source_length=self.hparams.max_source_length,
+            max_target_length=self.hparams.max_target_length,
+        )
 
     def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
         return self.model(
@@ -54,18 +64,18 @@ class BartSystem(BaseTransformer):
         return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
 
     def test_step(self, batch, batch_idx):
-        # NOTE: this generation will not use the cache.
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
-        # NOTE: these kwargs get more speed and lower quality summaries than those in evaluate_cnn.py.
+        # NOTE: the following kwargs get more speed and lower quality summaries than those in evaluate_cnn.py
         generated_ids = self.model.generate(
-            source_ids,
-            source_mask,
+            input_ids=source_ids,
+            attention_mask=source_mask,
             num_beams=1,
             max_length=80,
             repetition_penalty=2.5,
             length_penalty=1.0,
             early_stopping=True,
+            use_cache=True,
         )
         preds = [
             self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -92,21 +102,13 @@ class BartSystem(BaseTransformer):
 
         return self.test_end(outputs)
 
-    @property
-    def dataset_kwargs(self):
-        return dict(
-            data_dir=self.hparams.data_dir,
-            max_source_length=self.hparams.max_source_length,
-            max_target_length=self.hparams.max_target_length,
-        )
-
-    def get_dataloader(self, type_path: str, batch_size: int) -> DataLoader:
+    def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = SummarizationDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)
-        dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn)
+        dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn, shuffle=shuffle)
         return dataloader
 
     def train_dataloader(self) -> DataLoader:
-        dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size)
+        dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
         t_total = (
             (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.n_gpu)))
             // self.hparams.gradient_accumulation_steps
@@ -153,22 +155,30 @@ class BartSystem(BaseTransformer):
         return parser
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    add_generic_args(parser, os.getcwd())
-    parser = BartSystem.add_model_specific_args(parser, os.getcwd())
-    args = parser.parse_args()
+def main(args):
 
     # If output_dir not provided, a folder will be generated in pwd
     if not args.output_dir:
-        args.output_dir = os.path.join("./results", f"{args.task}_{args.model_type}_{time.strftime('%Y%m%d_%H%M%S')}",)
+        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
-
-    model = BartSystem(args)
+    model = SummarizationTrainer(args)
     trainer = generic_train(model, args)
 
     # Optionally, predict on dev set and write to output_dir
     if args.do_predict:
+        # See https://github.com/huggingface/transformers/issues/3159
+        # pl use this format to create a checkpoint:
+        # https://github.com/PyTorchLightning/pytorch-lightning/blob/master\
+        # /pytorch_lightning/callbacks/model_checkpoint.py#L169
         checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
-        BartSystem.load_from_checkpoint(checkpoints[-1])
+        model = model.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    add_generic_args(parser, os.getcwd())
+    parser = SummarizationTrainer.add_model_specific_args(parser, os.getcwd())
+    args = parser.parse_args()
+
+    main(args)

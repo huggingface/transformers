@@ -30,10 +30,10 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "bert-base-japanese": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-vocab.txt",
-        "bert-base-japanese-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking-vocab.txt",
-        "bert-base-japanese-char": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-vocab.txt",
-        "bert-base-japanese-char-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking-vocab.txt",
+        "bert-base-japanese": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese/vocab.txt",
+        "bert-base-japanese-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking/vocab.txt",
+        "bert-base-japanese-char": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char/vocab.txt",
+        "bert-base-japanese-char-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking/vocab.txt",
     }
 }
 
@@ -119,8 +119,6 @@ class BertJapaneseTokenizer(BertTokenizer):
             **kwargs,
         )
         # ^^ We call the grandparent's init, not the parent's.
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
 
         if not os.path.isfile(vocab_file):
             raise ValueError(

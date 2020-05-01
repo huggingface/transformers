@@ -307,7 +307,7 @@ def evaluate(args, model, tokenizer, prefix=""):
             if args.model_type in ["xlm", "roberta", "distilbert", "camembert"]:
                 del inputs["token_type_ids"]
 
-            example_indices = batch[3]
+            feature_indices = batch[3]
 
             # XLNet and XLM use more arguments for their predictions
             if args.model_type in ["xlnet", "xlm"]:
@@ -320,8 +320,9 @@ def evaluate(args, model, tokenizer, prefix=""):
 
             outputs = model(**inputs)
 
-        for i, example_index in enumerate(example_indices):
-            eval_feature = features[example_index.item()]
+        for i, feature_index in enumerate(feature_indices):
+            # TODO: i and feature_index are the same number! Simplify by removing enumerate?
+            eval_feature = features[feature_index.item()]
             unique_id = int(eval_feature.unique_id)
 
             output = [to_list(output[i]) for output in outputs]

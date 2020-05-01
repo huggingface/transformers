@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -293,7 +293,6 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
         def create_t5_and_check_t5_generate_with_past_key_value_states(
             self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,
         ):
-            config.num_layers = 1
             model = T5ForConditionalGeneration(config=config)
             model.to(torch_device)
             model.eval()
@@ -359,7 +358,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in list(T5_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = T5Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
+            model = T5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 

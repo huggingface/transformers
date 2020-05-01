@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -274,7 +274,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in list(ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = RobertaModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+            model = RobertaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):

@@ -33,28 +33,28 @@ from .modeling_utils import PreTrainedModel, prune_linear_layer
 logger = logging.getLogger(__name__)
 
 BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "bert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-pytorch_model.bin",
-    "bert-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-pytorch_model.bin",
-    "bert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-pytorch_model.bin",
-    "bert-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-pytorch_model.bin",
-    "bert-base-multilingual-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-uncased-pytorch_model.bin",
-    "bert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-pytorch_model.bin",
-    "bert-base-chinese": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-chinese-pytorch_model.bin",
-    "bert-base-german-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-cased-pytorch_model.bin",
-    "bert-large-uncased-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-pytorch_model.bin",
-    "bert-large-cased-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-pytorch_model.bin",
-    "bert-large-uncased-whole-word-masking-finetuned-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-whole-word-masking-finetuned-squad-pytorch_model.bin",
-    "bert-large-cased-whole-word-masking-finetuned-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-whole-word-masking-finetuned-squad-pytorch_model.bin",
-    "bert-base-cased-finetuned-mrpc": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-pytorch_model.bin",
-    "bert-base-german-dbmdz-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-pytorch_model.bin",
-    "bert-base-german-dbmdz-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-pytorch_model.bin",
-    "bert-base-japanese": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-pytorch_model.bin",
-    "bert-base-japanese-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking-pytorch_model.bin",
-    "bert-base-japanese-char": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-pytorch_model.bin",
-    "bert-base-japanese-char-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking-pytorch_model.bin",
-    "bert-base-finnish-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-cased-v1/pytorch_model.bin",
-    "bert-base-finnish-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-uncased-v1/pytorch_model.bin",
-    "bert-base-dutch-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/wietsedv/bert-base-dutch-cased/pytorch_model.bin",
+    "bert-base-uncased": "https://cdn.huggingface.co/bert-base-uncased-pytorch_model.bin",
+    "bert-large-uncased": "https://cdn.huggingface.co/bert-large-uncased-pytorch_model.bin",
+    "bert-base-cased": "https://cdn.huggingface.co/bert-base-cased-pytorch_model.bin",
+    "bert-large-cased": "https://cdn.huggingface.co/bert-large-cased-pytorch_model.bin",
+    "bert-base-multilingual-uncased": "https://cdn.huggingface.co/bert-base-multilingual-uncased-pytorch_model.bin",
+    "bert-base-multilingual-cased": "https://cdn.huggingface.co/bert-base-multilingual-cased-pytorch_model.bin",
+    "bert-base-chinese": "https://cdn.huggingface.co/bert-base-chinese-pytorch_model.bin",
+    "bert-base-german-cased": "https://cdn.huggingface.co/bert-base-german-cased-pytorch_model.bin",
+    "bert-large-uncased-whole-word-masking": "https://cdn.huggingface.co/bert-large-uncased-whole-word-masking-pytorch_model.bin",
+    "bert-large-cased-whole-word-masking": "https://cdn.huggingface.co/bert-large-cased-whole-word-masking-pytorch_model.bin",
+    "bert-large-uncased-whole-word-masking-finetuned-squad": "https://cdn.huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad-pytorch_model.bin",
+    "bert-large-cased-whole-word-masking-finetuned-squad": "https://cdn.huggingface.co/bert-large-cased-whole-word-masking-finetuned-squad-pytorch_model.bin",
+    "bert-base-cased-finetuned-mrpc": "https://cdn.huggingface.co/bert-base-cased-finetuned-mrpc-pytorch_model.bin",
+    "bert-base-german-dbmdz-cased": "https://cdn.huggingface.co/bert-base-german-dbmdz-cased-pytorch_model.bin",
+    "bert-base-german-dbmdz-uncased": "https://cdn.huggingface.co/bert-base-german-dbmdz-uncased-pytorch_model.bin",
+    "bert-base-japanese": "https://cdn.huggingface.co/cl-tohoku/bert-base-japanese/pytorch_model.bin",
+    "bert-base-japanese-whole-word-masking": "https://cdn.huggingface.co/cl-tohoku/bert-base-japanese-whole-word-masking/pytorch_model.bin",
+    "bert-base-japanese-char": "https://cdn.huggingface.co/cl-tohoku/bert-base-japanese-char/pytorch_model.bin",
+    "bert-base-japanese-char-whole-word-masking": "https://cdn.huggingface.co/cl-tohoku/bert-base-japanese-char-whole-word-masking/pytorch_model.bin",
+    "bert-base-finnish-cased-v1": "https://cdn.huggingface.co/TurkuNLP/bert-base-finnish-cased-v1/pytorch_model.bin",
+    "bert-base-finnish-uncased-v1": "https://cdn.huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/pytorch_model.bin",
+    "bert-base-dutch-cased": "https://cdn.huggingface.co/wietsedv/bert-base-dutch-cased/pytorch_model.bin",
 }
 
 
@@ -146,7 +146,7 @@ class BertEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=0)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
@@ -703,36 +703,9 @@ class BertModel(BertPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        if attention_mask.dim() == 3:
-            extended_attention_mask = attention_mask[:, None, :, :]
-        elif attention_mask.dim() == 2:
-            # Provided a padding mask of dimensions [batch_size, seq_length]
-            # - if the model is a decoder, apply a causal mask in addition to the padding mask
-            # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            if self.config.is_decoder:
-                batch_size, seq_length = input_shape
-                seq_ids = torch.arange(seq_length, device=device)
-                causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
-                causal_mask = causal_mask.to(
-                    attention_mask.dtype
-                )  # causal and attention masks must have same type with pytorch version < 1.3
-                extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
-            else:
-                extended_attention_mask = attention_mask[:, None, None, :]
-        else:
-            raise ValueError(
-                "Wrong shape for input_ids (shape {}) or attention_mask (shape {})".format(
-                    input_shape, attention_mask.shape
-                )
-            )
-
-        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-        # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -10000.0 for masked positions.
-        # Since we are adding it to the raw scores before the softmax, this is
-        # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            attention_mask, input_shape, self.device
+        )
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
         # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
@@ -741,22 +714,7 @@ class BertModel(BertPreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-
-            if encoder_attention_mask.dim() == 3:
-                encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
-            elif encoder_attention_mask.dim() == 2:
-                encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
-            else:
-                raise ValueError(
-                    "Wrong shape for encoder_hidden_shape (shape {}) or encoder_attention_mask (shape {})".format(
-                        encoder_hidden_shape, encoder_attention_mask.shape
-                    )
-                )
-
-            encoder_extended_attention_mask = encoder_extended_attention_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # fp16 compatibility
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 
@@ -765,19 +723,7 @@ class BertModel(BertPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand(self.config.num_hidden_layers, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = (
-                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
-                )  # We can specify head_mask for each layer
-            head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # switch to fload if need + fp16 compatibility
-        else:
-            head_mask = [None] * self.config.num_hidden_layers
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
@@ -1011,7 +957,29 @@ class BertForMaskedLM(BertPreTrainedModel):
             ltr_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), lm_labels.view(-1))
             outputs = (ltr_lm_loss,) + outputs
 
-        return outputs  # (masked_lm_loss), (ltr_lm_loss), prediction_scores, (hidden_states), (attentions)
+        return outputs  # (ltr_lm_loss), (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
+
+    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
+        input_shape = input_ids.shape
+        effective_batch_size = input_shape[0]
+
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = input_ids.new_ones(input_shape)
+
+        # if model is does not use a causal mask then add a dummy token
+        if self.config.is_decoder is False:
+            assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
+            attention_mask = torch.cat(
+                [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1
+            )
+
+            dummy_token = torch.full(
+                (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
+            )
+            input_ids = torch.cat([input_ids, dummy_token], dim=1)
+
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
 @add_start_docstrings(
@@ -1111,7 +1079,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, self.config.num_labels)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
@@ -1401,7 +1369,7 @@ class BertForTokenClassification(BertPreTrainedModel):
 )
 class BertForQuestionAnswering(BertPreTrainedModel):
     def __init__(self, config):
-        super(BertForQuestionAnswering, self).__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
 
         self.bert = BertModel(config)
@@ -1460,8 +1428,8 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         model = BertForQuestionAnswering.from_pretrained('bert-large-uncased-whole-word-masking-finetuned-squad')
 
         question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        input_ids = tokenizer.encode(question, text)
-        token_type_ids = [0 if i <= input_ids.index(102) else 1 for i in range(len(input_ids))]
+        encoding = tokenizer.encode_plus(question, text)
+        input_ids, token_type_ids = encoding["input_ids"], encoding["token_type_ids"]
         start_scores, end_scores = model(torch.tensor([input_ids]), token_type_ids=torch.tensor([token_type_ids]))
 
         all_tokens = tokenizer.convert_ids_to_tokens(input_ids)

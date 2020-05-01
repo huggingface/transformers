@@ -33,8 +33,8 @@ from .modeling_utils import PoolerAnswerClass, PoolerEndLogits, PoolerStartLogit
 logger = logging.getLogger(__name__)
 
 XLNET_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-pytorch_model.bin",
-    "xlnet-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-pytorch_model.bin",
+    "xlnet-base-cased": "https://cdn.huggingface.co/xlnet-base-cased-pytorch_model.bin",
+    "xlnet-large-cased": "https://cdn.huggingface.co/xlnet-large-cased-pytorch_model.bin",
 }
 
 

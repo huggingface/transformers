@@ -36,10 +36,10 @@ from .modeling_xlm import (
 logger = logging.getLogger(__name__)
 
 FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "flaubert-small-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_small_cased/pytorch_model.bin",
-    "flaubert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_base_uncased/pytorch_model.bin",
-    "flaubert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_base_cased/pytorch_model.bin",
-    "flaubert-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_large_cased/pytorch_model.bin",
+    "flaubert-small-cased": "https://cdn.huggingface.co/flaubert/flaubert_small_cased/pytorch_model.bin",
+    "flaubert-base-uncased": "https://cdn.huggingface.co/flaubert/flaubert_base_uncased/pytorch_model.bin",
+    "flaubert-base-cased": "https://cdn.huggingface.co/flaubert/flaubert_base_cased/pytorch_model.bin",
+    "flaubert-large-cased": "https://cdn.huggingface.co/flaubert/flaubert_large_cased/pytorch_model.bin",
 }
 
 
@@ -112,7 +112,7 @@ class FlaubertModel(XLMModel):
     pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config):  # , dico, is_encoder, with_output):
-        super(FlaubertModel, self).__init__(config)
+        super().__init__(config)
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
 
@@ -201,23 +201,7 @@ class FlaubertModel(XLMModel):
             # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x qlen x klen]
-        if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand(self.n_layers, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = (
-                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
-                )  # We can specify head_mask for each layer
-            head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # switch to fload if need + fp16 compatibility
-        else:
-            head_mask = [None] * self.n_layers
+        head_mask = self.get_head_mask(head_mask, self.config.n_layers)
 
         # do not recompute cached elements
         if cache is not None and input_ids is not None:
@@ -323,7 +307,7 @@ class FlaubertWithLMHeadModel(XLMWithLMHeadModel):
     pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config):
-        super(FlaubertWithLMHeadModel, self).__init__(config)
+        super().__init__(config)
         self.transformer = FlaubertModel(config)
         self.init_weights()
 
@@ -343,7 +327,7 @@ class FlaubertForSequenceClassification(XLMForSequenceClassification):
     pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config):
-        super(FlaubertForSequenceClassification, self).__init__(config)
+        super().__init__(config)
         self.transformer = FlaubertModel(config)
         self.init_weights()
 
@@ -363,7 +347,7 @@ class FlaubertForQuestionAnsweringSimple(XLMForQuestionAnsweringSimple):
     pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config):
-        super(FlaubertForQuestionAnsweringSimple, self).__init__(config)
+        super().__init__(config)
         self.transformer = FlaubertModel(config)
         self.init_weights()
 
@@ -383,6 +367,6 @@ class FlaubertForQuestionAnswering(XLMForQuestionAnswering):
     pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config):
-        super(FlaubertForQuestionAnswering, self).__init__(config)
+        super().__init__(config)
         self.transformer = FlaubertModel(config)
         self.init_weights()

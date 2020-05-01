@@ -37,11 +37,11 @@ logger = logging.getLogger(__name__)
 # for the pretrained weights provided with the models
 ####################################################
 T5_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-pytorch_model.bin",
-    "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-pytorch_model.bin",
-    "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-pytorch_model.bin",
-    "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-3b-pytorch_model.bin",
-    "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-11b-pytorch_model.bin",
+    "t5-small": "https://cdn.huggingface.co/t5-small-pytorch_model.bin",
+    "t5-base": "https://cdn.huggingface.co/t5-base-pytorch_model.bin",
+    "t5-large": "https://cdn.huggingface.co/t5-large-pytorch_model.bin",
+    "t5-3b": "https://cdn.huggingface.co/t5-3b-pytorch_model.bin",
+    "t5-11b": "https://cdn.huggingface.co/t5-11b-pytorch_model.bin",
 }
 
 
@@ -184,7 +184,7 @@ class T5LayerFF(nn.Module):
 
 
 class T5Attention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
+    def __init__(self, config: T5Config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
@@ -351,12 +351,11 @@ class T5Attention(nn.Module):
             else:
                 k, v = past_key_value_state
 
-        if self.is_decoder and use_cache:
+        if self.is_decoder and use_cache is True:
             present_key_value_state = ((k, v),)
         else:
             present_key_value_state = (None,)
 
-        # q = q / math.sqrt(dim_per_head)                                     # No scaling in T5
         scores = torch.einsum("bnqd,bnkd->bnqk", q, k)  # (bs, n_heads, qlen, klen)
 
         if position_bias is None:
@@ -486,11 +485,15 @@ class T5Block(nn.Module):
 
         if past_key_value_state is not None:
             assert self.is_decoder, "Only decoder can use `past_key_value_states`"
-            assert (
-                len(past_key_value_state) == 4
-            ), "The should be 4 past states. 2 (past / key) for self attention. 2 (past / key) for cross attention. Got {} past key / value states".format(
-                len(past_key_value_state)
+            expected_num_past_key_value_states = 2 if encoder_hidden_states is None else 4
+
+            error_message = "There should be {} past states. 2 (past / key) for self attention.{} Got {} past key / value states".format(
+                expected_num_past_key_value_states,
+                "2 (past / key) for cross attention" if expected_num_past_key_value_states == 4 else "",
+                len(past_key_value_state),
             )
+            assert len(past_key_value_state) == expected_num_past_key_value_states, error_message
+
             self_attn_past_key_value_state = past_key_value_state[:2]
             cross_attn_past_key_value_state = past_key_value_state[2:]
         else:
@@ -507,7 +510,7 @@ class T5Block(nn.Module):
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
-        if self.is_decoder:
+        if self.is_decoder and encoder_hidden_states is not None:
             # the actual query length is unknown for cross attention
             # if using past key value states. Need to inject it here
             if present_key_value_state is not None:
@@ -691,75 +694,16 @@ class T5Stack(T5PreTrainedModel):
         if past_key_value_states is None:
             past_key_value_states = [None] * len(self.block)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        if attention_mask.dim() == 3:
-            extended_attention_mask = attention_mask[:, None, :, :]
-        elif attention_mask.dim() == 2:
-            # Provided a padding mask of dimensions [batch_size, mask_seq_length]
-            # - if the model is a decoder, apply a causal mask in addition to the padding mask
-            # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
-            if self.config.is_decoder:
-                seq_ids = torch.arange(mask_seq_length, device=inputs_embeds.device)
-                causal_mask = seq_ids[None, None, :].repeat(batch_size, mask_seq_length, 1) <= seq_ids[None, :, None]
-                causal_mask = causal_mask.to(attention_mask)
-                extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
-                if past_key_value_states[0] is not None:
-                    extended_attention_mask = extended_attention_mask[:, :, -1:, :]
-            else:
-                extended_attention_mask = attention_mask[:, None, None, :]
-
-        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-        # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -1e9 for masked positions.
-        # Since we are adding it to the raw scores before the softmax, this is
-        # effectively the same as removing these entirely.
-
-        # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
-        # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
-        # extended_attention_mask = (extended_attention_mask == extended_attention_mask.transpose(-1, -2))
-
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -1e9
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, self.device)
 
         if self.is_decoder and encoder_attention_mask is not None:
-            # If a 2D ou 3D attention mask is provided for the cross-attention
-            # we need to make broadcastabe to [batch_size, num_heads, mask_seq_length, mask_seq_length]
-            if encoder_attention_mask.dim() == 3:
-                encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
-            if encoder_attention_mask.dim() == 2:
-                encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
-
-            # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
-            # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
-            # encoder_extended_attention_mask = (encoder_extended_attention_mask == encoder_extended_attention_mask.transpose(-1, -2))
-
-            encoder_extended_attention_mask = encoder_extended_attention_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # fp16 compatibility
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 
         # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x mask_seq_length x mask_seq_length]
-        if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand(self.config.num_layers, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = (
-                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
-                )  # We can specify head_mask for each layer
-            head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # switch to fload if need + fp16 compatibility
-        else:
-            head_mask = [None] * self.config.num_layers
-
+        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
         present_key_value_states = ()
         all_hidden_states = ()
         all_attentions = ()
@@ -790,7 +734,7 @@ class T5Stack(T5PreTrainedModel):
                 # We share the position biases between the layers - the first layer store them
                 # layer_outputs = hidden-states, key-value-states (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
                 position_bias = layer_outputs[3 if self.output_attentions else 2]
-                if self.is_decoder:
+                if self.is_decoder and encoder_hidden_states is not None:
                     encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 3]
             # append next layer key value states
             present_key_value_states = present_key_value_states + (present_key_value_state,)

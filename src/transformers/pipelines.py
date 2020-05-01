@@ -23,17 +23,12 @@ import sys
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from os.path import abspath, exists
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
-from .configuration_bart import BartConfig
-from .configuration_distilbert import DistilBertConfig
-from .configuration_roberta import RobertaConfig
-from .configuration_t5 import T5Config
 from .configuration_utils import PretrainedConfig
-from .configuration_xlm import XLMConfig
 from .data import SquadExample, squad_convert_examples_to_features
 from .file_utils import is_tf_available, is_torch_available
 from .modelcard import ModelCard
@@ -423,27 +418,6 @@ class Pipeline(_ScikitCompat):
         """
         return {name: tensor.to(self.device) for name, tensor in inputs.items()}
 
-    def inputs_for_model(self, features: Union[dict, List[dict]]) -> Dict:
-        """
-        Generates the input dictionary with model-specific parameters.
-
-        Returns:
-            dict holding all the required parameters for model's forward
-        """
-        args = ["input_ids", "attention_mask"]
-
-        if not isinstance(self.model.config, (DistilBertConfig, XLMConfig, RobertaConfig, BartConfig, T5Config)):
-            args += ["token_type_ids"]
-
-        # PR #1548 (CLI) There is an issue with attention_mask
-        # if 'xlnet' in model_type or 'xlm' in model_type:
-        #     args += ['cls_index', 'p_mask']
-
-        if isinstance(features, dict):
-            return {k: features[k] for k in args}
-        else:
-            return {k: [feature[k] for feature in features] for k in args}
-
     def _parse_and_tokenize(self, *texts, pad_to_max_length=False, **kwargs):
         """
         Parse arguments and tokenize
@@ -451,15 +425,8 @@ class Pipeline(_ScikitCompat):
         # Parse arguments
         inputs = self._args_parser(*texts, **kwargs)
         inputs = self.tokenizer.batch_encode_plus(
-            inputs,
-            add_special_tokens=True,
-            return_tensors=self.framework,
-            max_length=self.tokenizer.max_len,
-            pad_to_max_length=pad_to_max_length,
+            inputs, add_special_tokens=True, return_tensors=self.framework, pad_to_max_length=pad_to_max_length,
         )
-
-        # Filter out features not available on specific models
-        # inputs = self.inputs_for_model(inputs)
 
         return inputs
 
@@ -551,6 +518,103 @@ class FeatureExtractionPipeline(Pipeline):
 
     def __call__(self, *args, **kwargs):
         return super().__call__(*args, **kwargs).tolist()
+
+
+class TextGenerationPipeline(Pipeline):
+    """
+    Language generation pipeline using any ModelWithLMHead head. This pipeline predicts the words that will follow a specified text prompt.
+
+    This language generation pipeline can currently be loaded from the :func:`~transformers.pipeline` method using
+    the following task identifier(s):
+
+    - "text-generation", for generating text from a specified prompt.
+
+    The models that this pipeline can use are models that have been trained with an autoregressive language modeling objective,
+    which includes the uni-directional models in the library (e.g. gpt2).
+    See the list of available community models on
+    `huggingface.co/models <https://huggingface.co/models?search=&filter=lm-head>`__.
+    """
+
+    # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
+    # in https://github.com/rusiaaman/XLNet-gen#methodology
+    # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
+    PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+    (except for Alexei and Maria) are discovered.
+    The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+    remainder of the story. 1883 Western Siberia,
+    a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+    Rasputin has a vision and denounces one of the men as a horse thief. Although his
+    father initially slaps him for making such an accusation, Rasputin watches as the
+    man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+    the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+    with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
+
+    def __call__(
+        self, *texts, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+    ):
+        text_inputs = self._args_parser(*texts)
+
+        results = []
+        for prompt_text in text_inputs:
+            # Manage correct placement of the tensors
+            with self.device_placement():
+                if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
+                    inputs = self._parse_and_tokenize(self.PADDING_TEXT + prompt_text)
+                else:
+                    inputs = self._parse_and_tokenize(prompt_text)
+
+                # set input_ids to None to allow empty prompt
+                if inputs["input_ids"].shape[-1] == 0:
+                    inputs["input_ids"] = None
+                    inputs["attention_mask"] = None
+
+                if self.framework == "pt" and inputs["input_ids"] is not None:
+                    inputs = self.ensure_tensor_on_device(**inputs)
+
+                input_ids = inputs["input_ids"]
+
+                # Ensure that batch size = 1 (batch generation not allowed for now)
+                assert (
+                    input_ids is None or input_ids.shape[0] == 1
+                ), "Batch generation is currently not supported. See https://github.com/huggingface/transformers/issues/3021 for more information."
+
+                output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
+
+            result = []
+            for generated_sequence in output_sequences:
+                generated_sequence = generated_sequence.tolist()
+                record = {}
+                if return_tensors:
+                    record["generated_token_ids"] = generated_sequence
+                if return_text:
+                    # Decode text
+                    text = self.tokenizer.decode(
+                        generated_sequence,
+                        skip_special_tokens=True,
+                        clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                    )
+
+                    # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
+                    if input_ids is None:
+                        prompt_length = 0
+                    else:
+                        prompt_length = len(
+                            self.tokenizer.decode(
+                                input_ids[0],
+                                skip_special_tokens=True,
+                                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                            )
+                        )
+
+                    record["generated_text"] = prompt_text + text[prompt_length:]
+
+                result.append(record)
+            results += [result]
+
+        if len(results) == 1:
+            return results[0]
+
+        return results
 
 
 class TextClassificationPipeline(Pipeline):
@@ -973,6 +1037,7 @@ class QuestionAnsweringPipeline(Pipeline):
         kwargs.setdefault("max_answer_len", 15)
         kwargs.setdefault("max_seq_len", 384)
         kwargs.setdefault("max_question_len", 64)
+        kwargs.setdefault("handle_impossible_answer", False)
 
         if kwargs["topk"] < 1:
             raise ValueError("topk parameter should be >= 1 (got {})".format(kwargs["topk"]))
@@ -990,12 +1055,14 @@ class QuestionAnsweringPipeline(Pipeline):
                 kwargs["doc_stride"],
                 kwargs["max_question_len"],
                 False,
+                tqdm_enabled=False,
             )
             for example in examples
         ]
         all_answers = []
         for features, example in zip(features_list, examples):
-            fw_args = self.inputs_for_model([f.__dict__ for f in features])
+            model_input_names = self.tokenizer.model_input_names + ["input_ids"]
+            fw_args = {k: [feature.__dict__[k] for feature in features] for k in model_input_names}
 
             # Manage tensor allocation on correct device
             with self.device_placement():
@@ -1010,6 +1077,7 @@ class QuestionAnsweringPipeline(Pipeline):
                         start, end = self.model(**fw_args)
                         start, end = start.cpu().numpy(), end.cpu().numpy()
 
+            min_null_score = 1000000  # large and positive
             answers = []
             for (feature, start_, end_) in zip(features, start, end):
                 # Normalize logits and spans to retrieve the answer
@@ -1022,8 +1090,9 @@ class QuestionAnsweringPipeline(Pipeline):
                     end_ * np.abs(np.array(feature.p_mask) - 1),
                 )
 
-                # TODO : What happens if not possible
-                # Mask CLS
+                if kwargs["handle_impossible_answer"]:
+                    min_null_score = min(min_null_score, (start_[0] * end_[0]).item())
+
                 start_[0] = end_[0] = 0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
@@ -1041,6 +1110,10 @@ class QuestionAnsweringPipeline(Pipeline):
                     }
                     for s, e, score in zip(starts, ends, scores)
                 ]
+
+            if kwargs["handle_impossible_answer"]:
+                answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
+
             answers = sorted(answers, key=lambda x: x["score"], reverse=True)[: kwargs["topk"]]
             all_answers += answers
 
@@ -1479,6 +1552,12 @@ SUPPORTED_TASKS = {
             "config": None,
             "tokenizer": ("t5-base", {"use_fast": False}),
         },
+    },
+    "text-generation": {
+        "impl": TextGenerationPipeline,
+        "tf": TFAutoModelWithLMHead if is_tf_available() else None,
+        "pt": AutoModelWithLMHead if is_torch_available() else None,
+        "default": {"model": {"pt": "gpt2", "tf": "gpt2"}, "config": None, "tokenizer": "gpt2"},
     },
 }
 

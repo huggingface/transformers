@@ -20,7 +20,7 @@ from transformers import AlbertConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -28,6 +28,7 @@ if is_tf_available():
         TFAlbertModel,
         TFAlbertForMaskedLM,
         TFAlbertForSequenceClassification,
+        TFAlbertForQuestionAnswering,
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
@@ -36,7 +37,9 @@ if is_tf_available():
 class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (TFAlbertModel, TFAlbertForMaskedLM, TFAlbertForSequenceClassification) if is_tf_available() else ()
+        (TFAlbertModel, TFAlbertForMaskedLM, TFAlbertForSequenceClassification, TFAlbertForQuestionAnswering)
+        if is_tf_available()
+        else ()
     )
 
     class TFAlbertModelTester(object):
@@ -175,6 +178,19 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
             }
             self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
 
+        def create_and_check_albert_for_question_answering(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            model = TFAlbertForQuestionAnswering(config=config)
+            inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
+            start_logits, end_logits = model(inputs)
+            result = {
+                "start_logits": start_logits.numpy(),
+                "end_logits": end_logits.numpy(),
+            }
+            self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -208,8 +224,12 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_albert_for_sequence_classification(*config_and_inputs)
 
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_albert_for_question_answering(*config_and_inputs)
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in list(TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFAlbertModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+            model = TFAlbertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

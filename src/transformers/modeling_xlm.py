@@ -35,16 +35,16 @@ from .modeling_utils import PreTrainedModel, SequenceSummary, SQuADHead, prune_l
 logger = logging.getLogger(__name__)
 
 XLM_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xlm-mlm-en-2048": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-en-2048-pytorch_model.bin",
-    "xlm-mlm-ende-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-ende-1024-pytorch_model.bin",
-    "xlm-mlm-enfr-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-enfr-1024-pytorch_model.bin",
-    "xlm-mlm-enro-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-enro-1024-pytorch_model.bin",
-    "xlm-mlm-tlm-xnli15-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-tlm-xnli15-1024-pytorch_model.bin",
-    "xlm-mlm-xnli15-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-xnli15-1024-pytorch_model.bin",
-    "xlm-clm-enfr-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-clm-enfr-1024-pytorch_model.bin",
-    "xlm-clm-ende-1024": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-clm-ende-1024-pytorch_model.bin",
-    "xlm-mlm-17-1280": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-17-1280-pytorch_model.bin",
-    "xlm-mlm-100-1280": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-mlm-100-1280-pytorch_model.bin",
+    "xlm-mlm-en-2048": "https://cdn.huggingface.co/xlm-mlm-en-2048-pytorch_model.bin",
+    "xlm-mlm-ende-1024": "https://cdn.huggingface.co/xlm-mlm-ende-1024-pytorch_model.bin",
+    "xlm-mlm-enfr-1024": "https://cdn.huggingface.co/xlm-mlm-enfr-1024-pytorch_model.bin",
+    "xlm-mlm-enro-1024": "https://cdn.huggingface.co/xlm-mlm-enro-1024-pytorch_model.bin",
+    "xlm-mlm-tlm-xnli15-1024": "https://cdn.huggingface.co/xlm-mlm-tlm-xnli15-1024-pytorch_model.bin",
+    "xlm-mlm-xnli15-1024": "https://cdn.huggingface.co/xlm-mlm-xnli15-1024-pytorch_model.bin",
+    "xlm-clm-enfr-1024": "https://cdn.huggingface.co/xlm-clm-enfr-1024-pytorch_model.bin",
+    "xlm-clm-ende-1024": "https://cdn.huggingface.co/xlm-clm-ende-1024-pytorch_model.bin",
+    "xlm-mlm-17-1280": "https://cdn.huggingface.co/xlm-mlm-17-1280-pytorch_model.bin",
+    "xlm-mlm-100-1280": "https://cdn.huggingface.co/xlm-mlm-100-1280-pytorch_model.bin",
 }
 
 
@@ -479,23 +479,7 @@ class XLMModel(XLMPreTrainedModel):
             # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x qlen x klen]
-        if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand(self.n_layers, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = (
-                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
-                )  # We can specify head_mask for each layer
-            head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # switch to fload if need + fp16 compatibility
-        else:
-            head_mask = [None] * self.n_layers
+        head_mask = self.get_head_mask(head_mask, self.config.n_layers)
 
         # do not recompute cached elements
         if cache is not None and input_ids is not None:

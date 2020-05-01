@@ -22,25 +22,24 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from transformers.configuration_albert import AlbertConfig
-from transformers.modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
-from transformers.modeling_utils import PreTrainedModel
-
+from .configuration_albert import AlbertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
+from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
 
 
 ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "albert-base-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-v1-pytorch_model.bin",
-    "albert-large-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v1-pytorch_model.bin",
-    "albert-xlarge-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v1-pytorch_model.bin",
-    "albert-xxlarge-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v1-pytorch_model.bin",
-    "albert-base-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-v2-pytorch_model.bin",
-    "albert-large-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-pytorch_model.bin",
-    "albert-xlarge-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v2-pytorch_model.bin",
-    "albert-xxlarge-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v2-pytorch_model.bin",
+    "albert-base-v1": "https://cdn.huggingface.co/albert-base-v1-pytorch_model.bin",
+    "albert-large-v1": "https://cdn.huggingface.co/albert-large-v1-pytorch_model.bin",
+    "albert-xlarge-v1": "https://cdn.huggingface.co/albert-xlarge-v1-pytorch_model.bin",
+    "albert-xxlarge-v1": "https://cdn.huggingface.co/albert-xxlarge-v1-pytorch_model.bin",
+    "albert-base-v2": "https://cdn.huggingface.co/albert-base-v2-pytorch_model.bin",
+    "albert-large-v2": "https://cdn.huggingface.co/albert-large-v2-pytorch_model.bin",
+    "albert-xlarge-v2": "https://cdn.huggingface.co/albert-xlarge-v2-pytorch_model.bin",
+    "albert-xxlarge-v2": "https://cdn.huggingface.co/albert-xxlarge-v2-pytorch_model.bin",
 }
 
 
@@ -552,19 +551,7 @@ class AlbertModel(AlbertPreTrainedModel):
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
         extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-        if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand(self.config.num_hidden_layers, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = (
-                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
-                )  # We can specify head_mask for each layer
-            head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # switch to fload if need + fp16 compatibility
-        else:
-            head_mask = [None] * self.config.num_hidden_layers
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
             input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds

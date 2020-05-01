@@ -1,3 +1,4 @@
+import argparse
 import logging
 import os
 import random
@@ -7,7 +8,6 @@ import pytorch_lightning as pl
 import torch
 
 from transformers import (
-    ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
     AdamW,
     AutoConfig,
     AutoModel,
@@ -19,14 +19,10 @@ from transformers import (
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
-from transformers.modeling_auto import MODEL_MAPPING
 
 
 logger = logging.getLogger(__name__)
 
-
-ALL_MODELS = tuple(ALL_PRETRAINED_MODEL_ARCHIVE_MAP)
-MODEL_CLASSES = tuple(m.model_type for m in MODEL_MAPPING)
 
 MODEL_MODES = {
     "base": AutoModel,
@@ -38,7 +34,7 @@ MODEL_MODES = {
 }
 
 
-def set_seed(args):
+def set_seed(args: argparse.Namespace):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -47,31 +43,28 @@ def set_seed(args):
 
 
 class BaseTransformer(pl.LightningModule):
-    def __init__(self, hparams, num_labels=None, mode="base", **config_kwargs):
+    def __init__(self, hparams: argparse.Namespace, num_labels=None, mode="base", **config_kwargs):
         "Initialize a model."
 
-        super(BaseTransformer, self).__init__()
+        super().__init__()
         self.hparams = hparams
         cache_dir = self.hparams.cache_dir if self.hparams.cache_dir else None
-        self.hparams.model_type = self.hparams.model_type.lower()
-        config = AutoConfig.from_pretrained(
+        self.config = AutoConfig.from_pretrained(
             self.hparams.config_name if self.hparams.config_name else self.hparams.model_name_or_path,
             **({"num_labels": num_labels} if num_labels is not None else {}),
             cache_dir=cache_dir,
             **config_kwargs,
         )
-        tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer = AutoTokenizer.from_pretrained(
             self.hparams.tokenizer_name if self.hparams.tokenizer_name else self.hparams.model_name_or_path,
-            do_lower_case=self.hparams.do_lower_case,
             cache_dir=cache_dir,
         )
-        model = MODEL_MODES[mode].from_pretrained(
+        self.model = MODEL_MODES[mode].from_pretrained(
             self.hparams.model_name_or_path,
             from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
-            config=config,
+            config=self.config,
             cache_dir=cache_dir,
         )
-        self.config, self.tokenizer, self.model = config, tokenizer, model
 
     def is_logger(self):
         return self.trainer.proc_rank <= 0
@@ -104,8 +97,8 @@ class BaseTransformer(pl.LightningModule):
         self.lr_scheduler.step()
 
     def get_tqdm_dict(self):
-        tqdm_dict = {"loss": "{:.3f}".format(self.trainer.avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
-
+        avg_loss = getattr(self.trainer, "avg_loss", 0.0)
+        tqdm_dict = {"loss": "{:.3f}".format(avg_loss), "lr": self.lr_scheduler.get_last_lr()[-1]}
         return tqdm_dict
 
     def test_step(self, batch, batch_nb):
@@ -148,18 +141,11 @@ class BaseTransformer(pl.LightningModule):
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         parser.add_argument(
-            "--model_type",
-            default=None,
-            type=str,
-            required=True,
-            help="Model type selected in the list: " + ", ".join(MODEL_CLASSES),
-        )
-        parser.add_argument(
             "--model_name_or_path",
             default=None,
             type=str,
             required=True,
-            help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(ALL_MODELS),
+            help="Path to pretrained model or model identifier from huggingface.co/models",
         )
         parser.add_argument(
             "--config_name", default="", type=str, help="Pretrained config name or path if not the same as model_name"
@@ -176,9 +162,6 @@ class BaseTransformer(pl.LightningModule):
             type=str,
             help="Where do you want to store the pre-trained models downloaded from s3",
         )
-        parser.add_argument(
-            "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model."
-        )
         parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
         parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
         parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
@@ -192,7 +175,7 @@ class BaseTransformer(pl.LightningModule):
 
 
 class LoggingCallback(pl.Callback):
-    def on_validation_end(self, trainer, pl_module):
+    def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         logger.info("***** Validation results *****")
         if pl_module.is_logger():
             metrics = trainer.callback_metrics
@@ -201,7 +184,7 @@ class LoggingCallback(pl.Callback):
                 if key not in ["log", "progress_bar"]:
                     logger.info("{} = {}\n".format(key, str(metrics[key])))
 
-    def on_test_end(self, trainer, pl_module):
+    def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         logger.info("***** Test results *****")
 
         if pl_module.is_logger():
@@ -251,23 +234,12 @@ def add_generic_args(parser, root_dir):
         help="Number of updates steps to accumulate before performing a backward/update pass.",
     )
 
-    parser.add_argument("--server_ip", type=str, default="", help="For distant debugging.")
-    parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
 
-def generic_train(model, args):
+def generic_train(model: BaseTransformer, args: argparse.Namespace):
     # init model
     set_seed(args)
-
-    # Setup distant debugging if needed
-    if args.server_ip and args.server_port:
-        # Distant debugging - see https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
-        import ptvsd
-
-        print("Waiting for debugger attach")
-        ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
-        ptvsd.wait_for_attach()
 
     if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))

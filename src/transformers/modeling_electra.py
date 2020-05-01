@@ -4,10 +4,9 @@ import os
 import torch
 import torch.nn as nn
 
-from transformers import ElectraConfig, add_start_docstrings
-from transformers.activations import get_activation
-
-from .file_utils import add_start_docstrings_to_callable
+from .activations import get_activation
+from .configuration_electra import ElectraConfig
+from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bert import BertEmbeddings, BertEncoder, BertLayerNorm, BertPreTrainedModel
 
 
@@ -15,12 +14,12 @@ logger = logging.getLogger(__name__)
 
 
 ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "google/electra-small-generator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-small-generator/pytorch_model.bin",
-    "google/electra-base-generator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-base-generator/pytorch_model.bin",
-    "google/electra-large-generator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-large-generator/pytorch_model.bin",
-    "google/electra-small-discriminator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-small-discriminator/pytorch_model.bin",
-    "google/electra-base-discriminator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-base-discriminator/pytorch_model.bin",
-    "google/electra-large-discriminator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-large-discriminator/pytorch_model.bin",
+    "google/electra-small-generator": "https://cdn.huggingface.co/google/electra-small-generator/pytorch_model.bin",
+    "google/electra-base-generator": "https://cdn.huggingface.co/google/electra-base-generator/pytorch_model.bin",
+    "google/electra-large-generator": "https://cdn.huggingface.co/google/electra-large-generator/pytorch_model.bin",
+    "google/electra-small-discriminator": "https://cdn.huggingface.co/google/electra-small-discriminator/pytorch_model.bin",
+    "google/electra-base-discriminator": "https://cdn.huggingface.co/google/electra-base-discriminator/pytorch_model.bin",
+    "google/electra-large-discriminator": "https://cdn.huggingface.co/google/electra-large-discriminator/pytorch_model.bin",
 }
 
 
@@ -163,65 +162,6 @@ class ElectraPreTrainedModel(BertPreTrainedModel):
     pretrained_model_archive_map = ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_electra
     base_model_prefix = "electra"
-
-    def get_extended_attention_mask(self, attention_mask, input_shape, device):
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        if attention_mask.dim() == 3:
-            extended_attention_mask = attention_mask[:, None, :, :]
-        elif attention_mask.dim() == 2:
-            # Provided a padding mask of dimensions [batch_size, seq_length]
-            # - if the model is a decoder, apply a causal mask in addition to the padding mask
-            # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            if self.config.is_decoder:
-                batch_size, seq_length = input_shape
-                seq_ids = torch.arange(seq_length, device=device)
-                causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
-                causal_mask = causal_mask.to(
-                    attention_mask.dtype
-                )  # causal and attention masks must have same type with pytorch version < 1.3
-                extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
-            else:
-                extended_attention_mask = attention_mask[:, None, None, :]
-        else:
-            raise ValueError(
-                "Wrong shape for input_ids (shape {}) or attention_mask (shape {})".format(
-                    input_shape, attention_mask.shape
-                )
-            )
-
-        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
-        # masked positions, this operation will create a tensor which is 0.0 for
-        # positions we want to attend and -10000.0 for masked positions.
-        # Since we are adding it to the raw scores before the softmax, this is
-        # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-
-        return extended_attention_mask
-
-    def get_head_mask(self, head_mask):
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        num_hidden_layers = self.config.num_hidden_layers
-        if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-                head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = (
-                    head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
-                )  # We can specify head_mask for each layer
-            head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # switch to fload if need + fp16 compatibility
-        else:
-            head_mask = [None] * num_hidden_layers
-
-        return head_mask
 
 
 ELECTRA_START_DOCSTRING = r"""
@@ -376,7 +316,7 @@ class ElectraModel(ElectraPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, device)
-        head_mask = self.get_head_mask(head_mask)
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         hidden_states = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds

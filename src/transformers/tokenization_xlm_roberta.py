@@ -20,8 +20,7 @@ import os
 from shutil import copyfile
 from typing import List, Optional
 
-from transformers.tokenization_utils import PreTrainedTokenizer
-
+from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE
 
 
@@ -128,8 +127,6 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             **kwargs,
         )
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
 
         try:
             import sentencepiece as spm

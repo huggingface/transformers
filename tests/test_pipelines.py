@@ -2,26 +2,19 @@ import unittest
 from typing import Iterable, List, Optional
 
 from transformers import pipeline
-from transformers.pipelines import (
-    FeatureExtractionPipeline,
-    FillMaskPipeline,
-    NerPipeline,
-    Pipeline,
-    QuestionAnsweringPipeline,
-    TextClassificationPipeline,
-)
+from transformers.pipelines import Pipeline
 
 from .utils import require_tf, require_torch, slow
 
 
 QA_FINETUNED_MODELS = [
     (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
-    (("bert-base-cased", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
+    (("distilbert-base-cased-distilled-squad", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
 ]
 
 TF_QA_FINETUNED_MODELS = [
     (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
-    (("bert-base-cased", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
+    (("distilbert-base-cased-distilled-squad", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
 ]
 
 TF_NER_FINETUNED_MODELS = {
@@ -65,6 +58,11 @@ TEXT_CLASSIF_FINETUNED_MODELS = {
         "distilbert-base-uncased-finetuned-sst-2-english",
         "distilbert-base-uncased-finetuned-sst-2-english",
     )
+}
+
+TEXT_GENERATION_FINETUNED_MODELS = {
+    ("gpt2", "gpt2"),
+    ("xlnet-base-cased", "xlnet-base-cased"),
 }
 
 FILL_MASK_FINETUNED_MODELS = [
@@ -300,6 +298,16 @@ class MonoColumnInputTestCase(unittest.TestCase):
                 nlp, valid_inputs, invalid_inputs, mandatory_keys,
             )
 
+    @require_torch
+    def test_text_generation(self):
+        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        invalid_inputs = [None]
+        for model, tokenizer in TEXT_GENERATION_FINETUNED_MODELS:
+            nlp = pipeline(task="text-generation", model=model, tokenizer=tokenizer, framework="pt")
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, invalid_inputs, {},
+            )
+
 
 class MultiColumnInputTestCase(unittest.TestCase):
     def _test_multicolumn_pipeline(self, nlp, valid_inputs: list, invalid_inputs: list, output_keys: Iterable[str]):
@@ -369,25 +377,30 @@ class MultiColumnInputTestCase(unittest.TestCase):
 class PipelineCommonTests(unittest.TestCase):
 
     pipelines = (
-        NerPipeline,
-        FeatureExtractionPipeline,
-        QuestionAnsweringPipeline,
-        FillMaskPipeline,
-        TextClassificationPipeline,
+        "ner",
+        "feature-extraction",
+        "question-answering",
+        "fill-mask",
+        "summarization",
+        "sentiment-analysis",
+        "translation_en_to_fr",
+        "translation_en_to_de",
+        "translation_en_to_ro",
+        "text-generation",
     )
 
     @slow
     @require_tf
     def test_tf_defaults(self):
         # Test that pipelines can be correctly loaded without any argument
-        for default_pipeline in self.pipelines:
-            with self.subTest(msg="Testing Torch defaults with PyTorch and {}".format(default_pipeline.task)):
-                default_pipeline(framework="tf")
+        for task in self.pipelines:
+            with self.subTest(msg="Testing Torch defaults with PyTorch and {}".format(task)):
+                pipeline(task, framework="tf")
 
     @slow
     @require_torch
     def test_pt_defaults(self):
         # Test that pipelines can be correctly loaded without any argument
-        for default_pipeline in self.pipelines:
-            with self.subTest(msg="Testing Torch defaults with PyTorch and {}".format(default_pipeline.task)):
-                default_pipeline(framework="pt")
+        for task in self.pipelines:
+            with self.subTest(msg="Testing Torch defaults with PyTorch and {}".format(task)):
+                pipeline(task, framework="pt")

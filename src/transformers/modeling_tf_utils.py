@@ -319,6 +319,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
+        use_cdn = kwargs.pop("use_cdn", True)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -358,7 +359,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path, postfix=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME)
+                    pretrained_model_name_or_path,
+                    filename=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME),
+                    use_cdn=use_cdn,
                 )
 
             # redirect to the cache, if necessary
@@ -488,7 +491,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
             input_ids: (`optional`) `tf.Tensor` of `dtype=tf.int32` of shape `(batch_size, sequence_length)`
                 The sequence used as a prompt for the generation. If `None` the method initializes
-                it as an empty `torch.LongTensor` of shape `(1,)`.
+                it as an empty `tf.Tensor` of shape `(1,)`.
 
             max_length: (`optional`) int
                 The max length of the sequence to be generated.  Between 1 and infinity. Default to 20.
@@ -1299,17 +1302,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        reordered_past = []
-        for layer_past in past:
-            # get the correct batch idx from layer past batch dim
-            # batch dim of `past` and `mems` is at 2nd position
-            reordered_layer_past = [tf.identity(tf.expand_dims(layer_past[:, i], 1)) for i in beam_idx]
-            reordered_layer_past = tf.concat(reordered_layer_past, axis=1)
-            # check that shape matches
-            assert shape_list(reordered_layer_past) == shape_list(layer_past)
-            reordered_past.append(reordered_layer_past)
-        past = tuple(reordered_past)
-        return past
+        return tuple(tf.gather(layer_past, beam_idx, axis=1) for layer_past in past)
 
 
 def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
