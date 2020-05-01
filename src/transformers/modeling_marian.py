@@ -18,14 +18,10 @@
 from transformers.modeling_bart import BartForConditionalGeneration
 
 
-PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/pytorch_model.bin",
-}
-
-
 class MarianMTModel(BartForConditionalGeneration):
     """Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
-    Model API is identical to BartForConditionalGeneration
+    Model API is identical to BartForConditionalGeneration.
+    Available models are listed at https://huggingface.co/models?search=Helsinki-NLP
 
     Examples:
         src = 'fr'
@@ -40,8 +36,6 @@ class MarianMTModel(BartForConditionalGeneration):
         gen = model.generate(**batch)
         tok.decode_batch(gen, skip_special_tokens=True)
     """
-
-    pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
 
     def prepare_scores_for_generation(self, scores, cur_len, max_length):
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
