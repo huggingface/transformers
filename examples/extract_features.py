@@ -304,7 +304,7 @@ def examples2embeds(examples,tokenizer,model,device,writer,args):
     model.eval()
     with torch.no_grad():
         w2token_batch=tokenid2wordid(input_ids,tokenizer,examples)
-        all_encoder_layers,_=model(input_ids,attention_mask=attention_mask)[-2:]
+        all_encoder_layers,_=model(input_ids=input_ids,attention_mask=attention_mask)[-2:]
         average_layer_batch = sum(all_encoder_layers[-args.layers:]) / args.layers
         wembs_sent_batch=tokenemb2wemb(average_layer_batch.cpu().detach().numpy(),w2token_batch)
         for i,sent in enumerate(examples):
