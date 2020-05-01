@@ -28,14 +28,13 @@ if is_torch_available():
 
 
 @require_torch
-class IntegrationTests(unittest.TestCase):
-    src = 'en'
-    tgt = 'de'
-    sample_text = ''
+class MarianIntegrationTest(unittest.TestCase):
+    src = "en"
+    tgt = "de"
+    sample_text = ""
     src_text = [
         "I am a small frog.",
         "Now I can forget the 100 words of german that I know.",
-        "O",
         "Tom asked his teacher for advice.",
         "That's how I would do it.",
         "Tom really admired Mary's courage.",
@@ -44,11 +43,10 @@ class IntegrationTests(unittest.TestCase):
     expected_text = [
         "Ich bin ein kleiner Frosch.",
         "Jetzt kann ich die 100 Wörter des Deutschen vergessen, die ich kenne.",
-        "",
         "Tom bat seinen Lehrer um Rat.",
-        "So würde ich das tun.",
+        "So würde ich das machen.",
         "Tom bewunderte Marias Mut wirklich.",
-        "Umdrehen und die Augen schließen.",
+        "Drehen Sie sich um und schließen Sie die Augen.",
     ]
     # ^^ actual C++ output differs slightly: (1) des Deutschen removed, (2) ""-> "O", (3) tun -> machen
 
@@ -67,24 +65,23 @@ class IntegrationTests(unittest.TestCase):
         else:
             return model
 
-    @slow
-    def test_repl_generate_batch(self):
+    def _test_repl_generate_batch(self):
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src_texts=self.src_text).to(torch_device)
         self.assertEqual(self.model.device, model_inputs["input_ids"].device)
         generated_ids = self.model.generate(
             model_inputs["input_ids"],
-            attention_mask=model_inputs['attention_mask'],
+            attention_mask=model_inputs["attention_mask"],
             length_penalty=1.0,  # same as C++
             num_beams=2,  # 6 is the default
-            bad_words_ids=[[self.tokenizer.pad_token_id]],
+            # no_repeat_ngram_size=1,
+            # bad_words_ids=[[self.tokenizer.pad_token_id]],
             decoder_start_token_id=self.tokenizer.pad_token_id,  # mimics 0 embedding at first step.
         )
         generated_words = self.tokenizer.decode_batch(generated_ids, skip_special_tokens=True)
         self.assertListEqual(self.expected_text, generated_words)
 
 
-class TestMarian_EN_DE(IntegrationTests):
-
+class TestMarian_EN_DE_More(MarianIntegrationTest):
     @slow
     def test_forward(self):
         src, tgt = ["I am a small frog"], ["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
@@ -116,28 +113,40 @@ class TestMarian_EN_DE(IntegrationTests):
         expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad
         self.assertListEqual(expected_w_pad, input_ids_w_pad.tolist())
 
+    @slow
+    def test_batch_generation_en_de(self):
+        self._test_repl_generate_batch()
 
-class TestMarian_EN_FR(IntegrationTests):
-    src = 'en'
-    tgt = 'fr'
+
+class TestMarian_EN_FR(MarianIntegrationTest):
+    src = "en"
+    tgt = "fr"
     src_text = [
         "I am a small frog.",
         "Now I can forget the 100 words of german that I know.",
     ]
     expected_text = [
-        'Je suis une petite grenouille.',
-        "Maintenant je peux oublier les 100 mots d'allemand que je connais."
+        "Je suis une petite grenouille.",
+        "Maintenant, je peux oublier les 100 mots d'allemand que je connais.",
     ]
 
+    @slow
+    def test_batch_generation_en_fr(self):
+        self._test_repl_generate_batch()
 
-class TestMarian_FR_EN(IntegrationTests):
-    src = 'fr'
-    tgt = 'en'
+
+class TestMarian_FR_EN(MarianIntegrationTest):
+    src = "fr"
+    tgt = "en"
     src_text = [
-        "Donnez moi le micro",
-        "Tom et Mary étaient assis à une table dans le coin.",  # Accents
+        "Donnez moi le micro.",
+        "Tom et Mary étaient assis à une table.",  # Accents
     ]
     expected_text = [
-        "Give me the microphone",
-        "Tom and Mary were sitting at a table in the corner.",
+        "Give me the microphone.",
+        "Tom and Mary were sitting at a table.",
     ]
+
+    @slow
+    def test_batch_generation_fr_en(self):
+        self._test_repl_generate_batch()

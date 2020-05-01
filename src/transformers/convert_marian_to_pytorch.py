@@ -14,6 +14,8 @@ from tqdm import tqdm
 from durbango import tqdm_nice
 from transformers import MarianConfig, MarianMTModel, MarianSentencePieceTokenizer
 
+from .marian_registry import MODELS
+
 
 def remove_prefix(text: str, prefix: str):
     if text.startswith(prefix):
@@ -93,9 +95,8 @@ def make_registry(repo_path="Opus-MT-train/models"):
         else:
             lns = list(open(p / "README.md").readlines())
             results[p.name] = _parse_readme(lns)
-    return [(k, v['pre-processing'], v['download']) for k,v in results.items()]
+    return [(k, v["pre-processing"], v["download"]) for k, v in results.items()]
 
-from .marian_registry import MODELS
 
 def download_all_sentencepiece_models(model_list=MODELS, repo_path=None):
     """Requires 300GB"""
@@ -160,8 +161,10 @@ def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
         added += 1
     return added
 
+
 def find_vocab_file(model_dir):
-    return list(model_dir.glob('*vocab.yml'))[0]
+    return list(model_dir.glob("*vocab.yml"))[0]
+
 
 def add_special_tokens_to_vocab(model_dir: Path) -> None:
     vocab = load_yaml(find_vocab_file(model_dir))
@@ -288,6 +291,7 @@ class OpusState:
             dropout=0.1,  # see opus-mt-train repo/transformer-dropout param.
             # default: add_final_layer_norm=False,
             num_beams=decoder_yml["beam-size"],
+            decoder_start_token_id=self.pad_token_id,
         )
 
     def _check_layer_entries(self):
