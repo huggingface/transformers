@@ -366,18 +366,18 @@ class EfficientAttentionUtils(object):
 class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
     def __init__(self, config):
         super().__init__()
-        self.num_attention_heads = config.num_attention_heads
-        self.hash_seed = config.hash_seed
+        self.chunk_length = config.lsh_attn_chunk_length
         self.num_hashes = config.num_hashes
         self.num_buckets = config.num_buckets
-        self.chunk_length = config.lsh_attn_chunk_length
         self.num_chunks_before = config.lsh_num_chunks_before
         self.num_chunks_after = config.lsh_num_chunks_after
+        self.hash_seed = config.hash_seed
         self.is_decoder = config.is_decoder
         self.max_position_embeddings = config.max_position_embeddings
 
         self.dropout = config.lsh_attention_probs_dropout_prob
 
+        self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = config.attention_head_size
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.hidden_size = config.hidden_size
@@ -386,7 +386,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.query_key = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
 
-        # save mask value here
+        # save mask value here. Need fp32 and fp16 mask values
         self.register_buffer("self_mask_value_float16", torch.tensor(-1e3))
         self.register_buffer("self_mask_value_float32", torch.tensor(-1e5))
         self.register_buffer("mask_value_float16", torch.tensor(-1e4))
@@ -420,8 +420,8 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         )
         value_vectors = self._split_hidden_size_dim(value_vectors, self.num_attention_heads, self.attention_head_size)
 
-        assert query_key_vectors.shape[-1] == self.attention_head_size
-        assert value_vectors.shape[-1] == self.attention_head_size
+        assert query_key_vectors.shape[-1] == self.attention_head_size, "last dim of query_key_vectors is {} but should be {}.".format(query_key_vectors.shape[-1], self.attention_head_size)
+        assert value_vectors.shape[-1] == self.attention_head_size, "last dim of query_key_vectors is {} but should be {}.".format(value_vectors.shape[-1], self.attention_head_size)
 
         # set `num_buckets` on the fly, recommended way to do it
         if self.num_buckets is None:
@@ -432,7 +432,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             # hash query key vectors into buckets
             buckets = self._hash_vectors(query_key_vectors, num_hashes)
 
-        assert int(buckets.shape[-1]) == num_hashes * sequence_length
+        assert int(buckets.shape[-1]) == num_hashes * sequence_length, "lash dim of buckets is {}, but should be {}".format(buckets.shape[-1], num_hashes * sequence_length)
 
         sorted_bucket_idx, undo_sorted_bucket_idx = self._get_sorted_bucket_idx_and_undo_sorted_bucket_idx(
             sequence_length, buckets, num_hashes
@@ -441,6 +441,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # make sure bucket idx is not longer then sequence length
         sorted_bucket_idx = sorted_bucket_idx % sequence_length
 
+        # cluster query key value vectors according to hashed buckets
         query_key_vectors = self._gather_by_expansion(query_key_vectors, sorted_bucket_idx, num_hashes)
         value_vectors = self._gather_by_expansion(value_vectors, sorted_bucket_idx, num_hashes)
 
@@ -452,10 +453,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         )
 
         if self.chunk_length is None:
-            assert self.num_chunks_before == 0 and self.num_chunks_after == 0
+            assert self.num_chunks_before == 0 and self.num_chunks_after == 0, "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
 
+        # scale key vectors
         key_vectors = self._len_and_dim_norm(query_key_vectors)
 
+        # get attention probs
         out_vectors, logits, attention_probs = self._attend(
             query_vectors=query_key_vectors,
             key_vectors=key_vectors,
@@ -467,11 +470,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # free memory
         del query_key_vectors, key_vectors, value_vectors
 
-        # calculate total concatenad chunks to split gradients correctly
-        out_vectors, logits = GatherSorted.apply(
+        # sort clusters back to correct ordering
+        out_vectors, logits = ReverseSort.apply(
             out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, self.num_hashes
         )
 
+        # sum up all hash rounds
         if num_hashes > 1:
             out_vectors = self._split_seq_length_dim_to(
                 out_vectors, num_hashes, sequence_length, self.num_attention_heads, self.attention_head_size,
@@ -488,7 +492,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # free memory
         del logits
 
-        assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size,)
+        assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size,), "out_vectors have be of shape `[batch_size, config.num_attention_heads, sequence_length, config.attention_head_size]`."
 
         out_vectors = self._merge_hidden_size_dims(out_vectors, self.num_attention_heads, self.attention_head_size)
 
@@ -503,7 +507,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # See https://arxiv.org/pdf/1509.02897.pdf
         # We sample a different random rotation for each round of hashing to
         # decrease the probability of hash misses.
-
         if isinstance(self.num_buckets, int):
             assert (
                 self.num_buckets % 2 == 0
@@ -605,39 +608,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         # get logits and dots
         query_key_dots = torch.matmul(query_vectors, key_vectors.transpose(-1, -2))
+
         # free memory
         del query_vectors, key_vectors
 
         query_bucket_idx = self._split_seq_length_dim_to(sorted_bucket_idx, -1, self.chunk_length, self.num_attention_heads)
         key_value_bucket_idx = self._look_adjacent(query_bucket_idx, self.num_chunks_before, self.num_chunks_after)
-
-        mask = None
-        # Causal mask
-        if self.is_decoder:
-            mask = torch.ge(query_bucket_idx.unsqueeze(-1), key_value_bucket_idx.unsqueeze(-2)).to(
-                query_bucket_idx.device
-            )
-
-        # Attention mask: chunk, look up correct mask value from key_value_bucket_idx
-        # IMPORTANT: official trax code does not use a mask for LSH Atttention. Not sure why.
-        if attention_mask is not None:
-            attention_mask = attention_mask.to(torch.uint8)[:, None, None, :]
-            # expand attn_mask to fit with key_value_bucket_idx shape
-            attention_mask = attention_mask.expand(query_bucket_idx.shape[:-1] + (-1,))
-            key_attn_mask = torch.gather(attention_mask, -1, key_value_bucket_idx)
-            query_attn_mask = torch.gather(attention_mask, -1, query_bucket_idx)
-            # expand to query_key_dots shape: duplicate along query axis since key sorting is the same for each query position in chunk
-            attn_mask = query_attn_mask.unsqueeze(-1) * key_attn_mask.unsqueeze(-2)
-            # free memory
-            del query_attn_mask, key_attn_mask, attention_mask
-
-            # multiply by casaul mask if necessary
-            if mask is not None:
-                mask = mask * attn_mask
-            else:
-                mask = attn_mask
-            # free memory
-            del attn_mask
 
         # get correct mask values depending on precision
         if query_key_dots.dtype == torch.float16:
@@ -647,9 +623,13 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             self_mask_value = self.self_mask_value_float32
             mask_value = self.mask_value_float32
 
-        # if attention_mask and/or casaul mask apply here
+        mask = self._compute_attn_mask(query_bucket_idx, key_value_bucket_idx, attention_mask)
+
         if mask is not None:
             query_key_dots = torch.where(mask, query_key_dots, mask_value)
+
+        # free memory
+        del mask
 
         # Self mask is ALWAYS applied.
         # From the reformer paper (https://arxiv.org/pdf/2001.04451.pdf):
@@ -660,11 +640,14 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # query vector with a vector at another position. We therefore modify the masking
         # to forbid a token from attending to itself, except in situations
         # where a token has no other valid attention targets (e.g. the first token in a sequence) "
-        mask = torch.ne(query_bucket_idx.unsqueeze(-1), key_value_bucket_idx.unsqueeze(-2)).to(query_bucket_idx.device)
-        query_key_dots = torch.where(mask, query_key_dots, self_mask_value)
+
+        self_mask = torch.ne(query_bucket_idx.unsqueeze(-1), key_value_bucket_idx.unsqueeze(-2)).to(query_bucket_idx.device)
+
+        # apply self_mask
+        query_key_dots = torch.where(self_mask, query_key_dots, self_mask_value)
 
         # free memory
-        del mask
+        del self_mask
 
         logits = torch.logsumexp(query_key_dots, dim=-1, keepdim=True)
         # dots shape is `[batch_size, num_attn_heads, num_hashes * seq_len // chunk_length, chunk_length, chunk_length * (1 + num_chunks_before + num_chunks_after)]`
@@ -692,7 +675,40 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         return out_vectors, logits, attention_probs
 
+    def _compute_attn_mask(self, query_indices, key_indices, attention_mask):
+        mask = None
+
+        # Causal mask
+        if self.is_decoder:
+            mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2)).to(
+                query_indices.device
+            )
+
+        # Attention mask: chunk, look up correct mask value from key_value_bucket_idx
+        # IMPORTANT: official trax code does not use a mask for LSH Atttention. Not sure why.
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(torch.uint8)[:, None, None, :]
+            # expand attn_mask to fit with key_value_bucket_idx shape
+            attention_mask = attention_mask.expand(query_indices.shape[:-1] + (-1,))
+            key_attn_mask = torch.gather(attention_mask, -1, key_indices)
+            query_attn_mask = torch.gather(attention_mask, -1, query_indices)
+            # expand to query_key_dots shape: duplicate along query axis since key sorting is the same for each query position in chunk
+            attn_mask = query_attn_mask.unsqueeze(-1) * key_attn_mask.unsqueeze(-2)
+            # free memory
+            del query_attn_mask, key_attn_mask, attention_mask
+
+            # multiply by casaul mask if necessary
+            if mask is not None:
+                mask = mask * attn_mask
+            else:
+                mask = attn_mask
+
+        return mask
+
     def _len_and_dim_norm(self, vectors):
+        """
+            length and attention head size dim normalization
+        """
         vectors = self._len_norm(vectors)
         vectors = vectors / torch.sqrt(
             torch.tensor(self.attention_head_size, device=vectors.device, dtype=vectors.dtype)
@@ -700,17 +716,30 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         return vectors
 
     def _len_norm(self, x, epsilon=1e-6):
+        """
+            length normalization
+        """
         variance = torch.mean(x ** 2, -1, keepdim=True)
         norm_x = x / torch.sqrt(variance + epsilon)
         return norm_x
 
     def _gather_by_expansion(self, vectors, idxs, num_hashes):
+        """
+            expand dims of idxs and vectors for all hashes and gather
+        """
         expanded_idxs = idxs.unsqueeze(-1).expand(-1, -1, -1, self.attention_head_size)
         vectors = vectors.repeat(1, 1, num_hashes, 1)
         return torch.gather(vectors, 2, expanded_idxs)
 
 
-class GatherSorted(Function):
+class ReverseSort(Function):
+    """
+        After chunked attention is applied which sorted clusters,
+        original ordering has to be restored.
+        Since customized backward function is used for Reformer,
+        the gradients of the output vectors have to be explicitely
+        sorted here.
+    """
     @staticmethod
     def forward(ctx, out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, num_hashes):
         # save sorted_bucket_idx for backprop
@@ -745,10 +774,10 @@ class GatherSorted(Function):
             grad_out_vectors, (grad_out_vectors_shape[:2] + (num_hashes, -1) + grad_out_vectors_shape[-1:])
         )
 
+        # reshape and expand
         sorted_bucket_idx = torch.reshape(sorted_bucket_idx, (sorted_bucket_idx.shape[:2] + (num_hashes, -1)))
-
-        # reverse sort of forward
         expanded_sort_indices = sorted_bucket_idx.unsqueeze(-1).expand(grad_out_vectors.shape)
+        # reverse sort of forward
         grad_out_vectors = torch.gather(grad_out_vectors, 3, expanded_sort_indices)
         grad_logits = torch.gather(grad_logits, 3, sorted_bucket_idx)
 
@@ -787,83 +816,61 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         self.register_buffer("mask_value_float32", torch.tensor(-1e9))
 
     def forward(self, hidden_states, attention_mask=None, head_mask=None, do_output_attentions=False, **kwargs):
-
-        # get SeqLen and BatchSize
         sequence_length = hidden_states.shape[1]
         batch_size = hidden_states.shape[0]
 
+        # project hidden_states to query, key and value
         query_vectors = self.query(hidden_states)
         key_vectors = self.key(hidden_states)
         value_vectors = self.value(hidden_states)
 
+        # split last dim into `config.num_attention_heads` and `config.attention_head_size`
         query_vectors = self._split_hidden_size_dim(query_vectors, self.num_attention_heads, self.attention_head_size)
         key_vectors = self._split_hidden_size_dim(key_vectors, self.num_attention_heads, self.attention_head_size)
         value_vectors = self._split_hidden_size_dim(value_vectors, self.num_attention_heads, self.attention_head_size)
 
-        assert query_vectors.shape[-1] == self.attention_head_size
-        assert key_vectors.shape[-1] == self.attention_head_size
-        assert value_vectors.shape[-1] == self.attention_head_size
+        assert query_vectors.shape[-1] == self.attention_head_size, "last dim of query_key_vectors is {} but should be {}.".format(query_vectors.shape[-1], self.attention_head_size)
+        assert key_vectors.shape[-1] == self.attention_head_size, "last dim of query_key_vectors is {} but should be {}.".format(key_vectors.shape[-1], self.attention_head_size)
+        assert value_vectors.shape[-1] == self.attention_head_size, "last dim of query_key_vectors is {} but should be {}.".format(value_vectors.shape[-1], self.attention_head_size)
 
         if self.chunk_length is None:
-            assert self.num_chunks_before == 0 and self.num_chunks_after == 0
+            assert self.num_chunks_before == 0 and self.num_chunks_after == 0, "If `config.chunk_length` is `None`, make sure `config.num_chunks_after` and `config.num_chunks_before` are set to 0."
 
+        # normalize key vectors
         key_vectors = key_vectors / torch.sqrt(
             torch.tensor(self.attention_head_size, device=key_vectors.device, dtype=key_vectors.dtype)
         )
 
         # chunk vectors
+        # B x Num_Attn_Head x Seq_Len // chunk_len x chunk_len  x  attn_head_size
         query_vectors = self._split_seq_length_dim_to(
             query_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
-        )  # B x Num_Attn_Head x Seq_Len // chunk_len x chunk_len  x  attn_head_size
+        )
         key_vectors = self._split_seq_length_dim_to(
             key_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
-        )  # B x Num_Attn_Head x Seq_Len // chunk_len x chunk_len  x  attn_head_size
+        )
         value_vectors = self._split_seq_length_dim_to(
             value_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
-        )  # B x Num_Attn_Head x Seq_Len // chunk_len x chunk_len  x  attn_head_size
+        )
 
         # chunk indices
         indices = torch.arange(sequence_length, device=query_vectors.device).repeat(
             batch_size, self.num_attention_heads, 1
         )
         query_indices = self._split_seq_length_dim_to(indices, -1, self.chunk_length, self.num_attention_heads)
-        key_value_indices = self._split_seq_length_dim_to(indices, -1, self.chunk_length, self.num_attention_heads)
+        key_indices = self._split_seq_length_dim_to(indices, -1, self.chunk_length, self.num_attention_heads)
 
         # append chunks before and after
         key_vectors = self._look_adjacent(key_vectors, self.num_chunks_before, self.num_chunks_after)
         value_vectors = self._look_adjacent(value_vectors, self.num_chunks_before, self.num_chunks_after)
-        key_value_indices = self._look_adjacent(key_value_indices, self.num_chunks_before, self.num_chunks_after)
+        key_indices = self._look_adjacent(key_indices, self.num_chunks_before, self.num_chunks_after)
 
-        # chunk attention mask and look before and after
-        if attention_mask is not None:
-            attention_mask = attention_mask.to(torch.uint8)[:, None, :]
-            attention_mask = self._split_seq_length_dim_to(attention_mask, -1, self.chunk_length, 1)
-            attention_mask_key = self._look_adjacent(attention_mask, self.num_chunks_before, self.num_chunks_after)
-
-        # get logits and dots
-        # query_key_dots shape is `[batch_size, num_attn_heads, seq_len // chunk_length, chunk_length, chunk_length * (1 + num_chunks_before + num_chunks_after)]`
         query_key_dots = torch.matmul(query_vectors, key_vectors.transpose(-1, -2))
 
         # free memory
         del query_vectors, key_vectors
 
-        mask = None
-        # Causal mask
-        if self.is_decoder is True:
-            mask = torch.ge(query_indices.unsqueeze(-1), key_value_indices.unsqueeze(-2)).to(query_indices.device)
-
-        # Attention mask
-        if attention_mask is not None:
-            # create attn_mask
-            attn_mask = (attention_mask.unsqueeze(-1) * attention_mask_key.unsqueeze(-2)).expand(query_key_dots.shape)
-            # multiply by casaul mask if necessary
-            if mask is not None:
-                mask = mask * attn_mask
-            else:
-                mask = attn_mask
-
-            # free memory
-            del attn_mask, attention_mask, attention_mask_key
+        mask = self._compute_attn_mask(query_indices, key_indices, attention_mask, query_key_dots.shape)
 
         if mask is not None:
             # get mask tensor depending on half precision or not
@@ -877,6 +884,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         # free memory
         del mask
 
+        # softmax
         logits = torch.logsumexp(query_key_dots, dim=-1, keepdim=True)
         attention_probs = torch.exp(query_key_dots - logits)
 
@@ -908,13 +916,38 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
 
         return LocalSelfAttentionOutput(hidden_states=out_vectors, attention_probs=attention_probs)
 
+    def _compute_attn_mask(self, query_indices, key_indices, attention_mask, query_key_dots_shape):
+        mask = None
+
+        # chunk attention mask and look before and after
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(torch.uint8)[:, None, :]
+            attention_mask = self._split_seq_length_dim_to(attention_mask, -1, self.chunk_length, 1)
+            attention_mask_key = self._look_adjacent(attention_mask, self.num_chunks_before, self.num_chunks_after)
+
+        # Causal mask
+        if self.is_decoder is True:
+            mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2)).to(query_indices.device)
+
+        # Attention mask
+        if attention_mask is not None:
+            # create attn_mask
+            attn_mask = (attention_mask.unsqueeze(-1) * attention_mask_key.unsqueeze(-2)).expand(query_key_dots_shape)
+            # multiply by casaul mask if necessary
+            if mask is not None:
+                mask = mask * attn_mask
+            else:
+                mask = attn_mask
+        return mask
+
 
 class ReformerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         all_head_size = config.num_attention_heads * config.attention_head_size
-        self.dense = nn.Linear(all_head_size, config.hidden_size, bias=False)
         self.dropout = config.hidden_dropout_prob
+
+        self.dense = nn.Linear(all_head_size, config.hidden_size, bias=False)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -926,15 +959,16 @@ class ReformerAttention(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.layer_id = layer_id
-        self.layer_norm = ReformerLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn_layers = config.attn_layers
+
+        self.layer_norm = ReformerLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if len(set(self.attn_layers)) == 1 and self.attn_layers[0] == "lsh":
             self.self_attention = LSHSelfAttention(config)
         elif len(set(self.attn_layers)) == 1 and self.attn_layers[0] == "local":
             self.self_attention = LocalSelfAttention(config)
         elif len(set(self.attn_layers)) == 2 and set(self.attn_layers) == set(["lsh", "local"]):
-            # get correct attn_layers
+            # get correct attn layers
             if self.attn_layers[self.layer_id] == "lsh":
                 self.self_attention = LSHSelfAttention(config)
             else:
@@ -983,12 +1017,14 @@ class ReformerAttention(nn.Module):
 class ReformerFeedForwardDense(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.feed_forward_size)
         self.dropout = config.hidden_dropout_prob
+
         if isinstance(config.hidden_act, str):
             self.act_fn = ACT2FN[config.hidden_act]
         else:
             self.act_fn = config.hidden_act
+
+        self.dense = nn.Linear(config.hidden_size, config.feed_forward_size)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -1000,8 +1036,9 @@ class ReformerFeedForwardDense(nn.Module):
 class ReformerFeedForwardOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.feed_forward_size, config.hidden_size)
         self.dropout = config.hidden_dropout_prob
+
+        self.dense = nn.Linear(config.feed_forward_size, config.hidden_size)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -1012,8 +1049,9 @@ class ReformerFeedForwardOutput(nn.Module):
 class ChunkReformerFeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.seq_len_dim = 1
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
+
         self.layer_norm = ReformerLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dense = ReformerFeedForwardDense(config)
         self.output = ReformerFeedForwardOutput(config)
@@ -1033,13 +1071,22 @@ class ReformerLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.attention = ReformerAttention(config, layer_id)
-        self.feed_forward = ChunkReformerFeedForward(config)
         # dropout requires to have the same
         # seed for forward and backward pass
         self.attention_seed = None
         self.feed_forward_seed = None
 
+        self.feed_forward = ChunkReformerFeedForward(config)
+
     def _init_attention_seed(self):
+        """
+            This function sets a new seed for the 
+            attention layer to make dropout deterministic
+            for both forward calls: 1 normal forward 
+            call and 1 forward call in backward 
+            to recalculate activations.
+        """
+
         # randomize seeds
         if next(self.parameters()).device.type == "cuda":
             # GPU
@@ -1052,6 +1099,14 @@ class ReformerLayer(nn.Module):
             torch.manual_seed(self.attention_seed)
 
     def _init_feed_forward_seed(self):
+        """
+            This function sets a new seed for the 
+            feed forward layer to make dropout deterministic
+            for both forward calls: 1 normal forward 
+            call and 1 forward call in backward 
+            to recalculate activations.
+        """
+
         # randomize seeds
         if next(self.parameters()).device.type == "cuda":
             # GPU
