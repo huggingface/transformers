@@ -1,5 +1,5 @@
 ---
-language: Italian
+language: italian
 ---
 
 # GePpeTto GPT2 Model 🇮🇹
