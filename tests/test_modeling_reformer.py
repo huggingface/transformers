@@ -74,6 +74,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             pad_token_id=0,
             eos_token_id=2,
             scope=None,
+            hash_seed=0,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -105,6 +106,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.scope = scope
             self.attn_layers = attn_layers
             self.pad_token_id = pad_token_id
+            self.hash_seed = hash_seed
 
             self.encoder_seq_length = seq_length // local_attn_chunk_length + (
                 self.seq_length % local_attn_chunk_length != 0
@@ -140,6 +142,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 local_num_chunks_before=self.local_num_chunks_before,
                 attn_layers=self.attn_layers,
                 pad_token_id=self.pad_token_id,
+                hash_seed=self.hash_seed
             )
 
             return (
@@ -371,9 +374,11 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             lsh_attention_probs_dropout_prob=0.1,
             max_position_embeddings=512,
             initializer_range=0.02,
+            axial_norm_std=1.0,
             layer_norm_eps=1e-12,
-            sinusoidal_pos_embds=True,
             axial_pos_embds=True,
+            axial_pos_shape=[2, 8],
+            axial_pos_embds_dim=[16, 48],
             attn_layers=["lsh", "lsh", "lsh", "lsh"],
             pad_token_id=0,
             eos_token_id=2,
@@ -410,6 +415,9 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self.hash_seed = hash_seed
             self.pad_token_id = pad_token_id
             self.axial_pos_embds = axial_pos_embds
+            self.axial_pos_shape = tuple(axial_pos_shape)
+            self.axial_pos_embds_dim = tuple(axial_pos_embds_dim)
+            self.axial_norm_std = axial_norm_std
 
             self.encoder_seq_length = seq_length // lsh_attn_chunk_length + (seq_length % lsh_attn_chunk_length != 0)
             self.key_length = (self.lsh_num_chunks_before + self.lsh_num_chunks_after + 1) * lsh_attn_chunk_length
@@ -434,6 +442,8 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 max_position_embeddings=self.max_position_embeddings,
                 is_decoder=self.is_decoder,
                 axial_pos_embds=self.axial_pos_embds,
+                axial_pos_shape=self.axial_pos_shape,
+                axial_pos_embds_dim=self.axial_pos_embds_dim,
                 num_hashes=self.num_hashes,
                 num_buckets=self.num_buckets,
                 lsh_attn_chunk_length=self.lsh_attn_chunk_length,
