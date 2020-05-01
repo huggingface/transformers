@@ -68,14 +68,6 @@ ReformerBackwardOutput = namedtuple(
 ReformerEncoderOutput = namedtuple("ReformerEncoderOutput", ["hidden_states", "all_hidden_states", "all_attentions"])
 
 
-def create_sinusoidal_embeddings(n_pos, dim, out):
-    position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
-    out[:, 0::2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
-    out[:, 1::2] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-    out.detach_()
-    out.requires_grad = False
-
-
 def _get_least_common_mult_chunk_len(config):
     attn_types = config.attn_layers
     if len(set(attn_types)) == 1 and attn_types[0] == "lsh":
@@ -227,18 +219,11 @@ class PositionEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dropout = config.hidden_dropout_prob
-        self.is_sinusoidal_pos_embds = config.sinusoidal_pos_embds
-
         self.embedding = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        if config.sinusoidal_pos_embds is True:
-            create_sinusoidal_embeddings(
-                n_pos=config.max_position_embeddings, dim=config.hidden_size, out=self.embedding.weight,
-            )
 
     def forward(self, position_ids):
         position_embeddings = self.embedding(position_ids)
-        if self.is_sinusoidal_pos_embds is False:
-            position_embeddings = nn.functional.dropout(position_embeddings, self.dropout, self.training)
+        position_embeddings = nn.functional.dropout(position_embeddings, self.dropout, self.training)
         return position_embeddings
 
 
@@ -255,9 +240,6 @@ class ReformerEmbeddings(nn.Module):
         self.position_embeddings = (
             AxialPositionEmbeddings(config) if config.axial_pos_embds else PositionEmbeddings(config)
         )
-        assert not (
-            config.sinusoidal_pos_embds and config.axial_pos_embds
-        ), "Select either config.sinusoidal_pos_embds or config.axial_pos_embds"
 
     def forward(self, input_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
@@ -1112,10 +1094,10 @@ class ReformerLayer(nn.Module):
 
     def _init_attention_seed(self):
         """
-            This function sets a new seed for the 
+            This function sets a new seed for the
             attention layer to make dropout deterministic
-            for both forward calls: 1 normal forward 
-            call and 1 forward call in backward 
+            for both forward calls: 1 normal forward
+            call and 1 forward call in backward
             to recalculate activations.
         """
 
@@ -1132,10 +1114,10 @@ class ReformerLayer(nn.Module):
 
     def _init_feed_forward_seed(self):
         """
-            This function sets a new seed for the 
+            This function sets a new seed for the
             feed forward layer to make dropout deterministic
-            for both forward calls: 1 normal forward 
-            call and 1 forward call in backward 
+            for both forward calls: 1 normal forward
+            call and 1 forward call in backward
             to recalculate activations.
         """
 
@@ -1257,9 +1239,9 @@ class ReformerLayer(nn.Module):
 
 class _ReversibleFunction(Function):
     """
-    To prevent PyTorch from performing the usual backpropagation, 
-    a customized backward function is implemented here. This way 
-    it is made sure that no memory expensive activations are 
+    To prevent PyTorch from performing the usual backpropagation,
+    a customized backward function is implemented here. This way
+    it is made sure that no memory expensive activations are
     saved during the forward pass.
     This function is heavily inspired by https://github.com/lucidrains/reformer-pytorch/blob/master/reformer_pytorch/reversible.py
     """
@@ -1463,15 +1445,12 @@ class ReformerPreTrainedModel(PreTrainedModel):
             # cf https://github.com/pytorch/pytorch/pull/5617
             if module.weight.requires_grad:
                 module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-                # TODO(PVP): discuss with Thom if necessary here to use different init
-                # torch.nn.init.xavier_uniform_(module.weight)
+
         elif isinstance(module, ReformerLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
-            # TODO(PVP): discuss with Thom if necessary here to use different init
-            # module.bias.data.normal_(mean=0.0, std=1e-6)
 
 
 REFORMER_START_DOCSTRING = r"""
@@ -1496,7 +1475,7 @@ REFORMER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
-            During training the input_ids sequence_length has to be a multiple of the relevant model's 
+            During training the input_ids sequence_length has to be a multiple of the relevant model's
             chunk lengths (lsh's, local's or both). During evaluation, the indices are automatically
             padded to be a multiple of the chunk length.
 
@@ -1525,9 +1504,9 @@ REFORMER_INPUTS_DOCSTRING = r"""
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
         num_hashes (:obj:`int`, `optional`, defaults to :obj:`None`):
-            `num_hashes` is the number of hashing rounds that should be performed during 
-            bucketing. Setting `num_hashes` overwrites the default `num_hashes` defined 
-            in `config.num_hashes`. 
+            `num_hashes` is the number of hashing rounds that should be performed during
+            bucketing. Setting `num_hashes` overwrites the default `num_hashes` defined
+            in `config.num_hashes`.
             For more information, see `num_hashes` in :class:`transformers.ReformerConfig`.
 """
 
