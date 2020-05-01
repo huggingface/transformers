@@ -123,8 +123,6 @@ class FlaxPreTrainedModel(ABC):
 
         # Instantiate model.
         with open(resolved_archive_file, "rb") as state_f:
-            from msgpack.exceptions import UnpackException
-
             try:
                 from flax.serialization import from_bytes
 
