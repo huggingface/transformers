@@ -143,3 +143,8 @@ positional embeddings.
 
 Absolute positional embeddings are selected in the range ``[0, config.max_position_embeddings - 1]``. Some models
 use other types of positional embeddings, such as sinusoidal position embeddings or relative position embeddings.
+
+
+Feed Forward Chunking
+--------------------------
+TODO
