@@ -219,5 +219,5 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
     # @slow
     # def test_model_from_pretrained(self):
     #     for model_name in list(DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-    #         model = DistilBertModesss.from_pretrained(model_name, cache_dir=CACHE_DIR)
+    #         model = DistilBertModesss.from_pretrained(model_name)
     #         self.assertIsNotNone(model)

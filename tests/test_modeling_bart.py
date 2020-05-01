@@ -13,15 +13,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import tempfile
 import unittest
+
+import timeout_decorator  # noqa
 
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -357,6 +358,7 @@ class BartHeadTests(unittest.TestCase):
         loss = outputs[0]
         self.assertIsInstance(loss.item(), float)
 
+    @timeout_decorator.timeout(1)
     def test_lm_forward(self):
         config, input_ids, batch_size = self._get_config_and_data()
         lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
@@ -563,7 +565,7 @@ class BartModelIntegrationTests(unittest.TestCase):
     def test_model_from_pretrained(self):
         # Forces 1.6GB download from S3 for each model
         for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys()):
-            model = BartModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+            model = BartModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @slow
