@@ -36,27 +36,18 @@ class ReformerConfig(PretrainedConfig):
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
         for more information.
 
-
         Args:
-            vocab_size (:obj:`int`, optional, defaults to 30522):
-                Vocabulary size of the Reformer model. Defines the different tokens that
-                can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.ReformerModel`.
-            hidden_size (:obj:`int`, optional, defaults to 768):
-                Dimensionality of the encoder layers and the pooler layer.
-            num_hidden_layers (:obj:`int`, optional, defaults to 12):
-                Number of hidden layers in the Transformer encoder.
-            num_attention_heads (:obj:`int`, optional, defaults to 12):
-                Number of attention heads for each attention layer in the Transformer encoder.
-            num_buckets (:obj:`int`, optional, defaults to ):
+            attention_head_size=64,
+            attn_layers=["local", "lsh", "local", "lsh", "local", "lsh"],
+            axial_pos_embds=True,
+            axial_norm_std=1.0,
+            axial_pos_shape=[512, 1024],
+            axial_pos_embds_dim=[512, 1024],
                 TODO (PVP)
-            num_hashes (:obj:`int`, optional, defaults to ):
                 TODO (PVP)
-            chunk_length (:obj:`int`, optional, defaults to ):
+            chunk_size_lm_head=0,
                 TODO (PVP)
-            num_chunks_before (:obj:`int`, optional, defaults to ):
-                TODO (PVP)
-            num_chunks_after (:obj:`int`, optional, defaults to ):
-                TODO (PVP)
+            chunk_size_feed_forward=0,
             feed_forward_size (:obj:`int`, optional, defaults to 3072):
                 Dimensionality of the "feed_forward" (i.e., feed-forward) layer in the Transformer encoder.
             hidden_act (:obj:`str` or :obj:`function`, optional, defaults to "gelu"):
@@ -64,24 +55,49 @@ class ReformerConfig(PretrainedConfig):
                 If string, "gelu", "relu", "swish" and "gelu_new" are supported.
             hidden_dropout_prob (:obj:`float`, optional, defaults to 0.1):
                 The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-            attention_probs_dropout_prob (:obj:`float`, optional, defaults to 0.1):
-                The dropout ratio for the attention probabilities.
-            max_position_embeddings (:obj:`int`, optional, defaults to 512):
-                The maximum sequence length that this model might ever be used with.
-                Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            hidden_size (:obj:`int`, optional, defaults to 768):
+                Dimensionality of the encoder layers and the pooler layer.
             initializer_range (:obj:`float`, optional, defaults to 0.02):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
                 The epsilon used by the layer normalization layers.
+            local_chunk_length (:obj:`int`, optional, defaults to ):
+                TODO (PVP)
+            local_num_chunks_before (:obj:`int`, optional, defaults to ):
+                TODO (PVP)
+            local_num_chunks_after (:obj:`int`, optional, defaults to ):
+                TODO (PVP)
+            local_attention_probs_dropout_prob (:obj:`float`, optional, defaults to 0.1):
+                The dropout ratio for the attention probabilities.
+            lsh_chunk_length (:obj:`int`, optional, defaults to ):
+                TODO (PVP)
+            lsh_num_chunks_before (:obj:`int`, optional, defaults to ):
+                TODO (PVP)
+            lsh_num_chunks_after (:obj:`int`, optional, defaults to ):
+                TODO (PVP)
+            lsh_attention_probs_dropout_prob (:obj:`float`, optional, defaults to 0.1):
+                The dropout ratio for the attention probabilities.
+            max_position_embeddings (:obj:`int`, optional, defaults to 512):
+                The maximum sequence length that this model might ever be used with.
+                Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            num_attention_heads (:obj:`int`, optional, defaults to 12):
+                Number of attention heads for each attention layer in the Transformer encoder.
+            num_buckets (:obj:`int`, optional, defaults to ):
+                TODO (PVP)
+            num_hashes (:obj:`int`, optional, defaults to ):
+                TODO (PVP)
+            vocab_size (:obj:`int`, optional, defaults to 30522):
+                Vocabulary size of the Reformer model. Defines the different tokens that
+                can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.ReformerModel`.
 
         Example::
 
             from transformers import ReformerModel, ReformerConfig
 
-            # Initializing a Reformer bert-base-uncased style configuration
+            # Initializing a Reformer configuration
             configuration = ReformerConfig()
 
-            # Initializing a model from the bert-base-uncased style configuration
+            # Initializing a Reformer model
             model = ReformerModel(configuration)
 
             # Accessing the model configuration
@@ -96,38 +112,37 @@ class ReformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=320,
-        attention_head_size=32,
-        hidden_size=64,
-        num_attention_heads=1,
-        num_buckets=[2, 4],
-        num_hashes=4,
-        lsh_attn_chunk_length=64,
-        local_attn_chunk_length=64,
-        lsh_num_chunks_before=1,
-        lsh_num_chunks_after=0,
-        local_num_chunks_before=1,
-        local_num_chunks_after=0,
+        attention_head_size=64,
+        attn_layers=["local", "lsh", "local", "lsh", "local", "lsh"],
+        axial_norm_std=1.0,
+        axial_pos_embds=True,
+        axial_pos_shape=[512, 1024],
+        axial_pos_embds_dim=[512, 1024],
         chunk_size_lm_head=0,
         chunk_size_feed_forward=0,
-        feed_forward_size=128,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        lsh_attention_probs_dropout_prob=0.0,
-        local_attention_probs_dropout_prob=0.0,
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        axial_norm_std=1.0,
-        layer_norm_eps=1e-12,
-        sinusoidal_pos_embds=False,
-        axial_pos_embds=False,
-        axial_pos_shape=[32, 16],
-        axial_pos_embds_dim=[32, 32],
-        attn_layers=["local", "lsh", "local", "lsh", "local", "lsh"],
-        is_decoder=False,
-        pad_token_id=0,
         eos_token_id=2,
+        feed_forward_size=512,
         hash_seed=None,
+        hidden_act="relu",
+        hidden_dropout_prob=0.05,
+        hidden_size=256,
+        initializer_range=0.02,
+        is_decoder=True,
+        layer_norm_eps=1e-12,
+        local_num_chunks_before=1,
+        local_num_chunks_after=0,
+        local_attention_probs_dropout_prob=0.05,
+        local_attn_chunk_length=64,
+        lsh_attn_chunk_length=64,
+        lsh_attention_probs_dropout_prob=0.0,
+        lsh_num_chunks_before=1,
+        lsh_num_chunks_after=0,
+        max_position_embeddings=524288,
+        num_attention_heads=2,
+        num_buckets=[64, 128],
+        num_hashes=1,
+        pad_token_id=0,
+        vocab_size=320,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, eos_token_id=eos_token_id, is_decoder=is_decoder, **kwargs)
@@ -154,7 +169,6 @@ class ReformerConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.sinusoidal_pos_embds = sinusoidal_pos_embds
         self.axial_pos_embds = axial_pos_embds
         self.axial_pos_shape = tuple(axial_pos_shape)
         self.axial_pos_embds_dim = tuple(axial_pos_embds_dim)
