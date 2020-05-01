@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
+# Copyright 2020 The Trax Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,23 +15,21 @@
 # limitations under the License.
 """PyTorch REFORMER model. """
 
-import sys
-
 import inspect
 import logging
+import sys
 from collections import namedtuple
 from functools import reduce
 from operator import mul
 from typing import Callable
 
-# DELETE later
 import numpy as np
 import torch
 from torch import nn
 from torch.autograd.function import Function
 from torch.nn import CrossEntropyLoss
 
-from .activations import gelu, gelu_new, swish, gelu_fast
+from .activations import gelu, gelu_fast, gelu_new, swish
 from .configuration_reformer import ReformerConfig
 from .modeling_utils import PreTrainedModel
 
@@ -65,7 +63,10 @@ LSHSelfAttentionOutput = namedtuple("LSHSelfAttentionOutput", ["hidden_states", 
 LocalSelfAttentionOutput = namedtuple("LocalSelfAttentionOutput", ["hidden_states", "attention_probs"])
 AttentionOutput = namedtuple("AttentionOutput", ["hidden_states", "attention_probs", "buckets"])
 ReformerOutput = namedtuple("ReformerOutput", ["hidden_states", "attn_output", "attention_probs", "buckets"])
-ReformerBackwardOutput = namedtuple("ReformerBackwardOutput", ["attn_output", "hidden_states", "grad_attn_output", "grad_hidden_states"])
+ReformerBackwardOutput = namedtuple(
+    "ReformerBackwardOutput", ["attn_output", "hidden_states", "grad_attn_output", "grad_hidden_states"]
+)
+ReformerEncoderOutput = namedtuple("ReformerEncoderOutput", ["hidden_states", "all_hidden_states", "all_attentions"])
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -389,6 +390,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         query_key_vectors = self.query_key(hidden_states)
         value_vectors = self.value(hidden_states)
+
         # free memory
         del hidden_states
 
@@ -445,7 +447,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         del query_key_vectors, key_vectors, value_vectors
 
         # calculate total concatenad chunks to split gradients correctly
-        out_vectors, logits = GatherSorted.apply(out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, self.num_hashes)
+        out_vectors, logits = GatherSorted.apply(
+            out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, self.num_hashes
+        )
 
         if num_hashes > 1:
             out_vectors = self._split_dim_by(
@@ -489,7 +493,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             # Factorize the hash if self.num_buckets is a list or tuple
             rotation_size, num_buckets = 0, 1
             for bucket_factor in self.num_buckets:
-                assert bucket_factor % 2 == 0, "The number of buckets should be even, but `num_bucket`: {}".format(bucket_factor)
+                assert bucket_factor % 2 == 0, "The number of buckets should be even, but `num_bucket`: {}".format(
+                    bucket_factor
+                )
                 rotation_size = rotation_size + bucket_factor
                 num_buckets = num_buckets * bucket_factor
 
@@ -571,13 +577,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         self.num_buckets = num_buckets
 
     def _attend(
-        self,
-        query_vectors,
-        key_vectors,
-        value_vectors,
-        sorted_bucket_idx,
-        attention_mask,
-        head_mask,
+        self, query_vectors, key_vectors, value_vectors, sorted_bucket_idx, attention_mask, head_mask,
     ):
         key_vectors = self._look_adjacent(key_vectors, self.num_chunks_before, self.num_chunks_after)
         value_vectors = self._look_adjacent(value_vectors, self.num_chunks_before, self.num_chunks_after)
@@ -626,7 +626,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             self_mask_value = self.self_mask_value_float32
             mask_value = self.mask_value_float32
 
-
         # if attention_mask and/or casaul mask apply here
         if mask is not None:
             query_key_dots = torch.where(mask, query_key_dots, mask_value)
@@ -642,24 +641,27 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # where a token has no other valid attention targets (e.g. the first token in a sequence) "
         mask = torch.ne(query_bucket_idx.unsqueeze(-1), key_value_bucket_idx.unsqueeze(-2)).to(query_bucket_idx.device)
         query_key_dots = torch.where(mask, query_key_dots, self_mask_value)
+
         # free memory
         del mask
 
         logits = torch.logsumexp(query_key_dots, dim=-1, keepdim=True)
         # dots shape is `[batch_size, num_attn_heads, num_hashes * seq_len // chunk_length, chunk_length, chunk_length * (1 + num_chunks_before + num_chunks_after)]`
-        dots = torch.exp(query_key_dots - logits)
+        attention_probs = torch.exp(query_key_dots - logits)
+
         # free memory
         del query_key_dots
 
         # dropout
-        dots = nn.functional.dropout(dots, self.dropout, self.training)
+        attention_probs = nn.functional.dropout(attention_probs, self.dropout, self.training)
 
         # Mask heads if we want to
         if head_mask is not None:
-            dots = dots * head_mask
+            attention_probs = attention_probs * head_mask
 
         # attend values
-        out_vectors = torch.matmul(dots, value_vectors)
+        out_vectors = torch.matmul(attention_probs, value_vectors)
+
         # free memory
         del value_vectors
 
@@ -667,7 +669,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         logits = self._merge_by_middle_dim(logits, self.num_attention_heads).squeeze(-1)
         out_vectors = self._merge_by_middle_dim(out_vectors, self.num_attention_heads)
 
-        return out_vectors, logits, dots
+        return out_vectors, logits, attention_probs
 
     def _len_and_dim_norm(self, vectors):
         vectors = self._len_norm(vectors)
@@ -718,7 +720,9 @@ class GatherSorted(Function):
         # shape is BatchSize x NumAttnHeads x NumHashes x ChunkLen
         grad_logits = torch.reshape(grad_logits, (grad_logits_shape[:2] + (num_hashes, -1)))
         # shape is BatchSize x NumAttnHeads x NumHashes x ChunkLen x ChunkLen
-        grad_out_vectors = torch.reshape(grad_out_vectors, (grad_out_vectors_shape[:2] + (num_hashes, -1) + grad_out_vectors_shape[-1:]))
+        grad_out_vectors = torch.reshape(
+            grad_out_vectors, (grad_out_vectors_shape[:2] + (num_hashes, -1) + grad_out_vectors_shape[-1:])
+        )
 
         sorted_bucket_idx = torch.reshape(sorted_bucket_idx, (sorted_bucket_idx.shape[:2] + (num_hashes, -1)))
 
@@ -818,6 +822,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         # get logits and dots
         # query_key_dots shape is `[batch_size, num_attn_heads, seq_len // chunk_length, chunk_length, chunk_length * (1 + num_chunks_before + num_chunks_after)]`
         query_key_dots = torch.matmul(query_vectors, key_vectors.transpose(-1, -2))
+
         # free memory
         del query_vectors, key_vectors
 
@@ -835,6 +840,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
                 mask = mask * attn_mask
             else:
                 mask = attn_mask
+
             # free memory
             del attn_mask, attention_mask, attention_mask_key
 
@@ -845,15 +851,14 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
             else:
                 mask_value = self.mask_value_float32
 
-            query_key_dots = torch.where(
-                mask, query_key_dots, mask_value
-            )
+            query_key_dots = torch.where(mask, query_key_dots, mask_value)
 
         # free memory
         del mask
 
         logits = torch.logsumexp(query_key_dots, dim=-1, keepdim=True)
         attention_probs = torch.exp(query_key_dots - logits)
+
         # free memory
         del logits
 
@@ -866,6 +871,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
 
         # attend values
         out_vectors = torch.matmul(attention_probs, value_vectors)
+
         # free memory
         del value_vectors
 
@@ -1201,7 +1207,8 @@ class _ReversibleFunction(Function):
         attn_output, hidden_states = ctx.saved_tensors
 
         # create tuple
-        output = ReformerBackwardOutput(attn_output=attn_output,
+        output = ReformerBackwardOutput(
+            attn_output=attn_output,
             hidden_states=hidden_states,
             grad_attn_output=grad_attn_output,
             grad_hidden_states=grad_hidden_states,
@@ -1281,12 +1288,9 @@ class ReformerEncoder(nn.Module):
         # Apply dropout
         hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
 
-        outputs = (hidden_states,)
-        if do_output_hidden_states:
-            outputs = outputs + (tuple(all_hidden_states),)
-        if do_output_attentions:
-            outputs = outputs + (tuple(all_attentions),)
-        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+        return ReformerEncoderOutput(
+            hidden_states=hidden_states, all_hidden_states=all_hidden_states, all_attentions=all_attentions
+        )
 
 
 class ReformerPreTrainedModel(PreTrainedModel):
@@ -1312,13 +1316,15 @@ class ReformerPreTrainedModel(PreTrainedModel):
             if module.weight.requires_grad:
                 module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
                 # TODO(PVP): discuss with Thom if necessary here to use different init
-#                torch.nn.init.xavier_uniform_(module.weight)
+        #                torch.nn.init.xavier_uniform_(module.weight)
         elif isinstance(module, ReformerLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
             # TODO(PVP): discuss with Thom if necessary here to use different init
+
+
 #            module.bias.data.normal_(mean=0.0, std=1e-6)
 
 
@@ -1418,54 +1424,23 @@ class ReformerModel(ReformerPreTrainedModel):
         # prepare head mask
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers, is_attention_chunked=True)
 
-        real_sequence_length = input_shape[-1]
+        # original sequence length for padding
+        orig_sequence_length = input_shape[-1]
 
         # if needs padding
         least_common_mult_chunk_length = _get_least_common_mult_chunk_len(self.config)
-        if input_shape[-1] % least_common_mult_chunk_length != 0:
-
-            padding_length = least_common_mult_chunk_length - input_shape[-1] % least_common_mult_chunk_length
-            assert (
-                self.training is False
-            ), "Sequence Length {} has to be a multiple of least common multiple chunk_length {} if training. Please consider padding the input to a length of {}.".format(
-                input_shape[-2], least_common_mult_chunk_length, input_shape[-2] + padding_length
+        has_to_pad_to_match_chunk_length = input_shape[-1] % least_common_mult_chunk_length != 0
+        if has_to_pad_to_match_chunk_length is True:
+            # pad input
+            input_ids, inputs_embeds, attention_mask, position_ids, input_shape = self._pad_to_mult_of_chunk_length(
+                input_ids,
+                inputs_embeds,
+                attention_mask,
+                position_ids,
+                input_shape,
+                least_common_mult_chunk_length,
+                device,
             )
-
-            logger.info(
-                "Input ids are automatically padded from {} to {} to be a multiple of `config.chunk_length`: {}".format(
-                    input_shape[-1], input_shape[-1] + padding_length, least_common_mult_chunk_length
-                )
-            )
-
-            padded_input_ids = torch.full(
-                (input_shape[0], padding_length), self.config.pad_token_id, device=device, dtype=torch.long,
-            )
-
-            # Extend `attention_mask`
-            if attention_mask is not None:
-                attention_mask = torch.cat(
-                    [attention_mask, torch.zeros(input_shape[0], padding_length, device=device, dtype=attention_mask.dtype,)],
-                    dim=-1,
-                )
-            else:
-                attention_mask = torch.cat(
-                    [
-                        torch.ones(input_shape, device=device, dtype=torch.uint8),
-                        torch.zeros((input_shape[0], padding_length), device=device, dtype=torch.uint8),
-                    ],
-                    dim=-1,
-                )
-
-            # Extend `input_ids` with padding to match least common multiple chunk_length
-            if input_ids is not None:
-                input_ids = torch.cat([input_ids, padded_input_ids], dim=-1)
-                input_shape = input_ids.size()
-
-            # Extend `input_embeds` with padding to match least common multiple chunk_length
-            if inputs_embeds is not None:
-                padded_inputs_embeds = self.embeddings(padded_input_ids, position_ids)
-                inputs_embeds = torch.cat([inputs_embeds, padded_inputs_embeds], dim=-2)
-                input_shape = inputs_embeds.size()
 
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
 
@@ -1477,15 +1452,77 @@ class ReformerModel(ReformerPreTrainedModel):
             do_output_hidden_states=do_output_hidden_states,
             do_output_attentions=do_output_attentions,
         )
-        sequence_output = encoder_outputs[0]
+        sequence_output = encoder_outputs.hidden_states
 
         # if padding was applied
-        if real_sequence_length < input_shape[-1]:
-            sequence_output = sequence_output[:, :real_sequence_length]
+        if has_to_pad_to_match_chunk_length is True:
+            sequence_output = sequence_output[:, :orig_sequence_length]
 
-        # add hidden_states and attentions if they are here
-        outputs = (sequence_output,) + encoder_outputs[1:]
-        return outputs  # sequence_output, pooled_output, (hidden_states), (attentions)
+        outputs = (sequence_output,)
+
+        # TODO(PVP): Replace by named tuple after namedtuples are introduced in the library.
+        if do_output_hidden_states is True:
+            outputs = outputs + (encoder_outputs.all_hidden_states,)
+        if do_output_attentions is True:
+            outputs = outputs + (encoder_outputs.all_attentions,)
+        return outputs
+
+    def _pad_to_mult_of_chunk_length(
+        self, input_ids, inputs_embeds, attention_mask, position_ids, input_shape, padded_seq_length, device
+    ):
+        padding_length = padded_seq_length - input_shape[-1] % padded_seq_length
+        assert (
+            self.training is False
+        ), "Sequence Length {} has to be a multiple of least common multiple chunk_length {} if training. Please consider padding the input to a length of {}.".format(
+            input_shape[-2], padded_seq_length, input_shape[-2] + padding_length
+        )
+
+        logger.info(
+            "Input ids are automatically padded from {} to {} to be a multiple of `config.chunk_length`: {}".format(
+                input_shape[-1], input_shape[-1] + padding_length, padded_seq_length
+            )
+        )
+
+        padded_input_ids = torch.full(
+            (input_shape[0], padding_length), self.config.pad_token_id, device=device, dtype=torch.long,
+        )
+
+        # Extend `attention_mask`
+        if attention_mask is not None:
+            attention_mask = torch.cat(
+                [
+                    attention_mask,
+                    torch.zeros(input_shape[0], padding_length, device=device, dtype=attention_mask.dtype,),
+                ],
+                dim=-1,
+            )
+        else:
+            attention_mask = torch.cat(
+                [
+                    torch.ones(input_shape, device=device, dtype=torch.uint8),
+                    torch.zeros((input_shape[0], padding_length), device=device, dtype=torch.uint8),
+                ],
+                dim=-1,
+            )
+
+        # Extend `input_ids` with padding to match least common multiple chunk_length
+        if input_ids is not None:
+            input_ids = torch.cat([input_ids, padded_input_ids], dim=-1)
+            input_shape = input_ids.size()
+
+            # Pad position ids if given
+            if position_ids is not None:
+                padded_position_ids = torch.arange(input_shape[-1], padded_seq_length, dtype=torch.long, device=device)
+                padded_position_ids = position_ids.unsqueeze(0).expand(input_shape[0], padding_length)
+                position_ids = torch.cat([position_ids, padded_position_ids], dim=-1)
+
+        # Extend `input_embeds` with padding to match least common multiple chunk_length
+        if inputs_embeds is not None:
+            padded_inputs_embeds = self.embeddings(padded_input_ids, position_ids)
+            inputs_embeds = torch.cat([inputs_embeds, padded_inputs_embeds], dim=-2)
+            input_shape = inputs_embeds.size()
+
+        return input_ids, inputs_embeds, attention_mask, position_ids, input_shape
 
 
 class ReformerOnlyLMHead(nn.Module):
@@ -1556,8 +1593,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
-#            shift_logits = logits.contiguous()
-#            shift_labels = labels.contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
@@ -1567,4 +1602,9 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
         # TODO(PVP): Add smart caching
-        return {"input_ids": input_ids}
+        inputs_dict = {"input_ids": input_ids}
+
+        if "num_hashes" in kwargs:
+            inputs_dict["num_hashes"] = kwargs["num_hashes"]
+
+        return inputs_dict
