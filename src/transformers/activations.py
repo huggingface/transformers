@@ -45,7 +45,7 @@ ACT2FN = {
     "gelu": gelu,
     "tanh": torch.tanh,
     "gelu_new": gelu_new,
-    "gelu_fast": gelu_fast
+    "gelu_fast": gelu_fast,
 }
 
 

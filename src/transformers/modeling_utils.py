@@ -788,6 +788,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
+        num_hashes=None,
+        **model_specific_kwargs
     ):
         r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
 
@@ -864,6 +866,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             use_cache: (`optional`) bool
                 If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.
+
+            model_specific_kwargs: (`optional`) dict
+                Additional model specific kwargs will be forwarded to the `forward` function of the model.
 
         Return:
 
@@ -1118,6 +1123,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                model_specific_kwargs=model_specific_kwargs,
             )
         else:
             output = self._generate_no_beam_search(
@@ -1140,6 +1146,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                model_specific_kwargs=model_specific_kwargs,
             )
 
         return output
@@ -1165,6 +1172,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         encoder_outputs,
         attention_mask,
         use_cache,
+        model_specific_kwargs,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
             All returned sequence are generated independantly.
@@ -1177,7 +1185,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
 
             outputs = self(**model_inputs)
@@ -1290,6 +1298,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         encoder_outputs,
         attention_mask,
         use_cache,
+        model_specific_kwargs,
     ):
         """ Generate sequences for each example with beam search.
         """
@@ -1316,7 +1325,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
