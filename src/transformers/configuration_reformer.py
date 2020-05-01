@@ -57,24 +57,22 @@ class ReformerConfig(PretrainedConfig):
             axial_pos_embds_dim (:obj:`list(int)`, optional, defaults to `[64, 192]`):
                 The embedding dims of the axial position encodings.
                 The sum of the embedding dims has to equal the hidden size.
-
                 For more information on how axial position embeddings work, see `Axial Position Encodings <reformer.html#axial-positional-encodings>`__ncodings.
             chunk_size_lm_head (:obj:`int`, optional, defaults to 0):
                 The chunk size of the final language model feed forward head layer.
                 A chunk size of 0 means that the feed forward layer is not chunked.
                 A chunk size of n means that the feed forward layer processes n < sequence_length embeddings at a time.
-                For more information on feed forward chunking, see `How does Feed Forward Chunking work ? <../glossary.html#feed-forward-chunking>`__ .
+                For more information on feed forward chunking, see `How does Feed Forward Chunking work? <../glossary.html#feed-forward-chunking>`__ .
             chunk_size_feed_forward (:obj:`int`, optional, defaults to 0):
                 The chunk size of all feed forward layers in the residual attention blocks.
                 A chunk size of 0 means that the feed forward layer is not chunked.
                 A chunk size of n means that the feed forward layer processes n < sequence_length embeddings at a time.
-
-                For more information on feed forward chunking, see `How does Feed Forward Chunking work <../glossary.html#feed-forward-chunking>`__ .
-            eos_token_id (:obj: `int`, optional, defaults to 2):
+                For more information on feed forward chunking, see `How does Feed Forward Chunking work? <../glossary.html#feed-forward-chunking>`__ .
+            eos_token_id (:obj:`int`, optional, defaults to 2):
                 The token id for the <EOS> token.
             feed_forward_size (:obj:`int`, optional, defaults to 512):
                 Dimensionality of the "feed_forward" (i.e., feed-forward) layer in the residual attention block.
-            hash_seed (:obj: `int`, optional, defaults to `None`):
+            hash_seed (:obj:`int`, optional, defaults to `None`):
                 Seed that can be used to make local sensitive hashing in LSHSelfAttention deterministic. This should only be set for testing purposed. For evaluation and training purposes `hash_seed` should be set to `None` to ensure fully random rotations in local sensitive hashing scheme.
             hidden_act (:obj:`str` or :obj:`function`, optional, defaults to "relu"):
                 The non-linear activation function (function or string) in the feed forward layer in the residual attention block.
@@ -118,7 +116,7 @@ class ReformerConfig(PretrainedConfig):
             num_hashes (:obj:`int`, optional, defaults to 1):
                 Number of hashing rounds (e.g. number of random rotations) in Local Sensitive Hashing scheme.
                 The higher `num_hashes`, the more accurate the `LSHSelfAttention` becomes, but also the more memory and time intensive the hashing becomes.
-            pad_token_id (:obj: `int`, optional, defaults to 0):
+            pad_token_id (:obj:`int`, optional, defaults to 0):
                 The token id for the <PAD> token.
             vocab_size (:obj:`int`, optional, defaults to 320):
                 Vocabulary size of the Reformer model. Defines the different tokens that
