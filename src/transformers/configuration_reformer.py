@@ -30,8 +30,7 @@ class ReformerConfig(PretrainedConfig):
     r"""
         This is the configuration class to store the configuration of a :class:`~transformers.ReformerModel`.
         It is used to instantiate an Reformer model according to the specified arguments, defining the model
-        architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-        the Reformer `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
+        architecture.
 
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
@@ -97,7 +96,7 @@ class ReformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=10,
+        vocab_size=320,
         attention_head_size=32,
         hidden_size=64,
         num_attention_heads=1,
@@ -124,7 +123,7 @@ class ReformerConfig(PretrainedConfig):
         axial_pos_embds=False,
         axial_pos_shape=[32, 16],
         axial_pos_embds_dim=[32, 32],
-        attn_layers=["lsh", "lsh", "lsh", "lsh"],
+        attn_layers=["local", "lsh", "local", "lsh", "local", "lsh"],
         is_decoder=False,
         pad_token_id=0,
         eos_token_id=2,
