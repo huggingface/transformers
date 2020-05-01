@@ -32,8 +32,23 @@ except ImportError:
     _has_apex = False
 
 
+try:
+    import torch_xla.core.xla_model as xm
+    import torch_xla.debug.metrics as met
+    import torch_xla.distributed.parallel_loader as pl
+    import torch_xla.distributed.xla_multiprocessing as xmp
+
+    _has_tpu = True
+except ImportError:
+    _has_tpu = False
+
+
 def is_apex_available():
     return _has_apex
+
+
+def is_tpu_available():
+    return _has_tpu
 
 
 try:
@@ -86,6 +101,12 @@ def torch_distributed_zero_first(local_rank: int):
     yield
     if local_rank == 0:
         torch.distributed.barrier()
+
+
+def get_tpu_sampler(dataset):
+    if xm.xrt_world_size() <= 1:
+        return RandomSampler(dataset)
+    return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
 
 
 class Trainer:
@@ -149,37 +170,63 @@ class Trainer:
         if self.args.local_rank in [-1, 0]:
             os.makedirs(self.args.output_dir, exist_ok=True)
 
+    def is_local_master(self):
+        return xm.is_master_ordinal() if is_tpu_available() else self.args.local_rank in [-1, 0]
+
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
         train_sampler = (
             RandomSampler(self.train_dataset) if self.args.local_rank == -1 else DistributedSampler(self.train_dataset)
-        )
-        return DataLoader(
+        ) if not is_tpu_available() else get_tpu_sampler(self.train_dataset)
+
+        data_loader = DataLoader(
             self.train_dataset,
             batch_size=self.args.train_batch_size,
             sampler=train_sampler,
             collate_fn=self.data_collator.collate_batch,
         )
 
+        if is_tpu_available():
+            data_loader = pl.ParallelLoader(data_loader, [self.args.device]).per_device_loader(self.args.device)
+
+        return data_loader
+
     def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
-        return DataLoader(
+
+        sampler = get_tpu_sampler(eval_dataset) if is_tpu_available() else None
+
+        data_loader = DataLoader(
             eval_dataset if eval_dataset is not None else self.eval_dataset,
+            sampler=sampler,
             batch_size=self.args.eval_batch_size,
             shuffle=False,
             collate_fn=self.data_collator.collate_batch,
         )
 
+        if is_tpu_available():
+            data_loader = pl.ParallelLoader(data_loader, [self.args.device]).per_device_loader(self.args.device)
+
+        return data_loader
+
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
         # We use the same batch_size as for eval.
-        return DataLoader(
+        sampler = get_tpu_sampler(test_dataset) if is_tpu_available() else None
+
+        data_loader = DataLoader(
             test_dataset,
+            sampler=sampler,
             batch_size=self.args.eval_batch_size,
             shuffle=False,
             collate_fn=self.data_collator.collate_batch,
         )
+
+        if is_tpu_available():
+            data_loader = pl.ParallelLoader(data_loader, [self.args.device]).per_device_loader(self.args.device)
+
+        return data_loader
 
     def get_optimizers(
         self, num_training_steps: int
@@ -309,10 +356,10 @@ class Trainer:
         logging_loss = 0.0
         model.zero_grad()
         train_iterator = trange(
-            epochs_trained, int(num_train_epochs), desc="Epoch", disable=self.args.local_rank not in [-1, 0],
+            epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_master()
         )
         for epoch in train_iterator:
-            epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=self.args.local_rank not in [-1, 0])
+            epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master())
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
@@ -332,12 +379,16 @@ class Trainer:
                     else:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
-                    optimizer.step()
+                    if is_tpu_available():
+                        xm.optimizer_step(optimizer)
+                    else:
+                        optimizer.step()
+
                     scheduler.step()
                     model.zero_grad()
                     global_step += 1
 
-                    if self.args.local_rank in [-1, 0]:
+                    if self.is_local_master():
                         if (self.args.logging_steps > 0 and global_step % self.args.logging_steps == 0) or (
                             global_step == 1 and self.args.logging_first_step
                         ):
@@ -371,6 +422,7 @@ class Trainer:
                                 assert model is self.model
                             # Save model checkpoint
                             output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{global_step}")
+
                             self.save_model(output_dir)
                             self._rotate_checkpoints()
                             torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
@@ -380,11 +432,14 @@ class Trainer:
                 if self.args.max_steps > 0 and global_step > self.args.max_steps:
                     epoch_iterator.close()
                     break
+            if self.args.tpu_metrics_debug:
+                # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
+                xm.master_print(met.metrics_report())
             if self.args.max_steps > 0 and global_step > self.args.max_steps:
                 train_iterator.close()
                 break
 
-        if self.tb_writer:
+        if self.tb_writer and (not is_tpu_available() or (is_tpu_available() and xm.is_master_ordinal())):
             self.tb_writer.close()
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
@@ -418,7 +473,9 @@ class Trainer:
         This will be True only in one process, even in distributed mode,
         even when training on multiple machines.
         """
-        return self.args.local_rank == -1 or torch.distributed.get_rank() == 0
+        return self.args.local_rank == -1 or torch.distributed.get_rank() == 0 or (
+                is_tpu_available() and xm.is_master_ordinal()
+        )
 
     def save_model(self, output_dir: Optional[str] = None):
         """
@@ -557,6 +614,11 @@ class Trainer:
                         label_ids = inputs["labels"].detach().cpu().numpy()
                     else:
                         label_ids = np.append(label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
+
+        if is_tpu_available():
+            # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
+            preds = xm.mesh_reduce("eval_preds", preds, np.concatenate)
+            label_ids = xm.mesh_reduce("eval_out_label_ids", label_ids, np.concatenate)
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
