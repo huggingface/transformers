@@ -10,7 +10,7 @@ class FlaxRobertaModel(FlaxBertModel):
     pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
-    def __init__(self, config: BertConfig, state: dict, seed: int, **kwargs):
+    def __init__(self, config: BertConfig, state: dict, seed: int = 0, **kwargs):
 
         super().__init__(config, state, seed, **kwargs)
 
