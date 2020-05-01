@@ -21,7 +21,6 @@ import pickle
 
 import numpy as np
 import torch
-from tensorflow.compat.v1.io.gfile import GFile
 
 from transformers import ReformerConfig, ReformerModelWithLMHead
 
@@ -30,6 +29,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 def set_param(torch_layer, weight, bias=None):
+    # set parameter of one layer
     assert torch_layer.weight.shape == weight.shape, "{} layer.weight does not match".format(torch_layer)
     torch_layer.weight = torch.nn.Parameter(weight)
     if bias is not None:
@@ -180,7 +180,7 @@ def convert_trax_checkpoint_to_pytorch(trax_model_pkl_path, config_file, pytorch
     print("Building PyTorch model from configuration: {}".format(str(config)))
     model = ReformerModelWithLMHead(config)
 
-    with GFile(trax_model_pkl_path, "rb") as f:
+    with open(trax_model_pkl_path, "rb") as f:
         model_weights = pickle.load(f)["weights"]
 
     set_model_weights_in_torch(model_weights, model, config.hidden_size)
