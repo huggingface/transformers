@@ -38,7 +38,7 @@ if is_torch_available():
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
-class BertModelTester(object):
+class BertModelTester:
     def __init__(
         self,
         parent,
