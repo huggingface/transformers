@@ -41,7 +41,7 @@ Training parameters:
 | News | 45.3859 |
 | Social Media | 84.6408 |
 
-For furhter details, qualitative analysis and human evaluation check out: https://arxiv.org/abs/2004.14253
+For further details, qualitative analysis and human evaluation check out: https://arxiv.org/abs/2004.14253
 
 ## Load Pretrained Model
 
