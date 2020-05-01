@@ -44,7 +44,7 @@ class ReformerConfig(PretrainedConfig):
             attn_layers (:obj:`list(str)`, optional, defaults to ["local", "lsh", "local", "lsh", "local", "lsh"]):
                 List of attention layer types in ascending order. It can be chosen between a
                 LSHSelfAttention layer ("lsh") and a LocalSelfAttention layer ("local").
-                For more information on LSHSelfAttention layer, see `Local Sensitive Hashing Self Attention <reformer.html#local-sensitive-hashing-self-attention>`__ .
+                For more information on LSHSelfAttention layer, see `LSH Sensitive Hashing Self Attention <reformer.html#lsh-sensitive-hashing-self-attention>`__ .
                 For more information on LocalSelfAttention layer, see `Local Self Attention <reformer.html#local-sensitive-hashing-self-attention>`__ .
             axial_pos_embds (:obj:`bool`, optional, defaults to True):
                 If `True` use axial position embeddings. For more information on how axial position embeddings work, see `Axial Position Encodings <reformer.html#axial-positional-encodings>`__
@@ -63,7 +63,7 @@ class ReformerConfig(PretrainedConfig):
                 The chunk size of the final language model feed forward head layer.
                 A chunk size of 0 means that the feed forward layer is not chunked.
                 A chunk size of n means that the feed forward layer processes n < sequence_length embeddings at a time.
-                For more information on feed forward chunking, see `How does Feed Forward Chunking work <../glossary.html#feed-forward-chunking>`__ .
+                For more information on feed forward chunking, see `How does Feed Forward Chunking work ? <../glossary.html#feed-forward-chunking>`__ .
             chunk_size_feed_forward (:obj:`int`, optional, defaults to 0):
                 The chunk size of all feed forward layers in the residual attention blocks.
                 A chunk size of 0 means that the feed forward layer is not chunked.

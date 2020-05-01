@@ -142,7 +142,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
                 local_num_chunks_before=self.local_num_chunks_before,
                 attn_layers=self.attn_layers,
                 pad_token_id=self.pad_token_id,
-                hash_seed=self.hash_seed
+                hash_seed=self.hash_seed,
             )
 
             return (
