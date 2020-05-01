@@ -105,3 +105,15 @@ BERT has two checkpoints that can be used for multi-lingual tasks:
 
 These checkpoints do not require language embeddings at inference time. They should identify the language
 used in the context and infer accordingly.
+
+XLM-RoBERTa
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+XLM-RoBERTa was trained on 2.5TB of newly created clean CommonCrawl data in 100 languages. It provides strong
+gains over previously released multi-lingual models like mBERT or XLM on downstream taks like classification,
+sequence labeling and question answering.
+
+Two XLM-RoBERTa checkpoints can be used for multi-lingual tasks:
+
+- ``xlm-roberta-base`` (Masked language modeling, 100 languages)
+- ``xlm-roberta-large`` (Masked language modeling, 100 languages)
