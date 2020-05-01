@@ -1,6 +1,6 @@
 ## Generating Chinese poetry by topic.
 
-
+```python
 from transformers import *
 
 tokenizer = BertTokenizer.from_pretrained("gaochangkuan/model_dir")
@@ -63,4 +63,4 @@ text = tokenizer.decode(generated_sequence)
 text = text[: text.find(stop_token) if stop_token else None]
 
 print(''.join(text).replace(' ','').replace('<pad>','').replace('<s>',''))
-
+```
