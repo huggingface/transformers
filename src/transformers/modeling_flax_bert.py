@@ -321,7 +321,7 @@ class FlaxBertModel(FlaxPreTrainedModel):
 
         return jax_state
 
-    def __init__(self, config: BertConfig, state: dict, seed: int, **kwargs):
+    def __init__(self, config: BertConfig, state: dict, seed: int = 0, **kwargs):
         model_def = BertModel.partial(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
