@@ -6,6 +6,7 @@ from transformers.commands.download import DownloadCommand
 from transformers.commands.env import EnvironmentCommand
 from transformers.commands.run import RunCommand
 from transformers.commands.serving import ServeCommand
+from transformers.commands.torchserve import TorchServeCommand
 from transformers.commands.user import UserCommands
 
 if __name__ == '__main__':
@@ -18,6 +19,7 @@ if __name__ == '__main__':
     EnvironmentCommand.register_subcommand(commands_parser)
     RunCommand.register_subcommand(commands_parser)
     ServeCommand.register_subcommand(commands_parser)
+    TorchServeCommand.register_subcommand(commands_parser)
     UserCommands.register_subcommand(commands_parser)
 
     # Let's go
