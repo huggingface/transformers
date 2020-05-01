@@ -73,7 +73,7 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Limit the total amount of checkpoints."
-                "Delete the older checkpoints in the output_dir, does not delete by default"
+                "Deletes the older checkpoints in the output_dir. Default is unlimited checkpoints"
             )
         },
     )
