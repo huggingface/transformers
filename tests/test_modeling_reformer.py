@@ -1106,8 +1106,8 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     @slow
     def test_pretrained_generate_crime_and_punish(self):
-        model = ReformerModelWithLMHead.from_pretrained("patrickvonplaten/reformer-crime-and-punish").to(torch_device)
-        tokenizer = ReformerTokenizer.from_pretrained("patrickvonplaten/reformer-crime-and-punish")
+        model = ReformerModelWithLMHead.from_pretrained("google/reformer-crime-and-punish").to(torch_device)
+        tokenizer = ReformerTokenizer.from_pretrained("google/reformer-crime-and-punish")
         model.eval()
 
         input_ids = tokenizer.encode("A few months later", return_tensors="pt").to(torch_device)
