@@ -129,7 +129,7 @@ class FlaxPreTrainedModel(ABC):
                 from flax.serialization import from_bytes
 
                 state = from_bytes(cls.model_class, state_f)
-            except UnpackException:
+            except TypeError:
                 try:
                     import torch
 
