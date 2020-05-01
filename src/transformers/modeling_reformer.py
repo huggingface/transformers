@@ -365,6 +365,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         self.dropout = config.lsh_attention_probs_dropout_prob
 
+        # save mask value here
+        self.register_buffer("self_mask_value_float16", torch.tensor(-1e3))
+        self.register_buffer("self_mask_value_float32", torch.tensor(-1e5))
+        self.register_buffer("mask_value_float16", torch.tensor(-1e4))
+        self.register_buffer("mask_value_float32", torch.tensor(-1e9))
+
     def forward(
         self,
         hidden_states,
@@ -612,17 +618,21 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
             # free memory
             del attn_mask
 
+        # get correct mask values depending on precision
+        if query_key_dots.dtype == torch.float16:
+            self_mask_value = self.self_mask_value_float16
+            mask_value = self.mask_value_float16
+        else:
+            self_mask_value = self.self_mask_value_float32
+            mask_value = self.mask_value_float32
+
+
         # if attention_mask and/or casaul mask apply here
         if mask is not None:
-            query_key_dots = torch.where(
-                mask, query_key_dots, torch.tensor(-1e9, dtype=query_key_dots.dtype, device=query_key_dots.device),
-            )
+            query_key_dots = torch.where(mask, query_key_dots, mask_value)
 
-        # Self mask is ALWAYS applied
-        # Note: Causal mask probably uses higher mask value (-1e9) than Self mask (-1e5) so that token is able to attend to itself when it has no other valid attention targets.
-        # Note: Self mask is used because Q and K projection weights are shared.
+        # Self mask is ALWAYS applied.
         # From the reformer paper (https://arxiv.org/pdf/2001.04451.pdf):
-
         # " While attention to the future is not allowed, typical implementations of the
         # Transformer do allow a position to attend to itself.
         # Such behavior is undesirable in a shared-QK formulation because the dot-product
@@ -631,9 +641,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # to forbid a token from attending to itself, except in situations
         # where a token has no other valid attention targets (e.g. the first token in a sequence) "
         mask = torch.ne(query_bucket_idx.unsqueeze(-1), key_value_bucket_idx.unsqueeze(-2)).to(query_bucket_idx.device)
-        query_key_dots = torch.where(
-            mask, query_key_dots, torch.tensor(-1e5, dtype=query_key_dots.dtype, device=query_key_dots.device),
-        )
+        query_key_dots = torch.where(mask, query_key_dots, self_mask_value)
         # free memory
         del mask
 
@@ -643,8 +651,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         # free memory
         del query_key_dots
 
-        # TODO(PVP): discuss with thom. Trax uses special dropout  here where same dropout mask is applied for all "num_hashes * seq_len // chunk_length" dim.
-        # should be fine with normal dropout, no?
         # dropout
         dots = nn.functional.dropout(dots, self.dropout, self.training)
 
@@ -751,6 +757,10 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
 
         self.dropout = config.local_attention_probs_dropout_prob
 
+        # save mask value here
+        self.register_buffer("mask_value_float16", torch.tensor(-1e4))
+        self.register_buffer("mask_value_float32", torch.tensor(-1e9))
+
     def forward(self, hidden_states, attention_mask=None, head_mask=None, do_output_attentions=False, **kwargs):
 
         # get SeqLen and BatchSize
@@ -829,8 +839,14 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
             del attn_mask, attention_mask, attention_mask_key
 
         if mask is not None:
+            # get mask tensor depending on half precision or not
+            if query_key_dots.dtype == torch.float16:
+                mask_value = self.mask_value_float16
+            else:
+                mask_value = self.mask_value_float32
+
             query_key_dots = torch.where(
-                mask, query_key_dots, torch.tensor(-1e9, dtype=query_key_dots.dtype, device=query_key_dots.device),
+                mask, query_key_dots, mask_value
             )
 
         # free memory
@@ -1488,7 +1504,6 @@ class ReformerOnlyLMHead(nn.Module):
     def forward(self, hidden_states):
         return apply_chunking_to_forward(self.chunk_size_lm_head, self.seq_len_dim, self.forward_chunk, hidden_states)
 
-    # TODO(PVP): Does this work with backpropagation?
     def forward_chunk(self, hidden_states):
         hidden_states = self.decoder(hidden_states)
         return hidden_states
@@ -1507,8 +1522,6 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         return self.lm_head.decoder
 
     def tie_weights(self):
-        # TODO(PVP): output and input embeddings are
-        # apparently not tied so skip this step
         pass
 
     def forward(

@@ -332,16 +332,8 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.half()
             model.eval()
-            model(input_ids, attention_mask=input_mask)
-
-        def create_and_check_reformer_model_fp16_generate(
-            self, config, input_ids, input_mask
-        ):
-            model = ReformerModelWithLMHead(config=config)
-            model.to(torch_device)
-            model.half()
-            model.eval()
-            model.generate(input_ids, attention_mask=input_mask, do_sample=False)
+            output = model(input_ids, attention_mask=input_mask)[0]
+            self.parent.assertFalse(torch.isnan(output).any().item())
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -775,7 +767,8 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.half()
             model.eval()
-            model(input_ids, attention_mask=input_mask)
+            output = model(input_ids, attention_mask=input_mask)[0]
+            self.parent.assertFalse(torch.isnan(output).any().item())
 
         def create_and_check_reformer_model_fp16_generate(
             self, config, input_ids, input_mask
@@ -784,7 +777,8 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.half()
             model.eval()
-            model.generate(input_ids, attention_mask=input_mask, do_sample=False)
+            output = model.generate(input_ids, attention_mask=input_mask, do_sample=False)
+            self.parent.assertFalse(torch.isnan(output).any().item())
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
