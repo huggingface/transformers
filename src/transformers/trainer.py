@@ -167,8 +167,11 @@ class Trainer:
             )
         set_seed(self.args.seed)
         # Create output directory if needed
-        if self.args.local_rank in [-1, 0]:
+        if self.is_local_master():
             os.makedirs(self.args.output_dir, exist_ok=True)
+
+        if is_tpu_available():
+            self.args.device = xm.xla_device()
 
     def is_local_master(self):
         return xm.is_master_ordinal() if is_tpu_available() else self.args.local_rank in [-1, 0]
