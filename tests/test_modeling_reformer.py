@@ -19,7 +19,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -215,12 +215,12 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             # normal padded
             attn_mask = torch.cat([torch.ones_like(half_input_ids), torch.zeros_like(half_input_ids)], dim=-1,)
             input_ids_padded = torch.cat(
-                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size),], dim=-1,
+                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1,
             )
 
             # shifted padded
             input_ids_roll = torch.cat(
-                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size),], dim=-1,
+                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1,
             )
             input_ids_roll = torch.roll(input_ids_roll, roll, dims=-1)
             attn_mask_roll = torch.roll(attn_mask, roll, dims=-1)
@@ -521,12 +521,12 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             # normal padded
             attn_mask = torch.cat([torch.ones_like(half_input_ids), torch.zeros_like(half_input_ids)], dim=-1,)
             input_ids_padded = torch.cat(
-                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size),], dim=-1,
+                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1,
             )
 
             # shifted padded
             input_ids_roll = torch.cat(
-                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size),], dim=-1,
+                [half_input_ids, ids_tensor((self.batch_size, half_seq_len), self.vocab_size)], dim=-1,
             )
             input_ids_roll = torch.roll(input_ids_roll, roll, dims=-1)
             attn_mask_roll = torch.roll(attn_mask, roll, dims=-1)
@@ -705,7 +705,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in list(REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = ReformerModelWithLMHead.from_pretrained(model_name, cache_dir=CACHE_DIR).to(torch_device)
+            model = ReformerModelWithLMHead.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -837,8 +837,8 @@ class ReformerIntegrationTests(unittest.TestCase):
     def _get_input_ids_and_mask(self):
         mask = torch.tensor(
             [
-                [1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1,],
-                [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0,],
+                [1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
+                [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 0, 0, 1, 0],
             ],
             dtype=torch.long,
             device=torch_device,
@@ -1096,9 +1096,7 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     @slow
     def test_pretrained_generate_crime_and_punish(self):
-        model = ReformerModelWithLMHead.from_pretrained(
-            "patrickvonplaten/reformer-crime-and-punish", cache_dir=CACHE_DIR
-        ).to(torch_device)
+        model = ReformerModelWithLMHead.from_pretrained("patrickvonplaten/reformer-crime-and-punish").to(torch_device)
         tokenizer = ReformerTokenizer.from_pretrained("patrickvonplaten/reformer-crime-and-punish")
         model.eval()
 
