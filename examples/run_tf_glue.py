@@ -1,5 +1,5 @@
 # coding=utf-8
-""" Fine-tuning the library models for named entity recognition."""
+""" Fine-tuning the library models for sequence classification."""
 
 
 import logging
@@ -34,36 +34,25 @@ class Split(Enum):
     test = "test"
 
 
-class TFGlueDataset:
-    """
-    This will be superseded by a framework-agnostic approach
-    soon.
-    """
+def get_tfds(
+    task_name: str, tokenizer: PreTrainedTokenizer, max_seq_length: Optional[int] = None, mode: Split = Split.train
+):
+    if task_name == "mnli-mm" and mode == Split.dev:
+        tfds_name = "mnli_mismatched"
+    elif task_name == "mnli-mm" and mode == Split.train:
+        tfds_name = "mnli"
+    elif task_name == "mnli" and mode == Split.dev:
+        tfds_name = "mnli_matched"
+    elif task_name == "sst-2":
+        tfds_name = "sst2"
+    elif task_name == "sts-b":
+        tfds_name = "stsb"
+    else:
+        tfds_name = task_name
 
-    def __init__(
-        self,
-        task_name: str,
-        tokenizer: PreTrainedTokenizer,
-        max_seq_length: Optional[int] = None,
-        mode: Split = Split.train,
-    ):
-        if task_name == "mnli-mm" and mode == Split.dev:
-            task_name = "validation_mismatched"
-        elif task_name == "mnli-mm" and mode == Split.train:
-            task_name = "mnli"
-        elif task_name == "mnli" and mode == Split.dev:
-            task_name = "validation_matched"
+    ds = tfds.load("glue/" + tfds_name, split=mode.value)
 
-        ds, info = tfds.load("glue/" + task_name, split=mode.value, with_info=True)
-        self.features = [0] * info.splits[mode.value].num_examples
-        # TODO clean up all this to leverage built-in features of tokenizers
-        self.dataset = glue_convert_examples_to_features(ds, tokenizer, max_seq_length, task_name)
-
-    def get_dataset(self):
-        return self.dataset
-
-    def __len__(self):
-        return len(self.features)
+    return glue_convert_examples_to_features(ds, tokenizer, max_seq_length, task_name)
 
 
 logger = logging.getLogger(__name__)
@@ -150,7 +139,7 @@ def main():
     logger.info("Training/evaluation parameters %s", training_args)
 
     try:
-        num_labels = glue_tasks_num_labels[data_args.task_name]
+        num_labels = glue_tasks_num_labels["mnli" if data_args.task_name == "mnli-mm" else data_args.task_name]
         output_mode = glue_output_modes[data_args.task_name]
     except KeyError:
         raise ValueError("Task not found: %s" % (data_args.task_name))
@@ -182,12 +171,12 @@ def main():
 
     # Get datasets
     train_dataset = (
-        TFGlueDataset(task_name=data_args.task_name, tokenizer=tokenizer, max_seq_length=data_args.max_seq_length)
+        get_tfds(task_name=data_args.task_name, tokenizer=tokenizer, max_seq_length=data_args.max_seq_length)
         if training_args.do_train
         else None
     )
     eval_dataset = (
-        TFGlueDataset(
+        get_tfds(
             task_name=data_args.task_name, tokenizer=tokenizer, max_seq_length=data_args.max_seq_length, mode=Split.dev
         )
         if training_args.do_eval

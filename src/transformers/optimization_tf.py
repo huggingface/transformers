@@ -26,7 +26,7 @@ class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
     def __init__(
         self, initial_learning_rate, decay_schedule_fn, warmup_steps, power=1.0, name=None,
     ):
-        super(WarmUp, self).__init__()
+        super().__init__()
         self.initial_learning_rate = initial_learning_rate
         self.warmup_steps = warmup_steps
         self.power = power
@@ -104,7 +104,7 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
         name="AdamWeightDecay",
         **kwargs
     ):
-        super(AdamWeightDecay, self).__init__(learning_rate, beta_1, beta_2, epsilon, amsgrad, name, **kwargs)
+        super().__init__(learning_rate, beta_1, beta_2, epsilon, amsgrad, name, **kwargs)
         self.weight_decay_rate = weight_decay_rate
         self._include_in_weight_decay = include_in_weight_decay
         self._exclude_from_weight_decay = exclude_from_weight_decay
@@ -160,7 +160,7 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
             return super(AdamWeightDecay, self)._resource_apply_sparse(grad, var, indices, **kwargs)
 
     def get_config(self):
-        config = super(AdamWeightDecay, self).get_config()
+        config = super().get_config()
         config.update({"weight_decay_rate": self.weight_decay_rate})
         return config
 
@@ -181,7 +181,7 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
         return True
 
 
-# Taken from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py
+# Extracted from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py
 class GradientAccumulator(object):
     """Gradient accumulation utility.
   When used with a distribution strategy, the accumulator should be called in a

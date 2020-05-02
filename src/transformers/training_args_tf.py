@@ -15,13 +15,26 @@ if is_tf_available():
 @dataclass
 class TFTrainingArguments(TrainingArguments):
     tpu: bool = field(default=False, metadata={"help": "Run the training over TPUs"})
-    optimizer_name: str = field(default="adam", metadata={"help": "Name of a Tensorflow optimizer"})
+    optimizer_name: str = field(
+        default="adam",
+        metadata={
+            "help": 'Name of a Tensorflow optimizer among "adadelta, adagrad, adam, adamax, ftrl, nadam, rmsprop, sgd, adamw"'
+        },
+    )
     mode: str = field(
         default="sequence-classification",
         metadata={"help": 'Type of task, one of "sequence-classification", "token-classification" '},
     )
-    loss_name: str = field(default="SparseCategoricalCrossentropy", metadata={"help": "Name of a Tensorflow loss"})
+    loss_name: str = field(
+        default="SparseCategoricalCrossentropy",
+        metadata={
+            "help": "Name of a Tensorflow loss. For the list see: https://www.tensorflow.org/api_docs/python/tf/keras/losses"
+        },
+    )
     eval_steps: int = field(default=1000, metadata={"help": "Run an eval every X steps."})
+    debug: bool = field(
+        default=False, metadata={"help": "Activate the trace to record computation graphs and profiling information"}
+    )
 
     @cached_property
     @tf_required

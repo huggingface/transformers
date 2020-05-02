@@ -10,21 +10,11 @@ import tensorflow as tf
 
 from .modeling_tf_utils import TFPreTrainedModel, shape_list
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput
 from .training_tf_args import TFTrainingArguments
 
 
 logger = logging.getLogger(__name__)
-
-
-class TFDataset:
-    TrainOutput,
-    """
-    Fake superclass to partially imitate the PT Dataset class.
-    """
-
-    def get_dataset(self):
-        return self.dataset
 
 
 class TFTrainer:
@@ -33,8 +23,8 @@ class TFTrainer:
     # something similar to a PT Dataset.
     # This is just temporary before to have
     # a framework-agnostic approach for datasets.
-    train_dataset: Optional[TFDataset]
-    eval_dataset: Optional[TFDataset]
+    train_dataset: Optional[tf.data.Dataset]
+    eval_dataset: Optional[tf.data.Dataset]
     compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None
     prediction_loss_only: bool
 
@@ -42,8 +32,8 @@ class TFTrainer:
         self,
         model: TFPreTrainedModel,
         args: TFTrainingArguments,
-        train_dataset: Optional[TFDataset] = None,
-        eval_dataset: Optional[TFDataset] = None,
+        train_dataset: Optional[tf.data.Dataset] = None,
+        eval_dataset: Optional[tf.data.Dataset] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         prediction_loss_only=False,
     ):
@@ -102,25 +92,32 @@ class TFTrainer:
         Prepare the training, validation and test data.
         """
         if self.train_dataset is not None:
+            self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
+
             if self.args.max_steps > 0:
                 self.train_steps = self.args.max_steps
             else:
-                self.train_steps: int = math.ceil(len(self.train_dataset) / self.args.train_batch_size)
+                self.train_steps: int = math.ceil(self.num_train_examples / self.args.train_batch_size)
 
-            self.tf_train_dataset: tf.data.Dataset = self.train_dataset.get_dataset().shuffle(128).batch(
-                self.args.train_batch_size
-            ).repeat(-1)
-            self.tf_train_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(
-                self.tf_train_dataset
+            self.train_dataset = (
+                self.train_dataset.cache()
+                .shuffle(self.num_train_examples)
+                .batch(self.args.train_batch_size)
+                .prefetch(tf.data.experimental.AUTOTUNE)
             )
+
+            if self.args.max_steps > 0:
+                self.train_dataset = self.train_dataset.repeat(-1)
+
+            self.train_dataset = self.args.strategy.experimental_distribute_dataset(self.train_dataset)
         else:
             self.train_steps = 0
 
         if self.eval_dataset is not None:
-            self.tf_eval_dataset: tf.data.Dataset = self.eval_dataset.get_dataset().batch(self.args.eval_batch_size)
-            self.tf_eval_dataset: tf.data.Dataset = self.args.strategy.experimental_distribute_dataset(
-                self.tf_eval_dataset
+            self.eval_dataset = (
+                self.eval_dataset.batch(self.args.eval_batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
             )
+            self.eval_dataset = self.args.strategy.experimental_distribute_dataset(self.eval_dataset)
 
     def _create_optimizer(self) -> None:
         """
@@ -188,7 +185,6 @@ class TFTrainer:
         preds: np.ndarray = None
 
         step: int = 1
-        loss: float = 0.0
 
         for features, labels in dataset:
             step = tf.convert_to_tensor(step, dtype=tf.int64)
@@ -237,7 +233,7 @@ class TFTrainer:
         Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
         """
         if eval_dataset is None:
-            eval_dataset = self.tf_eval_dataset
+            eval_dataset = self.eval_dataset
 
         output = self._prediction_loop(eval_dataset, description="Evaluation")
 
@@ -247,52 +243,57 @@ class TFTrainer:
         """
         Train method to train the model.
         """
-        tf.summary.trace_on(graph=True, profiler=True)
+        if self.args.debug:
+            tf.summary.trace_on(graph=True, profiler=True)
+
         self.gradient_accumulator.reset()
 
         iterations = self.optimizer.iterations
+
+        if iterations.numpy() > 0:
+            logger.info("Start the training from the last checkpoint")
+            start_epoch = (iterations.numpy() // self.train_steps) + 1
+        else:
+            start_epoch = 1
+
         tf.summary.experimental.set_step(iterations)
 
         epochs = 1 if self.args.max_steps > 0 else self.args.num_train_epochs
 
         logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", len(self.train_dataset))
-        logger.info("  Num Epochs = %d", self.args.num_train_epochs)
+        logger.info("  Num examples = %d", self.num_train_examples)
+        logger.info("  Num Epochs = %d", epochs)
         logger.info("  Total optimization steps = %d", self.train_steps)
 
-        for epoch in range(1, int(epochs + 1)):
+        for epoch in range(start_epoch, int(epochs + 1)):
             for training_loss in self._training_steps():
                 step = iterations.numpy()
-                training_loss = tf.reduce_mean(training_loss)
 
-                with self.writer.as_default():
-                    tf.summary.scalar("loss", training_loss, step=step)
-
-                if step == 1:
+                if step == 1 and self.args.debug:
                     with self.writer.as_default():
                         tf.summary.trace_export(name="training", step=step, profiler_outdir=self.args.logging_dir)
 
+                if self.args.evaluate_during_training and step % self.args.eval_steps == 0:
+                    logs = {}
+                    results = self.evaluate()
+
+                    for key, value in results.items():
+                        eval_key = "eval_{}".format(key)
+                        logs[eval_key] = value
+
+                    if callable(self.optimizer.learning_rate):
+                        logs["learning_rate"] = self.optimizer.learning_rate(step).numpy()
+                    else:
+                        logs["learning_rate"] = self.optimizer.learning_rate.numpy()
+
+                    logger.info("Epoch {} Step {} Validation Metrics {}".format(epoch, step, logs))
+
+                    with self.writer.as_default():
+                        for k, v in logs.items():
+                            tf.summary.scalar(k, v, step=step)
+
                 if step % self.args.logging_steps == 0:
                     logger.info("Epoch {} Step {} Train Loss {:.4f}".format(epoch, step, training_loss.numpy()))
-
-                    if self.args.evaluate_during_training and step % self.args.eval_steps == 0:
-                        logs = {}
-                        results = self.evaluate()
-
-                        for key, value in results.items():
-                            eval_key = "eval_{}".format(key)
-                            logs[eval_key] = value
-
-                        if callable(self.optimizer.learning_rate):
-                            logs["learning_rate"] = self.optimizer.learning_rate(step).numpy()
-                        else:
-                            logs["learning_rate"] = self.optimizer.learning_rate.numpy()
-
-                        logger.info("Epoch {} Step {} Validation Metrics {}".format(epoch, step, logs))
-
-                        with self.writer.as_default():
-                            for k, v in logs.items():
-                                tf.summary.scalar(k, v, step=step)
 
                 if step % self.args.save_steps == 0:
                     ckpt_save_path = self.model.ckpt_manager.save()
@@ -332,7 +333,7 @@ class TFTrainer:
 
     def _accumulate_next_gradients(self):
         """Accumulates the gradients from the next element in dataset."""
-        iterator = iter(self.tf_train_dataset)
+        iterator = iter(self.train_dataset)
 
         @tf.function
         def _accumulate_next():
@@ -352,18 +353,22 @@ class TFTrainer:
             self._forward, args=(per_replica_features, per_replica_labels)
         )
 
-        return self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, axis=0)
+        try:
+            reduced_loss = self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, axis=0)
+        except ValueError:
+            reduced_loss = self.args.strategy.reduce(tf.distribute.ReduceOp.MEAN, per_replica_loss, None)
+
+        return reduced_loss
 
     def _forward(self, features, labels):
         """Forwards a training example and accumulates the gradients."""
         per_example_loss, _ = self._run_model(features, labels, True)
-        loss = tf.nn.compute_average_loss(per_example_loss, global_batch_size=self.args.train_batch_size)
         vars = self.model.trainable_variables
 
         if self.args.mode == "token-classification":
             vars = [var for var in self.model.trainable_variables if "pooler" not in var.name]
 
-        gradients = self.optimizer.get_gradients(loss, vars)
+        gradients = self.optimizer.get_gradients(per_example_loss, vars)
 
         self.gradient_accumulator(gradients)
 
@@ -390,9 +395,11 @@ class TFTrainer:
         else:
             loss = self.loss(labels, logits)
 
+        loss += sum(self.model.losses) * (1.0 / self.args.n_gpu)
+
         return loss, logits
 
-    def predict(self, test_dataset: TFDataset) -> PredictionOutput:
+    def predict(self, test_dataset: tf.data.Dataset) -> PredictionOutput:
         """
         Run prediction and return predictions and potential metrics.
         Depending on the dataset and your use case, your test dataset may contain labels.
@@ -401,10 +408,10 @@ class TFTrainer:
           test_dataset: something similar to a PT Dataset. This is just
             temporary before to have a framework-agnostic approach for datasets.
         """
-        tf_test_dataset = test_dataset.get_dataset().batch(self.args.eval_batch_size)
-        tf_test_dataset = self.args.strategy.experimental_distribute_dataset(tf_test_dataset)
+        test_dataset = test_dataset.batch(self.args.eval_batch_size)
+        test_dataset = self.args.strategy.experimental_distribute_dataset(test_dataset)
 
-        return self._prediction_loop(tf_test_dataset, description="Prediction")
+        return self._prediction_loop(test_dataset, description="Prediction")
 
     def save_model(self) -> None:
         """

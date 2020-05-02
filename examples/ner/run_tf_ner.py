@@ -203,8 +203,8 @@ def main():
     trainer = TFTrainer(
         model=model,
         args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
+        train_dataset=train_dataset.get_dataset() if train_dataset else None,
+        eval_dataset=eval_dataset.get_dataset() if eval_dataset else None,
         compute_metrics=compute_metrics,
     )
 
@@ -243,7 +243,7 @@ def main():
             mode=Split.test,
         )
 
-        predictions, label_ids, metrics = trainer.predict(test_dataset)
+        predictions, label_ids, metrics = trainer.predict(test_dataset.get_dataset())
         preds_list, labels_list = align_predictions(predictions, label_ids)
         report = classification_report(labels_list, preds_list)
 
