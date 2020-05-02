@@ -1,7 +1,7 @@
 # DistilRoBERTa + Sentiment Analysis 😂😢😡😃😯
 
 This in an adaption version of [@omarsar0](https://twitter.com/omarsar0) [tutorial](https://t.co/WMnATW0Hwf?amp=1)
-He explain everything so detailed and provided the dataset. I just changed some parameters and created the ```config.json```file to upload it to [🤗Transformers HUB](https://huggingface.co/) 
+He explains everything so detailed and provided the dataset. I just changed some parameters and created the ```config.json```file to upload it to [🤗Transformers HUB](https://huggingface.co/) 
 
 
 In this tutorial, he shows how to fine-tune a language model (LM) for **emotion classification** with code adapted from this [tutorial](https://zablo.net/blog/post/custom-classifier-on-bert-model-guide-polemo2-sentiment-analysis/) by MARCIN ZABŁOCKI. 
