@@ -300,13 +300,20 @@ def tokenid2wordid(input_ids,tokenizer,examples):
 def examples2embeds(examples,tokenizer,model,device,writer,args):
     inputs=tokenizer.batch_encode_plus(examples,max_length=args.max_seq_length,return_attention_masks=True,add_special_tokens=True,pad_to_max_length='right')
     input_ids=torch.tensor(inputs['input_ids'])
-    print (input)
     attention_mask=torch.tensor(inputs['attention_mask']).to(device)
+    if args.lg:
+        language_id = tokenizer.lang2id[args.lg]
+        langs = torch.tensor([[language_id] * input_ids.shape[1]] * len(examples)).to(device)
+
+
     input_ids=input_ids.to(device)
     model.eval()
     with torch.no_grad():
         w2token_batch=tokenid2wordid(input_ids,tokenizer,examples)
-        all_encoder_layers,_=model(input_ids=input_ids,attention_mask=attention_mask)[-2:]
+        if args.lg:
+            all_encoder_layers, _ = model(input_ids=input_ids, langs=langs, attention_mask=attention_mask)[-2:]
+        else:
+            all_encoder_layers,_=model(input_ids=input_ids,attention_mask=attention_mask)[-2:]
         average_layer_batch = sum(all_encoder_layers[-args.layers:]) / args.layers
         wembs_sent_batch=tokenemb2wemb(average_layer_batch.cpu().detach().numpy(),w2token_batch)
         for i,sent in enumerate(examples):
@@ -441,6 +448,7 @@ def main():
                         action='store_true',
                         help="Whether not to use CUDA when available")
     parser.add_argument('--gpu', type=int,help='specify the gpu to use')
+    parser.add_argument('--lg',type=str,default='',help='language id')
 
     args = parser.parse_args()
 
