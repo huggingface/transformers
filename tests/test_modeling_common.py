@@ -127,7 +127,7 @@ class ModelTesterMixin:
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
         chunk_length = getattr(self.model_tester, "chunk_length", None)
         if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-            chunk_length = self.model_tester.chunk_length * config.num_hashes
+            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
             config.output_attentions = True
@@ -144,7 +144,7 @@ class ModelTesterMixin:
             if chunk_length is not None:
                 self.assertListEqual(
                     list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, chunk_length, encoder_seq_length, encoder_key_length],
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
                 )
             else:
                 self.assertListEqual(
@@ -187,7 +187,7 @@ class ModelTesterMixin:
             if chunk_length is not None:
                 self.assertListEqual(
                     list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, chunk_length, encoder_seq_length, encoder_key_length],
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
                 )
             else:
                 self.assertListEqual(
@@ -648,9 +648,13 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
 
+        # max length of input_ids should be < max_length
+        input_ids = input_ids[..., :10]
+
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
 
             if config.bos_token_id is None:
                 # if bos token id is not defined, model needs input_ids
@@ -689,8 +693,12 @@ class ModelTesterMixin:
             torch_device
         )
 
+        # max length of input_ids should be < max_length
+        input_ids = input_ids[..., :10]
+
         for model_class in self.all_generative_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
 
             if config.bos_token_id is None:
                 # if bos token id is not defined mobel needs input_ids, num_return_sequences = 1
