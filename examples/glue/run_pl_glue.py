@@ -124,7 +124,7 @@ class GLUETransformer(BaseTransformer):
         ret["log"] = results
         return ret, preds_list, out_label_list
 
-    def validation_end(self, outputs: list) -> dict:
+    def validation_epoch_end(self, outputs: list) -> dict:
         ret, preds, targets = self._eval_end(outputs)
         logs = ret["log"]
         return {"val_loss": logs["val_loss"], "log": logs, "progress_bar": logs}
