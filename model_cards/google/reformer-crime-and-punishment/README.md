@@ -1,10 +1,14 @@
 ## Reformer Model trained on "Crime and Punishment" 
-Crime and Punishment text was taken from `gs://trax-ml/reformer/crime-and-punishment-2554.txt`.
-Model was trained in flax using colab notebook proposed by authors: https://colab.research.google.com/github/google/trax/blob/master/trax/models/reformer/text_generation.ipynb
-Weights were converted to Hugging Face PyTorch `ReformerModelWithLMHead`.
 
-The model is a character level language model. Language from in `crime-and-punishment` style 
-can be generated as follows:
+Crime and Punishment is a novel written by Fyodor Dostoevsky and was translated into English. 
+
+Crime and Punishment training data was taken from `gs://trax-ml/reformer/crime-and-punishment-2554.txt` and contains 
+roughly 0.5M tokens. 
+
+The ReformerLM model was trained in flax using colab notebook proposed by authors: https://colab.research.google.com/github/google/trax/blob/master/trax/models/reformer/text_generation.ipynb .
+and the weights were converted to Hugging Face's PyTorch ReformerLM model `ReformerModelWithLMHead`.
+
+The model is a language model that operates on small sub-word units. Text can be generated as follows:
 
 ```python
 model = ReformerModelWithLMHead.from_pretrained("patrickvonplaten/reformer-crime-and-punish")
