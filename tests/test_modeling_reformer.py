@@ -37,6 +37,7 @@ if is_torch_available():
 @require_torch
 class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ReformerModel, ReformerModelWithLMHead) if is_torch_available() else ()
+    all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -46,7 +47,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             self,
             parent,
             batch_size=13,
-            seq_length=16,
+            seq_length=32,
             is_training=True,
             is_decoder=False,
             use_input_mask=True,
@@ -68,7 +69,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
             axial_norm_std=1.0,
             layer_norm_eps=1e-12,
             axial_pos_embds=True,
-            axial_pos_shape=[4, 4],
+            axial_pos_shape=[4, 8],
             axial_pos_embds_dim=[16, 16],
             attn_layers=["local", "local", "local", "local"],
             pad_token_id=0,
@@ -344,6 +345,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ReformerModel, ReformerModelWithLMHead) if is_torch_available() else ()
+    all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -377,7 +379,7 @@ class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase):
             axial_norm_std=1.0,
             layer_norm_eps=1e-12,
             axial_pos_embds=True,
-            axial_pos_shape=[2, 8],
+            axial_pos_shape=[4, 8],
             axial_pos_embds_dim=[16, 48],
             attn_layers=["lsh", "lsh", "lsh", "lsh"],
             pad_token_id=0,
