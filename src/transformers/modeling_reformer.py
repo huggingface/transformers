@@ -121,6 +121,9 @@ class AxialPositionEmbeddings(nn.Module):
             weight.expand((batch_size,) + self.axial_pos_shape + weight.shape[-1:]) for weight in self.weights
         ]
 
+        import ipdb
+        ipdb.set_trace()
+
         if self.training is True:
             assert (
                 reduce(mul, self.axial_pos_shape) == sequence_length

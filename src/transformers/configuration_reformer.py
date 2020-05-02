@@ -44,7 +44,7 @@ class ReformerConfig(PretrainedConfig):
             attn_layers (:obj:`list(str)`, optional, defaults to ["local", "lsh", "local", "lsh", "local", "lsh"]):
                 List of attention layer types in ascending order. It can be chosen between a
                 LSHSelfAttention layer ("lsh") and a LocalSelfAttention layer ("local").
-                For more information on LSHSelfAttention layer, see `LSH Sensitive Hashing Self Attention <reformer.html#lsh-sensitive-hashing-self-attention>`__ .
+                For more information on LSHSelfAttention layer, see `LSH Self Attention <reformer.html#lsh-self-attention>`__ .
                 For more information on LocalSelfAttention layer, see `Local Self Attention <reformer.html#local-sensitive-hashing-self-attention>`__ .
             axial_pos_embds (:obj:`bool`, optional, defaults to True):
                 If `True` use axial position embeddings. For more information on how axial position embeddings work, see `Axial Position Encodings <reformer.html#axial-positional-encodings>`__
