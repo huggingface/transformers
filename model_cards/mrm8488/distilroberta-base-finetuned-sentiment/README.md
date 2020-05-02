@@ -4,7 +4,7 @@ This in an adaption version of [@omarsar0](https://twitter.com/omarsar0) [tutori
 He explain everything so detailed and provided the dataset. I just changed some parameters and created the ```config.json```file to upload it to [🤗Transformers HUB](https://huggingface.co/) 
 
 
-In this tutorial, He shows to fine-tune a language model (LM) for **emotion classification** with code adapted from this [tutorial](https://zablo.net/blog/post/custom-classifier-on-bert-model-guide-polemo2-sentiment-analysis/) by MARCIN ZABŁOCKI. 
+In this tutorial, he shows how to fine-tune a language model (LM) for **emotion classification** with code adapted from this [tutorial](https://zablo.net/blog/post/custom-classifier-on-bert-model-guide-polemo2-sentiment-analysis/) by MARCIN ZABŁOCKI. 
 
 The emotions covered are:
  - sadness 😢
@@ -63,4 +63,3 @@ nlp_sentiment(text)
 > Created by [Manuel Romero/@mrm8488](https://twitter.com/mrm8488)
 
 > Made with <span style="color: #e25555;">&hearts;</span> in Spain
-
