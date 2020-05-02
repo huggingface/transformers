@@ -5,8 +5,7 @@ Crime and Punishment is a novel written by Fyodor Dostoevsky and was translated 
 Crime and Punishment training data was taken from `gs://trax-ml/reformer/crime-and-punishment-2554.txt` and contains 
 roughly 0.5M tokens. 
 
-The ReformerLM model was trained in flax using colab notebook proposed by authors: https://colab.research.google.com/github/google/trax/blob/master/trax/models/reformer/text_generation.ipynb .
-and the weights were converted to Hugging Face's PyTorch ReformerLM model `ReformerModelWithLMHead`.
+The ReformerLM model was trained in flax using colab notebook proposed by authors: https://colab.research.google.com/github/google/trax/blob/master/trax/models/reformer/text_generation.ipynb and the weights were converted to Hugging Face's PyTorch ReformerLM model `ReformerModelWithLMHead`.
 
 The model is a language model that operates on small sub-word units. Text can be generated as follows:
 
