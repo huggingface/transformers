@@ -12,7 +12,7 @@ from tqdm import tqdm
 from modeling_bertabs import BertAbs, build_predictor
 from transformers import BertTokenizer
 
-from .utils_summarization import (
+from utils_summarization import (
     CNNDMDataset,
     build_mask,
     compute_token_type_ids,
