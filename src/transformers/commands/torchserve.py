@@ -8,6 +8,10 @@ from transformers.pipelines import SUPPORTED_TASKS, pipeline
 
 
 try:
+    from model_archiver.model_packaging import package_model
+    from model_archiver.model_packaging import ModelExportUtils
+    from model_archiver.manifest_components.manifest import RuntimeType
+
     _torchserve_dependencies_installed = True
 except (ImportError, AttributeError):
     _torchserve_dependencies_installed = False
@@ -15,12 +19,13 @@ except (ImportError, AttributeError):
 
 logger = logging.getLogger("transformers-cli/torchserve")
 
+
 class TorchServeCommand(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
         torchserve_parser = parser.add_parser(
             "torchserve",
-            help="CLI interface to package and version models for serving with pytorch/serve."
+            help="CLI interface to package and version models for serving with pytorch/serve.",
         )
         torchserve_parser.set_defaults(func=lambda args: TorchServeCommand(args))
 
