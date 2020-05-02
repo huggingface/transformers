@@ -130,8 +130,7 @@ class NERTransformer(BaseTransformer):
         ret["log"] = results
         return ret, preds_list, out_label_list
 
-    def validation_end(self, outputs):
-        # todo: update to validation_epoch_end instead of deprecated validation_end
+    def validation_epoch_end(self, outputs):
         # when stable
         ret, preds, targets = self._eval_end(outputs)
         logs = ret["log"]
