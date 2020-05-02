@@ -1,5 +1,5 @@
 ---
-language: Sanskrit
+language: sanskrit
 ---
 
 
