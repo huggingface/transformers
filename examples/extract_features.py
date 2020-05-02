@@ -253,7 +253,7 @@ def read_examples(input_file,example_batch):
                 continue
             examples.append(line)
     start=0
-    while start <= len(examples):
+    while start < len(examples):
         yield examples[start:start+example_batch]
         start+=example_batch
 
@@ -297,9 +297,10 @@ def tokenid2wordid(input_ids,tokenizer,examples):
 
 
 def examples2embeds(examples,tokenizer,model,device,writer,args):
-    input=tokenizer.batch_encode_plus(examples,max_length=args.max_seq_length,return_attention_masks=True,add_special_tokens=True,pad_to_max_length='right')
-    input_ids=torch.tensor(input['input_ids'])
-    attention_mask=torch.tensor(input['attention_mask']).to(device)
+    inputs=tokenizer.batch_encode_plus(examples,max_length=args.max_seq_length,return_attention_masks=True,add_special_tokens=True,pad_to_max_length='right')
+    input_ids=torch.tensor(inputs['input_ids'])
+    print (input)
+    attention_mask=torch.tensor(inputs['attention_mask']).to(device)
     input_ids=input_ids.to(device)
     model.eval()
     with torch.no_grad():
