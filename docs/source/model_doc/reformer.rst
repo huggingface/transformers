@@ -45,7 +45,7 @@ Therefore the following holds:
 Intuitively, this means that a position embedding vector :math:`x_j \in \mathbb{R}^{d}` is now the composition of two factorized embedding vectors: :math:`x^1_{k, l} + x^2_{l, k}`, where as the ``config.max_embedding_size`` dimension :math:`j` is factorized into :math:`k \text{ and } l`.
 This design ensures that each position embedding vector :math:`x_j` is unique.
 
-Using the above example again, axial position encoding with :math:`d^1 = 2^5, d^2 = 2^5, n_s^1 = 2^9, n_s^2 = 2^10` can drastically reduced the number of parameters to :math:`2^14 + 2^15 \approx 49000` parameters.
+Using the above example again, axial position encoding with :math:`d^1 = 2^5, d^2 = 2^5, n_s^1 = 2^9, n_s^2 = 2^{10}` can drastically reduced the number of parameters to :math:`2^{14} + 2^{15} \approx 49000` parameters.
 
 In praxis, the parameter ``config.axial_pos_embds_dim`` is set to ``list``:math:`(d^1, d^2)` which sum has to be equal to ``config.hidden_size`` and ``config.axial_pos_shape`` is set to ``list``:math:`(n_s^1, n_s^2)` and which product has to be equal to ``config.max_embedding_size`` which during training has to be equal to the ``sequence length`` of the ``input_ids``.
 
@@ -55,16 +55,16 @@ LSH Self Attention
 ~~~~~~~~~~~~~~~~~~~~
 In Locality sensitive hashing (LSH) self attention the key and query projection weights are tied to that the key query embedding vectors are also tied.
 LSH self attention uses the locality sensitive 
-hashing mechanism proposed in `Practical and Optimal LSH for Angular Distance <https://arxiv.org/abs/1509.02897>`_ to assign each of the tied key query embedding vectors to one of ``config.num_buckets`` possible buckets. The premise is that the "similar" key query embedding vectors (in terms of *euclidean distance* to each other) are likely to be assigned to the same bucket. 
+hashing mechanism proposed in `Practical and Optimal LSH for Angular Distance <https://arxiv.org/abs/1509.02897>`_ to assign each of the tied key query embedding vectors to one of ``config.num_buckets`` possible buckets. The premise is that the "similar" key query embedding vectors (in terms of *angular distance* to each other) are likely to be assigned to the same bucket. 
 The accuracy of the LSH mechanism can be improved by increasing ``config.num_hashes`` or directly the argument ``num_hashes`` of the forward function so that the output of the LSH self attention better approximates the output of the "normal" full self attention.
 The buckets are then sorted and chunked into query key embedding vector chunks each of length ``config.lsh_chunk_length``. For each chunk, the query embedding vectors attend to its key vectors (which are tied to themselves) and to the key embedding vectors of ``config.lsh_num_chunks_before`` previous neighbooring chunks and ``config.lsh_num_chunks_after`` following neighbooring chunks.
-For more information, see the `original Paper <https://arxiv.org/abs/2001.04451>_` or this great `blog post <https://www.pragmatic.ml/reformer-deep-dive/>_`.
+For more information, see the `original Paper <https://arxiv.org/abs/2001.04451>`_ or this great `blog post <https://www.pragmatic.ml/reformer-deep-dive/>`_.
 
 Note that ``config.num_buckets`` can also be factorized into a ``list``:math:`(n_{\text{buckets}}^1, n_{\text{buckets}}^2)`. This way instead of assigning the query key embedding vectors to one of :math:`(1,\ldots, n_{\text{buckets}})` they are assigned to one of :math:`(1-1,\ldots, n_{\text{buckets}}^1-1, \ldots, 1-n_{\text{buckets}}^2, \ldots, n_{\text{buckets}}^1-n_{\text{buckets}}^2)`. This is crucial for very long sequences to save memory.
 
 It is recommended to leave ``config.num_buckets=None``, so that depending on the sequence length, a good value for ``num_buckets`` are calculated on the fly.
 
-Using LSH Self attention, the memory and time complexity of the query-key matmul operation can be reduced from :math:`\mathcal{O}(n_s \times n_s)` to :math:`\mathcal{O}(n_s \times n_s)`, which usually represents the memory and time bottleneck in a transformer model, with :math:`n_s` being the sequence length.
+Using LSH Self attention, the memory and time complexity of the query-key matmul operation can be reduced from :math:`\mathcal{O}(n_s \times n_s)` to :math:`\mathcal{O}(n_s + n_s)`, which usually represents the memory and time bottleneck in a transformer model, with :math:`n_s` being the sequence length.
 
 
 Local Self Attention
@@ -72,7 +72,7 @@ Local Self Attention
 Local self attention is essentially a "normal" self attention layer with 
 key, query and value projections, but is chunked so that in each chunk of length ``config.local_chunk_length`` the query embedding vectors only attends to the key embedding vectors in its chunk and to the key embedding vectors of ``config.local_num_chunks_before`` previous neighbooring chunks and ``config.local_num_chunks_after`` following neighbooring chunks.
 
-Using LSH Self attention, the memory and time complexity of the query-key matmul operation can be reduced from :math:`\mathcal{O}(n_s \times n_s)` to :math:`\mathcal{O}(n_s \times n_s)`, which usually represents the memory and time bottleneck in a transformer model, with :math:`n_s` being the sequence length.
+Using LSH Self attention, the memory and time complexity of the query-key matmul operation can be reduced from :math:`\mathcal{O}(n_s \times n_s)` to :math:`\mathcal{O}(n_s + n_s)`, which usually represents the memory and time bottleneck in a transformer model, with :math:`n_s` being the sequence length.
 
 
 Training
