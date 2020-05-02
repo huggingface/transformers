@@ -11,7 +11,7 @@ import tensorflow as tf
 from .modeling_tf_utils import TFPreTrainedModel, shape_list
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput
-from .training_tf_args import TFTrainingArguments
+from .training_args_tf import TFTrainingArguments
 
 
 logger = logging.getLogger(__name__)
