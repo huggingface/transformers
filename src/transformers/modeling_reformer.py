@@ -52,7 +52,6 @@ ACT2FN = {
     "gelu_fast": gelu_fast,
     "mish": mish,
 }
-ReformerLayerNorm = torch.nn.LayerNorm
 
 
 # Define named tuples for nn.Modules here
@@ -84,7 +83,7 @@ def _get_least_common_mult_chunk_len(config):
 
 class AxialPositionEmbeddings(nn.Module):
     """Constructs axial position embeddings. Useful for very long input
-    sequences to stay memory and computational efficient
+    sequences to save memory and time.
     """
 
     def __init__(self, config):
@@ -104,12 +103,12 @@ class AxialPositionEmbeddings(nn.Module):
 
         # create weights
         for axis, axial_pos_embd_dim in enumerate(self.axial_pos_embds_dim):
-            # create shape
+            # create expanded shapes
             ax_shape = [1] * len(self.axial_pos_shape)
             ax_shape[axis] = self.axial_pos_shape[axis]
             ax_shape = tuple(ax_shape) + (axial_pos_embd_dim,)
 
-            # create tenser and init
+            # create tensor and init
             self.weights.append(nn.Parameter(torch.ones(ax_shape, dtype=torch.float32)))
 
     def forward(self, position_ids):
@@ -132,8 +131,8 @@ class AxialPositionEmbeddings(nn.Module):
                 # permute weights so that 2D correctly drops dims 1 and 2
                 perm_weigthts = weights.permute(0, 3, 2, 1)
                 # drop entire matrix of last two dims (prev dims 1 and 2)
-                drop_perm_weights = nn.functional.dropout2d(perm_weigthts, self.dropout, training=self.training)
-                drop_weights = drop_perm_weights.permute(0, 3, 2, 1)
+                drop_permuted_weights = nn.functional.dropout2d(perm_weigthts, p=self.dropout, training=self.training)
+                drop_weights = drop_permuted_weights.permute(0, 3, 2, 1)
 
                 position_encodings = torch.reshape(drop_weights, (batch_size, sequence_length, -1))
 
@@ -170,7 +169,7 @@ class PositionEmbeddings(nn.Module):
 
     def forward(self, position_ids):
         position_embeddings = self.embedding(position_ids)
-        position_embeddings = nn.functional.dropout(position_embeddings, self.dropout, self.training)
+        position_embeddings = nn.functional.dropout(position_embeddings, p=self.dropout, training=self.training)
         return position_embeddings
 
 
@@ -210,15 +209,16 @@ class ReformerEmbeddings(nn.Module):
             position_ids.shape[-1], self.max_position_embeddings
         )
 
-        embeddings = nn.functional.dropout(inputs_embeds, self.dropout, self.training)
-        position_embeddings = self.position_embeddings(position_ids)
+        # dropout
+        embeddings = nn.functional.dropout(inputs_embeds, p=self.dropout, training=self.training)
 
+        # add positional embeddings
+        position_embeddings = self.position_embeddings(position_ids)
         embeddings = embeddings + position_embeddings
-        embeddings = nn.functional.dropout(embeddings, self.dropout, self.training)
         return embeddings
 
 
-class EfficientAttentionUtils(object):
+class EfficientAttentionMixin:
     """
     A few utilities for nn.Modules in Reformer, to be used as a mixin.
     """
@@ -232,7 +232,7 @@ class EfficientAttentionUtils(object):
                 num_chunks_after: chunks after current chunk to include in attention
 
             Returns:
-                array of shape [num_chunks, N * chunk_length, ...], where
+                tensor of shape [num_chunks, N * chunk_length, ...], where
                 N = (1 + num_chunks_before + num_chunks_after).
         """
         if num_chunks_before == 0 and num_chunks_after == 0:
@@ -290,7 +290,7 @@ class EfficientAttentionUtils(object):
             raise ValueError("Input vector rank should be one of [4, 5], but is: {}".format(len(vectors.shape)))
 
 
-class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
+class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
     def __init__(self, config):
         super().__init__()
         self.chunk_length = config.lsh_attn_chunk_length
@@ -354,13 +354,13 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         )
         assert (
             value_vectors.shape[-1] == self.attention_head_size
-        ), "last dim of query_key_vectors is {} but should be {}.".format(
+        ), "last dim of value_vectors is {} but should be {}.".format(
             value_vectors.shape[-1], self.attention_head_size
         )
 
         # set `num_buckets` on the fly, recommended way to do it
         if self.num_buckets is None:
-            self._set_num_buckets_on_the_fly(sequence_length)
+            self._set_num_buckets(sequence_length)
 
         # use cached buckets for backprop only
         if buckets is None:
@@ -369,7 +369,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         assert (
             int(buckets.shape[-1]) == num_hashes * sequence_length
-        ), "lash dim of buckets is {}, but should be {}".format(buckets.shape[-1], num_hashes * sequence_length)
+        ), "last dim of buckets is {}, but should be {}".format(buckets.shape[-1], num_hashes * sequence_length)
 
         sorted_bucket_idx, undo_sorted_bucket_idx = self._get_sorted_bucket_idx_and_undo_sorted_bucket_idx(
             sequence_length, buckets, num_hashes
@@ -532,7 +532,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
 
         return sorted_bucket_idx, undo_sorted_bucket_idx
 
-    def _set_num_buckets_on_the_fly(self, sequence_length):
+    def _set_num_buckets(self, sequence_length):
         # recommended `num_buckets` from paper
         num_buckets = 2 * sequence_length // self.chunk_length
 
@@ -605,7 +605,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionUtils):
         del query_key_dots
 
         # dropout
-        attention_probs = nn.functional.dropout(attention_probs, self.dropout, self.training)
+        attention_probs = nn.functional.dropout(attention_probs, p=self.dropout, training=self.training)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -736,7 +736,7 @@ class ReverseSort(Function):
         return grad_out_vectors, grad_logits, None, None, None
 
 
-class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
+class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
     def __init__(self, config):
         super().__init__()
 
@@ -853,7 +853,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionUtils):
         del logits
 
         # dropout
-        attention_probs = nn.functional.dropout(attention_probs, self.dropout, self.training)
+        attention_probs = nn.functional.dropout(attention_probs, p=self.dropout, training=self.training)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -912,7 +912,7 @@ class ReformerSelfOutput(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         return hidden_states
 
 
@@ -922,7 +922,7 @@ class ReformerAttention(nn.Module):
         self.layer_id = layer_id
         self.attn_layers = config.attn_layers
 
-        self.layer_norm = ReformerLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if len(set(self.attn_layers)) == 1 and self.attn_layers[0] == "lsh":
             self.self_attention = LSHSelfAttention(config)
@@ -989,7 +989,7 @@ class ReformerFeedForwardDense(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = self.act_fn(hidden_states)
         return hidden_states
 
@@ -1003,7 +1003,7 @@ class ReformerFeedForwardOutput(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         return hidden_states
 
 
@@ -1013,7 +1013,7 @@ class ChunkReformerFeedForward(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
 
-        self.layer_norm = ReformerLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dense = ReformerFeedForwardDense(config)
         self.output = ReformerFeedForwardOutput(config)
 
@@ -1090,7 +1090,7 @@ class ReformerLayer(nn.Module):
     ):
         with torch.no_grad():
             # every forward pass we sample a different seed
-            # for dropout and save seed for forward fn in backward
+            # for dropout and save for forward fn in backward pass
             # to have correct dropout
             self._init_attention_seed()
             attn_outputs = self.attention(
@@ -1299,7 +1299,7 @@ class ReformerEncoder(nn.Module):
         self.layers = nn.ModuleList([ReformerLayer(config, i) for i in range(config.num_hidden_layers)])
         # Reformer is using Rev Nets, thus last layer outputs are concatenated and
         # Layer Norm is done over 2 * hidden_size
-        self.layer_norm = ReformerLayerNorm(2 * config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(2 * config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -1332,7 +1332,7 @@ class ReformerEncoder(nn.Module):
         hidden_states = self.layer_norm(hidden_states)
 
         # Apply dropout
-        hidden_states = nn.functional.dropout(hidden_states, self.dropout, self.training)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         return ReformerEncoderOutput(
             hidden_states=hidden_states, all_hidden_states=all_hidden_states, all_attentions=all_attentions
@@ -1385,15 +1385,13 @@ class ReformerPreTrainedModel(PreTrainedModel):
             for weight in module.weights:
                 torch.nn.init.normal_(weight, std=self.config.axial_norm_std)
         elif isinstance(module, nn.Embedding):
-            if module.weight.requires_grad:
-                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
-            if module.weight.requires_grad:
-                module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
-        elif isinstance(module, ReformerLayerNorm):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
@@ -1559,18 +1557,28 @@ class ReformerModel(ReformerPreTrainedModel):
 
         # if needs padding
         least_common_mult_chunk_length = _get_least_common_mult_chunk_len(self.config)
-        has_to_pad_to_match_chunk_length = input_shape[-1] % least_common_mult_chunk_length != 0
+        must_pad_to_match_chunk_length = input_shape[-1] % least_common_mult_chunk_length != 0
 
-        if has_to_pad_to_match_chunk_length:
+        if must_pad_to_match_chunk_length:
+            padding_length = least_common_mult_chunk_length - input_shape[-1] % least_common_mult_chunk_length
+
+            if self.training is True:
+                raise ValueError(
+                    "If training, sequence Length {} has to be a multiple of least common multiple chunk_length {}. Please consider padding the input to a length of {}.".format(
+                        input_shape[-2], least_common_mult_chunk_length, input_shape[-2] + padding_length
+                    )
+                )
+
             # pad input
             input_ids, inputs_embeds, attention_mask, position_ids, input_shape = self._pad_to_mult_of_chunk_length(
                 input_ids,
-                inputs_embeds,
-                attention_mask,
-                position_ids,
-                input_shape,
-                least_common_mult_chunk_length,
-                device,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                input_shape=input_shape,
+                padding_length=padding_length,
+                padded_seq_length=least_common_mult_chunk_length,
+                device=device,
             )
 
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
@@ -1586,7 +1594,7 @@ class ReformerModel(ReformerPreTrainedModel):
         sequence_output = encoder_outputs.hidden_states
 
         # if padding was applied
-        if has_to_pad_to_match_chunk_length:
+        if must_pad_to_match_chunk_length:
             sequence_output = sequence_output[:, :orig_sequence_length]
 
         outputs = (sequence_output,)
@@ -1598,15 +1606,16 @@ class ReformerModel(ReformerPreTrainedModel):
         return outputs
 
     def _pad_to_mult_of_chunk_length(
-        self, input_ids, inputs_embeds, attention_mask, position_ids, input_shape, padded_seq_length, device
+        self,
+        input_ids,
+        inputs_embeds=None,
+        attention_mask=None,
+        position_ids=None,
+        input_shape=None,
+        padding_length=None,
+        padded_seq_length=None,
+        device=None,
     ):
-        padding_length = padded_seq_length - input_shape[-1] % padded_seq_length
-        assert (
-            self.training is False
-        ), "Sequence Length {} has to be a multiple of least common multiple chunk_length {} if training. Please consider padding the input to a length of {}.".format(
-            input_shape[-2], padded_seq_length, input_shape[-2] + padding_length
-        )
-
         logger.info(
             "Input ids are automatically padded from {} to {} to be a multiple of `config.chunk_length`: {}".format(
                 input_shape[-1], input_shape[-1] + padding_length, padded_seq_length
@@ -1713,8 +1722,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         from transformers import ReformerModel, ReformerTokenizer
         import torch
 
-        tokenizer = ReformerTokenizer.from_pretrained('bert-base-uncased')
-        model = ReformerModel.from_pretrained('bert-base-uncased')
+        tokenizer = ReformerTokenizer.from_pretrained('google/reformer-crime-and-punishment')
+        model =  ReformerModelWithLMHead.from_pretrained('google/reformer-crime-and-punishment')
 
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=input_ids)
