@@ -10,8 +10,8 @@ from transformers.commands.user import UserCommands
 
 
 def main():
-    parser = ArgumentParser('Transformers CLI tool', usage='transformers-cli <command> [<args>]')
-    commands_parser = parser.add_subparsers(help='transformers-cli command helpers')
+    parser = ArgumentParser("Transformers CLI tool", usage="transformers-cli <command> [<args>]")
+    commands_parser = parser.add_subparsers(help="transformers-cli command helpers")
 
     # Register commands
     ConvertCommand.register_subcommand(commands_parser)
@@ -24,7 +24,7 @@ def main():
     # Let's go
     args = parser.parse_args()
 
-    if not hasattr(args, 'func'):
+    if not hasattr(args, "func"):
         parser.print_help()
         exit(1)
 
@@ -33,5 +33,5 @@ def main():
     service.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
