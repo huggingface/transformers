@@ -269,6 +269,10 @@ class TFTrainer:
             for training_loss in self._training_steps():
                 step = iterations.numpy()
 
+                if self.args.debug:
+                    with self.writer.as_default():
+                        tf.summary.scalar("loss", training_loss, step=step)
+
                 if step == 1 and self.args.debug:
                     with self.writer.as_default():
                         tf.summary.trace_export(name="training", step=step, profiler_outdir=self.args.logging_dir)
