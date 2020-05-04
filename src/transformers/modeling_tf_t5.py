@@ -893,15 +893,15 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
         )
-
+        logger.info(decoder_outputs)
         sequence_output = decoder_outputs[0] * (self.model_dim ** -0.5)
         embed_tokens = self.get_output_embeddings()
         lm_logits = embed_tokens(sequence_output, mode="linear")
+        logger.info(lm_logits)
+        return lm_logits
             
-        #return lm_logits
-            
-        decoder_outputs = (lm_logits,) + decoder_outputs[1:]
-        return decoder_outputs + encoder_outputs
+        # decoder_outputs = (lm_logits,) + decoder_outputs[1:]
+        # return decoder_outputs + encoder_outputs
 
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
