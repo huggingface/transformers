@@ -29,6 +29,10 @@ function evaluate() {
                                      --do_eval --log_energy_consumption
 }
 
+function analyze() {
+    python examples/compute_efficiency_info.py --log_dir ${out_dir}
+}
+
 function debug() {
     python -m pdb examples/run_superglue.py --data_dir ${data_dir} --task_name ${task} \
                                      --output_dir ${out_dir} --overwrite_output_dir \
@@ -64,8 +68,8 @@ function copa() { # bad results
     export task="copa"
     export data_dir="${PROC}/mtl-sentence-representations/COPA"
     export lr=0.00003
-    export grad_acc_steps=1 # {1, 2, 4} for respective batch size of {4, 8, 16}
-    export eval_freq=100     # {100, 50, 25}
+    export grad_acc_steps=2 # {1, 2, 4} for respective batch size of {4, 8, 16}
+    export eval_freq=50     # {100, 50, 25}
 }
 
 function multirc() { # 80.1 / 48.8 F1/EM (LR 1e-5); 77.7/41.6 (LR 3e-6)
@@ -128,14 +132,17 @@ elif [ $2 == "wsc" ]; then
 else
     echo "Task $2 not found"
 fi
-export dt=`date '+%d%m_%H%M'`
-export out_dir="${CKPTS}/transformers/superglue/${model}/${task}/${dt}"
+#export dt=`date '+%d%m_%H%M'`
+#export out_dir="${CKPTS}/transformers/superglue/${model}/${task}/${dt}"
+export out_dir="${CKPTS}/transformers/superglue/${model}/${task}"
 mkdir -p ${out_dir}
 
 if [ ${mode} == "train" ]; then
     train
 elif [ ${mode} == "evaluate" ]; then
     evaluate
+elif [ ${mode} == "analyze" ]; then
+    analyze
 elif [ ${mode} == "debug" ]; then
     debug
 else

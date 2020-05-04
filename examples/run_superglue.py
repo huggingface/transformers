@@ -67,8 +67,6 @@ from transformers import superglue_tasks_num_labels as task_spans
 from transformers import superglue_output_modes as output_modes
 from transformers import superglue_processors as processors
 
-from experiment_impact_tracker.compute_tracker import ImpactTracker
-
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -561,8 +559,8 @@ def main():
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
-    parser.add_argument("--adam_beta1", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
-    parser.add_argument("--adam_beta2", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
+    parser.add_argument("--adam_beta1", default=1e-8, type=float, help="Epsilon for Adam optimizer. Currently not used. ")
+    parser.add_argument("--adam_beta2", default=1e-8, type=float, help="Epsilon for Adam optimizer. Currently not used. ")
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument(
         "--num_train_epochs", default=3.0, type=float, help="Total number of training epochs to perform.",
@@ -631,12 +629,6 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN,
     )
-
-    # Launch impact tracker
-    if args.log_energy_consumption:
-        logging.info("Launching impact tracker...")
-        tracker = ImpactTracker(args.output_dir)
-        tracker.launch_impact_monitor()
 
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:
@@ -747,6 +739,14 @@ def main():
     # Evaluation
     results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
+
+        # Launch impact tracker
+        if args.log_energy_consumption:
+            from experiment_impact_tracker.compute_tracker import ImpactTracker
+            logging.info("Launching impact tracker...")
+            tracker = ImpactTracker(args.output_dir)
+            tracker.launch_impact_monitor()
+
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
