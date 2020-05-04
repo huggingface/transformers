@@ -61,7 +61,7 @@ class ModelArguments:
     )
 
 
-def main(model_args, data_args, training_args):
+def run_glue(model_args, data_args, training_args):
     if (
         os.path.exists(training_args.output_dir)
         and os.listdir(training_args.output_dir)
@@ -108,7 +108,7 @@ def main(model_args, data_args, training_args):
         num_labels=num_labels,
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
-        xla_device=training_args.use_tpu
+        xla_device=training_args.use_tpu,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
@@ -191,10 +191,10 @@ def main(model_args, data_args, training_args):
 
 
 def _mp_fn(rank, model_args, data_args, training_args):
-    main(model_args, data_args, training_args)
+    run_glue(model_args, data_args, training_args)
 
 
-def main_cli():
+def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
@@ -210,10 +210,11 @@ def main_cli():
 
     if training_args.use_tpu:
         import torch_xla.distributed.xla_multiprocessing as xmp
-        xmp.spawn(_mp_fn, args=(model_args, data_args, training_args), nprocs=training_args.num_cores)
+
+        return xmp.spawn(_mp_fn, args=(model_args, data_args, training_args), nprocs=training_args.num_cores)
     else:
-        main(model_args, data_args, training_args)
+        return run_glue(model_args, data_args, training_args)
 
 
 if __name__ == "__main__":
-    main_cli()
+    main()

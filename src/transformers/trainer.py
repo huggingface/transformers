@@ -40,8 +40,6 @@ if is_tpu_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
     import torch_xla.distributed.parallel_loader as pl
-    import torch_xla.distributed.xla_multiprocessing as xmp
-
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -169,8 +167,14 @@ class Trainer:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
         train_sampler = (
-            RandomSampler(self.train_dataset) if self.args.local_rank == -1 else DistributedSampler(self.train_dataset)
-        ) if not is_tpu_available() else get_tpu_sampler(self.train_dataset)
+            (
+                RandomSampler(self.train_dataset)
+                if self.args.local_rank == -1
+                else DistributedSampler(self.train_dataset)
+            )
+            if not is_tpu_available()
+            else get_tpu_sampler(self.train_dataset)
+        )
 
         data_loader = DataLoader(
             self.train_dataset,
@@ -311,20 +315,19 @@ class Trainer:
         # Train!
         device = "TPU core" if is_tpu_available() else "GPU"
         total_train_batch_size = (
-            self.args.train_batch_size * self.args.num_cores
-        ) if is_tpu_available else (
-            self.args.train_batch_size
-            * self.args.gradient_accumulation_steps
-            * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1),
+            (self.args.train_batch_size * self.args.num_cores)
+            if is_tpu_available
+            else (
+                self.args.train_batch_size
+                * self.args.gradient_accumulation_steps
+                * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1),
+            )
         )
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_dataloader) * self.args.train_batch_size)
         logger.info("  Num Epochs = %d", num_train_epochs)
         logger.info("  Instantaneous batch size per %s = %d", device, self.args.per_gpu_train_batch_size)
-        logger.info(
-            "  Total train batch size (w. parallel, distributed & accumulation) = %d",
-            total_train_batch_size
-        )
+        logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", total_train_batch_size)
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", t_total)
 
@@ -470,8 +473,10 @@ class Trainer:
         This will be True only in one process, even in distributed mode,
         even when training on multiple machines.
         """
-        return self.args.local_rank == -1 or torch.distributed.get_rank() == 0 or (
-                is_tpu_available() and xm.is_master_ordinal()
+        return (
+            self.args.local_rank == -1
+            or torch.distributed.get_rank() == 0
+            or (is_tpu_available() and xm.is_master_ordinal())
         )
 
     def save_model(self, output_dir: Optional[str] = None):

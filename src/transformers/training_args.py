@@ -13,9 +13,6 @@ if is_torch_available():
 
 try:
     import torch_xla.core.xla_model as xm
-    import torch_xla.debug.metrics as met
-    import torch_xla.distributed.parallel_loader as pl
-    import torch_xla.distributed.xla_multiprocessing as xmp
 
     _has_tpu = True
 except ImportError:
@@ -109,15 +106,9 @@ class TrainingArguments:
         },
     )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
-    use_tpu: bool = field(
-        default=False, metadata={"help": "Whether to use a TPU device."}
-    )
-    num_cores: int = field(
-        default=8, metadata={"help": "Number of TPU cores to use (1 or 8)."}
-    )
-    tpu_metrics_debug: bool = field(
-        default=False, metadata={"help": "Whether to print debug metrics"}
-    )
+    use_tpu: bool = field(default=False, metadata={"help": "Whether to use a TPU device."})
+    num_cores: int = field(default=8, metadata={"help": "Number of TPU cores to use (1 or 8)."})
+    tpu_metrics_debug: bool = field(default=False, metadata={"help": "Whether to print debug metrics"})
 
     @property
     def train_batch_size(self) -> int:
