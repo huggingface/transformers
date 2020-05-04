@@ -316,7 +316,7 @@ class Trainer:
         device = "TPU core" if is_tpu_available() else "GPU"
         total_train_batch_size = (
             (self.args.train_batch_size * self.args.num_cores)
-            if is_tpu_available
+            if is_tpu_available()
             else (
                 self.args.train_batch_size
                 * self.args.gradient_accumulation_steps
