@@ -2115,6 +2115,18 @@ def apply_chunking_to_forward(
         input_tensors: tuple(torch.Tensor) - the input tensors of `forward_fn` which are chunked
     Returns:
         a Tensor with the same shape the foward_fn would have given if applied
+
+
+    Examples::
+
+        # rename the usual forward() fn to forward_chunk()
+        def forward_chunk(self, hidden_states):
+            hidden_states = self.decoder(hidden_states)
+            return hidden_states
+
+        # implement a chunked forward function
+        def forward(self, hidden_states):
+            return apply_chunking_to_forward(self.chunk_size_lm_head, self.seq_len_dim, self.forward_chunk, hidden_states)
     """
 
     assert len(input_tensors) > 0, "{} has to be a tuple/list of tensors".format(input_tensors)
