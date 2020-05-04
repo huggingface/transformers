@@ -576,6 +576,7 @@ def main():
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
     parser.add_argument("--warmup_ratio", default=0, type=float, help="Linear warmup over warmup_steps as a float.")
 
+    parser.add_argument("--log_energy_consumption", action="store_true", help="Whether to track energy consumption")
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
     parser.add_argument("--evaluate_steps", type=int, default=500, help="Evaluate every X updates steps.")
     parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
@@ -632,9 +633,10 @@ def main():
     )
 
     # Launch impact tracker
-    #logging.info("Launching impact tracker...")
-    #tracker = ImpactTracker(args.output_dir)
-    #tracker.launch_impact_monitor()
+    if args.log_energy_consumption:
+        logging.info("Launching impact tracker...")
+        tracker = ImpactTracker(args.output_dir)
+        tracker.launch_impact_monitor()
 
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:

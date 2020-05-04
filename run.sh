@@ -3,17 +3,18 @@ export model="roberta-large"
 # NOTE: USE --do_lower_case if using an uncased model (e.g. bert-base-uncased) !!!
 export mode=${1:evaluate}
 export gpuid=${3:-0}
+export seed=${4:-1}
 
 function train() {
     python examples/run_superglue.py --data_dir ${data_dir} --task_name ${task} \
                                      --output_dir ${out_dir} --overwrite_output_dir \
                                      --model_type ${model_type} --model_name_or_path ${model} \
+                                     --use_gpuid ${gpuid} --seed ${seed} \
                                      --do_train --num_train_epochs 10 \
                                      --do_eval --evaluate_steps ${eval_freq} \
                                      --learning_rate ${lr} \
                                      --warmup_ratio 0.06 \
                                      --weight_decay 0.01 \
-                                     --use_gpuid ${gpuid} \
                                      --per_gpu_train_batch_size 4 \
                                      --gradient_accumulation_steps ${grad_acc_steps} \
                                      --logging_steps 100
@@ -24,20 +25,20 @@ function evaluate() {
     python examples/run_superglue.py --data_dir ${data_dir} --task_name ${task} \
                                      --output_dir ${out_dir} --overwrite_output_dir \
                                      --model_type ${model_type} --model_name_or_path ${model} \
-                                     --do_eval \
-                                     --use_gpuid ${gpuid}
+                                     --use_gpuid ${gpuid} --seed ${seed} \
+                                     --do_eval --log_energy_consumption
 }
 
 function debug() {
     python -m pdb examples/run_superglue.py --data_dir ${data_dir} --task_name ${task} \
                                      --output_dir ${out_dir} --overwrite_output_dir \
                                      --model_type ${model_type} --model_name_or_path ${model} \
+                                     --use_gpuid ${gpuid} --seed ${seed} \
                                      --do_train --num_train_epochs 1 \
                                      --do_eval \ #--log_evaluate_during_training \
                                      --learning_rate ${lr} \
                                      --warmup_ratio 0.06 \
                                      --weight_decay 0.01 \
-                                     --use_gpuid ${gpuid} \
                                      --per_gpu_train_batch_size 4 \
                                      --gradient_accumulation_steps ${grad_acc_steps} \
                                      --logging_steps 100
@@ -62,15 +63,15 @@ function cb() { # 98.2/96.4 acc/f1
 function copa() { # bad results
     export task="copa"
     export data_dir="${PROC}/mtl-sentence-representations/COPA"
-    export lr=0.0000001
-    export grad_acc_steps=4
-    export eval_freq=25
+    export lr=0.00003
+    export grad_acc_steps=1 # {1, 2, 4} for respective batch size of {4, 8, 16}
+    export eval_freq=100     # {100, 50, 25}
 }
 
-function multirc() { # 80.1 / 48.8 F1/EM (LR 1e-5)
+function multirc() { # 80.1 / 48.8 F1/EM (LR 1e-5); 77.7/41.6 (LR 3e-6)
     export task="multirc"
     export data_dir="${PROC}/mtl-sentence-representations/MultiRC"
-    export lr=0.000003
+    export lr=0.00003
     export grad_acc_steps=8
     export eval_freq=851
 }
@@ -127,7 +128,8 @@ elif [ $2 == "wsc" ]; then
 else
     echo "Task $2 not found"
 fi
-export out_dir="${CKPTS}/transformers/superglue/${model}/${task}"
+export dt=`date '+%d%m_%H%M'`
+export out_dir="${CKPTS}/transformers/superglue/${model}/${task}/${dt}"
 mkdir -p ${out_dir}
 
 if [ ${mode} == "train" ]; then
