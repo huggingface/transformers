@@ -141,6 +141,7 @@ class ModelTesterMixin:
             self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
             if chunk_length is not None:
                 self.assertListEqual(
                     list(attentions[0].shape[-4:]),
@@ -648,8 +649,8 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
 
-        # max length of input_ids should be < max_length
-        input_ids = input_ids[..., :10]
+        # make sure that input_ids is at most of size 15
+        input_ids = input_ids[..., :15]
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:
@@ -693,8 +694,8 @@ class ModelTesterMixin:
             torch_device
         )
 
-        # max length of input_ids should be < max_length
-        input_ids = input_ids[..., :10]
+        # make sure that input_ids is at most of size 15
+        input_ids = input_ids[..., :15]
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config).to(torch_device)
