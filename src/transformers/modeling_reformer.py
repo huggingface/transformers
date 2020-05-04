@@ -518,7 +518,11 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             sorted_bucket_idx = torch.argsort(scaled_buckets, dim=-1)
 
             # create simple indices to scatter to, to have undo sort
-            indices = torch.arange(sorted_bucket_idx.shape[-1]).view(1, 1, -1).expand(sorted_bucket_idx.shape)
+            indices = (
+                torch.arange(sorted_bucket_idx.shape[-1], device=buckets.device)
+                .view(1, 1, -1)
+                .expand(sorted_bucket_idx.shape)
+            )
 
             # get undo sort
             undo_sorted_bucket_idx = sorted_bucket_idx.new(*sorted_bucket_idx.size())
