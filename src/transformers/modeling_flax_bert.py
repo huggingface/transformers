@@ -158,7 +158,7 @@ class BertOutput(nn.Module):
 class BertLayer(nn.Module):
     def apply(self, hidden_state, attention_mask, num_heads: int, head_size: int, intermediate_size: int):
         attention = BertAttention(
-            hidden_state, attention_mask, num_heads, head_size, intermediate_size, name="attention"
+            hidden_state, attention_mask, num_heads, head_size, name="attention"
         )
         intermediate = BertIntermediate(attention, intermediate_size, name="intermediate")
         output = BertOutput(intermediate, attention, name="output")
