@@ -67,11 +67,12 @@ ReformerEncoderOutput = namedtuple("ReformerEncoderOutput", ["hidden_states", "a
 
 def _get_least_common_mult_chunk_len(config):
     attn_types = config.attn_layers
-    if len(set(attn_types)) == 1 and attn_types[0] == "lsh":
+    attn_types_set = set(attn_types)
+    if len(attn_types_set) == 1 and attn_types[0] == "lsh":
         return config.lsh_attn_chunk_length
-    elif len(set(attn_types)) == 1 and attn_types[0] == "local":
+    elif len(attn_types_set) == 1 and attn_types[0] == "local":
         return config.local_attn_chunk_length
-    elif len(set(attn_types)) == 2 and set(attn_types) == set(["lsh", "local"]):
+    elif len(attn_types_set) == 2 and attn_types_set == set(["lsh", "local"]):
         return np.lcm(config.lsh_attn_chunk_length, config.local_attn_chunk_length)
     else:
         raise NotImplementedError(
@@ -129,12 +130,12 @@ class AxialPositionEmbeddings(nn.Module):
             if self.dropout > 0:
                 weights = torch.cat(broadcasted_weights, dim=-1)
                 # permute weights so that 2D correctly drops dims 1 and 2
-                perm_weigthts = weights.permute(0, 3, 2, 1)
+                transposed_weights = weights.transpose(2, 1)
                 # drop entire matrix of last two dims (prev dims 1 and 2)
-                drop_permuted_weights = nn.functional.dropout2d(perm_weigthts, p=self.dropout, training=self.training)
-                drop_weights = drop_permuted_weights.permute(0, 3, 2, 1)
+                dropped_transposed_weights = nn.functional.dropout2d(transposed_weights, p=self.dropout, training=self.training)
+                dropped_weights = dropped_transposed_weights.transpose(2, 1)
 
-                position_encodings = torch.reshape(drop_weights, (batch_size, sequence_length, -1))
+                position_encodings = torch.reshape(dropped_weights, (batch_size, sequence_length, -1))
 
             else:
                 position_encodings = torch.cat(
@@ -274,20 +275,6 @@ class EfficientAttentionMixin:
             return torch.reshape(vectors, split_dim_shape)
         else:
             raise ValueError("Input vector rank should be one of [3, 4], but is: {}".format(len(vectors.shape)))
-
-    def _merge_seq_length_dims(self, vectors, num_attn_heads):
-        """
-            merges factorized sequence length dims into one dim
-        """
-        batch_size = vectors.shape[0]
-        new_dim_shape = (batch_size, num_attn_heads, -1)
-
-        if len(vectors.shape) == 5:
-            return torch.reshape(vectors, new_dim_shape + (vectors.shape[-1],))
-        elif len(vectors.shape) == 4:
-            return torch.reshape(vectors, new_dim_shape)
-        else:
-            raise ValueError("Input vector rank should be one of [4, 5], but is: {}".format(len(vectors.shape)))
 
 
 class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
@@ -476,7 +463,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         rotations_shape = (self.num_attention_heads, vectors.shape[-1], num_hashes, rotation_size // 2)
         # create a random self.attention_head_size x num_hashes x num_buckets/2
-        random_rotations = torch.randn(rotations_shape, device=vectors.device).to(vectors.dtype)
+        random_rotations = torch.randn(rotations_shape, device=vectors.device, dtype=vectors.dtype)
 
         # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2
         rotated_vectors = torch.einsum("bmtd,mdhr->bmhtr", vectors, random_rotations)
@@ -502,33 +489,38 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # buckets is now (Batch_size x Num_Attn_Heads x Num_Hashes x Seq_Len).
         # Next we add offsets so that bucket numbers from different hashing rounds don't overlap.
         offsets = torch.arange(num_hashes, device=vectors.device)
-        offsets = torch.reshape(offsets * num_buckets, (-1, 1))
+        offsets = (offsets * num_buckets).view((1, 1, -1, 1))
 
-        # repeat same values for Batch_size and Num_Attn_Heads
-        offsets = offsets.repeat(batch_size, self.num_attention_heads, 1, 1)
-        offset_buckets = self._merge_seq_length_dims(buckets + offsets, self.num_attention_heads)
+        # expand to batch size and num attention heads
+        offsets = offsets.expand((batch_size, self.num_attention_heads) + offsets.shape[-2:])
+        offset_buckets = (buckets + offsets).flatten(start_dim=2, end_dim=3)
 
         return offset_buckets
 
     def _get_sorted_bucket_idx_and_undo_sorted_bucket_idx(self, sequence_length, buckets, num_hashes):
-        batch_size = buckets.shape[0]
+        # no gradients are needed
+        with torch.no_grad():
+            batch_size = buckets.shape[0]
 
-        orig_indices = torch.arange(num_hashes * sequence_length, device=buckets.device)
-        orig_indices = orig_indices.repeat(batch_size, self.num_attention_heads, 1)
+            # arange and expand
+            orig_indices = torch.arange(num_hashes * sequence_length, device=buckets.device).view(1, 1, -1)
+            orig_indices = orig_indices.expand(batch_size, self.num_attention_heads, orig_indices.shape[-1])
 
-        # scale buckets
-        scaled_buckets = sequence_length * buckets + (orig_indices % sequence_length)
+            # scale buckets
+            scaled_buckets = sequence_length * buckets + (orig_indices % sequence_length)
 
-        # remove gradient
-        scaled_buckets = scaled_buckets.detach()
+            # remove gradient
+            scaled_buckets = scaled_buckets.detach()
 
-        # Hash-based sort
-        sorted_bucket_idx = torch.argsort(scaled_buckets, dim=-1)
-        undo_sorted_bucket_idx = torch.argsort(sorted_bucket_idx, dim=-1)
+            # Hash-based sort
+            sorted_bucket_idx = torch.argsort(scaled_buckets, dim=-1)
 
-        # remove gradient
-        sorted_bucket_idx = sorted_bucket_idx.detach()
-        undo_sorted_bucket_idx = undo_sorted_bucket_idx.detach()
+            # create simple indices to scatter to, to have undo sort
+            indices = torch.arange(sorted_bucket_idx.shape[-1]).view(1, 1, -1).expand(sorted_bucket_idx.shape)
+
+            # get undo sort
+            undo_sorted_bucket_idx = sorted_bucket_idx.new(*sorted_bucket_idx.size())
+            undo_sorted_bucket_idx.scatter_(-1, sorted_bucket_idx, indices)
 
         return sorted_bucket_idx, undo_sorted_bucket_idx
 
@@ -618,8 +610,8 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         del value_vectors
 
         # merge chunk length
-        logits = self._merge_seq_length_dims(logits, self.num_attention_heads).squeeze(-1)
-        out_vectors = self._merge_seq_length_dims(out_vectors, self.num_attention_heads)
+        logits = logits.flatten(start_dim=2, end_dim=3).squeeze(-1)
+        out_vectors = out_vectors.flatten(start_dim=2, end_dim=3)
 
         return out_vectors, logits, attention_probs
 
@@ -656,7 +648,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             length and attention head size dim normalization
         """
         vectors = self._len_norm(vectors)
-        vectors = vectors / torch.sqrt(
+        vectors = vectors * torch.rsqrt(
             torch.tensor(self.attention_head_size, device=vectors.device, dtype=vectors.dtype)
         )
         return vectors
@@ -666,7 +658,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             length normalization
         """
         variance = torch.mean(x ** 2, -1, keepdim=True)
-        norm_x = x / torch.sqrt(variance + epsilon)
+        norm_x = x * torch.rsqrt(variance + epsilon)
         return norm_x
 
     def _gather_by_expansion(self, vectors, idxs, num_hashes):
@@ -690,15 +682,14 @@ class ReverseSort(Function):
     @staticmethod
     def forward(ctx, out_vectors, logits, sorted_bucket_idx, undo_sorted_bucket_idx, num_hashes):
         # save sorted_bucket_idx for backprop
-        ctx.sorted_bucket_idx = sorted_bucket_idx
-        ctx.num_hashes = num_hashes
+        with torch.no_grad():
+            ctx.sorted_bucket_idx = sorted_bucket_idx
+            ctx.num_hashes = num_hashes
 
-        out_vectors = out_vectors.detach()
-        logits = logits.detach()
-        # undo sort to have correct order for next layer
-        expanded_undo_sort_indices = undo_sorted_bucket_idx.unsqueeze(-1).expand(out_vectors.shape)
-        out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
-        logits = torch.gather(logits, 2, undo_sorted_bucket_idx)
+            # undo sort to have correct order for next layer
+            expanded_undo_sort_indices = undo_sorted_bucket_idx.unsqueeze(-1).expand(out_vectors.shape)
+            out_vectors = torch.gather(out_vectors, 2, expanded_undo_sort_indices)
+            logits = torch.gather(logits, 2, undo_sorted_bucket_idx)
         return out_vectors, logits
 
     @staticmethod
@@ -715,11 +706,9 @@ class ReverseSort(Function):
 
         # split gradient vectors and sorted bucket idxs by concatenated chunk dimension to gather correct indices
         # shape is BatchSize x NumAttnHeads x NumHashes x ChunkLen
-        grad_logits = torch.reshape(grad_logits, (grad_logits_shape[:2] + (num_hashes, -1)))
+        grad_logits = grad_logits.view((grad_logits_shape[:2] + (num_hashes, -1)))
         # shape is BatchSize x NumAttnHeads x NumHashes x ChunkLen x ChunkLen
-        grad_out_vectors = torch.reshape(
-            grad_out_vectors, (grad_out_vectors_shape[:2] + (num_hashes, -1) + grad_out_vectors_shape[-1:])
-        )
+        grad_out_vectors = grad_out_vectors.view((grad_out_vectors_shape[:2] + (num_hashes, -1) + grad_out_vectors_shape[-1:]))
 
         # reshape and expand
         sorted_bucket_idx = torch.reshape(sorted_bucket_idx, (sorted_bucket_idx.shape[:2] + (num_hashes, -1)))
@@ -866,7 +855,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         del value_vectors
 
         # merge chunk length
-        out_vectors = self._merge_seq_length_dims(out_vectors, self.num_attention_heads)
+        out_vectors = out_vectors.flatten(start_dim=2, end_dim=3)
 
         assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size,)
 
