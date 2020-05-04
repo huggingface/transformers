@@ -309,15 +309,21 @@ class Trainer:
             self._setup_wandb()
 
         # Train!
-        logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", len(train_dataloader) * self.args.train_batch_size)
-        logger.info("  Num Epochs = %d", num_train_epochs)
-        logger.info("  Instantaneous batch size per GPU = %d", self.args.per_gpu_train_batch_size)
-        logger.info(
-            "  Total train batch size (w. parallel, distributed & accumulation) = %d",
+        device = "TPU core" if is_tpu_available() else "GPU"
+        total_train_batch_size = (
+            self.args.train_batch_size * self.args.num_cores
+        ) if is_tpu_available else (
             self.args.train_batch_size
             * self.args.gradient_accumulation_steps
             * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1),
+        )
+        logger.info("***** Running training *****")
+        logger.info("  Num examples = %d", len(train_dataloader) * self.args.train_batch_size)
+        logger.info("  Num Epochs = %d", num_train_epochs)
+        logger.info("  Instantaneous batch size per %s = %d", device, self.args.per_gpu_train_batch_size)
+        logger.info(
+            "  Total train batch size (w. parallel, distributed & accumulation) = %d",
+            total_train_batch_size
         )
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", t_total)
