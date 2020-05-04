@@ -47,7 +47,7 @@ class RobertaEmbeddings(BertEmbeddings):
 
     def __init__(self, config):
         super().__init__(config)
-        self.padding_idx = 1
+        self.padding_idx = config.pad_token_id
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
