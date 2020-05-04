@@ -115,7 +115,7 @@ class TrainingArguments:
     num_cores: int = field(
         default=8, metadata={"help": "Number of TPU cores to use (1 or 8)."}
     )
-    metrics_debug: bool = field(
+    tpu_metrics_debug: bool = field(
         default=False, metadata={"help": "Whether to print debug metrics"}
     )
 
