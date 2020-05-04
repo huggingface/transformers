@@ -20,7 +20,7 @@ from transformers import T5Config, is_tf_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -260,7 +260,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in ["t5-small"]:
-            model = TFT5Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
+            model = TFT5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 

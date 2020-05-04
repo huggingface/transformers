@@ -673,7 +673,7 @@ class TFBertModel(TFBertPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         pooler_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, hidden_size)`):
@@ -730,7 +730,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         seq_relationship_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, 2)`):
@@ -786,7 +786,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -836,7 +836,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         seq_relationship_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, 2)`)
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -892,7 +892,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -967,7 +967,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
     ):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         classification_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`:
             `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
 
@@ -1069,7 +1069,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -1126,7 +1126,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         start_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
