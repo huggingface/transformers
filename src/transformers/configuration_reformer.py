@@ -85,7 +85,7 @@ class ReformerConfig(PretrainedConfig):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             is_decoder (:obj:`bool`, optional, defaults to False):
                 If `is_decoder` is True, a causal mask is used in addition to `attention_mask`.
-                When using the Reformer for casaul language modeling, `is_decoder` is set to `True`.
+                When using the Reformer for causal language modeling, `is_decoder` is set to `True`.
             layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
                 The epsilon used by the layer normalization layers.
             local_chunk_length (:obj:`int`, optional, defaults to 64):
