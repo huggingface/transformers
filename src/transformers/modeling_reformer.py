@@ -132,7 +132,9 @@ class AxialPositionEmbeddings(nn.Module):
                 # permute weights so that 2D correctly drops dims 1 and 2
                 transposed_weights = weights.transpose(2, 1)
                 # drop entire matrix of last two dims (prev dims 1 and 2)
-                dropped_transposed_weights = nn.functional.dropout2d(transposed_weights, p=self.dropout, training=self.training)
+                dropped_transposed_weights = nn.functional.dropout2d(
+                    transposed_weights, p=self.dropout, training=self.training
+                )
                 dropped_weights = dropped_transposed_weights.transpose(2, 1)
 
                 position_encodings = torch.reshape(dropped_weights, (batch_size, sequence_length, -1))
@@ -708,7 +710,9 @@ class ReverseSort(Function):
         # shape is BatchSize x NumAttnHeads x NumHashes x ChunkLen
         grad_logits = grad_logits.view((grad_logits_shape[:2] + (num_hashes, -1)))
         # shape is BatchSize x NumAttnHeads x NumHashes x ChunkLen x ChunkLen
-        grad_out_vectors = grad_out_vectors.view((grad_out_vectors_shape[:2] + (num_hashes, -1) + grad_out_vectors_shape[-1:]))
+        grad_out_vectors = grad_out_vectors.view(
+            (grad_out_vectors_shape[:2] + (num_hashes, -1) + grad_out_vectors_shape[-1:])
+        )
 
         # reshape and expand
         sorted_bucket_idx = torch.reshape(sorted_bucket_idx, (sorted_bucket_idx.shape[:2] + (num_hashes, -1)))
