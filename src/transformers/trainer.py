@@ -47,6 +47,11 @@ except ImportError:
     except ImportError:
         _has_tensorboard = False
 
+
+def is_tensorboard_available():
+    return _has_tensorboard
+
+
 try:
     import wandb
 
@@ -55,8 +60,8 @@ except ImportError:
     _has_wandb = False
 
 
-def is_tensorboard_available():
-    return _has_tensorboard
+def is_wandb_available():
+    return _has_wandb
 
 
 logger = logging.getLogger(__name__)
@@ -158,8 +163,8 @@ class Trainer:
             logger.warning(
                 "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
             )
-        if not _has_wandb:
-            logger.warning(
+        if not is_wandb_available():
+            logger.info(
                 "You are instantiating a Trainer but wandb is not installed. Install it to use Weights & Biases logging."
             )
         set_seed(self.args.seed)
@@ -220,6 +225,12 @@ class Trainer:
         )
         return optimizer, scheduler
 
+    def _setup_wandb(self):
+        # Start a wandb run and log config parameters
+        wandb.init(name=self.args.logging_dir, config=vars(self.args))
+        # keep track of model topology and gradients
+        # wandb.watch(self.model)
+
     def train(self, model_path: Optional[str] = None):
         """
         Main training entry point.
@@ -274,12 +285,9 @@ class Trainer:
 
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", self.args.to_json_string())
-
-        # Start a wandb run and log config parameters
-        if _has_wandb:
-            wandb.init(config={**vars(self.args), "config": self.model.config.to_dict()})
-            # keep track of model topology and gradients
-            wandb.watch(self.model)
+            self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
+        if is_wandb_available():
+            self._setup_wandb()
 
         # Train!
         logger.info("***** Running training *****")
@@ -354,7 +362,7 @@ class Trainer:
                         ):
                             logs = {}
                             if self.args.evaluate_during_training:
-                                results = self.evaluate(no_log=True)
+                                results = self.evaluate()
                                 for key, value in results.items():
                                     eval_key = "eval_{}".format(key)
                                     logs[eval_key] = value
@@ -368,14 +376,8 @@ class Trainer:
                             if self.tb_writer:
                                 for k, v in logs.items():
                                     self.tb_writer.add_scalar(k, v, global_step)
-                            if _has_wandb:
-                                wandb.log(
-                                    {
-                                        **logs,
-                                        "epoch": global_step
-                                        / (len(train_dataloader) // self.args.gradient_accumulation_steps),
-                                    }
-                                )
+                            if is_wandb_available():
+                                wandb.log(logs, step=global_step)
 
                             epoch_iterator.write(json.dumps({**logs, **{"step": global_step}}))
 
@@ -493,10 +495,7 @@ class Trainer:
             shutil.rmtree(checkpoint)
 
     def evaluate(
-        self,
-        eval_dataset: Optional[Dataset] = None,
-        prediction_loss_only: Optional[bool] = None,
-        no_log: Optional[bool] = False,
+        self, eval_dataset: Optional[Dataset] = None, prediction_loss_only: Optional[bool] = None,
     ) -> Dict[str, float]:
         """
         Run evaluation and return metrics.
@@ -515,11 +514,6 @@ class Trainer:
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
         output = self._prediction_loop(eval_dataloader, description="Evaluation")
-        if _has_wandb and not no_log and wandb.run:
-            # Log final metrics
-            wandb.log(
-                {**{"eval_{}".format(k): v for k, v in output.metrics.items()}, "epoch": self.args.num_train_epochs}
-            )
         return output.metrics
 
     def predict(self, test_dataset: Dataset) -> PredictionOutput:
