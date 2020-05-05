@@ -465,7 +465,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.decoder_bias = self.add_weight(
-            shape=(self.vocab_size,), initializer="zeros", trainable=True, name="decoder/bias"
+            shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias"
         )
         super().build(input_shape)
 
