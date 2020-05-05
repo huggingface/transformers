@@ -23,7 +23,8 @@ class MarianMTModel(BartForConditionalGeneration):
     Model API is identical to BartForConditionalGeneration.
     Available models are listed at https://huggingface.co/models?search=Helsinki-NLP
 
-    Examples:
+    Examples::
+    
         src = 'fr'
         trg = 'en'
         sample_text = "où est l'arrêt de bus ?"
