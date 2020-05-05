@@ -11,10 +11,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from durbango import tqdm_nice
 from transformers import MarianConfig, MarianMTModel, MarianSentencePieceTokenizer
-
-from .marian_registry import MODELS
 
 
 def remove_prefix(text: str, prefix: str):
@@ -98,24 +95,23 @@ def make_registry(repo_path="Opus-MT-train/models"):
     return [(k, v["pre-processing"], v["download"]) for k, v in results.items()]
 
 
-def download_all_sentencepiece_models(model_list=MODELS, repo_path=None):
+def convert_all_sentencepiece_models(model_list=None, repo_path=None):
     """Requires 300GB"""
     save_dir = Path("marian_ckpt")
+    dest_dir = Path("marian_converted")
+    dest_dir.mkdir(exist_ok=True)
     if model_list is None:
         model_list: list = make_registry(repo_path=repo_path)
     for k, prepro, download in tqdm(model_list):
-        if os.path.exists(save_dir / k):
-            print(f"already have path {k}")
+        if "SentencePiece" not in prepro:  # dont convert BPE models.
             continue
-        if "SentencePiece" in prepro:
-            continue
-        download_and_unzip(download, save_dir / k)
-        dest_dir = Path("marian_converted_bpe") / k
-        convert(save_dir / k, dest_dir)
+        if not os.path.exists(save_dir / k / "pytorch_model.bin"):
+            download_and_unzip(download, save_dir / k)
+        convert(save_dir / k, dest_dir / k)
 
 
 def convert_whole_dir(path=Path("marian_ckpt/")):
-    for subdir in tqdm_nice(list(path.ls())):
+    for subdir in tqdm(list(path.ls())):
         dest_dir = f"marian_converted/{subdir.name}"
         if (dest_dir / "pytorch_model.bin").exists():
             continue
@@ -145,7 +141,7 @@ def _parse_readme(lns):
     return subres
 
 
-def write_metadata(dest_dir: Path):
+def save_tokenizer_config(dest_dir: Path):
     dname = dest_dir.name.split("-")
     dct = dict(target_lang=dname[-1], source_lang="-".join(dname[:-1]))
     save_json(dct, dest_dir / "tokenizer_config.json")
@@ -172,7 +168,7 @@ def add_special_tokens_to_vocab(model_dir: Path) -> None:
     num_added = add_to_vocab_(vocab, ["<pad>"])
     print(f"added {num_added} tokens to vocab")
     save_json(vocab, model_dir / "vocab.json")
-    write_metadata(model_dir)
+    save_tokenizer_config(model_dir)
 
 
 def save_tokenizer(self, save_directory):
@@ -269,7 +265,6 @@ class OpusState:
 
         # Process decoder.yml
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
-        # TODO: what are normalize and word-penalty?
         check_marian_cfg_assumptions(cfg)
         self.hf_config = MarianConfig(
             vocab_size=cfg["vocab_size"],
