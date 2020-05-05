@@ -1174,6 +1174,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         encoder_outputs,
         attention_mask,
         use_cache,
+        sampling_transform,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
             All returned sequence are generated independantly.
