@@ -786,6 +786,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
+        sampling_transform=None,
     ):
         r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
 
@@ -862,6 +863,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             use_cache: (`optional`) bool
                 If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.
+            
+            sampling_transform: (`optional`) Callable[[torch.LongTensor, torch.FloatTensor, torch.LongTensor], torch.LongTensor]
+                A guidance function for the sampler when choosing the next token accepting arguments of 
+                `(input_ids, probs, next_token)` and returning a new `next_token`
+                Defaults to `None`
 
         Return:
 
@@ -972,6 +978,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         assert (
             bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
         ), "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
+
+        assert (
+            sampling_transform is None or do_sample and num_beams == 1,
+        ), "`sampling_transform` only works for sampled sequences"
 
         if input_ids is None:
             assert isinstance(bos_token_id, int) and bos_token_id >= 0, (
@@ -1138,6 +1148,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                sampling_transform=sampling_transform,
             )
 
         return output
@@ -1216,6 +1227,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 # Sample
                 probs = F.softmax(next_token_logits, dim=-1)
                 next_token = torch.multinomial(probs, num_samples=1).squeeze(1)
+
+                if sampling_transform:
+                    next_token = sampling_transform(input_ids, probs, next_token)
             else:
                 # Greedy decoding
                 next_token = torch.argmax(next_token_logits, dim=-1)
