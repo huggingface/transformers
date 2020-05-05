@@ -36,7 +36,9 @@ class MarianMTModel(BartForConditionalGeneration):
         gen = model.generate(**batch)
         tok.decode_batch(gen, skip_special_tokens=True)
     """
+
     pretrained_model_archive_map = {}  # see https://huggingface.co/models?search=Helsinki-NLP
+
     def prepare_scores_for_generation(self, scores, cur_len, max_length):
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
             self._force_token_ids_generation(scores, self.config.eos_token_id)
