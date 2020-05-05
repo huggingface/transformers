@@ -2,10 +2,9 @@ import unittest
 from typing import Iterable, List, Optional
 
 from transformers import pipeline
-from transformers.pipelines import Pipeline
+from transformers.pipelines import DefaultArgumentHandler, Pipeline
 
 from .utils import require_tf, require_torch, slow
-
 
 QA_FINETUNED_MODELS = [
     (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
@@ -84,6 +83,78 @@ TRANSLATION_FINETUNED_MODELS = {
     ("patrickvonplaten/t5-tiny-random", "t5-small", "translation_en_to_ro"),
 }
 TF_TRANSLATION_FINETUNED_MODELS = {("patrickvonplaten/t5-tiny-random", "t5-small", "translation_en_to_fr")}
+
+
+class DefaultArgumentHandlerTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.handler = DefaultArgumentHandler()
+
+    def test_kwargs_x(self):
+        mono_data = {"X": "This is a sample input"}
+        mono_args = self.handler(**mono_data)
+
+        self.assertTrue(isinstance(mono_args, list))
+        self.assertEqual(len(mono_args), 1)
+
+        multi_data = {"x": ["This is a sample input", "This is a second sample input"]}
+        multi_args = self.handler(**multi_data)
+
+        self.assertTrue(isinstance(multi_args, list))
+        self.assertEqual(len(multi_args), 2)
+
+    def test_kwargs_data(self):
+        mono_data = {"data": "This is a sample input"}
+        mono_args = self.handler(**mono_data)
+
+        self.assertTrue(isinstance(mono_args, list))
+        self.assertEqual(len(mono_args), 1)
+
+        multi_data = {"data": ["This is a sample input", "This is a second sample input"]}
+        multi_args = self.handler(**multi_data)
+
+        self.assertTrue(isinstance(multi_args, list))
+        self.assertEqual(len(multi_args), 2)
+
+    def test_multi_kwargs(self):
+        mono_data = {"data": "This is a sample input", "X": "This is a sample input 2"}
+        mono_args = self.handler(**mono_data)
+
+        self.assertTrue(isinstance(mono_args, list))
+        self.assertEqual(len(mono_args), 2)
+
+        multi_data = {
+            "data": ["This is a sample input", "This is a second sample input"],
+            "test": ["This is a sample input 2", "This is a second sample input 2"],
+        }
+        multi_args = self.handler(**multi_data)
+
+        self.assertTrue(isinstance(multi_args, list))
+        self.assertEqual(len(multi_args), 4)
+
+    def test_args(self):
+        mono_data = "This is a sample input"
+        mono_args = self.handler(mono_data)
+
+        self.assertTrue(isinstance(mono_args, list))
+        self.assertEqual(len(mono_args), 1)
+
+        mono_data = ["This is a sample input"]
+        mono_args = self.handler(mono_data)
+
+        self.assertTrue(isinstance(mono_args, list))
+        self.assertEqual(len(mono_args), 1)
+
+        multi_data = ["This is a sample input", "This is a second sample input"]
+        multi_args = self.handler(multi_data)
+
+        self.assertTrue(isinstance(multi_args, list))
+        self.assertEqual(len(multi_args), 2)
+
+        multi_data = ["This is a sample input", "This is a second sample input"]
+        multi_args = self.handler(*multi_data)
+
+        self.assertTrue(isinstance(multi_args, list))
+        self.assertEqual(len(multi_args), 2)
 
 
 class MonoColumnInputTestCase(unittest.TestCase):

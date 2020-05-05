@@ -22,8 +22,9 @@ import pickle
 import sys
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
+from itertools import chain
 from os.path import abspath, exists
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -35,7 +36,6 @@ from .modelcard import ModelCard
 from .tokenization_auto import AutoTokenizer
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
-
 
 if is_tf_available():
     import tensorflow as tf
@@ -96,19 +96,50 @@ class DefaultArgumentHandler(ArgumentHandler):
     Default varargs argument parser handling parameters for each Pipeline
     """
 
-    def __call__(self, *args, **kwargs):
-        if "X" in kwargs:
-            return kwargs["X"]
-        elif "data" in kwargs:
-            return kwargs["data"]
-        elif len(args) == 1:
-            if isinstance(args[0], list):
-                return args[0]
-            else:
+    @staticmethod
+    def handle_kwargs(kwargs: Dict) -> List:
+        if len(kwargs) == 1:
+            output = list(kwargs.values())
+        else:
+            output = list(chain(kwargs.values()))
+
+        return DefaultArgumentHandler.handle_args(output)
+
+    @staticmethod
+    def handle_args(args: Sequence[Any]) -> List[str]:
+
+        # Only one argument, let's do case by case
+        if len(args) == 1:
+            if isinstance(args[0], str):
                 return [args[0]]
+            elif not isinstance(args[0], list):
+                return list(args)
+            else:
+                return args[0]
+
+        # Multiple arguments (x1, x2, ...)
         elif len(args) > 1:
-            return list(args)
-        raise ValueError("Unable to infer the format of the provided data (X=, data=, ...)")
+            if all([isinstance(arg, str) for arg in args]):
+                return list(args)
+
+            # If not instance of list, then it should instance of iterable
+            elif isinstance(args, Iterable):
+                return list(chain.from_iterable(chain(args)))
+            else:
+                raise ValueError(
+                    "Invalid input type {}. Pipeline supports Union[str, Iterable[str]]".format(type(args))
+                )
+        else:
+            return []
+
+    def __call__(self, *args, **kwargs):
+        if len(kwargs) > 0 and len(args) > 0:
+            raise ValueError("Pipeline cannot handle mixed args and kwargs")
+
+        if len(kwargs) > 0:
+            return DefaultArgumentHandler.handle_kwargs(kwargs)
+        else:
+            return DefaultArgumentHandler.handle_args(args)
 
 
 class PipelineDataFormat:
