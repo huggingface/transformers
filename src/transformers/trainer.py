@@ -226,10 +226,14 @@ class Trainer:
         return optimizer, scheduler
 
     def _setup_wandb(self):
-        # Start a wandb run and log config parameters
+        """
+        Setup the optional Weights & Biases (`wandb`) integration.
+
+        One can override this method to customize the setup if needed.
+        """
         wandb.init(name=self.args.logging_dir, config=vars(self.args))
         # keep track of model topology and gradients
-        # wandb.watch(self.model)
+        wandb.watch(self.model)
 
     def train(self, model_path: Optional[str] = None):
         """
