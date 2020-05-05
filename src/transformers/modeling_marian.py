@@ -24,14 +24,14 @@ class MarianMTModel(BartForConditionalGeneration):
     Available models are listed at https://huggingface.co/models?search=Helsinki-NLP
 
     Examples::
-    
+
         src = 'fr'
         trg = 'en'
         sample_text = "où est l'arrêt de bus ?"
         mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'
 
         model = MarianMTModel.from_pretrained(mname)
-        tok = MarianSentencePieceTokenizer.from_pretrained(mname)
+        tok = MarianTokenizer.from_pretrained(mname)
         batch = tok.prepare_translation_batch(src_texts=[sample_text])
         outs = model(**batch)  # forward pass
         gen = model.generate(**batch)

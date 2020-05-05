@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from transformers import MarianConfig, MarianMTModel, MarianSentencePieceTokenizer
+from transformers import MarianConfig, MarianMTModel, MarianTokenizer
 
 
 def remove_prefix(text: str, prefix: str):
@@ -368,7 +368,7 @@ def convert(source_dir, dest_dir):
     dest_dir.mkdir(exist_ok=True)
 
     add_special_tokens_to_vocab(source_dir)
-    tokenizer = MarianSentencePieceTokenizer.from_pretrained(str(source_dir))
+    tokenizer = MarianTokenizer.from_pretrained(str(source_dir))
     save_tokenizer(tokenizer, dest_dir)
 
     opus_state = OpusState(source_dir)

@@ -24,7 +24,7 @@ from .utils import require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
-    from transformers import MarianMTModel, MarianSentencePieceTokenizer
+    from transformers import AutoTokenizer, MarianConfig, AutoConfig, AutoModelWithLMHead
 
 
 @require_torch
@@ -53,13 +53,13 @@ class MarianIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.model_name = f"Helsinki-NLP/opus-mt-{cls.src}-{cls.tgt}"
-        cls.tokenizer = MarianSentencePieceTokenizer.from_pretrained(cls.model_name)
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.eos_token_id = cls.tokenizer.eos_token_id
         return cls
 
     @cached_property
     def model(self):
-        model = MarianMTModel.from_pretrained(self.model_name).to(torch_device)
+        model = AutoModelWithLMHead.from_pretrained(self.model_name).to(torch_device)
         if torch_device == "cuda":
             return model.half()
         else:
@@ -116,6 +116,10 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
     @slow
     def test_batch_generation_en_de(self):
         self._test_repl_generate_batch()
+
+    def test_auto_config(self):
+        config = AutoConfig.from_pretrained(self.model_name)
+        self.assertIsInstance(config, MarianConfig)
 
 
 class TestMarian_EN_FR(MarianIntegrationTest):

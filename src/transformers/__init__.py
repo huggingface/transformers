@@ -243,7 +243,7 @@ if is_torch_available():
         BART_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_marian import MarianMTModel
-    from .tokenization_marian import MarianSentencePieceTokenizer
+    from .tokenization_marian import MarianTokenizer
     from .modeling_roberta import (
         RobertaForMaskedLM,
         RobertaModel,

@@ -22,7 +22,11 @@ PRETRAINED_VOCAB_FILES_MAP = {
 # Example URL https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/vocab.json
 
 
-class MarianSentencePieceTokenizer(PreTrainedTokenizer):
+class MarianTokenizer(PreTrainedTokenizer):
+    """Sentencepiece tokenizer for marian.
+    source and target languages have different SPM models.
+    """
+
     vocab_files_names = vocab_files_names
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {m: 512 for m in MODEL_NAMES}
