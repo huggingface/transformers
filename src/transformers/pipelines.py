@@ -450,7 +450,7 @@ class Pipeline(_ScikitCompat):
         """
         return {name: tensor.to(self.device) for name, tensor in inputs.items()}
 
-    def _parse_and_tokenize(self, *texts, pad_to_max_length=False, **kwargs):
+    def _parse_and_tokenize(self, *texts, pad_to_max_length=True, **kwargs):
         """
         Parse arguments and tokenize
         """
