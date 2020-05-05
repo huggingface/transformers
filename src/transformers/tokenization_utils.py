@@ -2179,6 +2179,9 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         else:
             return text
 
+    def decode_batch(self, token_ids: List[List[int]], **kwargs) -> List[str]:
+        return [self.decode(ids, **kwargs) for ids in token_ids]
+
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
         """ Clean up a list of simple English tokenization artifacts like spaces before punctuations and abreviated forms.
