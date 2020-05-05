@@ -6,6 +6,7 @@ from transformers.pipelines import DefaultArgumentHandler, Pipeline
 
 from .utils import require_tf, require_torch, slow
 
+
 QA_FINETUNED_MODELS = [
     (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
     (("distilbert-base-cased-distilled-squad", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
