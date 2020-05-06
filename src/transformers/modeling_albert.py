@@ -111,7 +111,8 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
 
         # No ALBERT model currently handles the next sentence prediction task
         if "seq_relationship" in name:
-            continue
+            name = name.replace("seq_relationship/output_", "sop_classifier/classifier/")
+            name = name.replace("weights", "weight")
 
         name = name.split("/")
 
@@ -578,16 +579,17 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         super().__init__(config)
 
         self.albert = AlbertModel(config)
-        self.cls = AlbertPreTrainingHeads(config)
+        self.predictions = AlbertMLMHead(config)
+        self.sop_classifier = AlbertSOPHead(config)
 
         self.init_weights()
         self.tie_weights()
 
     def tie_weights(self):
-        self._tie_or_clone_weights(self.cls.predictions.decoder, self.albert.embeddings.word_embeddings)
+        self._tie_or_clone_weights(self.predictions.decoder, self.albert.embeddings.word_embeddings)
 
     def get_output_embeddings(self):
-        return self.cls.predictions.decoder
+        return self.predictions.decoder
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
     def forward(
@@ -660,7 +662,9 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         )
 
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores, sop_scores = self.cls(sequence_output, pooled_output)
+
+        prediction_scores = self.predictions(sequence_output)
+        sop_scores = self.sop_classifier(pooled_output)
 
         outputs = (prediction_scores, sop_scores,) + outputs[2:]  # add hidden states and attention if they are here
 
@@ -672,18 +676,6 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), prediction_scores, sop_scores, (hidden_states), (attentions)
-
-
-class AlbertPreTrainingHeads(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = AlbertMLMHead(config)
-        self.sop_classifier = AlbertSOPHead(config)
-
-    def forward(self, sequence_output, pooled_output):
-        prediction_scores = self.predictions(sequence_output)
-        sop_scores = self.sop_classifier(pooled_output)
-        return prediction_scores, sop_scores
 
 
 class AlbertMLMHead(nn.Module):
