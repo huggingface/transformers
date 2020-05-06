@@ -40,7 +40,7 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
 
     tokens = nlp.tokenizer.encode_plus("This is a sample output", return_tensors=framework)
     seq_len = tokens.input_ids.shape[-1]
-    outputs = nlp.model(**tokens)
+    outputs = nlp.model(**tokens) if args.framework == "pt" else nlp.model(tokens)
 
     if not isinstance(outputs, (list, tuple)):
         outputs = (outputs, )
@@ -100,15 +100,15 @@ def export_tensorflow(nlp: Pipeline, args: Namespace):
 
     try:
         import tensorflow as tf
-        from tf2onnx import tfonnx
+        from keras2onnx import convert_keras, save_model
 
-        @tf.function
-        def build_graph(inputs):
-            return nlp.model(inputs)
+        # Build
+        input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, args.framework)
 
-        graph_def = build_graph(nlp.model.dummy_inputs.values())
-        # tfonnx.process_tf_graph()
-        input()
+        # Forward
+        nlp.model.predict(list(tokens.data.values()))
+        onnx_model = convert_keras(nlp.model, nlp.model.name)
+        save_model(onnx_model, args.output)
 
     except ImportError as e:
         print("Cannot import {} required to export TF model to ONNX. Please install {} first.".format(e.name, e.name))
