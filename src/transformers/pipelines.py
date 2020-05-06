@@ -591,9 +591,9 @@ class TextGenerationPipeline(Pipeline):
             # Manage correct placement of the tensors
             with self.device_placement():
                 if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
-                    inputs = self._parse_and_tokenize(self.PADDING_TEXT + prompt_text)
+                    inputs = self._parse_and_tokenize(self.PADDING_TEXT + prompt_text, pad_to_max_length=False)
                 else:
-                    inputs = self._parse_and_tokenize(prompt_text)
+                    inputs = self._parse_and_tokenize(prompt_text, pad_to_max_length=False)
 
                 # set input_ids to None to allow empty prompt
                 if inputs["input_ids"].shape[-1] == 0:
