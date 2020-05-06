@@ -282,6 +282,7 @@ if is_torch_available():
     from .modeling_albert import (
         AlbertPreTrainedModel,
         AlbertModel,
+        AlbertMLMHead,
         AlbertForMaskedLM,
         AlbertForSequenceClassification,
         AlbertForQuestionAnswering,
