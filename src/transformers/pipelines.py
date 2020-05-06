@@ -450,20 +450,20 @@ class Pipeline(_ScikitCompat):
         """
         return {name: tensor.to(self.device) for name, tensor in inputs.items()}
 
-    def _parse_and_tokenize(self, *texts, pad_to_max_length=True, **kwargs):
+    def _parse_and_tokenize(self, *args, pad_to_max_length=True, **kwargs):
         """
         Parse arguments and tokenize
         """
         # Parse arguments
-        inputs = self._args_parser(*texts, **kwargs)
+        inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer.batch_encode_plus(
             inputs, add_special_tokens=True, return_tensors=self.framework, pad_to_max_length=pad_to_max_length,
         )
 
         return inputs
 
-    def __call__(self, *texts, **kwargs):
-        inputs = self._parse_and_tokenize(*texts, **kwargs)
+    def __call__(self, *args, **kwargs):
+        inputs = self._parse_and_tokenize(*args, **kwargs)
         return self._forward(inputs)
 
     def _forward(self, inputs, return_tensors=False):
@@ -582,9 +582,9 @@ class TextGenerationPipeline(Pipeline):
     with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
     def __call__(
-        self, *texts, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
-        text_inputs = self._args_parser(*texts)
+        text_inputs = self._args_parser(*args)
 
         results = []
         for prompt_text in text_inputs:
@@ -857,8 +857,8 @@ class NerPipeline(Pipeline):
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self.ignore_labels = ignore_labels
 
-    def __call__(self, *texts, **kwargs):
-        inputs = self._args_parser(*texts, **kwargs)
+    def __call__(self, *args, **kwargs):
+        inputs = self._args_parser(*args, **kwargs)
         answers = []
         for sentence in inputs:
 
@@ -1048,7 +1048,7 @@ class QuestionAnsweringPipeline(Pipeline):
         else:
             return SquadExample(None, question, context, None, None, None)
 
-    def __call__(self, *texts, **kwargs):
+    def __call__(self, *args, **kwargs):
         """
         Args:
             We support multiple use-cases, the following are exclusive:
@@ -1078,7 +1078,7 @@ class QuestionAnsweringPipeline(Pipeline):
             raise ValueError("max_answer_len parameter should be >= 1 (got {})".format(kwargs["max_answer_len"]))
 
         # Convert inputs to features
-        examples = self._args_parser(*texts, **kwargs)
+        examples = self._args_parser(*args, **kwargs)
         features_list = [
             squad_convert_examples_to_features(
                 [example],
@@ -1415,11 +1415,11 @@ class TranslationPipeline(Pipeline):
     """
 
     def __call__(
-        self, *texts, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
         r"""
         Args:
-            *texts: (list of strings) texts to be translated
+            *args: (list of strings) texts to be translated
             return_text: (bool, default=True) whether to add a decoded "translation_text" to each result
             return_tensors: (bool, default=False) whether to return the raw "translation_token_ids" to each result
 
@@ -1452,7 +1452,7 @@ class TranslationPipeline(Pipeline):
             )
 
         with self.device_placement():
-            inputs = self._parse_and_tokenize(*texts, pad_to_max_length=pad_to_max_length)
+            inputs = self._parse_and_tokenize(*args, pad_to_max_length=pad_to_max_length)
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
