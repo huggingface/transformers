@@ -23,6 +23,8 @@ from .optimization import AdamW, get_linear_schedule_with_warmup
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
 from .training_args import TrainingArguments
 
+from azureml.core.run import Run
+run = Run.get_context()
 
 try:
     from apex import amp
@@ -359,7 +361,12 @@ class Trainer:
                                     self.tb_writer.add_scalar(k, v, global_step)
                             if is_wandb_available():
                                 wandb.log(logs, step=global_step)
-
+                            
+                            # added AzureML logging
+                            for key, value in logs.items():
+                                print(key, value)
+                                run.log(key, value, description=key)
+                                
                             epoch_iterator.write(json.dumps({**logs, **{"step": global_step}}))
 
                         if self.args.save_steps > 0 and global_step % self.args.save_steps == 0:
