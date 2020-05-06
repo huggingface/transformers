@@ -41,7 +41,7 @@ class TFTrainingArguments(TrainingArguments):
         logger.info("Tensorflow: setting up strategy")
         gpus = tf.config.list_physical_devices("GPU")
 
-        if self.no_cuda or len(gpus) == 0:
+        if self.no_cuda:
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
         else:
             try:
@@ -54,6 +54,8 @@ class TFTrainingArguments(TrainingArguments):
                 tf.tpu.experimental.initialize_tpu_system(tpu)
 
                 strategy = tf.distribute.experimental.TPUStrategy(tpu)
+            elif len(gpus) == 0:
+                strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
             elif len(gpus) > 1:
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
                 strategy = tf.distribute.MirroredStrategy(gpus)
