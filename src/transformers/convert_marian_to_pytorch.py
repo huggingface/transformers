@@ -366,7 +366,7 @@ def download_and_unzip(url, dest_dir):
     os.remove(filename)
 
 
-def convert(source_dir, dest_dir):
+def convert(source_dir: Path, dest_dir):
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(exist_ok=True)
 
