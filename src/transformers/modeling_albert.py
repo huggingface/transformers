@@ -980,3 +980,34 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
             outputs = (total_loss,) + outputs
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+
+
+class AlbertForQuestionGeneration(AlbertPreTrainedModel):
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.albert = AlbertModel(config)
+        self.predictions = AlbertMLMHead(config)
+        self.init_weights()
+        self.tie_weights()
+
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None, position_ids=None, head_mask=None, inputs_embeds=None):
+
+        outputs = self.albert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
+        sequence_outputs = outputs[0]
+        prediction_scores = self.predictions(sequence_outputs)
+
+        if masked_lm_labels is not None:
+            loss_fct = torch.nn.modules.loss.CrossEntropyLoss(ignore_index=-1)
+            masked_lm_loss = loss_fct(
+                prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            return masked_lm_loss
+        else:
+            return prediction_scores

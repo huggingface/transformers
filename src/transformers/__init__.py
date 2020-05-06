@@ -288,6 +288,7 @@ if is_torch_available():
         AlbertForQuestionAnswering,
         AlbertForTokenClassification,
         load_tf_weights_in_albert,
+        AlbertForQuestionGeneration,
         ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
     from .modeling_xlm_roberta import (
