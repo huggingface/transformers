@@ -1434,20 +1434,20 @@ class TranslationPipeline(Pipeline):
 
         prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
 
-        if isinstance(texts[0], list):
+        if isinstance(args[0], list):
             assert (
                 self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
-            texts = ([prefix + text for text in texts[0]],)
+            args = ([prefix + text for text in args[0]],)
             pad_to_max_length = True
 
-        elif isinstance(texts[0], str):
-            texts = (prefix + texts[0],)
+        elif isinstance(args[0], str):
+            args = (prefix + args[0],)
             pad_to_max_length = False
         else:
             raise ValueError(
                 " `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(
-                    texts[0]
+                    args[0]
                 )
             )
 
