@@ -19,13 +19,15 @@ from transformers.modeling_bart import BartForConditionalGeneration
 
 
 class MarianMTModel(BartForConditionalGeneration):
-    """Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
+    r"""
+    Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
     Model API is identical to BartForConditionalGeneration.
     Available models are listed at `Model List <https://huggingface.co/models?search=Helsinki-NLP>`__
 
     Examples::
 
         from transformers import MarianTokenizer, MarianMTModel
+        from typing import List
         src = 'fr'  # source language
         trg = 'en'  # target language
         sample_text = "où est l'arrêt de bus ?"
@@ -34,9 +36,9 @@ class MarianMTModel(BartForConditionalGeneration):
         model = MarianMTModel.from_pretrained(mname)
         tok = MarianTokenizer.from_pretrained(mname)
         batch = tok.prepare_translation_batch(src_texts=[sample_text])  # don't need tgt_text for inference
-        # outs =
         gen = model.generate(**batch)  # for forward pass: model(**batch)
-        tok.decode_batch(gen, skip_special_tokens=True)  # returns "Where is the the bus stop ?"
+        words: List[str] = tok.decode_batch(gen, skip_special_tokens=True)  # returns "Where is the the bus stop ?"
+
     """
 
     pretrained_model_archive_map = {}  # see https://huggingface.co/models?search=Helsinki-NLP

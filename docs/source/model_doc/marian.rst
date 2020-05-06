@@ -26,7 +26,15 @@ Implementation Notes
 
 MarianMTModel
 ~~~~~~~~~~~~~
+
+Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
+Model API is identical to BartForConditionalGeneration.
+Available models are listed at `Model List <https://huggingface.co/models?search=Helsinki-NLP>`__
 This class inherits all functionality from ``BartForConditionalGeneration``, see that page for method signatures.
+
+.. autoclass:: transformers.MarianMTModel
+    :members:
+
 
 MarianTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
