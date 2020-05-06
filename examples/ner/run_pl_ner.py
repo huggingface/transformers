@@ -50,7 +50,10 @@ class NERTransformer(BaseTransformer):
         args = self.hparams
         for mode in ["train", "dev", "test"]:
             cached_features_file = self._feature_file(mode)
-            if not os.path.exists(cached_features_file):
+            if os.path.exists(cached_features_file) and not args.overwrite_cache:
+                logger.info("Loading features from cached file %s", cached_features_file)
+                features = torch.load(cached_features_file)
+            else:
                 logger.info("Creating features from dataset file at %s", args.data_dir)
                 examples = read_examples_from_file(args.data_dir, mode)
                 features = convert_examples_to_features(
