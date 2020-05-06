@@ -44,6 +44,15 @@ class TrainingArguments:
     evaluate_during_training: bool = field(
         default=False, metadata={"help": "Run evaluation during training at each logging step."},
     )
+    patience: int = field(
+        default=-1,
+        metadata={
+            "help": (
+                "If > 0: stops training after evaluating this many times consecutively with non-decreasing loss."
+                "Requires evaluate_during_training."
+            )
+        },
+    )
 
     per_gpu_train_batch_size: int = field(default=8, metadata={"help": "Batch size per GPU/CPU for training."})
     per_gpu_eval_batch_size: int = field(default=8, metadata={"help": "Batch size per GPU/CPU for evaluation."})

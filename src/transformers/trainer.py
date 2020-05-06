@@ -124,6 +124,8 @@ class Trainer:
         """
         self.model = model
         self.args = args
+        if self.args.patience > 0 and not self.args.evaluate_during_training:
+            raise ValueError("Patience requires evaluate_during_training.")
         if data_collator is not None:
             self.data_collator = data_collator
         else:
@@ -307,6 +309,8 @@ class Trainer:
 
         tr_loss = 0.0
         logging_loss = 0.0
+        best_eval_loss = None
+        evals_without_improvement = 0
         model.zero_grad()
         train_iterator = trange(
             epochs_trained, int(num_train_epochs), desc="Epoch", disable=self.args.local_rank not in [-1, 0],
@@ -347,6 +351,18 @@ class Trainer:
                                 for key, value in results.items():
                                     eval_key = "eval_{}".format(key)
                                     logs[eval_key] = value
+                                if self.args.patience > 0:
+                                    # Keep track of best loss to determine if we should stop early
+                                    eval_loss = results["loss"]
+                                    if not best_eval_loss or eval_loss < best_eval_loss:
+                                        evals_without_improvement = 0
+                                        best_eval_loss = eval_loss
+                                    else:
+                                        evals_without_improvement += 1
+                                        if evals_without_improvement >= self.args.patience:
+                                            logger.info(
+                                                f"Patience threshold ({self.args.patience}) exceeded, stopping training"
+                                            )
 
                             loss_scalar = (tr_loss - logging_loss) / self.args.logging_steps
                             learning_rate_scalar = scheduler.get_last_lr()[0]
@@ -377,10 +393,12 @@ class Trainer:
                             torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                             logger.info("Saving optimizer and scheduler states to %s", output_dir)
 
-                if self.args.max_steps > 0 and global_step > self.args.max_steps:
+                if ((self.args.max_steps > 0 and global_step > self.args.max_steps) or
+                        (self.args.patience > 0 and evals_without_improvement >= self.args.patience)):
                     epoch_iterator.close()
                     break
-            if self.args.max_steps > 0 and global_step > self.args.max_steps:
+            if ((self.args.max_steps > 0 and global_step > self.args.max_steps) or
+                    (self.args.patience > 0 and evals_without_improvement >= self.args.patience)):
                 train_iterator.close()
                 break
 
