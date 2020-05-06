@@ -31,7 +31,6 @@ if is_torch_available():
 class MarianIntegrationTest(unittest.TestCase):
     src = "en"
     tgt = "de"
-    sample_text = ""
     src_text = [
         "I am a small frog.",
         "Now I can forget the 100 words of german that I know.",
