@@ -63,6 +63,8 @@ class MarianTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
         )
         self.encoder = load_json(vocab)
+        if self.unk_token not in self.encoder:
+            raise KeyError("<unk> token must be in vocab")
         assert self.pad_token in self.encoder
         self.decoder = {v: k for k, v in self.encoder.items()}
 
@@ -78,8 +80,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         self.spm_target = sentencepiece.SentencePieceProcessor()
         self.spm_target.Load(target_spm)
 
-        # Note(SS): splitter would require lots of book-keeping.
-        # self.sentence_splitter = MosesSentenceSplitter(source_lang)
+        # Note(SS): sentence_splitter would require lots of book-keeping.
         try:
             from mosestokenizer import MosesPunctuationNormalizer
 
@@ -89,7 +90,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             self.punc_normalizer = lambda x: x
 
     def _convert_token_to_id(self, token):
-        return self.encoder[token]
+        return self.encoder.get(token, self.encoder[self.unk_token])
 
     def _tokenize(self, text: str, src=True) -> List[str]:
         spm = self.spm_source if src else self.spm_target

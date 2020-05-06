@@ -101,6 +101,12 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, input_ids.tolist())
 
+    def test_unk_support(self):
+        t = self.tokenizer
+        ids = t.prepare_translation_batch(["||"]).to(torch_device)["input_ids"][0].tolist()
+        expected = [t.unk_token_id, t.unk_token_id, t.eos_token_id]
+        self.assertEqual(expected, ids)
+
     def test_pad_not_split(self):
         input_ids_w_pad = self.tokenizer.prepare_translation_batch(["I am a small frog <pad>"])["input_ids"][0]
         expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad
