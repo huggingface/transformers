@@ -64,7 +64,7 @@ class MarianIntegrationTest(unittest.TestCase):
         else:
             return model
 
-    def _test_repl_generate_batch(self):
+    def _assert_generated_batch_equal_expected(self):
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src_texts=self.src_text).to(torch_device)
         self.assertEqual(self.model.device, model_inputs["input_ids"].device)
         generated_ids = self.model.generate(
@@ -108,7 +108,7 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
 
     @slow
     def test_batch_generation_en_de(self):
-        self._test_repl_generate_batch()
+        self._assert_generated_batch_equal_expected()
 
     def test_auto_config(self):
         config = AutoConfig.from_pretrained(self.model_name)
@@ -129,7 +129,7 @@ class TestMarian_EN_FR(MarianIntegrationTest):
 
     @slow
     def test_batch_generation_en_fr(self):
-        self._test_repl_generate_batch()
+        self._assert_generated_batch_equal_expected()
 
 
 class TestMarian_FR_EN(MarianIntegrationTest):
@@ -146,4 +146,4 @@ class TestMarian_FR_EN(MarianIntegrationTest):
 
     @slow
     def test_batch_generation_fr_en(self):
-        self._test_repl_generate_batch()
+        self._assert_generated_batch_equal_expected()

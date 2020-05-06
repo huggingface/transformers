@@ -82,8 +82,11 @@ def find_model_file(dest_dir):  # this one better
 
 
 def make_registry(repo_path="Opus-MT-train/models"):
-    if not Path(repo_path).exists():
-        raise ValueError("You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git")
+    if not (Path(repo_path) / "fr-en" / "README.md").exists():
+        raise ValueError(
+            f"repo_path:{repo_path} does not exist: "
+            "You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git before calling."
+        )
     results = {}
     for p in Path(repo_path).ls():
         n_dash = p.name.count("-")
