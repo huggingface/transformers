@@ -1,9 +1,9 @@
 from argparse import ArgumentParser, Namespace
-from os import mkdir
+from os import mkdir, listdir
 from os.path import exists, abspath, dirname
 from typing import Dict, Tuple, List
 
-from transformers import is_torch_available
+from transformers import is_torch_available, is_tf_available
 from transformers.pipelines import SUPPORTED_TASKS, pipeline, Pipeline
 from transformers.tokenization_utils import BatchEncoding
 
@@ -74,7 +74,7 @@ def load_graph_from_args(args: Namespace) -> Pipeline:
 
 def export_pytorch(nlp: Pipeline, args: Namespace):
         if not is_torch_available():
-            print("Cannot export {} because PyTorch is not installed. Please install torch first.")
+            print("Cannot export {} because PyTorch is not installed. Please install torch first.".format(args.model))
             exit(1)
 
         import torch
@@ -88,24 +88,48 @@ def export_pytorch(nlp: Pipeline, args: Namespace):
                 use_external_data_format=True,
                 f=args.output, opset_version=args.opset,
                 input_names=input_names, output_names=output_names,
-                dynamic_axes=dynamic_axes
+                dynamic_axes=dynamic_axes,
+                enable_onnx_checker=True
             )
 
 
 def export_tensorflow(nlp: Pipeline, args: Namespace):
-    pass
+    if not is_tf_available():
+        print("Cannot export {} because TF is not installed. Please install torch first.".format(args.model))
+        exit(1)
+
+    try:
+        import tensorflow as tf
+        from tf2onnx import tfonnx
+
+        @tf.function
+        def build_graph(inputs):
+            return nlp.model(inputs)
+
+        graph_def = build_graph(nlp.model.dummy_inputs.values())
+        # tfonnx.process_tf_graph()
+        input()
+
+    except ImportError as e:
+        print("Cannot import {} required to export TF model to ONNX. Please install {} first.".format(e.name, e.name))
+        exit(1)
 
 
 if __name__ == '__main__':
     parser = OnnxConverterArgumentParser()
     args = parser.parse_args()
 
+    # Ensure we have an absolute path for the output
+    args.output = abspath(args.output)
+
     # Create export folder if needed
-    if exists(dirname(args.output)):
-        raise ValueError("Folder {} already exists".format(abspath(args.output)))
-    else:
+    if exists(dirname(args.output)) and len(listdir(dirname(args.output))) > 0:
+        raise ValueError("Folder {} already exists".format(args.output))
+    elif not exists(dirname(args.output)):
         print("Creating folder {}".format(dirname(args.output)))
-        mkdir(dirname(abspath(args.output)))
+        mkdir(dirname(args.output))
+    else:
+        print("Folder {} already exists and is empty: {}".format(dirname(args.output), u'\u2713'))
 
     # Load the pipeline
     nlp = load_graph_from_args(args)
