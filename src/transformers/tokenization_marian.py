@@ -23,8 +23,18 @@ PRETRAINED_VOCAB_FILES_MAP = {
 
 
 class MarianTokenizer(PreTrainedTokenizer):
-    """Sentencepiece tokenizer for marian.
-    source and target languages have different SPM models.
+    """Sentencepiece tokenizer for marian. Source and target languages have different SPM models.
+    The logic is use the relevant source_spm or target_spm to encode txt as pieces, then look up each piece in a vocab dictionary.
+
+    Examples::
+
+        from transformers import MarianTokenizer
+        tok = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-en-de')
+        src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
+        tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
+        batch_enc: BatchEncoding = tok.prepare_translation_batch(src_texts, tgt_texts=tgt_texts)
+        # keys  [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask].
+        # model(**batch) should work
     """
 
     vocab_files_names = vocab_files_names
@@ -118,18 +128,15 @@ class MarianTokenizer(PreTrainedTokenizer):
         """
         Arguments:
             src_texts: list of src language texts
-            src_lang: default en_XX (english)
             tgt_texts: list of tgt language texts
-            tgt_lang: default ro_RO (romanian)
             max_length: (None) defer to config (1024 for mbart-large-en-ro)
             pad_to_max_length: (bool)
+            return_tensors: (str) default "pt" returns pytorch tensors, pass None to return lists.
 
         Returns:
             BatchEncoding: with keys [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]
-            all shaped bs, seq_len. (BatchEncoding is a dict of string -> tensor or lists)
-
-        Examples:
-            from transformers import MarianS
+            all shaped bs, seq_len. (BatchEncoding is a dict of string -> tensor or lists).
+            If no tgt_text is specified, the only keys will be input_ids and attention_mask.
         """
         model_inputs: BatchEncoding = self.batch_encode_plus(
             src_texts,
