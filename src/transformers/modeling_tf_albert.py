@@ -475,7 +475,6 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
         hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.decoder(hidden_states, mode="linear") + self.decoder_bias
-        hidden_states = hidden_states + self.bias
         return hidden_states
 
 
@@ -729,7 +728,8 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.albert = TFAlbertMainLayer(config, name="albert")
-        self.cls = TFAlbertPreTrainingHeads(config, self.albert.embeddings, name="cls")
+        self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
+        self.sop_classifier = TFAlbertSOPHead(config, name="sop_classifier")
 
     def get_output_embeddings(self):
         return self.albert.embeddings
@@ -763,22 +763,10 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
 
         outputs = self.albert(inputs, **kwargs)
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores, sop_scores = self.cls(sequence_output, pooled_output)
+        prediction_scores = self.predictions(sequence_output)
+        sop_scores = self.sop_classifier(pooled_output, training=kwargs.get("training", False))
         outputs = (prediction_scores, sop_scores) + outputs[2:]
         return outputs
-
-
-class TFAlbertPreTrainingHeads(tf.keras.layers.Layer):
-    def __init__(self, config, input_embeddings, **kwargs):
-        super().__init__(**kwargs)
-        self.predictions = TFAlbertMLMHead(config, input_embeddings, name="predictions")
-        self.sop_classifier = TFAlbertSOPHead(config, name="sop_classifier")
-
-    def call(self, sequence_output, pooled_output, training: bool = False):
-        prediction_scores = self.predictions(sequence_output)
-        sop_scores = self.sop_classifier(pooled_output, training=training)
-        return prediction_scores, sop_scores
-
 
 class TFAlbertSOPHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
