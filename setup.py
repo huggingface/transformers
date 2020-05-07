@@ -5,6 +5,8 @@ To create the package for pypi.
 
 1. Change the version in __init__.py, setup.py as well as docs/source/conf.py.
 
+2. Unpin specific versions from setup.py (like isort).
+
 2. Commit these changes with the message: "Release: VERSION"
 
 3. Add a tag in git to mark the release: "git tag VERSION -m'Adds tag VERSION for pypi' "
@@ -76,14 +78,14 @@ extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator"]
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme"]
 extras["quality"] = [
     "black",
-    "isort @ git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort",
+    "isort",
     "flake8",
 ]
 extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "scikit-learn", "tensorflow", "torch"]
 
 setup(
     name="transformers",
-    version="2.8.0",
+    version="2.9.0",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
