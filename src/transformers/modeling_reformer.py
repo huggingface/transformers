@@ -1515,7 +1515,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
     Examples::
 
-        from transformers import ReformerModel, ReformerTokenizer
+        from transformers import ReformerModelWithLMHead, ReformerTokenizer
         import torch
 
         tokenizer = ReformerTokenizer.from_pretrained('google/reformer-crime-and-punishment')
@@ -1562,7 +1562,7 @@ class ReformerModel(ReformerPreTrainedModel):
             if self.training is True:
                 raise ValueError(
                     "If training, sequence Length {} has to be a multiple of least common multiple chunk_length {}. Please consider padding the input to a length of {}.".format(
-                        input_shape[-2], least_common_mult_chunk_length, input_shape[-2] + padding_length
+                        input_shape[-1], least_common_mult_chunk_length, input_shape[-1] + padding_length
                     )
                 )
 
