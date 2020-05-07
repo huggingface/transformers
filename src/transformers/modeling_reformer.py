@@ -124,8 +124,8 @@ class AxialPositionEmbeddings(nn.Module):
         if self.training is True:
             assert (
                 reduce(mul, self.axial_pos_shape) == sequence_length
-            ), "Make sure that config.axial_pos_shape factors: {} multiply to sequence length: {}".format(
-                self.axial_pos_shape, sequence_length
+            ), "If training, make sure that config.axial_pos_shape factors: {} multiply to sequence length. Got prod({}) != sequence_length: {}. You might want to consider padding your sequence length to {} or changing config.axial_pos_shape.".format(
+                self.axial_pos_shape, self.axial_pos_shape, sequence_length, reduce(mul, self.axial_pos_shape)
             )
             if self.dropout > 0:
                 weights = torch.cat(broadcasted_weights, dim=-1)
