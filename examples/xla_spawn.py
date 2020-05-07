@@ -12,9 +12,10 @@ Inspired by https://github.com/pytorch/pytorch/blob/master/torch/distributed/lau
 
 
 import importlib
+import os
 import sys
 from argparse import REMAINDER, ArgumentParser
-import os
+
 import torch_xla.distributed.xla_multiprocessing as xmp
 
 
