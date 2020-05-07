@@ -20,7 +20,7 @@ export OUTPUT_DIR=${CURRENT_DIR}/${OUTPUT_DIR_NAME}
 
 # Make output directory if it doesn't exist
 mkdir -p $OUTPUT_DIR
-# Add parent directory to python path to access transformer_base.py
+# Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
 
 python3 run_pl_glue.py --data_dir $DATA_DIR \
