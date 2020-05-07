@@ -12,6 +12,7 @@ class OnnxConverterArgumentParser(ArgumentParser):
     """
     Wraps all the script arguments supported to export transformers models to ONNX IR
     """
+
     def __init__(self):
         super(OnnxConverterArgumentParser, self).__init__("ONNX Converter")
 
@@ -21,6 +22,7 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument("--framework", type=str, choices=["pt", "tf"], help="Framework for loading the model")
         self.add_argument("--quantize", action="store_true", help="Enable post-training quantization")
         self.add_argument("--opset", type=int, default=-1, help="ONNX opset to use (-1 = latest)")
+        self.add_argument("--check-loading", action="store_true", help="Check ONNX is able to load the model")
         self.add_argument("output")
 
 
@@ -43,7 +45,7 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
     outputs = nlp.model(**tokens) if args.framework == "pt" else nlp.model(tokens)
 
     if not isinstance(outputs, (list, tuple)):
-        outputs = (outputs, )
+        outputs = (outputs,)
 
     # Generate names
     output_names = ["output_{}".format(i) for i in range(len(outputs))]
@@ -51,7 +53,7 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
 
     # Define dynamic axes
     input_dynamic_axes = {k: build_shape_dict(v, True, seq_len) for k, v in tokens.items()}
-    output_dynamic_axes = ({k: build_shape_dict(v, False, seq_len) for k, v in zip(output_names, outputs)})
+    output_dynamic_axes = {k: build_shape_dict(v, False, seq_len) for k, v in zip(output_names, outputs)}
     dynamic_axes = dict(input_dynamic_axes, **output_dynamic_axes)
     return input_vars, output_names, dynamic_axes, tokens
 
@@ -65,6 +67,7 @@ def load_graph_from_args(args: Namespace) -> Pipeline:
 
     if args.opset == -1:
         from onnx.defs import onnx_opset_version
+
         print("Setting ONNX opset version to: {}".format(onnx_opset_version()))
         args.opset = onnx_opset_version()
 
@@ -73,26 +76,29 @@ def load_graph_from_args(args: Namespace) -> Pipeline:
 
 
 def export_pytorch(nlp: Pipeline, args: Namespace):
-        if not is_torch_available():
-            print("Cannot export {} because PyTorch is not installed. Please install torch first.".format(args.model))
-            exit(1)
+    if not is_torch_available():
+        print("Cannot export {} because PyTorch is not installed. Please install torch first.".format(args.model))
+        exit(1)
 
-        import torch
-        from torch.onnx import export
+    import torch
+    from torch.onnx import export
 
-        print("PyTorch: {}".format(torch.__version__))
+    print("PyTorch: {}".format(torch.__version__))
 
-        with torch.no_grad():
-            input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, args.framework)
-            tokens = tuple(tokens[key] for key in input_names)  # Need to be ordered
-            export(
-                nlp.model, tokens,
-                use_external_data_format=True,
-                f=args.output, opset_version=args.opset,
-                input_names=input_names, output_names=output_names,
-                dynamic_axes=dynamic_axes,
-                enable_onnx_checker=True
-            )
+    with torch.no_grad():
+        input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, args.framework)
+        tokens = tuple(tokens[key] for key in input_names)  # Need to be ordered
+        export(
+            nlp.model,
+            tokens,
+            f=args.output,
+            input_names=input_names,
+            output_names=output_names,
+            dynamic_axes=dynamic_axes,
+            do_constant_folding=True,
+            use_external_data_format=True,
+            enable_onnx_checker=True,
+        )
 
 
 def export_tensorflow(nlp: Pipeline, args: Namespace):
@@ -121,7 +127,7 @@ def export_tensorflow(nlp: Pipeline, args: Namespace):
         exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = OnnxConverterArgumentParser()
     args = parser.parse_args()
 
@@ -135,7 +141,7 @@ if __name__ == '__main__':
         print("Creating folder {}".format(dirname(args.output)))
         mkdir(dirname(args.output))
     else:
-        print("Folder {} already exists and is empty: {}".format(dirname(args.output), u'\u2713'))
+        print("Folder {} already exists and is empty: {}".format(dirname(args.output), "\u2713"))
 
     # Load the pipeline
     nlp = load_graph_from_args(args)
@@ -145,3 +151,20 @@ if __name__ == '__main__':
         export_pytorch(nlp, args)
     else:
         export_tensorflow(nlp, args)
+
+    if args.check_loading:
+        from onnxruntime import InferenceSession, SessionOptions, ExecutionMode, GraphOptimizationLevel
+        from onnxruntime.capi.onnxruntime_pybind11_state import RuntimeException
+
+        print("Checking ONNX model loading from: {}".format(args.output))
+        try:
+            onnx_options = SessionOptions()
+            onnx_options.intra_op_num_threads = 1
+            onnx_options.log_severity_level = 3
+            onnx_options.log_verbosity_level = 3
+            onnx_options.execution_mode = ExecutionMode.ORT_SEQUENTIAL
+            onnx_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
+            session = InferenceSession(args.output, onnx_options, providers=["CPUExecutionProvider"])
+            print("Model correctly loaded")
+        except RuntimeException as re:
+            print("Error while loading the model: {}".format(re))
