@@ -247,8 +247,7 @@ def start_memory_tracing(
                 gpu_mem += meminfo.used
 
                 if is_torch_available():
-                    torch.cuda.reset_max_memory_cached()
-                    gpu_reserved_mem += torch.cuda.max_memory_reserved()
+                    gpu_reserved_mem += torch.cuda.memory_reserved()
 
             py3nvml.nvmlShutdown()
 
@@ -348,6 +347,10 @@ def stop_memory_tracing(
             total_memory = sum(max(0, step_trace.cpu_gpu.bytes) for step_trace in memory_diff_trace)
         else:
             total_memory = sum(step_trace.cpu_gpu.bytes for step_trace in memory_diff_trace)
+
+        if is_torch_available() and torch.cuda.is_available():
+            max_memory = torch.cuda.max_memory_reserved()
+            torch.cuda.reset_peak_memory_stats()
 
         max_memory = max(step_trace.cpu_gpu.bytes for step_trace in running_memory_trace)
 
