@@ -221,13 +221,11 @@ class Trainer:
                 or "all" to log gradients and parameters
             WANDB_PROJECT:
                 (Optional): str - "huggingface" by default, set this to a custom string to store results in a different project
-            WANDB_NAME:
-                (Optional): str - `args.logging_dir` set this to a string to name your training run
             WANDB_DISABLED:
                 (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
         """
         logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
-        wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), name=os.getenv("WANDB_NAME"), config=vars(self.args))
+        wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
         # keep track of model topology and gradients
         if os.getenv("WANDB_WATCH") != "false":
             wandb.watch(self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps))
