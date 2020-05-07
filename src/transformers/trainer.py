@@ -62,9 +62,11 @@ except ImportError:
 
 
 def is_wandb_available():
-    if _has_wandb and wandb.InternalApi().api_key == None:
-        wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
-        return False
+    if _has_wandb:
+        wandb.ensure_configured()
+        if wandb.api.api_key == None:
+            wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
+            return False
     return False if os.getenv("WANDB_DISABLED") else _has_wandb
 
 
@@ -224,7 +226,8 @@ class Trainer:
             WANDB_DISABLED:
                 (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
         """
-        wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), name=os.getenv("WANDB_NAME", self.args.logging_dir), config=vars(self.args))
+        logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
+        wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), name=os.getenv("WANDB_NAME"), config=vars(self.args))
         # keep track of model topology and gradients
         if os.getenv("WANDB_WATCH") != "false":
             wandb.watch(self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps))
