@@ -768,6 +768,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         outputs = (prediction_scores, sop_scores) + outputs[2:]
         return outputs
 
+
 class TFAlbertSOPHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
