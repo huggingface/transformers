@@ -30,6 +30,7 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     OpenAIGPTConfig,
+    ReformerConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -49,6 +50,7 @@ from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_reformer import ReformerTokenizer
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
@@ -69,6 +71,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
         (BartConfig, (BartTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
+        (ReformerConfig, (ReformerTokenizer, None)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
