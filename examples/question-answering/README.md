@@ -2,7 +2,7 @@
 
 ## SQuAD
 
-Based on the script [`run_squad.py`](https://github.com/huggingface/transformers/blob/master/examples/run_squad.py).
+Based on the script [`run_squad.py`](https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_squad.py).
 
 #### Fine-tuning BERT on SQuAD1.0
 
@@ -51,7 +51,7 @@ exact_match = 81.22
 Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD1.1:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=8 ./examples/run_squad.py \
+python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answering/run_squad.py \
     --model_type bert \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \

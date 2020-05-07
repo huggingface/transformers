@@ -29,7 +29,7 @@ The model was trained on a Tesla P100 GPU and 25GB of RAM with the following com
 
 ```bash
 export SQUAD_DIR=path/to/nl_squad
-python transformers/examples/run_squad.py \
+python transformers/examples/question-answering/run_squad.py \
   --model_type bert \
   --model_name_or_path dccuchile/bert-base-spanish-wwm-cased \
   --do_train \

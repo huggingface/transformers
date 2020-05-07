@@ -414,7 +414,7 @@ Training with these hyper-parameters gave us the following results:
 This example code fine-tunes BERT on the SQuAD dataset using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=8 ./examples/run_squad.py \
+python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answering/run_squad.py \
     --model_type bert \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
@@ -447,7 +447,7 @@ The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-g
 Here is how to run the script with the small version of OpenAI GPT-2 model:
 
 ```shell
-python ./examples/run_generation.py \
+python ./examples/text-generation/run_generation.py \
     --model_type=gpt2 \
     --length=20 \
     --model_name_or_path=gpt2 \
@@ -455,7 +455,7 @@ python ./examples/run_generation.py \
 
 and from the Salesforce CTRL model:
 ```shell
-python ./examples/run_generation.py \
+python ./examples/text-generation/run_generation.py \
     --model_type=ctrl \
     --length=20 \
     --model_name_or_path=ctrl \

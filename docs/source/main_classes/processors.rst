@@ -74,7 +74,7 @@ This library hosts the processor to load the XNLI data:
 Please note that since the gold labels are available on the test set, evaluation is performed on the test set.
 
 An example using these processors is given in the
-`run_xnli.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_xnli.py>`__ script.
+`run_xnli.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/text-classification/run_xnli.py>`__ script.
 
 
 SQuAD
@@ -150,4 +150,4 @@ Example::
 
 
 Another example using these processors is given in the
-`run_squad.py <https://github.com/huggingface/transformers/blob/master/examples/run_squad.py>`__ script.
+`run_squad.py <https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_squad.py>`__ script.
