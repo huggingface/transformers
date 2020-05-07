@@ -59,6 +59,7 @@ class UsedMemoryState(NamedTuple):
     frame: Frame
     cpu_memory: int
     gpu_memory: int
+    reserved_gpu_memory: int
 
 
 class Memory(NamedTuple):
@@ -228,6 +229,7 @@ def start_memory_tracing(
             cpu_mem = mem.rss
 
         gpu_mem = 0
+        gpu_reserved_mem = 0
         if log_gpu:
             # Clear GPU caches
             if is_torch_available():
@@ -241,13 +243,14 @@ def start_memory_tracing(
                 handle = py3nvml.nvmlDeviceGetHandleByIndex(i)
                 meminfo = py3nvml.nvmlDeviceGetMemoryInfo(handle)
                 meminfo = py3nvml.nvmlDeviceGetMemoryInfo(handle)
+                gpu_mem += meminfo.used
+
                 if is_torch_available():
-                    gpu_mem += torch.cuda.memory_allocated()
-                else:
-                    gpu_mem += meminfo.used
+                    gpu_reserved_mem += torch.cuda.memory_reserved(device=i)
+
             py3nvml.nvmlShutdown()
 
-        mem_state = UsedMemoryState(traced_state, cpu_mem, gpu_mem)
+        mem_state = UsedMemoryState(traced_state, cpu_mem, gpu_mem, gpu_reserved_mem)
         memory_trace.append(mem_state)
 
         return traceit
@@ -304,8 +307,8 @@ def stop_memory_tracing(
         memory_diff_trace = []
         running_memory_trace = []
 
-        cumulative_memory_dict = defaultdict(lambda: [0, 0, 0])
-        for (frame, cpu_mem, gpu_mem), (next_frame, next_cpu_mem, next_gpu_mem) in zip(
+        cumulative_memory_dict = defaultdict(lambda: [0, 0, 0, 0])
+        for (frame, cpu_mem, gpu_mem, next_reserved_gpu_mem), (next_frame, next_cpu_mem, next_gpu_mem, next_reserved_gpu_mem) in zip(
             memory_trace[:-1], memory_trace[1:]
         ):
             cpu_mem_inc = next_cpu_mem - cpu_mem
@@ -319,7 +322,7 @@ def stop_memory_tracing(
 
             running_memory_trace.append(
                 MemoryState(
-                    frame=frame, cpu=Memory(next_cpu_mem), gpu=Memory(next_gpu_mem), cpu_gpu=Memory(next_cpu_mem + next_gpu_mem),
+                    frame=frame, cpu=Memory(next_cpu_mem), gpu=Memory(next_reserved_gpu_mem), cpu_gpu=Memory(next_cpu_mem + next_reserved_gpu_mem),
                 )
             )
 
