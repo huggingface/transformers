@@ -166,7 +166,7 @@ class Attention(nn.Module):
 
     def merge_heads(self, x):
         x = x.transpose(2, 1).contiguous()
-        return x.flatten(-2)  # in Tensorflow implem: fct merge_states
+        return x.flatten(2)  # in Tensorflow implem: fct merge_states
 
     def split_heads(self, x, k=False):
         new_x_shape = x.size()[:-1] + (self.n_head, x.size(-1) // self.n_head)
