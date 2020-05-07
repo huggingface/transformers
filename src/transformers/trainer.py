@@ -172,6 +172,8 @@ class Trainer:
             # Set an xla_device flag on the model's config.
             # We'll find a more elegant and not need to do this in the future.
             self.model.config.xla_device = True
+        self.global_step = 0
+        self.epoch = 0
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
@@ -373,25 +375,24 @@ class Trainer:
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", t_total)
 
-        global_step = 0
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
         # Check if continuing training from a checkpoint
         if model_path is not None:
             # set global_step to global_step of last saved checkpoint from model path
             try:
-                global_step = int(model_path.split("-")[-1].split("/")[0])
-                epochs_trained = global_step // (len(train_dataloader) // self.args.gradient_accumulation_steps)
-                steps_trained_in_current_epoch = global_step % (
+                self.global_step = int(model_path.split("-")[-1].split("/")[0])
+                epochs_trained = self.global_step // (len(train_dataloader) // self.args.gradient_accumulation_steps)
+                steps_trained_in_current_epoch = self.global_step % (
                     len(train_dataloader) // self.args.gradient_accumulation_steps
                 )
 
                 logger.info("  Continuing training from checkpoint, will skip to saved global_step")
                 logger.info("  Continuing training from epoch %d", epochs_trained)
-                logger.info("  Continuing training from global step %d", global_step)
+                logger.info("  Continuing training from global step %d", self.global_step)
                 logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
             except ValueError:
-                global_step = 0
+                self.global_step = 0
                 logger.info("  Starting fine-tuning.")
 
         tr_loss = 0.0
@@ -428,34 +429,31 @@ class Trainer:
 
                     scheduler.step()
                     model.zero_grad()
-                    global_step += 1
+                    self.global_step += 1
+                    self.epoch = epoch + (step + 1) / len(epoch_iterator)
 
                     if self.is_local_master():
-                        if (self.args.logging_steps > 0 and global_step % self.args.logging_steps == 0) or (
-                            global_step == 1 and self.args.logging_first_step
+                        if (self.args.logging_steps > 0 and self.global_step % self.args.logging_steps == 0) or (
+                            self.global_step == 1 and self.args.logging_first_step
                         ):
                             logs = {}
-                            if self.args.evaluate_during_training:
-                                results = self.evaluate()
-                                for key, value in results.items():
-                                    eval_key = "eval_{}".format(key)
-                                    logs[eval_key] = value
-
                             loss_scalar = (tr_loss - logging_loss) / self.args.logging_steps
                             learning_rate_scalar = scheduler.get_last_lr()[0]
                             logs["learning_rate"] = learning_rate_scalar
                             logs["loss"] = loss_scalar
                             logging_loss = tr_loss
 
-                            if self.tb_writer:
-                                for k, v in logs.items():
-                                    self.tb_writer.add_scalar(k, v, global_step)
-                            if is_wandb_available():
-                                wandb.log(logs, step=global_step)
+                            self._log(logs)
 
-                            epoch_iterator.write(json.dumps({**logs, **{"step": global_step}}))
+                            if self.args.evaluate_during_training:
+                                results = self.evaluate()
+                                for key, value in results.items():
+                                    eval_key = "eval_{}".format(key)
+                                    logs[eval_key] = value
 
-                        if self.args.save_steps > 0 and global_step % self.args.save_steps == 0:
+                            epoch_iterator.write(json.dumps({**logs, **{"step": self.global_step}}))
+
+                        if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                             # In all cases (even distributed/parallel), self.model is always a reference
                             # to the model we want to save.
                             if hasattr(model, "module"):
@@ -463,7 +461,9 @@ class Trainer:
                             else:
                                 assert model is self.model
                             # Save model checkpoint
-                            output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{global_step}")
+                            output_dir = os.path.join(
+                                self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}"
+                            )
 
                             self.save_model(output_dir)
                             self._rotate_checkpoints()
@@ -471,10 +471,10 @@ class Trainer:
                             torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                             logger.info("Saving optimizer and scheduler states to %s", output_dir)
 
-                if self.args.max_steps > 0 and global_step > self.args.max_steps:
+                if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
                     epoch_iterator.close()
                     break
-            if self.args.max_steps > 0 and global_step > self.args.max_steps:
+            if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
                 train_iterator.close()
                 break
             if self.args.tpu_metrics_debug:
@@ -485,7 +485,15 @@ class Trainer:
             self.tb_writer.close()
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
-        return TrainOutput(global_step, tr_loss / global_step)
+        return TrainOutput(self.global_step, tr_loss / self.global_step)
+
+    def _log(self, logs: Dict[str, torch.Tensor]) -> None:
+        logs["epoch"] = self.epoch
+        if self.tb_writer:
+            for k, v in logs.items():
+                self.tb_writer.add_scalar(k, v, self.global_step)
+        if is_wandb_available():
+            wandb.log(logs, step=self.global_step)
 
     def _training_step(
         self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer
@@ -601,6 +609,12 @@ class Trainer:
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
         output = self._prediction_loop(eval_dataloader, description="Evaluation")
+
+        logs = {}
+        for key, value in output.metrics.items():
+            eval_key = "eval_{}".format(key)
+            logs[eval_key] = value
+        self._log(logs)
 
         if self.args.tpu_metrics_debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
