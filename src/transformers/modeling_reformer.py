@@ -1515,11 +1515,11 @@ class ReformerModel(ReformerPreTrainedModel):
 
     Examples::
 
-        from transformers import ReformerModelWithLMHead, ReformerTokenizer
+        from transformers import ReformerModel, ReformerTokenizer
         import torch
 
         tokenizer = ReformerTokenizer.from_pretrained('google/reformer-crime-and-punishment')
-        model =  ReformerModelWithLMHead.from_pretrained('google/reformer-crime-and-punishment')
+        model =  ReformerModel.from_pretrained('google/reformer-crime-and-punishment')
 
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids)
@@ -1716,7 +1716,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
 
     Examples::
 
-        from transformers import ReformerModel, ReformerTokenizer
+        from transformers import ReformerModelWithLMHead, ReformerTokenizer
         import torch
 
         tokenizer = ReformerTokenizer.from_pretrained('google/reformer-crime-and-punishment')
