@@ -53,12 +53,11 @@ def is_tensorboard_available():
     return _has_tensorboard
 
 
-_has_wandb = False
 try:
     import wandb
     _has_wandb = True
 except ImportError:
-    pass
+    _has_wandb = False
 
 
 def is_wandb_available():
