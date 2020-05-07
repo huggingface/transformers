@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Finetuning multi-lingual models on XNLI (Bert, DistilBERT, XLM).
-    Adapted from `examples/run_glue.py`"""
+    Adapted from `examples/text-classification/run_glue.py`"""
 
 
 import argparse
