@@ -6,7 +6,7 @@ import re
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -20,6 +20,7 @@ from tqdm.auto import tqdm, trange
 from .data.data_collator import DataCollator, DefaultDataCollator
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
 from .training_args import TrainingArguments
 
 
@@ -85,30 +86,6 @@ def torch_distributed_zero_first(local_rank: int):
     yield
     if local_rank == 0:
         torch.distributed.barrier()
-
-
-class EvalPrediction(NamedTuple):
-    """
-    Evaluation output (always contains labels), to be used
-    to compute metrics.
-    """
-
-    predictions: np.ndarray
-    label_ids: np.ndarray
-
-
-class PredictionOutput(NamedTuple):
-    predictions: np.ndarray
-    label_ids: Optional[np.ndarray]
-    metrics: Optional[Dict[str, float]]
-
-
-class TrainOutput(NamedTuple):
-    global_step: int
-    training_loss: float
-
-
-PREFIX_CHECKPOINT_DIR = "checkpoint"
 
 
 class Trainer:
