@@ -1,4 +1,4 @@
-# # opus+giella-2020-04-18.zip
+# opus+giella-2020-04-18.zip
 
 * dataset: opus+giella
 * model: transformer-align

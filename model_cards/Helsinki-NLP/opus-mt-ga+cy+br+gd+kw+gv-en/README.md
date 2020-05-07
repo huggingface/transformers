@@ -1,4 +1,4 @@
-# opus+techiaith+bt-2020-04-30.zip
+opus+techiaith+bt-2020-04-30.zip
 
 * dataset: opus+techiaith+bt
 * model: transformer-align

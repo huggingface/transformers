@@ -1,4 +1,4 @@
-# opus+bt-news-2020-03-21.zip
+opus+bt-news-2020-03-21.zip
 
 * dataset: opus+bt-news
 * model: transformer

@@ -1,4 +1,4 @@
-# # opus-2020-01-21.zip
+# opus-2020-01-21.zip
 
 * dataset: opus
 * model: transformer-align

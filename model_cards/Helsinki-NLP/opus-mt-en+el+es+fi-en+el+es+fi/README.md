@@ -1,4 +1,4 @@
-# # opus-2020-03-02.zip
+# opus-2020-03-02.zip
 
 * dataset: opus
 * model: transformer
