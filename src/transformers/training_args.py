@@ -66,7 +66,7 @@ class TrainingArguments:
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
     scheduler: str = field(default="linear", metadata={"help": "Name of learning rate scheduler to use. Choose between ['linear', 'cosine_decay', 'cosine_decay_hard_restarts', 'constant']"})
-    num_cycles_cosine: float = field(default=1.0, metadata={"help": "Number of cosine cycles when using cosine decay schedules"})
+    num_cycles_cosine_decay: float = field(default=1.0, metadata={"help": "Number of cosine cycles when using cosine decay schedules"})
 
     logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
     logging_first_step: bool = field(default=False, metadata={"help": "Log and eval the first global_step"})

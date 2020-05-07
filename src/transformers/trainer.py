@@ -204,11 +204,11 @@ class Trainer:
             )
         elif self.args.scheduler == "cosine_decay":
             scheduler = get_cosine_schedule_with_warmup(
-                optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps, num_cycles=self.args.num_cycles_cosine
+                optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps, num_cycles=self.args.num_cycles_cosine_decay
             )
         elif self.args.scheduler == "cosine_decay_hard_restarts":
             scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(
-                optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps, num_cycles=self.args.num_cycles_cosine
+                optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps, num_cycles=self.args.num_cycles_cosine_decay
             )
         elif self.args.scheduler == "constant":
             scheduler = get_constant_schedule_with_warmup(
