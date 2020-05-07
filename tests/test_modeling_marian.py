@@ -162,3 +162,41 @@ class TestMarian_FR_EN(MarianIntegrationTest):
     @slow
     def test_batch_generation_fr_en(self):
         self._assert_generated_batch_equal_expected()
+
+
+class TestMarian_RU_FR(MarianIntegrationTest):
+    src = "ru"
+    tgt = "fr"
+    src_text = [
+        "Ð¢Ñ‹ Ð¾Ñ‚Ð´Ð¾Ñ…Ð½ÑƒÐ»?",
+    ]
+    expected_text = [
+        "Tu t'es reposÃ© ?",
+    ]
+
+    @slow
+    def test_batch_generation_ru_fr(self):
+        self._assert_generated_batch_equal_expected()
+
+
+class TestMarian_MT_EN(MarianIntegrationTest):
+    src = "mt"
+    tgt = "en"
+    src_text = ["Il - BabiloniÅ¼i b'mod Å¼baljat ikkonkludew li l - Alla l - veru kien dgÄ§ajjef."]
+    expected_text = ["The Babylonians wrongly concluded that the true God was weak."]
+
+    @slow
+    def test_batch_generation_mt_en(self):
+        self._assert_generated_batch_equal_expected()
+
+
+class TestMarian_SV_TW(MarianIntegrationTest):
+    src = "sv"
+    tgt = "tw"
+    # wrong but init fails
+    src_text = ["Il - BabiloniÅ¼i b'mod Å¼baljat ikkonkludew li l - Alla l - veru kien dgÄ§ajjef."]
+    expected_text = ["The Babylonians wrongly concluded that the true God was weak."]
+
+    @slow
+    def test_batch_generation_sv_tw(self):
+        self._assert_generated_batch_equal_expected()
