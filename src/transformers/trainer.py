@@ -145,7 +145,8 @@ class Trainer:
             )
         if not is_wandb_available():
             logger.info(
-                "You are instantiating a Trainer but W&B is not installed. Run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+                "You are instantiating a Trainer but W&B is not installed. To use wandb logging, \
+                    run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
             )
         set_seed(self.args.seed)
         # Create output directory if needed
@@ -209,7 +210,8 @@ class Trainer:
         """
         Setup the optional Weights & Biases (`wandb`) integration.
 
-        One can override this method to customize the setup if needed.  You can also override the following environment variables:
+        One can override this method to customize the setup if needed.  Find more information at https://docs.wandb.com/huggingface
+        You can also override the following environment variables:
 
         Environment:
             WANDB_WATCH:
