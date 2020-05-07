@@ -53,11 +53,11 @@ class ReformerConfig(PretrainedConfig):
             axial_pos_shape (:obj:`list(int)`, optional, defaults to `[64, 64]`):
                 The position dims of the axial position encodings.
                 During training the product of the position dims has to equal the sequence length.
-                For more information on how axial position embeddings work, see `Axial Position Encodings <reformer.html#axial-positional-encodings>`__ncodings.
+                For more information on how axial position embeddings work, see `Axial Position Encodings <reformer.html#axial-positional-encodings>`__.
             axial_pos_embds_dim (:obj:`list(int)`, optional, defaults to `[64, 192]`):
                 The embedding dims of the axial position encodings.
                 The sum of the embedding dims has to equal the hidden size.
-                For more information on how axial position embeddings work, see `Axial Position Encodings <reformer.html#axial-positional-encodings>`__ncodings.
+                For more information on how axial position embeddings work, see `Axial Position Encodings <reformer.html#axial-positional-encodings>`__.
             chunk_size_lm_head (:obj:`int`, optional, defaults to 0):
                 The chunk size of the final language model feed forward head layer.
                 A chunk size of 0 means that the feed forward layer is not chunked.
