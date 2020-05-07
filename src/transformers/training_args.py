@@ -19,6 +19,7 @@ except ImportError:
     _has_tpu = False
 
 
+@torch_required
 def is_tpu_available():
     return _has_tpu
 
@@ -89,7 +90,7 @@ class TrainingArguments:
             )
         },
     )
-    no_cuda: bool = field(default=False, metadata={"help": "Avoid using CUDA even if it is available"})
+    no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "random seed for initialization"})
 
     fp16: bool = field(
@@ -106,9 +107,11 @@ class TrainingArguments:
         },
     )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
-    use_tpu: bool = field(default=False, metadata={"help": "Whether to use a TPU device."})
-    num_tpu_cores: int = field(default=8, metadata={"help": "Number of TPU cores to use (1 or 8)."})
-    tpu_metrics_debug: bool = field(default=False, metadata={"help": "Whether to print debug metrics"})
+
+    tpu_num_cores: Optional[int] = field(
+        default=None, metadata={"help": "TPU: Number of TPU cores (automatically passed by launcher script)"}
+    )
+    tpu_metrics_debug: bool = field(default=False, metadata={"help": "TPU: Whether to print debug metrics"})
 
     @property
     def train_batch_size(self) -> int:
@@ -125,7 +128,7 @@ class TrainingArguments:
         if self.no_cuda:
             device = torch.device("cpu")
             n_gpu = 0
-        elif self.use_tpu and is_tpu_available():
+        elif is_tpu_available():
             device = xm.xla_device()
             n_gpu = 0
         elif self.local_rank == -1:

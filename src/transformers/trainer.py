@@ -93,7 +93,7 @@ def torch_distributed_zero_first(local_rank: int):
         torch.distributed.barrier()
 
 
-def get_tpu_sampler(dataset):
+def get_tpu_sampler(dataset: Dataset):
     if xm.xrt_world_size() <= 1:
         return RandomSampler(dataset)
     return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
@@ -159,22 +159,22 @@ class Trainer:
         # Create output directory if needed
         if self.is_local_master():
             os.makedirs(self.args.output_dir, exist_ok=True)
-
-    def is_local_master(self):
-        return xm.is_master_ordinal() if is_tpu_available() else self.args.local_rank in [-1, 0]
+        if is_tpu_available():
+            # Set an xla_device flag on the model's config.
+            # We'll find a more elegant and not need to do this in the future.
+            self.model.config.xla_device = True
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
-        train_sampler = (
-            (
+        if is_tpu_available():
+            train_sampler = get_tpu_sampler(self.train_dataset)
+        else:
+            train_sampler = (
                 RandomSampler(self.train_dataset)
                 if self.args.local_rank == -1
                 else DistributedSampler(self.train_dataset)
             )
-            if not is_tpu_available()
-            else get_tpu_sampler(self.train_dataset)
-        )
 
         data_loader = DataLoader(
             self.train_dataset,
@@ -313,20 +313,20 @@ class Trainer:
             self._setup_wandb()
 
         # Train!
-        device = "TPU core" if is_tpu_available() else "GPU"
-        total_train_batch_size = (
-            (self.args.train_batch_size * self.args.num_cores)
-            if is_tpu_available()
-            else (
+        if is_tpu_available():
+            num_examples = len(train_dataloader._loader._loader.dataset)
+            total_train_batch_size = self.args.train_batch_size * xm.xrt_world_size()
+        else:
+            num_examples = len(train_dataloader.dataset)
+            total_train_batch_size = (
                 self.args.train_batch_size
                 * self.args.gradient_accumulation_steps
                 * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1),
             )
-        )
         logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", len(train_dataloader) * self.args.train_batch_size)
+        logger.info("  Num examples = %d", num_examples)
         logger.info("  Num Epochs = %d", num_train_epochs)
-        logger.info("  Instantaneous batch size per %s = %d", device, self.args.per_gpu_train_batch_size)
+        logger.info("  Instantaneous batch size per device = %d", self.args.per_gpu_train_batch_size)
         logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", total_train_batch_size)
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", t_total)
@@ -432,14 +432,14 @@ class Trainer:
                 if self.args.max_steps > 0 and global_step > self.args.max_steps:
                     epoch_iterator.close()
                     break
-            if self.args.tpu_metrics_debug:
-                # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
-                xm.master_print(met.metrics_report())
             if self.args.max_steps > 0 and global_step > self.args.max_steps:
                 train_iterator.close()
                 break
+            if self.args.tpu_metrics_debug:
+                # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
+                xm.master_print(met.metrics_report())
 
-        if self.tb_writer and (not is_tpu_available() or (is_tpu_available() and xm.is_master_ordinal())):
+        if self.tb_writer:
             self.tb_writer.close()
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
@@ -468,16 +468,21 @@ class Trainer:
 
         return loss.item()
 
+    def is_local_master(self) -> bool:
+        if is_tpu_available():
+            return xm.is_master_ordinal(local=True)
+        else:
+            return self.args.local_rank in [-1, 0]
+
     def is_world_master(self) -> bool:
         """
         This will be True only in one process, even in distributed mode,
         even when training on multiple machines.
         """
-        return (
-            self.args.local_rank == -1
-            or torch.distributed.get_rank() == 0
-            or (is_tpu_available() and xm.is_master_ordinal())
-        )
+        if is_tpu_available():
+            return xm.is_master_ordinal(local=False)
+        else:
+            return self.args.local_rank == -1 or torch.distributed.get_rank() == 0
 
     def save_model(self, output_dir: Optional[str] = None):
         """
