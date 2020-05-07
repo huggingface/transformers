@@ -163,8 +163,9 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 16. **[BART](https://huggingface.co/transformers/model_doc/bart.html)** (from Facebook) released with the paper [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension](https://arxiv.org/pdf/1910.13461.pdf) by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov and Luke Zettlemoyer.
 17. **[ELECTRA](https://huggingface.co/transformers/model_doc/electra.html)** (from Google Research/Stanford University) released with the paper [ELECTRA: Pre-training text encoders as discriminators rather than generators](https://arxiv.org/abs/2003.10555) by Kevin Clark, Minh-Thang Luong, Quoc V. Le, Christopher D. Manning.
 18. **[DialoGPT](https://huggingface.co/transformers/model_doc/dialogpt.html)** (from Microsoft Research) released with the paper [DialoGPT: Large-Scale Generative Pre-training for Conversational Response Generation](https://arxiv.org/abs/1911.00536) by Yizhe Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao, Jianfeng Gao, Jingjing Liu, Bill Dolan.
-18. **[Other community models](https://huggingface.co/models)**, contributed by the [community](https://huggingface.co/users).
-19. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
+19. **[Reformer](https://huggingface.co/transformers/model_doc/reformer.html)** (from Google Research) released with the paper [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
+20. **[Other community models](https://huggingface.co/models)**, contributed by the [community](https://huggingface.co/users).
+21. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
 
 These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
@@ -330,7 +331,7 @@ pip install -r ./examples/requirements.txt
 export GLUE_DIR=/path/to/glue
 export TASK_NAME=MRPC
 
-python ./examples/run_glue.py \
+python ./examples/text-classification/run_glue.py \
     --model_name_or_path bert-base-uncased \
     --task_name $TASK_NAME \
     --do_train \
@@ -356,7 +357,7 @@ Parallel training is a simple way to use several GPUs (but is slower and less fl
 ```shell
 export GLUE_DIR=/path/to/glue
 
-python ./examples/run_glue.py \
+python ./examples/text-classification/run_glue.py \
     --model_name_or_path xlnet-large-cased \
     --do_train  \
     --do_eval   \
@@ -381,7 +382,7 @@ On this machine we thus have a batch size of 32, please increase `gradient_accum
 This example code fine-tunes the Bert Whole Word Masking model on the Microsoft Research Paraphrase Corpus (MRPC) corpus using distributed training on 8 V100 GPUs to reach a F1 > 92.
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node 8 ./examples/run_glue.py   \
+python -m torch.distributed.launch --nproc_per_node 8 ./examples/text-classification/run_glue.py   \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --task_name MRPC \
     --do_train   \

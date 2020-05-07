@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "2.8.0"
+__version__ = "2.9.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -47,6 +47,7 @@ from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_marian import MarianConfig
 from .configuration_mmbt import MMBTConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
+from .configuration_reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
@@ -138,6 +139,7 @@ from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_reformer import ReformerTokenizer
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
@@ -159,7 +161,7 @@ if is_sklearn_available():
 
 # Modeling
 if is_torch_available():
-    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D, top_k_top_p_filtering
+    from .modeling_utils import PreTrainedModel, prune_layer, Conv1D, top_k_top_p_filtering, apply_chunking_to_forward
     from .modeling_auto import (
         AutoModel,
         AutoModelForPreTraining,
@@ -190,6 +192,7 @@ if is_torch_available():
         BertForQuestionAnswering,
         load_tf_weights_in_bert,
         BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        BertLayer,
     )
     from .modeling_openai import (
         OpenAIGPTPreTrainedModel,
@@ -318,6 +321,14 @@ if is_torch_available():
         ElectraModel,
         load_tf_weights_in_electra,
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
+
+    from .modeling_reformer import (
+        ReformerAttention,
+        ReformerLayer,
+        ReformerModel,
+        ReformerModelWithLMHead,
+        REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
     # Optimization
