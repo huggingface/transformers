@@ -297,7 +297,7 @@ def stop_memory_tracing(
 
     if memory_trace is not None and len(memory_trace) > 1:
         memory_diff_trace = []
-        memory_trace = []
+        running_memory_trace = []
 
         cumulative_memory_dict = defaultdict(lambda: [0, 0, 0])
         for (frame, cpu_mem, gpu_mem), (next_frame, next_cpu_mem, next_gpu_mem) in zip(
@@ -312,7 +312,7 @@ def stop_memory_tracing(
                 )
             )
 
-            memory_trace.append(
+            running_memory_trace.append(
                 MemoryState(
                     frame=frame, cpu=Memory(cpu_mem), gpu=Memory(gpu_mem), cpu_gpu=Memory(cpu_mem + gpu_mem),
                 )
@@ -337,11 +337,11 @@ def stop_memory_tracing(
         else:
             total_memory = sum(step_trace.cpu_gpu.bytes for step_trace in memory_diff_trace)
 
-        max_memory = max(step_trace.cpu_gpu.bytes for step_trace in memory_trace)
+        max_memory = max(step_trace.cpu_gpu.bytes for step_trace in running_memory_trace)
 
         max_memory = Memory(max_memory)
         total_memory = Memory(total_memory)
-        return MemorySummary(sequential=memory_diff_trace, cumulative=cumulative_memory, current=memory_trace, total=total_memory, max_memory=max_memory)
+        return MemorySummary(sequential=memory_diff_trace, cumulative=cumulative_memory, current=running_memory_trace, total=total_memory, max_memory=max_memory)
 
     return None
 
