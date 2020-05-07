@@ -8,7 +8,7 @@ The library was designed with two strong goals in mind:
 
 - be as easy and fast to use as possible:
 
-  - we strongly limited the number of user-facing abstractions to learn, in fact there are almost no abstractions, just three standard classes required to use each model: configuration, models and tokenizer,
+  - we strongly limited the number of user-facing abstractions to learn, in fact, there are almost no abstractions, just three standard classes required to use each model: configuration, models and tokenizer,
   - all of these classes can be initialized in a simple and unified way from pretrained instances by using a common `from_pretrained()` instantiation method which will take care of downloading (if needed), caching and loading the related class from a pretrained instance supplied in the library or your own saved instance.
   - as a consequence, this library is NOT a modular toolbox of building blocks for neural nets. If you want to extend/build-upon the library, just use regular Python/PyTorch modules and inherit from the base classes of the library to reuse functionalities like model loading/saving.
 
@@ -31,27 +31,27 @@ A few other goals:
 
 ## Main concepts
 
-The library is build around three type of classes for each models:
+The library is build around three types of classes for each model:
 
-- **model classes** which are PyTorch models (`torch.nn.Modules`) of the 8 models architectures currently provided in the library, e.g. `BertModel`
-- **configuration classes** which store all the parameters required to build a model, e.g. `BertConfig`. You don't always need to instantiate these your-self, in particular if you are using a pretrained model without any modification, creating the model will automatically take care of instantiating the configuration (which is part of the model)
-- **tokenizer classes** which store the vocabulary for each model and provide methods for encoding/decoding strings in list of token embeddings indices to be fed to a model, e.g. `BertTokenizer`
+- **model classes** which are PyTorch models (`torch.nn.Modules`) of the 8 models architectures currently provided in the library, e.g., `BertModel`
+- **configuration classes** which store all the parameters required to build a model, e.g., `BertConfig`. You don't always need to instantiate these your-self, in particular, if you are using a pretrained model without any modification, creating the model will automatically take care of instantiating the configuration (which is part of the model)
+- **tokenizer classes** which store the vocabulary for each model and provide methods for encoding/decoding strings in a list of token embeddings indices to be fed to a model, e.g., `BertTokenizer`
 
 All these classes can be instantiated from pretrained instances and saved locally using two methods:
 
 - `from_pretrained()` let you instantiate a model/configuration/tokenizer from a pretrained version either provided by the library itself (currently 27 models are provided as listed [here](https://huggingface.co/transformers/pretrained_models.html)) or stored locally (or on a server) by the user,
 - `save_pretrained()` let you save a model/configuration/tokenizer locally so that it can be reloaded using `from_pretrained()`.
 
-We'll finish this quickstart tour by going through a few simple quick-start examples to see how we can instantiate and use these classes. The rest of the documentation is organized in two parts:
+We'll finish this quickstart tour by going through a few simple quick-start examples to see how we can instantiate and use these classes. The rest of the documentation is organized into two parts:
 
 - the **MAIN CLASSES** section details the common functionalities/method/attributes of the three main type of classes (configuration, model, tokenizer) plus some optimization related classes provided as utilities for training,
-- the **PACKAGE REFERENCE** section details all the variants of each class for each model architectures and in particular the input/output that you should expect when calling each of them.
+- the **PACKAGE REFERENCE** section details all the variants of each class for each model architectures and, in particular, the input/output that you should expect when calling each of them.
 
 ## Quick tour: Usage
 
 Here are two examples showcasing a few `Bert` and `GPT2` classes and pre-trained models.
 
-See full API reference for examples for each model class.
+See the full API reference for examples of each model class.
 
 ### BERT example
 
@@ -191,7 +191,7 @@ Examples for each model class of each model architecture (Bert, GPT, GPT-2, Tran
 
 #### Using the past
 
-GPT-2 as well as some other models (GPT, XLNet, Transfo-XL, CTRL) make use of a `past` or `mems` attribute which can be used to prevent re-computing the key/value pairs when using sequential decoding. It is useful when generating sequences as a big part of the attention mechanism benefits from previous computations.
+GPT-2, as well as some other models (GPT, XLNet, Transfo-XL, CTRL), make use of a `past` or `mems` attribute which can be used to prevent re-computing the key/value pairs when using sequential decoding. It is useful when generating sequences as a big part of the attention mechanism benefits from previous computations.
 
 Here is a fully-working example using the `past` with `GPT2LMHeadModel` and argmax decoding (which should only be used as an example, as argmax decoding introduces a lot of repetition):
 
