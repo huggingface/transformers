@@ -415,6 +415,7 @@ class Trainer:
                             learning_rate_scalar = scheduler.get_last_lr()[0]
                             logs["learning_rate"] = learning_rate_scalar
                             logs["loss"] = loss_scalar
+                            logs["epoch"] = epoch + (step + 1) / len(epoch_iterator)
                             logging_loss = tr_loss
 
                             if self.tb_writer:
