@@ -53,15 +53,16 @@ def is_tensorboard_available():
     return _has_tensorboard
 
 
+_has_wandb = False
 try:
     import wandb
-
     _has_wandb = True
 except ImportError:
-    _has_wandb = False
+    pass
 
 
 def is_wandb_available():
+    global _has_wandb
     if _has_wandb:
         wandb.ensure_configured()
         if wandb.api.api_key == None:
