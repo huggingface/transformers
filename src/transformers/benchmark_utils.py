@@ -247,7 +247,8 @@ def start_memory_tracing(
                 gpu_mem += meminfo.used
 
                 if is_torch_available():
-                    gpu_reserved_mem += torch.cuda.memory_reserved()
+                    torch.cuda.reset_max_memory_cached()
+                    gpu_reserved_mem += torch.cuda.max_memory_reserved()
 
             py3nvml.nvmlShutdown()
 
