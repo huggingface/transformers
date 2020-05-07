@@ -18,10 +18,10 @@ class ExamplesTests(unittest.TestCase):
 
         testargs = """
             --model_name distilbert-base-german-cased
-            --output_dir ./examples/tests_samples/temp_dir
+            --output_dir ./tests/fixtures/tests_samples/temp_dir
             --overwrite_output_dir
-            --data_dir ./examples/tests_samples/GermEval
-            --labels ./examples/tests_samples/GermEval/labels.txt
+            --data_dir ./tests/fixtures/tests_samples/GermEval
+            --labels ./tests/fixtures/tests_samples/GermEval/labels.txt
             --max_seq_length 128
             --num_train_epochs 6
             --logging_steps 1

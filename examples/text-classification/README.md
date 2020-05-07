@@ -1,8 +1,6 @@
-# GLUE Benchmark
+## GLUE Benchmark
 
-Based on the script [`run_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/run_glue.py).
-
-## TensorFlow 2.0 Bert models on GLUE
+# Run TensorFlow 2.0 version
 
 Based on the script [`run_tf_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/run_tf_glue.py).
 
@@ -24,51 +22,11 @@ Quick benchmarks from the script (no other modifications):
 
 Mixed precision (AMP) reduces the training time considerably for the same hardware and hyper-parameters (same batch size was used).
 
-## Running on TPUs
-
-You can accelerate your workloads on Google's TPUs. For information on how to setup your TPU environment refer to this
-[README](https://github.com/pytorch/xla/blob/master/README.md).
-
-The following are some examples of running the `*_tpu.py` finetuning scripts on TPUs. All steps for data preparation are
-identical to your normal GPU + Huggingface setup.
-
-### GLUE
-
-Before running anyone of these GLUE tasks you should download the
-[GLUE data](https://gluebenchmark.com/tasks) by running
-[this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
-and unpack it to some directory `$GLUE_DIR`.
-
-For running your GLUE task on MNLI dataset you can run something like the following:
-
-```
-export XRT_TPU_CONFIG="tpu_worker;0;$TPU_IP_ADDRESS:8470"
-export GLUE_DIR=/path/to/glue
-export TASK_NAME=MNLI
-
-python run_glue_tpu.py \
-  --model_type bert \
-  --model_name_or_path bert-base-cased \
-  --task_name $TASK_NAME \
-  --do_train \
-  --do_eval \
-  --data_dir $GLUE_DIR/$TASK_NAME \
-  --max_seq_length 128 \
-  --train_batch_size 32 \
-  --learning_rate 3e-5 \
-  --num_train_epochs 3.0 \
-  --output_dir /tmp/$TASK_NAME \
-  --overwrite_output_dir \
-  --logging_steps 50 \
-  --save_steps 200 \
-  --num_cores=8 \
-  --only_log_master
-```
 
 
-## GLUE
+# Run PyTorch version
 
-Based on the script [`run_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/run_glue.py).
+Based on the script [`run_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py).
 
 Fine-tuning the library models for sequence classification on the GLUE benchmark: [General Language Understanding
 Evaluation](https://gluebenchmark.com/). This script can fine-tune the following models: BERT, XLM, XLNet and RoBERTa.
@@ -126,6 +84,40 @@ The code has not been tested with half-precision training with apex on any GLUE 
 CoLA, SST-2. The following section provides details on how to run half-precision training with MRPC. With that being
 said, there shouldn’t be any issues in running half-precision training with the remaining GLUE tasks as well,
 since the data processor for each task inherits from the base class DataProcessor.
+
+## Running on TPUs
+
+You can accelerate your workloads on Google's TPUs. For information on how to setup your TPU environment refer to this
+[README](https://github.com/pytorch/xla/blob/master/README.md).
+
+The following are some examples of running the `*_tpu.py` finetuning scripts on TPUs. All steps for data preparation are
+identical to your normal GPU + Huggingface setup.
+
+For running your GLUE task on MNLI dataset you can run something like the following:
+
+```
+export XRT_TPU_CONFIG="tpu_worker;0;$TPU_IP_ADDRESS:8470"
+export GLUE_DIR=/path/to/glue
+export TASK_NAME=MNLI
+
+python run_glue_tpu.py \
+  --model_type bert \
+  --model_name_or_path bert-base-cased \
+  --task_name $TASK_NAME \
+  --do_train \
+  --do_eval \
+  --data_dir $GLUE_DIR/$TASK_NAME \
+  --max_seq_length 128 \
+  --train_batch_size 32 \
+  --learning_rate 3e-5 \
+  --num_train_epochs 3.0 \
+  --output_dir /tmp/$TASK_NAME \
+  --overwrite_output_dir \
+  --logging_steps 50 \
+  --save_steps 200 \
+  --num_cores=8 \
+  --only_log_master
+```
 
 ### MRPC
 
@@ -251,9 +243,18 @@ The results  are the following:
   loss = 0.04755385363816904
 ```
 
+# Run PyTorch version using PyTorch-Lightning
+
+Run `bash run_pl.sh` from the `glue` directory. This will also install `pytorch-lightning` and the requirements in `examples/requirements.txt`. It is a shell pipeline that will automatically download, pre-process the data and run the specified models. Logs are saved in `lightning_logs` directory.
+
+Pass `--n_gpu` flag to change the number of GPUs. Default uses 1. At the end, the expected results are: 
+
+```
+TEST RESULTS {'val_loss': tensor(0.0707), 'precision': 0.852427800698191, 'recall': 0.869537067011978, 'f1': 0.8608974358974358}
+```
 
 
-## XNLI
+# XNLI
 
 Based on the script [`run_xnli.py`](https://github.com/huggingface/transformers/blob/master/examples/run_xnli.py).
 
@@ -296,8 +297,3 @@ acc = 0.7093812375249501
 
 
 
-#### Run PyTorch version using PyTorch-Lightning
-
-Run `bash run_pl.sh` from the `glue` directory. This will also install `pytorch-lightning` and the requirements in `examples/requirements.txt`. It is a shell pipeline that will automatically download, pre-process the data and run the specified models. Logs are saved in `lightning_logs` directory.
-
-Pass `--n_gpu` flag to change the number of GPUs. Default uses 1. At the end, the expected results are: `TEST RESULTS {'val_loss': tensor(0.0707), 'precision': 0.852427800698191, 'recall': 0.869537067011978, 'f1': 0.8608974358974358}`

@@ -54,7 +54,7 @@ Additionally, the following method  can be used to load values from a data file 
 Example usage
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-An example using these processors is given in the `run_glue.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/run_glue.py>`__ script.
+An example using these processors is given in the `run_glue.py <https://github.com/huggingface/pytorch-transformers/blob/master/examples/text-classification/run_glue.py>`__ script.
 
 
 XNLI
