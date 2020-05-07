@@ -55,6 +55,7 @@ def is_tensorboard_available():
 
 try:
     import wandb
+
     _has_wandb = True
 except ImportError:
     _has_wandb = False
@@ -66,7 +67,9 @@ def is_wandb_available():
         wandb.ensure_configured()
         if wandb.api.api_key == None:
             _has_wandb = False
-            wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
+            wandb.termwarn(
+                "W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable."
+            )
     return False if os.getenv("WANDB_DISABLED") else _has_wandb
 
 
@@ -228,7 +231,9 @@ class Trainer:
         wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
         # keep track of model topology and gradients
         if os.getenv("WANDB_WATCH") != "false":
-            wandb.watch(self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps))
+            wandb.watch(
+                self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
+            )
 
     def train(self, model_path: Optional[str] = None):
         """
