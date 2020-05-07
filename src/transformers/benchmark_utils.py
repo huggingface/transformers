@@ -16,6 +16,7 @@ from .file_utils import is_tf_available, is_torch_available
 
 if is_torch_available():
     from torch.cuda import empty_cache as torch_empty_cache
+    import torch
 if is_tf_available():
     from tensorflow.python.eager import context as tf_context
 
@@ -239,7 +240,11 @@ def start_memory_tracing(
             for i in devices:
                 handle = py3nvml.nvmlDeviceGetHandleByIndex(i)
                 meminfo = py3nvml.nvmlDeviceGetMemoryInfo(handle)
-                gpu_mem += meminfo.used
+                meminfo = py3nvml.nvmlDeviceGetMemoryInfo(handle)
+                if is_torch_available():
+                    gpu_mem += torch.cuda.memory_allocated()
+                else:
+                    gpu_mem += meminfo.used
             py3nvml.nvmlShutdown()
 
         mem_state = UsedMemoryState(traced_state, cpu_mem, gpu_mem)
