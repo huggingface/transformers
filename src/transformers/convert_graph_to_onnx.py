@@ -80,6 +80,8 @@ def export_pytorch(nlp: Pipeline, args: Namespace):
         import torch
         from torch.onnx import export
 
+        print("PyTorch: {}".format(torch.__version__))
+
         with torch.no_grad():
             input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, args.framework)
             tokens = tuple(tokens[key] for key in input_names)  # Need to be ordered
@@ -98,9 +100,13 @@ def export_tensorflow(nlp: Pipeline, args: Namespace):
         print("Cannot export {} because TF is not installed. Please install torch first.".format(args.model))
         exit(1)
 
+    print("Please note TensorFlow doesn't support exporting model > 2Gb")
+
     try:
         import tensorflow as tf
-        from keras2onnx import convert_keras, save_model
+        from keras2onnx import convert_keras, save_model, build_io_names_tf2onnx, __version__ as k2ov
+
+        print("TensorFlow: {}, keras2onnx: {}".format(tf.version.VERSION, k2ov))
 
         # Build
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, args.framework)
