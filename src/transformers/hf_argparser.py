@@ -11,10 +11,6 @@ DataClass = NewType("DataClass", Any)
 DataClassType = NewType("DataClassType", Any)
 
 
-def trim_suffix(s: str, suffix: str):
-    return s if not s.endswith(suffix) or len(suffix) == 0 else s[: -len(suffix)]
-
-
 class HfArgumentParser(ArgumentParser):
     """
     This subclass of `argparse.ArgumentParser` uses type hints on dataclasses
@@ -109,8 +105,7 @@ class HfArgumentParser(ArgumentParser):
                   (same as argparse.ArgumentParser.parse_known_args)
         """
         if look_for_args_file and len(sys.argv):
-            basename = trim_suffix(sys.argv[0], ".py")
-            args_file = Path(f"{basename}.args")
+            args_file = Path(sys.argv[0]).with_suffix(".args")
             if args_file.exists():
                 fargs = args_file.read_text().split()
                 args = fargs + args if args is not None else fargs + sys.argv[1:]
