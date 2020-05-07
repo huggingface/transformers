@@ -67,8 +67,8 @@ extras = {}
 
 extras["mecab"] = ["mecab-python3"]
 extras["sklearn"] = ["scikit-learn"]
-extras["tf"] = ["tensorflow"]
-extras["tf-cpu"] = ["tensorflow-cpu"]
+extras["tf"] = ["tensorflow<=2.1.0"]
+extras["tf-cpu"] = ["tensorflow-cpu<=2.1.0"]
 extras["torch"] = ["torch"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
@@ -78,10 +78,10 @@ extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator"]
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme"]
 extras["quality"] = [
     "black",
-    "isort",
+    "isort @ git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort",
     "flake8",
 ]
-extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "scikit-learn", "tensorflow", "torch"]
+extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "scikit-learn", "tensorflow<=2.1.0", "torch"]
 
 setup(
     name="transformers",
