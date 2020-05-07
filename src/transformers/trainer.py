@@ -6,7 +6,7 @@ import re
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -20,6 +20,7 @@ from tqdm.auto import tqdm, trange
 from .data.data_collator import DataCollator, DefaultDataCollator
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
 from .training_args import TrainingArguments
 
 
@@ -52,6 +53,18 @@ def is_tensorboard_available():
     return _has_tensorboard
 
 
+try:
+    import wandb
+
+    _has_wandb = True
+except ImportError:
+    _has_wandb = False
+
+
+def is_wandb_available():
+    return _has_wandb
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,30 +86,6 @@ def torch_distributed_zero_first(local_rank: int):
     yield
     if local_rank == 0:
         torch.distributed.barrier()
-
-
-class EvalPrediction(NamedTuple):
-    """
-    Evaluation output (always contains labels), to be used
-    to compute metrics.
-    """
-
-    predictions: np.ndarray
-    label_ids: np.ndarray
-
-
-class PredictionOutput(NamedTuple):
-    predictions: np.ndarray
-    label_ids: Optional[np.ndarray]
-    metrics: Optional[Dict[str, float]]
-
-
-class TrainOutput(NamedTuple):
-    global_step: int
-    training_loss: float
-
-
-PREFIX_CHECKPOINT_DIR = "checkpoint"
 
 
 class Trainer:
@@ -123,6 +112,7 @@ class Trainer:
         eval_dataset: Optional[Dataset] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         prediction_loss_only=False,
+        tb_writer: Optional["SummaryWriter"] = None,
     ):
         """
         Trainer is a simple but feature-complete training and eval loop for PyTorch,
@@ -142,11 +132,17 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
         self.prediction_loss_only = prediction_loss_only
-        if is_tensorboard_available() and self.args.local_rank in [-1, 0]:
+        if tb_writer is not None:
+            self.tb_writer = tb_writer
+        elif is_tensorboard_available() and self.args.local_rank in [-1, 0]:
             self.tb_writer = SummaryWriter(log_dir=self.args.logging_dir)
         if not is_tensorboard_available():
             logger.warning(
                 "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
+            )
+        if not is_wandb_available():
+            logger.info(
+                "You are instantiating a Trainer but wandb is not installed. Install it to use Weights & Biases logging."
             )
         set_seed(self.args.seed)
         # Create output directory if needed
@@ -206,6 +202,16 @@ class Trainer:
         )
         return optimizer, scheduler
 
+    def _setup_wandb(self):
+        """
+        Setup the optional Weights & Biases (`wandb`) integration.
+
+        One can override this method to customize the setup if needed.
+        """
+        wandb.init(name=self.args.logging_dir, config=vars(self.args))
+        # keep track of model topology and gradients
+        wandb.watch(self.model)
+
     def train(self, model_path: Optional[str] = None):
         """
         Main training entry point.
@@ -260,6 +266,9 @@ class Trainer:
 
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", self.args.to_json_string())
+            self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
+        if is_wandb_available():
+            self._setup_wandb()
 
         # Train!
         logger.info("***** Running training *****")
@@ -348,6 +357,9 @@ class Trainer:
                             if self.tb_writer:
                                 for k, v in logs.items():
                                     self.tb_writer.add_scalar(k, v, global_step)
+                            if is_wandb_available():
+                                wandb.log(logs, step=global_step)
+
                             epoch_iterator.write(json.dumps({**logs, **{"step": global_step}}))
 
                         if self.args.save_steps > 0 and global_step % self.args.save_steps == 0:
@@ -464,7 +476,7 @@ class Trainer:
             shutil.rmtree(checkpoint)
 
     def evaluate(
-        self, eval_dataset: Optional[Dataset] = None, prediction_loss_only: Optional[bool] = None
+        self, eval_dataset: Optional[Dataset] = None, prediction_loss_only: Optional[bool] = None,
     ) -> Dict[str, float]:
         """
         Run evaluation and return metrics.

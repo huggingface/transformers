@@ -30,6 +30,7 @@ from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, Flau
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
 from .configuration_marian import MarianConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
+from .configuration_reformer import ReformerConfig
 from .configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
@@ -75,6 +76,7 @@ CONFIG_MAPPING = OrderedDict(
         ("xlm-roberta", XLMRobertaConfig,),
         ("marian", MarianConfig,),
         ("bart", BartConfig,),
+        ("reformer", ReformerConfig,),
         ("roberta", RobertaConfig,),
         ("flaubert", FlaubertConfig,),
         ("bert", BertConfig,),
@@ -132,6 +134,7 @@ class AutoConfig:
             - contains `camembert`: :class:`~transformers.CamembertConfig` (CamemBERT model)
             - contains `xlm-roberta`: :class:`~transformers.XLMRobertaConfig` (XLM-RoBERTa model)
             - contains `roberta`: :class:`~transformers.RobertaConfig` (RoBERTa model)
+            - contains `reformer`: :class:`~transformers.ReformerConfig` (Reformer model)
             - contains `bert`: :class:`~transformers.BertConfig` (Bert model)
             - contains `openai-gpt`: :class:`~transformers.OpenAIGPTConfig` (OpenAI GPT model)
             - contains `gpt2`: :class:`~transformers.GPT2Config` (OpenAI GPT-2 model)

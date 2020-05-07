@@ -2,7 +2,7 @@ import dataclasses
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .file_utils import cached_property, is_torch_available, torch_required
 
@@ -138,3 +138,13 @@ class TrainingArguments:
         Serializes this instance to a JSON string.
         """
         return json.dumps(dataclasses.asdict(self), indent=2)
+
+    def to_sanitized_dict(self) -> Dict[str, Any]:
+        """
+        Sanitized serialization to use with TensorBoard’s hparams
+        """
+        d = dataclasses.asdict(self)
+        valid_types = [bool, int, float, str]
+        if is_torch_available():
+            valid_types.append(torch.Tensor)
+        return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}

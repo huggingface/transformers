@@ -153,15 +153,3 @@ class TestMarian_FR_EN(MarianIntegrationTest):
     @slow
     def test_batch_generation_fr_en(self):
         self._assert_generated_batch_equal_expected()
-
-class TestMarian_HIL_EN(MarianIntegrationTest):
-    src = "hil"
-    tgt = "en"
-    src_text = [#'(Tan - awa ang kahon, pahina 7.)',
-                'Sa gilayon, may kasampaton nga ginhatagan niya ako sing Makasulatanhon nga mga sabat nga daw '
-                'nagahisuno sa akon kaugalingon nga doktrinal nga mga konklusion.']
-    expected_text = [#'(See box, page 7.)',
-                     'Immediately, he skillfully gave me Scriptural answers that seemed to harmonize with my own doctrinal conclusions.']
-    @slow
-    def test_batch_generation_hil_en(self):
-        self._assert_generated_batch_equal_expected()

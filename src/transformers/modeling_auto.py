@@ -31,6 +31,7 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     OpenAIGPTConfig,
+    ReformerConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -99,6 +100,7 @@ from .modeling_flaubert import (
 from .modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, GPT2LMHeadModel, GPT2Model
 from .modeling_marian import MarianMTModel
 from .modeling_openai import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, OpenAIGPTLMHeadModel, OpenAIGPTModel
+from .modeling_reformer import ReformerModel, ReformerModelWithLMHead
 from .modeling_roberta import (
     ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     RobertaForMaskedLM,
@@ -181,6 +183,7 @@ MODEL_MAPPING = OrderedDict(
         (XLMConfig, XLMModel),
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
+        (ReformerConfig, ReformerModel),
     ]
 )
 
@@ -225,6 +228,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForMaskedLM),
         (EncoderDecoderConfig, EncoderDecoderModel),
+        (ReformerConfig, ReformerModelWithLMHead),
     ]
 )
 
