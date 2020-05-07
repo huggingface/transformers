@@ -55,8 +55,6 @@ class TrainingArguments:
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for Adam."})
     weight_decay: float = field(default=0.0, metadata={"help": "Weight decay if we apply some."})
     adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for Adam optimizer."})
-    adam_beta_1: float = field(default=0.9, metadata={"helf": "Beta 1 for Adam optimizer."})
-    adam_beta_2: float = field(default=0.999, metadata={"helf": "Beta 2 for Adam optimizer."})
     max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
 
     num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
@@ -65,8 +63,6 @@ class TrainingArguments:
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
-    scheduler: str = field(default="linear", metadata={"help": "Name of learning rate scheduler to use. Choose between ['linear', 'cosine_decay', 'cosine_decay_hard_restarts', 'constant']"})
-    num_cycles_cosine_decay: float = field(default=1.0, metadata={"help": "Number of cosine cycles when using cosine decay schedules"})
 
     logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
     logging_first_step: bool = field(default=False, metadata={"help": "Log and eval the first global_step"})
