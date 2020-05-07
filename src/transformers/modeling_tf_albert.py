@@ -865,7 +865,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
     Examples::
 
         # The checkpoint albert-base-v2 is not fine-tuned for question answering. Please see the
-        # examples/run_squad.py example to see how to fine-tune a model to a question answering task.
+        # examples/question-answering/run_squad.py example to see how to fine-tune a model to a question answering task.
 
         import tensorflow as tf
         from transformers import AlbertTokenizer, TFAlbertForQuestionAnswering
