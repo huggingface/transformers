@@ -241,7 +241,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
             query_layer, key_layer, transpose_b=True
         )  # (batch size, num_heads, seq_len_q, seq_len_k)
         dk = tf.cast(shape_list(key_layer)[-1], tf.float32)  # scale attention_scores
-        attention_scores = attention_scores * tf.rsqrt(dk)
+        attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)

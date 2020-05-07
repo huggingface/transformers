@@ -159,7 +159,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
                     k, v = cache[self.layer_id]
             cache[self.layer_id] = (k, v)
 
-        q = q * tf.rsqrt(dim_per_head)  # (bs, n_heads, qlen, dim_per_head)
+        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, qlen, dim_per_head)
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, qlen, klen)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         # scores.masked_fill_(mask, -float('inf'))                            # (bs, n_heads, qlen, klen)
