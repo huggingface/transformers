@@ -249,6 +249,7 @@ class AlbertAttention(BertSelfAttention):
         new_shape = context_layer.size()[:-2] + (-1,)
         context_layer = context_layer.view(*new_shape)
 
+        self.dense.to(context_layer.dtype)
         projected_context_layer = self.dense(context_layer)
         projected_context_layer_dropout = self.dropout(projected_context_layer)
         layernormed_context_layer = self.LayerNorm(input_ids + projected_context_layer_dropout)
