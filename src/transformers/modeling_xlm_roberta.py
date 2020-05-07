@@ -23,6 +23,7 @@ from .file_utils import add_start_docstrings
 from .modeling_roberta import (
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
+    RobertaForQuestionAnswering,
     RobertaForSequenceClassification,
     RobertaForTokenClassification,
     RobertaModel,
@@ -120,6 +121,20 @@ class XLMRobertaForTokenClassification(RobertaForTokenClassification):
     """
     This class overrides :class:`~transformers.RobertaForTokenClassification`. Please check the
     superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = XLMRobertaConfig
+    pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+
+
+@add_start_docstrings(
+    """XLM-Roberta Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    XLM_ROBERTA_START_DOCSTRING,
+)
+class XLMRobertaForQuestionAnswering(RobertaForQuestionAnswering):
+    """
+    This class overrides :class:`~transformers.RobertaForQuestionAnswering`. Please check    superclass for the appropriate documentation alongside usage examples.
     """
 
     config_class = XLMRobertaConfig
