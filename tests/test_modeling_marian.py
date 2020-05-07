@@ -18,6 +18,7 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
+from transformers.hf_api import HfApi
 
 from .utils import require_torch, slow, torch_device
 
@@ -25,6 +26,14 @@ from .utils import require_torch, slow, torch_device
 if is_torch_available():
     import torch
     from transformers import AutoTokenizer, MarianConfig, AutoConfig, AutoModelWithLMHead
+
+
+class ModelManagementTests(unittest.TestCase):
+    def test_model_count(self):
+        model_list = HfApi().model_list()
+        expected_num_models = 1010
+        actual_num_models = len([x for x in model_list if x.modelId.startswith("Helsinki-NLP")])
+        self.assertEqual(expected_num_models, actual_num_models)
 
 
 @require_torch
