@@ -5,6 +5,7 @@ Version 2.9 of `transformers` introduces a new `Trainer` class for PyTorch, and 
 Here is the list of all our examples:
 - **grouped by task** (all official examples work for multiple models)
 - with information on whether they are **built on top of `Trainer`/`TFTrainer`** (if not, they still work, they might just lack some features),
+- whether they also include examples for **`pytorch-lightning`**, which is a great fully-featured, general-purpose training library for PyTorch,
 - links to **Colab notebooks** to walk through the scripts and run them easily,
 - links to **Cloud deployments** to be able to deploy large-scale trainings in the Cloud with little to no setup.
 
@@ -13,12 +14,12 @@ This is still a work-in-progress – in particular documentation is still sparse
 
 ## Tasks built on Trainer
 
-| Task | Example datasets | Trainer support | TFTrainer support | Colab | One-click Deploy to Azure (wip) | 
-|---|---|:---:|:---:|:---:|:---:|
-| [`language-modeling`](./language-modeling) | Raw text | ✅ | - | - | - |
-| [`text-classification`](./text-classification) | GLUE, XNLI | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/transformers/blob/master/notebooks/trainer/01_text_classification.ipynb) | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Fazure-quickstart-templates%2Fmaster%2F101-storage-account-create%2Fazuredeploy.json) |
-| [`token-classification`](./token-classification) | CoNLL NER | ✅ | ✅ | - | - |
-| [`multiple-choice`](./multiple-choice) | SWAG, RACE, ARC | ✅ | - | - | - |
+| Task | Example datasets | Trainer support | TFTrainer support | pytorch-lightning | Colab | One-click Deploy to Azure (wip) | 
+|---|---|:---:|:---:|:---:|:---:|:---:|
+| [`language-modeling`](./language-modeling) | Raw text | ✅ | - | - | - | - |
+| [`text-classification`](./text-classification) | GLUE, XNLI | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/transformers/blob/master/notebooks/trainer/01_text_classification.ipynb) | [![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FAzure%2Fazure-quickstart-templates%2Fmaster%2F101-storage-account-create%2Fazuredeploy.json) |
+| [`token-classification`](./token-classification) | CoNLL NER | ✅ | ✅ | ✅ | - | - |
+| [`multiple-choice`](./multiple-choice) | SWAG, RACE, ARC | ✅ | - | - | - | - |
 
 
 
