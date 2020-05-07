@@ -332,7 +332,7 @@ pip install -r ./examples/requirements.txt
 export GLUE_DIR=/path/to/glue
 export TASK_NAME=MRPC
 
-python ./examples/run_glue.py \
+python ./examples/text-classification/run_glue.py \
     --model_name_or_path bert-base-uncased \
     --task_name $TASK_NAME \
     --do_train \
@@ -358,7 +358,7 @@ Parallel training is a simple way to use several GPUs (but is slower and less fl
 ```shell
 export GLUE_DIR=/path/to/glue
 
-python ./examples/run_glue.py \
+python ./examples/text-classification/run_glue.py \
     --model_name_or_path xlnet-large-cased \
     --do_train  \
     --do_eval   \
@@ -383,7 +383,7 @@ On this machine we thus have a batch size of 32, please increase `gradient_accum
 This example code fine-tunes the Bert Whole Word Masking model on the Microsoft Research Paraphrase Corpus (MRPC) corpus using distributed training on 8 V100 GPUs to reach a F1 > 92.
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node 8 ./examples/run_glue.py   \
+python -m torch.distributed.launch --nproc_per_node 8 ./examples/text-classification/run_glue.py   \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --task_name MRPC \
     --do_train   \

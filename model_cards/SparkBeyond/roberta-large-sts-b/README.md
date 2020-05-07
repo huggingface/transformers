@@ -4,7 +4,7 @@
 
 This model is a fine tuned RoBERTA model over STS-B.
 It was trained with these params:
-!python /content/transformers/examples/run_glue.py \
+!python /content/transformers/examples/text-classification/run_glue.py \
     --model_type roberta \
     --model_name_or_path roberta-large \
     --task_name STS-B \
