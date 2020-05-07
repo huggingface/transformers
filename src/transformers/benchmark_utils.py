@@ -239,6 +239,7 @@ def start_memory_tracing(
 
             # Sum used memory for all GPUs
             py3nvml.nvmlInit()
+
             for i in devices:
                 handle = py3nvml.nvmlDeviceGetHandleByIndex(i)
                 meminfo = py3nvml.nvmlDeviceGetMemoryInfo(handle)
@@ -246,7 +247,7 @@ def start_memory_tracing(
                 gpu_mem += meminfo.used
 
                 if is_torch_available():
-                    gpu_reserved_mem += torch.cuda.memory_reserved(device=i)
+                    gpu_reserved_mem += torch.cuda.memory_reserved()
 
             py3nvml.nvmlShutdown()
 
@@ -307,7 +308,7 @@ def stop_memory_tracing(
         memory_diff_trace = []
         running_memory_trace = []
 
-        cumulative_memory_dict = defaultdict(lambda: [0, 0, 0, 0])
+        cumulative_memory_dict = defaultdict(lambda: [0, 0, 0])
         for (frame, cpu_mem, gpu_mem, next_reserved_gpu_mem), (next_frame, next_cpu_mem, next_gpu_mem, next_reserved_gpu_mem) in zip(
             memory_trace[:-1], memory_trace[1:]
         ):
