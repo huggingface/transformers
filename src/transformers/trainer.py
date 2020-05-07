@@ -70,7 +70,7 @@ def is_wandb_available():
     global _has_wandb
     if _has_wandb:
         wandb.ensure_configured()
-        if wandb.api.api_key == None:
+        if wandb.api.api_key is None:
             _has_wandb = False
             wandb.termwarn(
                 "W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable."
