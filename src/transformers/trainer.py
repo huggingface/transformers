@@ -65,8 +65,8 @@ def is_wandb_available():
     if _has_wandb:
         wandb.ensure_configured()
         if wandb.api.api_key == None:
+            _has_wandb = False
             wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
-            return False
     return False if os.getenv("WANDB_DISABLED") else _has_wandb
 
 
