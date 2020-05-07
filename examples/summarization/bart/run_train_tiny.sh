@@ -16,7 +16,6 @@ mkdir -p $OUTPUT_DIR
 export PYTHONPATH="../../":"${PYTHONPATH}"
 python finetune.py \
 --data_dir=cnn_tiny/ \
---model_type=bart \
 --model_name_or_path=sshleifer/bart-tiny-random \
 --learning_rate=3e-5 \
 --train_batch_size=2 \
