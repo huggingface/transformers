@@ -79,7 +79,7 @@ class MarianIntegrationTest(unittest.TestCase):
         generated_ids = self.model.generate(
             model_inputs["input_ids"], attention_mask=model_inputs["attention_mask"], num_beams=2,
         )
-        generated_words = self.tokenizer.decode_batch(generated_ids, skip_special_tokens=True)
+        generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(self.expected_text, generated_words)
 
 
@@ -102,7 +102,7 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         with torch.no_grad():
             logits, *enc_features = self.model(**model_inputs)
         max_indices = logits.argmax(-1)
-        self.tokenizer.decode_batch(max_indices)
+        self.tokenizer.batch_decode(max_indices)
 
     def test_tokenizer_equivalence(self):
         batch = self.tokenizer.prepare_translation_batch(["I am a small frog"]).to(torch_device)
@@ -199,4 +199,18 @@ class TestMarian_SV_TW(MarianIntegrationTest):
 
     @slow
     def test_batch_generation_sv_tw(self):
+        self._assert_generated_batch_equal_expected()
+
+
+group_names = {"cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh": "ch_group"}
+
+
+class TestMarian_Multi_DE(MarianIntegrationTest):
+    src = "ch_group"
+    tgt = "de"
+    src_text = ["ä»–ä¸æ˜¯æ¯ä¸€å¤©éƒ½ä¾†é€™è£¡."]
+    expected_text = ["Er kommt nicht jeden Tag hierher."]
+
+    @slow
+    def test_batch_generation_multi_de(self):
         self._assert_generated_batch_equal_expected()

@@ -29,7 +29,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     Examples::
 
         from transformers import MarianTokenizer
-        tok = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-en-de')
+        tok = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
         src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
         tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
         batch_enc: BatchEncoding = tok.prepare_translation_batch(src_texts, tgt_texts=tgt_texts)
@@ -115,7 +115,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    def decode_batch(self, token_ids, **kwargs) -> List[str]:
+    def batch_decode(self, token_ids, **kwargs) -> List[str]:
         return [self.decode(ids, **kwargs) for ids in token_ids]
 
     def prepare_translation_batch(
