@@ -65,6 +65,11 @@ TEXT_GENERATION_FINETUNED_MODELS = {
     ("xlnet-base-cased", "xlnet-base-cased"),
 }
 
+TF_TEXT_GENERATION_FINETUNED_MODELS = {
+    ("gpt2", "gpt2"),
+    ("xlnet-base-cased", "xlnet-base-cased"),
+}
+
 FILL_MASK_FINETUNED_MODELS = [
     (("distilroberta-base", {"use_fast": False}), "distilroberta-base", None),
 ]
@@ -376,6 +381,16 @@ class MonoColumnInputTestCase(unittest.TestCase):
         invalid_inputs = [None]
         for model, tokenizer in TEXT_GENERATION_FINETUNED_MODELS:
             nlp = pipeline(task="text-generation", model=model, tokenizer=tokenizer, framework="pt")
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, invalid_inputs, {},
+            )
+
+    @require_tf
+    def test_tf_text_generation(self):
+        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        invalid_inputs = [None]
+        for model, tokenizer in TF_TEXT_GENERATION_FINETUNED_MODELS:
+            nlp = pipeline(task="text-generation", model=model, tokenizer=tokenizer, framework="tf")
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, {},
             )
