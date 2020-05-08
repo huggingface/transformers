@@ -59,56 +59,64 @@ tokenizer = GPT2Tokenizer.from_pretrained(
 ## Example using GPT2LMHeadModel
 
 ```python
-from transformers import GPT2Tokenizer, GPT2LMHeadModel
+from transformers import AutoTokenizer, AutoModelWithLMHead, pipeline, GPT2Tokenizer
 
-tokenizer = GPT2Tokenizer.from_pretrained('LorenzoDeMattei/GePpeTto')
-model = GPT2LMHeadModel.from_pretrained(
-    'LorenzoDeMattei/GePpeTto', pad_token_id = tokenizer.eos_token_id
+tokenizer = AutoTokenizer.from_pretrained("LorenzoDeMattei/GePpeTto")
+model = AutoModelWithLMHead.from_pretrained("LorenzoDeMattei/GePpeTto")
+
+text_generator = pipeline('text-generation', model=model, tokenizer=tokenizer)
+prompts = [
+    "Wikipedia Geppetto",
+    "Maestro Ciliegia regala il pezzo di legno al suo amico Geppetto, il quale lo prende per fabbricarsi un burattino maraviglioso"]
+
+
+samples_outputs = text_generator(
+    prompts,
+    do_sample=True,
+    max_length=50,
+    top_k=50,
+    top_p=0.95,
+    num_return_sequences=3
 )
 
-input_ids = tokenizer.encode(
-    'Wikipedia Geppetto', return_tensors = 'pt'
-)
-sample_outputs = model.generate(
-    input_ids,
-    do_sample = True,
-    max_length = 50,
-    top_k = 50,
-    top_p = 0.95,
-    num_return_sequences = 3,
-)
 
-print('Output:\n' + 100 * '-')
-for i, sample_output in enumerate(sample_outputs):
-    print(
-        '{}: {}'.format(
-            i, tokenizer.decode(sample_output, skip_special_tokens = True)
-        )
-    )
+for i, sample_outputs in enumerate(samples_outputs):
+    print(100 * '-')
+    print("Prompt:", prompts[i])
+    for sample_output in sample_outputs:
+        print("Sample:", sample_output['generated_text'])
+        print()
+
 ```
 
 Output is,
 
-```text
-Output:
+```
 ----------------------------------------------------------------------------------------------------
-0: Wikipedia Geppetto
+Prompt: Wikipedia Geppetto
+Sample: Wikipedia Geppetto rosso (film 1920)
 
-Geppetto è una città degli Stati Uniti d'America, situata nello Stato dell'Iowa, nella Contea di Greene.
+Geppetto rosso ("The Smokes in the Black") è un film muto del 1920 diretto da Henry H. Leonard.
 
-Wikipedia The Sax
+Il film fu prodotto dalla Selig Poly
 
-The Sax è il primo album discografico
-2: Wikipedia Geppetto/Passione
+Sample: Wikipedia Geppetto
 
-Geppetto è il primo album in studio dei Saturday Night Live, pubblicato dalla Iron Maiden nel 1974.
+Geppetto ("Geppetto" in piemontese) è un comune italiano di 978 abitanti della provincia di Cuneo in Piemonte.
 
-L'album è un lavoro di debutto che lo porta a definire
-3: Wikipedia Geppetto
+L'abitato, che si trova nel versante valtellinese, si sviluppa nella
 
-Geppetto ("Fenëvëv" in calabrese) è un comune italiano di abitanti della regione Calabria.
+Sample: Wikipedia Geppetto di Natale (romanzo)
 
-Zona di particolare pregio storico-artistico, paesaggistico, storico-artistico,
+Geppetto di Natale è un romanzo di Mario Caiano, pubblicato nel 2012.
+
+----------------------------------------------------------------------------------------------------
+Prompt: Maestro Ciliegia regala il pezzo di legno al suo amico Geppetto, il quale lo prende per fabbricarsi un burattino maraviglioso
+Sample: Maestro Ciliegia regala il pezzo di legno al suo amico Geppetto, il quale lo prende per fabbricarsi un burattino maraviglioso. Il burattino riesce a scappare. Dopo aver trovato un prezioso sacchetto si reca
+
+Sample: Maestro Ciliegia regala il pezzo di legno al suo amico Geppetto, il quale lo prende per fabbricarsi un burattino maraviglioso, e l'unico che lo possiede, ma, di fronte a tutte queste prove
+
+Sample: Maestro Ciliegia regala il pezzo di legno al suo amico Geppetto, il quale lo prende per fabbricarsi un burattino maraviglioso: - A voi gli occhi, le guance! A voi il mio pezzo!
 ```
 
 ## Citation
