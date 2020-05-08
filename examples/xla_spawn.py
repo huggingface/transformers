@@ -40,7 +40,7 @@ def parse_args():
         "training_script",
         type=str,
         help=(
-            "The full module name to the single TPU training "
+            "The full path to the single TPU training "
             "program/script to be launched in parallel, "
             "followed by all the arguments for the "
             "training script"
