@@ -28,8 +28,8 @@ TF_NER_FINETUNED_MODELS = {
 NER_FINETUNED_MODELS = {
     (
         "bert-base-cased",
-        "dbmdz/bert-large-cased-finetuned-conll03-english",
-        "dbmdz/bert-large-cased-finetuned-conll03-english",
+        "sshleifer/tiny_dbmdz_bert-large-cased-finetuned-conll03-english",
+        "sshleifer/tiny_dbmdz_bert-large-cased-finetuned-conll03-english",
     )
 }
 
@@ -205,7 +205,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         self.assertRaises(Exception, nlp, invalid_inputs)
 
     @require_torch
-    def test_ner(self):
+    def test_torch_ner(self):
         mandatory_keys = {"entity", "word", "score"}
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
