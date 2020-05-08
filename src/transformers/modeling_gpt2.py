@@ -145,7 +145,9 @@ class Attention(nn.Module):
             w = w / (v.size(-1) ** 0.5)
         nd, ns = w.size(-2), w.size(-1)
         mask = self.bias[:, :, ns - nd : ns, :ns]
-        w = torch.where(mask, w, self.masked_bias.to(w.dtype))
+        masked_bias = self.masked_bias.to(w.dtype)
+        assert masked_bias.item() != -float("inf"), "Make sure `self.masked_bias` is not `-inf` in fp16 mode"
+        w = torch.where(mask, w, masked_bias)
 
         if attention_mask is not None:
             # Apply the attention mask
