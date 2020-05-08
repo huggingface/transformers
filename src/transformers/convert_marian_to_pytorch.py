@@ -290,6 +290,8 @@ class OpusState:
             # default: add_final_layer_norm=False,
             num_beams=decoder_yml["beam-size"],
             decoder_start_token_id=self.pad_token_id,
+            bad_words_ids=[[self.pad_token_id]],
+            max_length=512,
         )
 
     def _check_layer_entries(self):
