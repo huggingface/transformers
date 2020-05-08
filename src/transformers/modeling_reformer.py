@@ -561,8 +561,8 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # get correct mask values depending on precision
         if query_key_dots.dtype == torch.float16:
-            self_mask_value = self.self_mask_value_float16
-            mask_value = self.mask_value_float16
+            self_mask_value = self.self_mask_value_float16.half()
+            mask_value = self.mask_value_float16.half()
         else:
             self_mask_value = self.self_mask_value_float32
             mask_value = self.mask_value_float32
@@ -833,7 +833,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         if mask is not None:
             # get mask tensor depending on half precision or not
             if query_key_dots.dtype == torch.float16:
-                mask_value = self.mask_value_float16
+                mask_value = self.mask_value_float16.half()
             else:
                 mask_value = self.mask_value_float32
 
