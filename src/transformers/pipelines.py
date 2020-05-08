@@ -457,11 +457,7 @@ class Pipeline(_ScikitCompat):
         # Parse arguments
         inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer.batch_encode_plus(
-            inputs,
-            add_special_tokens=True,
-            return_tensors=self.framework,
-            pad_to_max_length=pad_to_max_length,
-            max_length=self.tokenizer.max_len,
+            inputs, add_special_tokens=True, return_tensors=self.framework, pad_to_max_length=pad_to_max_length,
         )
 
         return inputs
@@ -1353,7 +1349,7 @@ class SummarizationPipeline(Pipeline):
             documents = (prefix + documents[0],)
             pad_to_max_length = False
         else:
-            raise TypeError(
+            raise ValueError(
                 " `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(
                     documents[0]
                 )
