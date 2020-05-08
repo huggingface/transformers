@@ -14,7 +14,7 @@ class OnnxConverterArgumentParser(ArgumentParser):
     """
 
     def __init__(self):
-        super(OnnxConverterArgumentParser, self).__init__("ONNX Converter")
+        super().__init__("ONNX Converter")
 
         self.add_argument("--model", type=str, required=True, help="Model's id or path (ex: bert-base-cased)")
         self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: bert-base-cased)")
