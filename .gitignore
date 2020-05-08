@@ -132,7 +132,8 @@ proc_data
 runs
 /runs_old
 /wandb
-examples/runs
+/examples/runs
+/examples/**/*.args
 
 # data
 /data
