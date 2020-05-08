@@ -59,7 +59,6 @@ tokenizer = GPT2Tokenizer.from_pretrained(
 ## Example using GPT2LMHeadModel
 
 ```python
-File Edit Options Buffers Tools Python Help                                                                          
 from transformers import AutoTokenizer, AutoModelWithLMHead, pipeline, GPT2Tokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("LorenzoDeMattei/GePpeTto")
