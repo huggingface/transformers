@@ -110,7 +110,7 @@ def convert_all_sentencepiece_models(model_list=None, repo_path=None):
             continue
         if not os.path.exists(save_dir / k / "pytorch_model.bin"):
             download_and_unzip(download, save_dir / k)
-        convert(save_dir / k, dest_dir / k)
+        convert(save_dir / k, dest_dir / f"opus-mt-{k}")
 
 
 def convert_whole_dir(path=Path("marian_ckpt/")):
