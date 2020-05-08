@@ -9,9 +9,9 @@ from .utils import require_tf, require_torch, slow
 
 QA_FINETUNED_MODELS = [
     (
-        ("bert-base-uncased", {"use_fast": False}),
-        "sshleifer/tiny_bert-large-uncased-whole-word-masking-finetuned-squad",
-        None,
+        ("bert-base-uncased", {"use_fast": False}),  # tokenizer
+        "sshleifer/tiny_bert-large-uncased-whole-word-masking-finetuned-squad",  # model
+        None,  # config
     ),
     (
         ("distilbert-base-cased-distilled-squad", {"use_fast": False}),
@@ -43,7 +43,7 @@ NER_FINETUNED_MODELS = {
 
 FEATURE_EXTRACT_FINETUNED_MODELS = {
     # ('xlnet-base-cased', 'xlnet-base-cased', None), # Disabled for now as it crash for TF2
-    ("distilbert-base-cased", "distilbert-base-cased", None),
+    ("distilbert-base-cased", "sshleifer/tiny_distilbert-base-cased", None),
 }
 
 TF_FEATURE_EXTRACT_FINETUNED_MODELS = {
@@ -62,14 +62,14 @@ TF_TEXT_CLASSIF_FINETUNED_MODELS = {
 TEXT_CLASSIF_FINETUNED_MODELS = {
     (
         "distilbert-base-cased",
-        "distilbert-base-uncased-finetuned-sst-2-english",
-        "distilbert-base-uncased-finetuned-sst-2-english",
+        "sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english",
+        "sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english",
     )
 }
 
 TEXT_GENERATION_FINETUNED_MODELS = {
-    ("gpt2", "gpt2"),
-    ("xlnet-base-cased", "xlnet-base-cased"),
+    # model = tokenizer
+    "sshleifer/tiny-gpt2",
 }
 
 TF_TEXT_GENERATION_FINETUNED_MODELS = {
@@ -78,7 +78,7 @@ TF_TEXT_GENERATION_FINETUNED_MODELS = {
 }
 
 FILL_MASK_FINETUNED_MODELS = [
-    (("distilroberta-base", {"use_fast": False}), "distilroberta-base", None),
+    (("distilroberta-base", {"use_fast": False}), "sshleifer/tiny-distilroberta-base", None),
 ]
 
 TF_FILL_MASK_FINETUNED_MODELS = [
@@ -86,6 +86,7 @@ TF_FILL_MASK_FINETUNED_MODELS = [
 ]
 
 SUMMARIZATION_FINETUNED_MODELS = {
+    # model, tokenizer
     ("sshleifer/bart-tiny-random", "bart-large-cnn"),
     ("patrickvonplaten/t5-tiny-random", "t5-small"),
 }
@@ -231,7 +232,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
     @require_torch
-    def test_sentiment_analysis(self):
+    def test_torch_sentiment_analysis(self):
         mandatory_keys = {"label", "score"}
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
@@ -249,7 +250,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
     @require_torch
-    def test_feature_extraction(self):
+    def test_torch_feature_extraction(self):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
         for tokenizer, model, config in FEATURE_EXTRACT_FINETUNED_MODELS:
@@ -265,40 +266,17 @@ class MonoColumnInputTestCase(unittest.TestCase):
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
 
     @require_torch
-    def test_fill_mask(self):
+    def test_torch_fill_mask(self):
         mandatory_keys = {"sequence", "score", "token"}
         valid_inputs = [
             "My name is <mask>",
             "The largest city in France is <mask>",
         ]
         invalid_inputs = [None]
-        expected_multi_result = [
-            [
-                {"sequence": "<s> My name is:</s>", "score": 0.009954338893294334, "token": 35},
-                {"sequence": "<s> My name is John</s>", "score": 0.0080940006300807, "token": 610},
-            ],
-            [
-                {
-                    "sequence": "<s> The largest city in France is Paris</s>",
-                    "score": 0.3185044229030609,
-                    "token": 2201,
-                },
-                {
-                    "sequence": "<s> The largest city in France is Lyon</s>",
-                    "score": 0.21112334728240967,
-                    "token": 12790,
-                },
-            ],
-        ]
         for tokenizer, model, config in FILL_MASK_FINETUNED_MODELS:
             nlp = pipeline(task="fill-mask", model=model, config=config, tokenizer=tokenizer, topk=2)
             self._test_mono_column_pipeline(
-                nlp,
-                valid_inputs,
-                invalid_inputs,
-                mandatory_keys,
-                expected_multi_result=expected_multi_result,
-                expected_check_keys=["sequence"],
+                nlp, valid_inputs, invalid_inputs, mandatory_keys, expected_check_keys=["sequence"],
             )
 
     @require_tf
@@ -362,7 +340,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             )
 
     @require_torch
-    def test_translation(self):
+    def test_torch_translation(self):
         valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["translation_text"]
@@ -384,11 +362,11 @@ class MonoColumnInputTestCase(unittest.TestCase):
             )
 
     @require_torch
-    def test_text_generation(self):
+    def test_torch_text_generation(self):
         valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
         invalid_inputs = [None]
-        for model, tokenizer in TEXT_GENERATION_FINETUNED_MODELS:
-            nlp = pipeline(task="text-generation", model=model, tokenizer=tokenizer, framework="pt")
+        for model_name in TEXT_GENERATION_FINETUNED_MODELS:
+            nlp = pipeline(task="text-generation", model=model_name, tokenizer=model_name, framework="pt")
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, {},
             )
