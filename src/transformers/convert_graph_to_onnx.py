@@ -20,7 +20,6 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: bert-base-cased)")
         self.add_argument("--task", type=str, default=None, choices=list(SUPPORTED_TASKS.keys()), help="Model's task")
         self.add_argument("--framework", type=str, choices=["pt", "tf"], help="Framework for loading the model")
-        self.add_argument("--quantize", action="store_true", help="Enable post-training quantization")
         self.add_argument("--opset", type=int, default=-1, help="ONNX opset to use (-1 = latest)")
         self.add_argument("--check-loading", action="store_true", help="Check ONNX is able to load the model")
         self.add_argument("output")
@@ -95,7 +94,7 @@ def export_pytorch(nlp: Pipeline, args: Namespace):
             input_names=input_names,
             output_names=output_names,
             dynamic_axes=dynamic_axes,
-            do_constant_folding=True,
+            do_constant_folding=False,
             use_external_data_format=True,
             enable_onnx_checker=True,
         )
@@ -153,17 +152,13 @@ if __name__ == "__main__":
         export_tensorflow(nlp, args)
 
     if args.check_loading:
-        from onnxruntime import InferenceSession, SessionOptions, ExecutionMode, GraphOptimizationLevel
+        from onnxruntime import InferenceSession, SessionOptions, GraphOptimizationLevel
         from onnxruntime.capi.onnxruntime_pybind11_state import RuntimeException
 
         print("Checking ONNX model loading from: {}".format(args.output))
         try:
             onnx_options = SessionOptions()
-            onnx_options.intra_op_num_threads = 1
-            onnx_options.log_severity_level = 3
-            onnx_options.log_verbosity_level = 3
-            onnx_options.execution_mode = ExecutionMode.ORT_SEQUENTIAL
-            onnx_options.graph_optimization_level = GraphOptimizationLevel.ORT_DISABLE_ALL
+            onnx_options.graph_optimization_level = GraphOptimizationLevel.ORT_ENABLE_ALL
             session = InferenceSession(args.output, onnx_options, providers=["CPUExecutionProvider"])
             print("Model correctly loaded")
         except RuntimeException as re:
