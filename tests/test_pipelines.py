@@ -8,8 +8,16 @@ from .utils import require_tf, require_torch, slow
 
 
 QA_FINETUNED_MODELS = [
-    (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
-    (("distilbert-base-cased-distilled-squad", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
+    (
+        ("bert-base-uncased", {"use_fast": False}),
+        "sshleifer/tiny_bert-large-uncased-whole-word-masking-finetuned-squad",
+        None,
+    ),
+    (
+        ("distilbert-base-cased-distilled-squad", {"use_fast": False}),
+        "sshleifer/tiny_distilbert-base-cased-distilled-squad",
+        None,
+    ),
 ]
 
 TF_QA_FINETUNED_MODELS = [
@@ -418,7 +426,7 @@ class MultiColumnInputTestCase(unittest.TestCase):
         self.assertRaises(Exception, nlp, invalid_inputs)
 
     @require_torch
-    def test_question_answering(self):
+    def test_torch_question_answering(self):
         mandatory_output_keys = {"score", "answer", "start", "end"}
         valid_samples = [
             {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
