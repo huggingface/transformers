@@ -15,6 +15,7 @@ import tempfile
 from contextlib import contextmanager
 from functools import partial, wraps
 from hashlib import sha256
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
