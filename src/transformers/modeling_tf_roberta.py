@@ -481,7 +481,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel):
     Examples::
 
         # The checkpoint roberta-base is not fine-tuned for question answering. Please see the
-        # examples/run_squad.py example to see how to fine-tune a model to a question answering task.
+        # examples/question-answering/run_squad.py example to see how to fine-tune a model to a question answering task.
 
         import tensorflow as tf
         from transformers import RobertaTokenizer, TFRobertaForQuestionAnswering
