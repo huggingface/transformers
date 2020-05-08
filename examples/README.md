@@ -58,7 +58,7 @@ When using Tensorflow, TPUs are supported out of the box as a `tf.distribute.Str
 When using PyTorch, we support TPUs thanks to `pytorch/xla`. For more context and information on how to setup your TPU environment refer to Google's documentation and to the
 very detailed [pytorch/xla README](https://github.com/pytorch/xla/blob/master/README.md).
 
-Here, we provide a very simple launcher script named [xla_spawn.py](./xla_spawn.py) that lets you run our example scripts on multiple TPU cores without any boilerplate.
+In this repo, we provide a very simple launcher script named [xla_spawn.py](./xla_spawn.py) that lets you run our example scripts on multiple TPU cores without any boilerplate.
 Just pass a `--num_cores` flag to this script, then your regular training script with its arguments (this is similar to the `torch.distributed.launch` helper for torch.distributed).
 
 For example for `run_glue`:
