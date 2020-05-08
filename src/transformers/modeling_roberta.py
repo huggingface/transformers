@@ -31,12 +31,12 @@ from .modeling_utils import create_position_ids_from_input_ids
 logger = logging.getLogger(__name__)
 
 ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-pytorch_model.bin",
-    "roberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-pytorch_model.bin",
-    "roberta-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-pytorch_model.bin",
-    "distilroberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-pytorch_model.bin",
-    "roberta-base-openai-detector": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-openai-detector-pytorch_model.bin",
-    "roberta-large-openai-detector": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-openai-detector-pytorch_model.bin",
+    "roberta-base": "https://cdn.huggingface.co/roberta-base-pytorch_model.bin",
+    "roberta-large": "https://cdn.huggingface.co/roberta-large-pytorch_model.bin",
+    "roberta-large-mnli": "https://cdn.huggingface.co/roberta-large-mnli-pytorch_model.bin",
+    "distilroberta-base": "https://cdn.huggingface.co/distilroberta-base-pytorch_model.bin",
+    "roberta-base-openai-detector": "https://cdn.huggingface.co/roberta-base-openai-detector-pytorch_model.bin",
+    "roberta-large-openai-detector": "https://cdn.huggingface.co/roberta-large-openai-detector-pytorch_model.bin",
 }
 
 
@@ -47,7 +47,7 @@ class RobertaEmbeddings(BertEmbeddings):
 
     def __init__(self, config):
         super().__init__(config)
-        self.padding_idx = 1
+        self.padding_idx = config.pad_token_id
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
@@ -643,7 +643,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
     Examples::
 
         # The checkpoint roberta-large is not fine-tuned for question answering. Please see the
-        # examples/run_squad.py example to see how to fine-tune a model to a question answering task.
+        # examples/question-answering/run_squad.py example to see how to fine-tune a model to a question answering task.
 
         from transformers import RobertaTokenizer, RobertaForQuestionAnswering
         import torch

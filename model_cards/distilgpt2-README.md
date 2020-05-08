@@ -1,6 +1,8 @@
 ---
 tags:
 - exbert
+
+license: apache-2.0
 ---
 
 <a href="https://huggingface.co/exbert/?model=distilgpt2">

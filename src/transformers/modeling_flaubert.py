@@ -36,10 +36,10 @@ from .modeling_xlm import (
 logger = logging.getLogger(__name__)
 
 FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "flaubert-small-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_small_cased/pytorch_model.bin",
-    "flaubert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_base_uncased/pytorch_model.bin",
-    "flaubert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_base_cased/pytorch_model.bin",
-    "flaubert-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_large_cased/pytorch_model.bin",
+    "flaubert-small-cased": "https://cdn.huggingface.co/flaubert/flaubert_small_cased/pytorch_model.bin",
+    "flaubert-base-uncased": "https://cdn.huggingface.co/flaubert/flaubert_base_uncased/pytorch_model.bin",
+    "flaubert-base-cased": "https://cdn.huggingface.co/flaubert/flaubert_base_cased/pytorch_model.bin",
+    "flaubert-large-cased": "https://cdn.huggingface.co/flaubert/flaubert_large_cased/pytorch_model.bin",
 }
 
 

@@ -31,11 +31,11 @@ from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list
 logger = logging.getLogger(__name__)
 
 TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-tf_model.h5",
-    "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-tf_model.h5",
-    "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-tf_model.h5",
-    "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-3b-tf_model.h5",
-    "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-11b-tf_model.h5",
+    "t5-small": "https://cdn.huggingface.co/t5-small-tf_model.h5",
+    "t5-base": "https://cdn.huggingface.co/t5-base-tf_model.h5",
+    "t5-large": "https://cdn.huggingface.co/t5-large-tf_model.h5",
+    "t5-3b": "https://cdn.huggingface.co/t5-3b-tf_model.h5",
+    "t5-11b": "https://cdn.huggingface.co/t5-11b-tf_model.h5",
 }
 
 ####################################################
@@ -797,7 +797,7 @@ T5_INPUTS_DOCSTRING = r"""
             Used in the cross-attention of the decoder.
         decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`, defaults to :obj:`None`):
             Default behavior: generate a tensor that ignores pad tokens in decoder_input_ids. Causal mask will also be used by default.
-        decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        decoder_past_key_value_states (:obj:`tuple(tuple(tf.Tensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up decoding.
             If `decoder_past_key_value_states` are used, the user can optionally input only the last `decoder_input_ids`
@@ -863,7 +863,7 @@ class TFT5Model(TFT5PreTrainedModel):
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
             If `decoder_past_key_value_states` is used only the last hidden-state of the sequences of shape :obj:`(batch_size, 1, hidden_size)` is output.
-        decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`, `optional`, returned when ``use_cache=True``):
+        decoder_past_key_value_states (:obj:`tuple(tuple(tf.Tensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`, `optional`, returned when ``use_cache=True``):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
             Note that when using `decoder_past_key_value_states`, the model only outputs the last `hidden-state` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
@@ -985,7 +985,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             Classification loss (cross entropy).
         prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        decoder_past_key_value_states (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`, `optional`, returned when ``use_cache=True``):
+        decoder_past_key_value_states (:obj:`tuple(tuple(tf.Tensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`, `optional`, returned when ``use_cache=True``):
             Contains pre-computed key and value hidden-states of the attention blocks.
             Can be used to speed up sequential decoding (see `decoder_past_key_value_states` input).
             Note that when using `decoder_past_key_value_states`, the model only outputs the last `prediction_score` of the sequence of shape :obj:`(batch_size, 1, config.vocab_size)`.
