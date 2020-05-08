@@ -318,8 +318,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
     @require_torch
     def test_torch_summarization(self):
-        tlong = "=" * 2000
-        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"], tlong]
+        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
         for model, tokenizer in SUMMARIZATION_FINETUNED_MODELS:
