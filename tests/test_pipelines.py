@@ -43,9 +43,21 @@ TF_FEATURE_EXTRACT_FINETUNED_MODELS = {
     ("distilbert-base-cased", "distilbert-base-cased", None),
 }
 
-TF_TEXT_CLASSIF_FINETUNED_MODELS = {("bert-base-uncased", "distilbert-base-uncased-finetuned-sst-2-english",)}
+TF_TEXT_CLASSIF_FINETUNED_MODELS = {
+    (
+        "bert-base-uncased",
+        "distilbert-base-uncased-finetuned-sst-2-english",
+        "distilbert-base-uncased-finetuned-sst-2-english",
+    )
+}
 
-TEXT_CLASSIF_FINETUNED_MODELS = {("distilbert-base-cased", "distilbert-base-uncased-finetuned-sst-2-english",)}
+TEXT_CLASSIF_FINETUNED_MODELS = {
+    (
+        "distilbert-base-cased",
+        "distilbert-base-uncased-finetuned-sst-2-english",
+        "distilbert-base-uncased-finetuned-sst-2-english",
+    )
+}
 
 TEXT_GENERATION_FINETUNED_MODELS = {
     ("gpt2", "gpt2"),
@@ -320,7 +332,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
     @require_torch
     def test_torch_summarization(self):
-        tlong = "=" * 102570
+        tlong = "=" * 2000
         valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"], tlong]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
