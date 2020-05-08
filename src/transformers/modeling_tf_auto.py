@@ -36,6 +36,7 @@ from .configuration_utils import PretrainedConfig
 from .modeling_tf_albert import (
     TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFAlbertForMaskedLM,
+    TFAlbertForPreTraining,
     TFAlbertForQuestionAnswering,
     TFAlbertForSequenceClassification,
     TFAlbertModel,
@@ -132,7 +133,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
-        (AlbertConfig, TFAlbertForMaskedLM),
+        (AlbertConfig, TFAlbertForPreTraining),
         (RobertaConfig, TFRobertaForMaskedLM),
         (BertConfig, TFBertForPreTraining),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
@@ -412,7 +413,7 @@ class TFAutoModelForPreTraining(object):
         in the `pretrained_model_name_or_path` string (in the following order):
             - contains `t5`: :class:`~transformers.TFT5ModelWithLMHead` (T5 model)
             - contains `distilbert`: :class:`~transformers.TFDistilBertForMaskedLM` (DistilBERT model)
-            - contains `albert`: :class:`~transformers.TFAlbertForMaskedLM` (ALBERT model)
+            - contains `albert`: :class:`~transformers.TFAlbertForPreTraining` (ALBERT model)
             - contains `roberta`: :class:`~transformers.TFRobertaForMaskedLM` (RoBERTa model)
             - contains `bert`: :class:`~transformers.TFBertForPreTraining` (Bert model)
             - contains `openai-gpt`: :class:`~transformers.TFOpenAIGPTLMHeadModel` (OpenAI GPT model)

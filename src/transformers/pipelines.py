@@ -570,6 +570,7 @@ class TextGenerationPipeline(Pipeline):
     # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
     # in https://github.com/rusiaaman/XLNet-gen#methodology
     # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
+
     PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
     (except for Alexei and Maria) are discovered.
     The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
@@ -581,9 +582,30 @@ class TextGenerationPipeline(Pipeline):
     the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
     with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
+    ALLOWED_MODELS = [
+        "XLNetLMHeadModel",
+        "TransfoXLLMHeadModel",
+        "ReformerModelWithLMHead",
+        "GPT2LMHeadModel",
+        "OpenAIGPTLMHeadModel",
+        "CTRLLMHeadModel",
+        "TFXLNetLMHeadModel",
+        "TFTransfoXLLMHeadModel",
+        "TFGPT2LMHeadModel",
+        "TFOpenAIGPTLMHeadModel",
+        "TFCTRLLMHeadModel",
+    ]
+
     def __call__(
         self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
+        if self.model.__class__.__name__ not in self.ALLOWED_MODELS:
+            raise NotImplementedError(
+                "Generation is currently not supported for {}. Please select a model from {} for generation.".format(
+                    self.model.__class__.__name__, self.ALLOWED_MODELS
+                )
+            )
+
         text_inputs = self._args_parser(*args)
 
         results = []
@@ -614,7 +636,7 @@ class TextGenerationPipeline(Pipeline):
 
             result = []
             for generated_sequence in output_sequences:
-                generated_sequence = generated_sequence.tolist()
+                generated_sequence = generated_sequence.numpy().tolist()
                 record = {}
                 if return_tensors:
                     record["generated_token_ids"] = generated_sequence
