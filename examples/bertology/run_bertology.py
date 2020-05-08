@@ -404,7 +404,7 @@ def main():
     logger.info("Training/evaluation parameters %s", args)
 
     # Prepare dataset for the GLUE task
-    eval_dataset = GlueDataset(args, tokenizer=tokenizer, evaluate=True, local_rank=args.local_rank)
+    eval_dataset = GlueDataset(args, tokenizer=tokenizer, evaluate=True)
     if args.data_subset > 0:
         eval_dataset = Subset(eval_dataset, list(range(min(args.data_subset, len(eval_dataset)))))
     eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)

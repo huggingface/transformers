@@ -12,15 +12,11 @@ Inspired by https://github.com/pytorch/pytorch/blob/master/torch/distributed/lau
 
 
 import importlib
-import os
 import sys
 from argparse import REMAINDER, ArgumentParser
+from pathlib import Path
 
 import torch_xla.distributed.xla_multiprocessing as xmp
-
-
-def trim_suffix(s: str, suffix: str):
-    return s if not s.endswith(suffix) or len(suffix) == 0 else s[: -len(suffix)]
 
 
 def parse_args():
@@ -61,7 +57,9 @@ def main():
     args = parse_args()
 
     # Import training_script as a module.
-    mod_name = trim_suffix(os.path.basename(args.training_script), ".py")
+    script_fpath = Path(args.training_script)
+    sys.path.append(str(script_fpath.parent.resolve()))
+    mod_name = script_fpath.stem
     mod = importlib.import_module(mod_name)
 
     # Patch sys.argv
