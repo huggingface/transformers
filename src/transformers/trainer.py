@@ -6,7 +6,7 @@ import re
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -195,10 +195,12 @@ class Trainer:
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
+        eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+
         sampler = get_tpu_sampler(eval_dataset) if is_tpu_available() else None
 
         data_loader = DataLoader(
-            eval_dataset if eval_dataset is not None else self.eval_dataset,
+            eval_dataset,
             sampler=sampler,
             batch_size=self.args.eval_batch_size,
             shuffle=False,
@@ -267,6 +269,16 @@ class Trainer:
         # keep track of model topology and gradients
         wandb.watch(self.model)
 
+    def num_examples(self, dataloader: Union[DataLoader, "pl.PerDeviceLoader"]) -> int:
+        """
+        Helper to get num of examples from a DataLoader, by accessing its Dataset.
+        """
+        if is_tpu_available():
+            assert isinstance(dataloader, pl.PerDeviceLoader)
+            return len(dataloader._loader._loader.dataset)
+        else:
+            return len(dataloader.dataset)
+
     def train(self, model_path: Optional[str] = None):
         """
         Main training entry point.
@@ -326,17 +338,15 @@ class Trainer:
 
         # Train!
         if is_tpu_available():
-            num_examples = len(train_dataloader._loader._loader.dataset)
             total_train_batch_size = self.args.train_batch_size * xm.xrt_world_size()
         else:
-            num_examples = len(train_dataloader.dataset)
             total_train_batch_size = (
                 self.args.train_batch_size
                 * self.args.gradient_accumulation_steps
                 * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
             )
         logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", num_examples)
+        logger.info("  Num examples = %d", self.num_examples(train_dataloader))
         logger.info("  Num Epochs = %d", num_train_epochs)
         logger.info("  Instantaneous batch size per device = %d", self.args.per_gpu_train_batch_size)
         logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", total_train_batch_size)
@@ -606,9 +616,13 @@ class Trainer:
             model = self.model
         model.to(self.args.device)
 
+        if is_tpu_available():
+            batch_size = dataloader._loader._loader.batch_size
+        else:
+            batch_size = dataloader.batch_size
         logger.info("***** Running %s *****", description)
-        logger.info("  Num examples = %d", len(dataloader.dataset))
-        logger.info("  Batch size = %d", dataloader.batch_size)
+        logger.info("  Num examples = %d", self.num_examples(dataloader))
+        logger.info("  Batch size = %d", batch_size)
         eval_losses: List[float] = []
         preds: np.ndarray = None
         label_ids: np.ndarray = None

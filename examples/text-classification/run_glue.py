@@ -134,16 +134,8 @@ def main():
     )
 
     # Get datasets
-    train_dataset = (
-        GlueDataset(data_args, tokenizer=tokenizer, local_rank=training_args.local_rank)
-        if training_args.do_train
-        else None
-    )
-    eval_dataset = (
-        GlueDataset(data_args, tokenizer=tokenizer, local_rank=training_args.local_rank, evaluate=True)
-        if training_args.do_eval
-        else None
-    )
+    train_dataset = GlueDataset(data_args, tokenizer=tokenizer) if training_args.do_train else None
+    eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, evaluate=True) if training_args.do_eval else None
 
     def compute_metrics(p: EvalPrediction) -> Dict:
         if output_mode == "classification":
@@ -181,9 +173,7 @@ def main():
         eval_datasets = [eval_dataset]
         if data_args.task_name == "mnli":
             mnli_mm_data_args = dataclasses.replace(data_args, task_name="mnli-mm")
-            eval_datasets.append(
-                GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, local_rank=training_args.local_rank, evaluate=True)
-            )
+            eval_datasets.append(GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, evaluate=True))
 
         for eval_dataset in eval_datasets:
             result = trainer.evaluate(eval_dataset=eval_dataset)

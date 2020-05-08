@@ -85,10 +85,12 @@ CoLA, SST-2. The following section provides details on how to run half-precision
 said, there shouldn’t be any issues in running half-precision training with the remaining GLUE tasks as well,
 since the data processor for each task inherits from the base class DataProcessor.
 
-## Running on TPUs
+## Running on TPUs in PyTorch
 
-You can accelerate your workloads on Google's TPUs. For information on how to setup your TPU environment refer to this
-[README](https://github.com/pytorch/xla/blob/master/README.md).
+**Update**: read the more up-to-date [Running on TPUs](../README.md#running-on-tpus) in the main README.md instead.
+
+Even when running PyTorch, you can accelerate your workloads on Google's TPUs, using `pytorch/xla`. For information on how to setup your TPU environment refer to the
+[pytorch/xla README](https://github.com/pytorch/xla/blob/master/README.md).
 
 The following are some examples of running the `*_tpu.py` finetuning scripts on TPUs. All steps for data preparation are
 identical to your normal GPU + Huggingface setup.
@@ -101,7 +103,6 @@ export GLUE_DIR=/path/to/glue
 export TASK_NAME=MNLI
 
 python run_glue_tpu.py \
-  --model_type bert \
   --model_name_or_path bert-base-cased \
   --task_name $TASK_NAME \
   --do_train \
@@ -115,8 +116,7 @@ python run_glue_tpu.py \
   --overwrite_output_dir \
   --logging_steps 50 \
   --save_steps 200 \
-  --num_cores=8 \
-  --only_log_master
+  --num_cores=8
 ```
 
 ### MRPC
