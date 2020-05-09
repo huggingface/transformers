@@ -35,6 +35,7 @@ python run_squad.py \
   --num_train_epochs 2.0 \
   --max_seq_length 384 \
   --doc_stride 128 \
+  --do_lower_case \
   --output_dir /tmp/debug_squad/
 ```
 
@@ -56,6 +57,7 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answer
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
     --do_eval \
+     --do_lower_case \
     --train_file $SQUAD_DIR/train-v1.1.json \
     --predict_file $SQUAD_DIR/dev-v1.1.json \
     --learning_rate 3e-5 \
