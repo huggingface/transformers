@@ -49,7 +49,7 @@ function debug() {
                                      --model_type ${model_type} --model_name_or_path ${model} \
                                      --use_gpuid ${gpuid} --seed ${seed} \
                                      --do_train --num_train_epochs 1 \
-                                     --do_eval --evaluate_steps 5 \
+                                     --do_eval --evaluate_steps ${eval_freq} \
                                      --learning_rate ${lr} \
                                      --warmup_ratio 0.06 \
                                      --weight_decay 0.01 \

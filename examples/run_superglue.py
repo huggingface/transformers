@@ -262,7 +262,7 @@ def train(args, train_dataset, model, tokenizer):
                 logs = {}
                 if args.evaluate_steps > 0 and global_step % args.evaluate_steps == 0 and args.local_rank == -1:
                     # Only evaluate when single GPU otherwise metrics may not average well
-                    results = evaluate(args, model, tokenizer, use_tqdm=True)
+                    results = evaluate(args, model, tokenizer, use_tqdm=False)
                     for key, value in results.items():
                         eval_key = "eval_{}".format(key)
                         logs[eval_key] = value
@@ -437,7 +437,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         if task in ["mnli", "mnli-mm"] and args.model_type in ["roberta", "xlmroberta"]:
             # HACK(label indices are swapped in RoBERTa pretrained model)
             label_list[1], label_list[2] = label_list[2], label_list[1]
-        get_examples = process.get_dev_examples if evaluate else processor.get_train_examples
+        get_examples = processor.get_dev_examples if evaluate else processor.get_train_examples
         examples = get_examples(args.data_dir)
         features = convert_examples_to_features(
             examples,
@@ -450,11 +450,6 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
         )
         logger.info("\tFinished creating features")
-        if args.local_rank in [-1, 0]:
-            logger.info("Saving features into cached file %s", cached_features_file)
-            torch.save(features, cached_features_file)
-            logger.info("\tFinished saving features")
-
         if args.local_rank == 0 and not evaluate:
             torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
