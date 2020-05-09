@@ -90,6 +90,7 @@ from .modeling_electra import (
     ElectraForPreTraining,
     ElectraForTokenClassification,
     ElectraModel,
+    ElectraForSequenceClassification,
 )
 from .modeling_encoder_decoder import EncoderDecoderModel
 from .modeling_flaubert import (
@@ -251,6 +252,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (XLNetConfig, XLNetForSequenceClassification),
         (FlaubertConfig, FlaubertForSequenceClassification),
         (XLMConfig, XLMForSequenceClassification),
+        (ElectraConfig, ElectraForSequenceClassification)
     ]
 )
 
