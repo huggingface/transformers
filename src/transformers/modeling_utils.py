@@ -17,7 +17,7 @@
 
 import logging
 import os
-from typing import Callable, Iterable, Tuple, Dict
+from typing import Callable, Dict, Iterable, Optional, Tuple
 
 import torch
 from torch import Tensor, device, dtype, nn
@@ -319,7 +319,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
-    def resize_token_embeddings(self, new_num_tokens: int = None):
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
         Take care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
 
@@ -353,7 +353,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         return self.get_input_embeddings()
 
     def _get_resized_embeddings(
-        self, old_embeddings: torch.nn.Embedding, new_num_tokens: int = None
+        self, old_embeddings: torch.nn.Embedding, new_num_tokens: Optional[int] = None
     ) -> torch.nn.Embedding:
         """ Build a resized Embedding Module from a provided token Embedding Module.
             Increasing the size will add newly initialized vectors at the end
@@ -767,26 +767,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: torch.LongTensor = None,
-        max_length: int = None,
-        min_length: int = None,
-        do_sample: bool = None,
-        early_stopping: bool = None,
-        num_beams: int = None,
-        temperature: float = None,
-        top_k: int = None,
-        top_p: float = None,
-        repetition_penalty: float = None,
-        bad_words_ids: Iterable[int] = None,
-        bos_token_id: int = None,
-        pad_token_id: int = None,
-        eos_token_id: int = None,
-        length_penalty: float = None,
-        no_repeat_ngram_size: int = None,
-        num_return_sequences: int = None,
-        attention_mask: torch.LongTensor = None,
-        decoder_start_token_id: int = None,
-        use_cache: bool = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        max_length: Optional[int] = None,
+        min_length: Optional[int] = None,
+        do_sample: Optional[bool] = None,
+        early_stopping: Optional[bool] = None,
+        num_beams: Optional[int] = None,
+        temperature: Optional[float] = None,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        repetition_penalty: Optional[float] = None,
+        bad_words_ids: Optional[Iterable[int]] = None,
+        bos_token_id: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        length_penalty: Optional[float] = None,
+        no_repeat_ngram_size: Optional[int] = None,
+        num_return_sequences: Optional[int] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        decoder_start_token_id: Optional[int] = None,
+        use_cache: Optional[bool] = None,
     ) -> torch.LongTensor:
         r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
 
