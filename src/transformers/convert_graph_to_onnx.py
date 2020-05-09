@@ -97,6 +97,7 @@ def export_pytorch(nlp: Pipeline, args: Namespace):
             do_constant_folding=False,
             use_external_data_format=True,
             enable_onnx_checker=True,
+            opset_version=args.opset
         )
 
 
@@ -118,7 +119,7 @@ def export_tensorflow(nlp: Pipeline, args: Namespace):
 
         # Forward
         nlp.model.predict(list(tokens.data.values()))
-        onnx_model = convert_keras(nlp.model, nlp.model.name)
+        onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=args.opset)
         save_model(onnx_model, args.output)
 
     except ImportError as e:
