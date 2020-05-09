@@ -1,6 +1,8 @@
 ---
 tags:
 - exbert
+
+license: mit
 ---
 
 <a href="https://huggingface.co/exbert/?model=roberta-base">

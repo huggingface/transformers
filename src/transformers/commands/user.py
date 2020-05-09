@@ -33,8 +33,10 @@ class UserCommands(BaseTransformersCLICommand):
         rm_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
         rm_parser.set_defaults(func=lambda args: DeleteObjCommand(args))
         # upload
-        upload_parser = parser.add_parser("upload")
-        upload_parser.add_argument("path", type=str, help="Local path of the folder or individual file to upload.")
+        upload_parser = parser.add_parser("upload", help="Upload a model to S3.")
+        upload_parser.add_argument(
+            "path", type=str, help="Local path of the model folder or individual file to upload."
+        )
         upload_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
         upload_parser.add_argument(
             "--filename", type=str, default=None, help="Optional: override individual object filename on S3."
@@ -48,11 +50,16 @@ class ANSI:
     """
 
     _bold = "\u001b[1m"
+    _red = "\u001b[31m"
     _reset = "\u001b[0m"
 
     @classmethod
     def bold(cls, s):
         return "{}{}{}".format(cls._bold, s, cls._reset)
+
+    @classmethod
+    def red(cls, s):
+        return "{}{}{}".format(cls._bold + cls._red, s, cls._reset)
 
 
 class BaseUserCommand:
@@ -80,6 +87,7 @@ class LoginCommand(BaseUserCommand):
         except HTTPError as e:
             # probably invalid credentials, display error message.
             print(e)
+            print(ANSI.red(e.response.text))
             exit(1)
         HfFolder.save_token(token)
         print("Login successful")
@@ -100,6 +108,8 @@ class WhoamiCommand(BaseUserCommand):
                 print(ANSI.bold("orgs: "), ",".join(orgs))
         except HTTPError as e:
             print(e)
+            print(ANSI.red(e.response.text))
+            exit(1)
 
 
 class LogoutCommand(BaseUserCommand):
@@ -138,6 +148,7 @@ class ListObjsCommand(BaseUserCommand):
             objs = self._api.list_objs(token, organization=self.args.organization)
         except HTTPError as e:
             print(e)
+            print(ANSI.red(e.response.text))
             exit(1)
         if len(objs) == 0:
             print("No shared file yet")
@@ -156,6 +167,7 @@ class DeleteObjCommand(BaseUserCommand):
             self._api.delete_obj(token, filename=self.args.filename, organization=self.args.organization)
         except HTTPError as e:
             print(e)
+            print(ANSI.red(e.response.text))
             exit(1)
         print("Done")
 
@@ -216,8 +228,13 @@ class UploadCommand(BaseUserCommand):
             exit()
         print(ANSI.bold("Uploading... This might take a while if files are large"))
         for filepath, filename in files:
-            access_url = self._api.presign_and_upload(
-                token=token, filename=filename, filepath=filepath, organization=self.args.organization
-            )
+            try:
+                access_url = self._api.presign_and_upload(
+                    token=token, filename=filename, filepath=filepath, organization=self.args.organization
+                )
+            except HTTPError as e:
+                print(e)
+                print(ANSI.red(e.response.text))
+                exit(1)
             print("Your file now lives at:")
             print(access_url)

@@ -44,8 +44,8 @@ Sequence Classification
 Sequence classification is the task of classifying sequences according to a given number of classes. An example
 of sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune
 a model on a GLUE sequence classification task, you may leverage the
-`run_glue.py <https://github.com/huggingface/transformers/tree/master/examples/run_glue.py>`_ or
-`run_tf_glue.py <https://github.com/huggingface/transformers/tree/master/examples/run_tf_glue.py>`_ scripts.
+`run_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_glue.py>`_ or
+`run_tf_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_tf_glue.py>`_ scripts.
 
 Here is an example using the pipelines do to sentiment analysis: identifying if a sequence is positive or negative.
 It leverages a fine-tuned model on sst2, which is a GLUE task.

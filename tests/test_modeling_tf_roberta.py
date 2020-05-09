@@ -20,7 +20,7 @@ from transformers import RobertaConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -233,7 +233,7 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in list(TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFRobertaModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+            model = TFRobertaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 

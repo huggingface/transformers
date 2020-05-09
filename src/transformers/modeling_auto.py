@@ -27,9 +27,11 @@ from .configuration_auto import (
     CTRLConfig,
     DistilBertConfig,
     ElectraConfig,
+    EncoderDecoderConfig,
     FlaubertConfig,
     GPT2Config,
     OpenAIGPTConfig,
+    ReformerConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -41,6 +43,7 @@ from .configuration_utils import PretrainedConfig
 from .modeling_albert import (
     ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     AlbertForMaskedLM,
+    AlbertForPreTraining,
     AlbertForQuestionAnswering,
     AlbertForSequenceClassification,
     AlbertForTokenClassification,
@@ -86,6 +89,7 @@ from .modeling_electra import (
     ElectraForTokenClassification,
     ElectraModel,
 )
+from .modeling_encoder_decoder import EncoderDecoderModel
 from .modeling_flaubert import (
     FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     FlaubertForQuestionAnsweringSimple,
@@ -95,6 +99,7 @@ from .modeling_flaubert import (
 )
 from .modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, GPT2LMHeadModel, GPT2Model
 from .modeling_openai import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, OpenAIGPTLMHeadModel, OpenAIGPTModel
+from .modeling_reformer import ReformerModel, ReformerModelWithLMHead
 from .modeling_roberta import (
     ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     RobertaForMaskedLM,
@@ -177,6 +182,7 @@ MODEL_MAPPING = OrderedDict(
         (XLMConfig, XLMModel),
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
+        (ReformerConfig, ReformerModel),
     ]
 )
 
@@ -184,7 +190,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
-        (AlbertConfig, AlbertForMaskedLM),
+        (AlbertConfig, AlbertForPreTraining),
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
         (BartConfig, BartForConditionalGeneration),
@@ -219,6 +225,8 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForMaskedLM),
+        (EncoderDecoderConfig, EncoderDecoderModel),
+        (ReformerConfig, ReformerModelWithLMHead),
     ]
 )
 

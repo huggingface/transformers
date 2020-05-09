@@ -34,7 +34,7 @@ from .modeling_utils import PreTrainedModel
 logger = logging.getLogger(__name__)
 
 TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-pytorch_model.bin",
+    "transfo-xl-wt103": "https://cdn.huggingface.co/transfo-xl-wt103-pytorch_model.bin",
 }
 
 

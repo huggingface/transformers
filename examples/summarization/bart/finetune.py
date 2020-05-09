@@ -7,7 +7,7 @@ import time
 import torch
 from torch.utils.data import DataLoader
 
-from transformer_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
+from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
 
 
 try:
