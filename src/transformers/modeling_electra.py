@@ -359,9 +359,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-
         self.electra = ElectraModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = ElectraClassificationHead(config)
 
         self.init_weights()
