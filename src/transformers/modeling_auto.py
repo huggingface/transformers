@@ -903,7 +903,7 @@ class AutoModelForQuestionAnswering:
         Examples::
 
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            model = AutoModelForSequenceClassification.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = AutoModelForQuestionAnswering.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
             if isinstance(config, config_class):
