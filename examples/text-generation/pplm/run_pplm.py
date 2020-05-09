@@ -31,7 +31,6 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.autograd import Variable
 from tqdm import trange
 
 from pplm_classification_head import ClassificationHead
@@ -74,15 +73,6 @@ DISCRIMINATOR_MODELS_PARAMS = {
         "pretrained_model": "gpt2-medium",
     },
 }
-
-
-def to_var(x, requires_grad=False, volatile=False, device="cuda"):
-    if torch.cuda.is_available() and device == "cuda":
-        x = x.cuda()
-    elif device != "cuda":
-        x = x.to(device)
-    return Variable(x, requires_grad=requires_grad, volatile=volatile)
-
 
 def top_k_filter(logits, k, probs=False):
     """
@@ -157,7 +147,7 @@ def perturb_past(
     for i in range(num_iterations):
         print("Iteration ", i + 1)
         curr_perturbation = [
-            to_var(torch.from_numpy(p_), requires_grad=True, device=device) for p_ in grad_accumulator
+            torch.from_numpy(p_).requires_grad_(True).to(device) for p_ in grad_accumulator
         ]
 
         # Compute hidden using perturbed past
@@ -247,7 +237,7 @@ def perturb_past(
         past = new_past
 
     # apply the accumulated perturbations to the past
-    grad_accumulator = [to_var(torch.from_numpy(p_), requires_grad=True, device=device) for p_ in grad_accumulator]
+    grad_accumulator = [torch.from_numpy(p_).requires_grad_(True).to(device) for p_ in grad_accumulator]
     pert_past = list(map(add, past, grad_accumulator))
 
     return pert_past, new_accumulated_hidden, grad_norms, loss_per_iter
