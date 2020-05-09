@@ -19,7 +19,7 @@ import dataclasses
 import json
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import List, Tuple, Optional, Union
 
 from ...file_utils import is_tf_available, is_torch_available
 
@@ -52,6 +52,7 @@ class InputExample:
         return json.dumps(dataclasses.asdict(self), indent=2) + "\n"
 
 
+@dataclass(frozen=True)
 class SpanClassificationExample(object):
     """
     A single training/test example for simple span classification.
@@ -60,30 +61,21 @@ class SpanClassificationExample(object):
         guid: Unique id for the example.
         text_a: string. The untokenized text of the first sequence. For single
             sequence tasks, only this sequence must be specified.
-        spans_a: list. List of tuples corresponding to the character locations in text_a
+        spans_a: list. List of tuples of ints corresponding to the character locations in text_a
             of the spans of interest.
         text_b: (Optional) string. The untokenized text of the second sequence.
             Only must be specified for sequence pair tasks.
-        spans_b: TODO
+        spans_b: list. List of tuples of ints corresponding to the character locations in text_b
         label: (Optional) string. The label of the example. This should be
             specified for train and dev examples, but not for test examples.
     """
 
-    def __init__(self, guid, text_a, spans_a, text_b=None, spans_b=None, label=None):
-        self.guid = guid
-        self.text_a = text_a
-        self.spans_a = spans_a
-        self.text_b = text_b
-        self.spans_b = spans_b
-        self.label = label
-
-    def __repr__(self):
-        return str(self.to_json_string())
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
+    guid: str
+    text_a: str
+    spans_a: List[Tuple[int]]
+    text_b: Optional[str] = None
+    spans_a: Optional[List[Tuple[int]]] = None
+    label: Optional[str] = None
 
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
@@ -119,6 +111,7 @@ class InputFeatures:
         return json.dumps(dataclasses.asdict(self)) + "\n"
 
 
+@dataclass(frozen=True)
 class SpanClassificationFeatures(object):
     """
     A single set of features of data.
@@ -126,28 +119,19 @@ class SpanClassificationFeatures(object):
     Args:
         guid: Example ID, as a list of ints
         input_ids: Indices of input sequence tokens in the vocabulary.
+        span_locs: List of spans, length 2 lists of indices.
         attention_mask: Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             Usually  ``1`` for tokens that are NOT MASKED, ``0`` for MASKED (padded) tokens.
         token_type_ids: Segment token indices to indicate first and second portions of the inputs.
         label: Label corresponding to the input
     """
-
-    def __init__(self, guid, input_ids, span_locs, attention_mask=None, token_type_ids=None, label=None):
-        self.guid = guid
-        self.input_ids = input_ids
-        self.span_locs = span_locs
-        self.attention_mask = attention_mask
-        self.token_type_ids = token_type_ids
-        self.label = label
-
-    def __repr__(self):
-        return str(self.to_json_string())
-
-    def to_dict(self):
-        """Serializes this instance to a Python dictionary."""
-        output = copy.deepcopy(self.__dict__)
-        return output
+    guid: List[int]
+    input_ids: List[int]
+    span_locs: List[Tuple[int]]
+    attention_mask: Optional[List[int]] = None
+    token_type_ids: Optional[List[int]] = None
+    label: Optional[Union[int, float]] = None
 
     def to_json_string(self):
         """Serializes this instance to a JSON string."""

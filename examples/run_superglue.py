@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import random
+import time
 
 import numpy as np
 import torch
@@ -63,7 +64,7 @@ from transformers import (
 )
 from transformers import superglue_compute_metrics as compute_metrics
 from transformers import superglue_convert_examples_to_features as convert_examples_to_features
-from transformers import superglue_tasks_num_labels as task_spans
+from transformers import superglue_tasks_num_spans as task_spans
 from transformers import superglue_output_modes as output_modes
 from transformers import superglue_processors as processors
 
@@ -261,7 +262,7 @@ def train(args, train_dataset, model, tokenizer):
                 logs = {}
                 if args.evaluate_steps > 0 and global_step % args.evaluate_steps == 0 and args.local_rank == -1:
                     # Only evaluate when single GPU otherwise metrics may not average well
-                    results = evaluate(args, model, tokenizer, use_tqdm=False)
+                    results = evaluate(args, model, tokenizer, use_tqdm=True)
                     for key, value in results.items():
                         eval_key = "eval_{}".format(key)
                         logs[eval_key] = value
@@ -408,61 +409,110 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     processor = processors[task]()
     output_mode = output_modes[task]
     # Load data features from cache or dataset file
-    cached_features_file = os.path.join(
+    cached_tensors_file = os.path.join(
         args.data_dir,
-        "cached_{}_{}_{}_{}".format(
+        "tensors_{}_{}_{}_{}".format(
             "dev" if evaluate else "train",
             list(filter(None, args.model_name_or_path.split("/"))).pop(),
             str(args.max_seq_length),
             str(task),
         ),
     )
-    if os.path.exists(cached_features_file) and not args.overwrite_cache:
-        logger.info("Loading features from cached file %s", cached_features_file)
-        features = torch.load(cached_features_file)
+    if os.path.exists(cached_tensors_file) and not args.overwrite_cache:
+        logger.info("Loading tensors from cached file %s", cached_tensors_file)
+        start_time = time.time()
+        dataset = torch.load(cached_tensors_file)
+        logger.info("\tFinished loading tensors")
+        logger.info(f"\tin {time.time() - start_time}s")
+
+        if args.task_name == "record" and evaluate:
+            answers = processor.get_answers(args.data_dir, "dev")
+            return dataset, answers
+        else:
+            return dataset
     else:
-        logger.info("Creating features from dataset file at %s", args.data_dir)
-        label_list = processor.get_labels()
-        if task in ["mnli", "mnli-mm"] and args.model_type in ["roberta", "xlmroberta"]:
-            # HACK(label indices are swapped in RoBERTa pretrained model)
-            label_list[1], label_list[2] = label_list[2], label_list[1]
-        examples = (
-            processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
+        # no cached tensors, look for cached features instead
+        cached_features_file = os.path.join(
+            args.data_dir,
+            "cached_{}_{}_{}_{}".format(
+                "dev" if evaluate else "train",
+                list(filter(None, args.model_name_or_path.split("/"))).pop(),
+                str(args.max_seq_length),
+                str(task),
+            ),
         )
-        features = convert_examples_to_features(
-            examples,
-            tokenizer,
-            label_list=label_list,
-            max_length=args.max_seq_length,
-            output_mode=output_mode,
-            pad_on_left=bool(args.model_type in ["xlnet"]),  # pad on the left for xlnet
-            pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-            pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
-        )
+        if os.path.exists(cached_features_file) and not args.overwrite_cache:
+            logger.info("Loading features from cached file %s", cached_features_file)
+            start_time = time.time()
+            features = torch.load(cached_features_file)
+            logger.info("\tFinished loading features")
+            logger.info(f"\tin {time.time() - start_time:.2f}s")
+        else:
+            logger.info("Creating features from dataset file at %s", args.data_dir)
+            label_list = processor.get_labels()
+            if task in ["mnli", "mnli-mm"] and args.model_type in ["roberta", "xlmroberta"]:
+                # HACK(label indices are swapped in RoBERTa pretrained model)
+                label_list[1], label_list[2] = label_list[2], label_list[1]
+            examples = (
+                processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
+            )
+            features = convert_examples_to_features(
+                examples,
+                tokenizer,
+                label_list=label_list,
+                max_length=args.max_seq_length,
+                output_mode=output_mode,
+                pad_on_left=bool(args.model_type in ["xlnet"]),  # pad on the left for xlnet
+                pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
+                pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
+            )
+            logger.info("\tFinished creating features")
+            if args.local_rank in [-1, 0]:
+                logger.info("Saving features into cached file %s", cached_features_file)
+                torch.save(features, cached_features_file)
+                logger.info("\tFinished saving features")
+
+        if args.local_rank == 0 and not evaluate:
+            torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
+
+        logger.info("Converting features into tensors")
+        start_time = time.time()
+
+        # Convert to Tensors and build dataset
+        all_guids = torch.tensor([f.guid for f in features], dtype=torch.long)
+        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+        all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
+        all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
+        if output_mode in ["classification", "span_classification"]:
+            all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
+        elif output_mode == "regression":
+            all_labels = torch.tensor([f.label for f in features], dtype=torch.float)
+
+        if output_mode in ["span_classification"]:
+            #all_starts = torch.tensor([[s[0] for s in f.span_locs] for f in features], dtype=torch.long)
+            #all_ends = torch.tensor([[s[1] for s in f.span_locs] for f in features], dtype=torch.long)
+            all_spans = torch.tensor([f.span_locs for f in features])
+            dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_spans, all_guids)
+        else:
+            dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_guids)
+        logger.info("\tFinished converting features into tensors")
+        logger.info(f"\tin {time.time() - start_time:.2f}s")
         if args.local_rank in [-1, 0]:
-            logger.info("Saving features into cached file %s", cached_features_file)
-            torch.save(features, cached_features_file)
+            cached_tensors_file = os.path.join(
+                args.data_dir,
+                "tensors_{}_{}_{}_{}".format(
+                    "dev" if evaluate else "train",
+                    list(filter(None, args.model_name_or_path.split("/"))).pop(),
+                    str(args.max_seq_length),
+                    str(task),
+                ),
+            )
 
-    if args.local_rank == 0 and not evaluate:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
-
-    # Convert to Tensors and build dataset
-    all_guids = torch.tensor([f.guid for f in features], dtype=torch.long)
-    all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-    all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
-    all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
-    if output_mode in ["classification", "span_classification"]:
-        all_labels = torch.tensor([f.label for f in features], dtype=torch.long)
-    elif output_mode == "regression":
-        all_labels = torch.tensor([f.label for f in features], dtype=torch.float)
-
-    if output_mode in ["span_classification"]:
-        #all_starts = torch.tensor([[s[0] for s in f.span_locs] for f in features], dtype=torch.long)
-        #all_ends = torch.tensor([[s[1] for s in f.span_locs] for f in features], dtype=torch.long)
-        all_spans = torch.tensor([f.span_locs for f in features])
-        dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_spans, all_guids)
-    else:
-        dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_guids)
+            logger.info("Saving features into cached file %s", cached_tensors_file)
+            start_time = time.time()
+            torch.save(dataset, cached_tensors_file)
+            logger.info("\tFinished saving tensors")
+            logger.info(f"\tin {time.time() - start_time:.2f}s")
 
     if args.task_name == "record" and evaluate:
         answers = processor.get_answers(args.data_dir, "dev")
@@ -762,7 +812,7 @@ def main():
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
             result = evaluate(args, model, tokenizer, prefix=prefix)
-            result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
+            result = dict((f"{k}_{global_step}", v) for k, v in result.items())
             results.update(result)
 
     return results

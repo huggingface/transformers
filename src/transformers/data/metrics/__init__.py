@@ -74,7 +74,6 @@ if _has_sklearn:
 
         return white_space_fix(remove_articles(remove_punc(lower(s))))
 
-
     def metric_max_over_ground_truths(metric_fn, prediction, ground_truths):
         """ Compute max metric between prediction and each ground truth.
         From official ReCoRD eval script """
