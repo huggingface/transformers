@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import os
 import random
 import re
@@ -15,7 +16,7 @@ from torch import nn
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data.sampler import RandomSampler
+from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
 
 from .data.data_collator import DataCollator, DefaultDataCollator
@@ -97,6 +98,44 @@ def torch_distributed_zero_first(local_rank: int):
     yield
     if local_rank == 0:
         torch.distributed.barrier()
+
+
+class SequentialDistributedSampler(Sampler):
+    """
+    Distributed Sampler that subsamples indicies sequentially,
+    making it easier to collate all results at the end.
+    """
+
+    def __init__(self, dataset, num_replicas=None, rank=None):
+        if num_replicas is None:
+            if not torch.distributed.is_available():
+                raise RuntimeError("Requires distributed package to be available")
+            num_replicas = torch.distributed.get_world_size()
+        if rank is None:
+            if not torch.distributed.is_available():
+                raise RuntimeError("Requires distributed package to be available")
+            rank = torch.distributed.get_rank()
+        self.dataset = dataset
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
+        self.total_size = self.num_samples * self.num_replicas
+
+    def __iter__(self):
+        indices = list(range(len(self.dataset)))
+
+        # add extra samples to make it evenly divisible
+        indices += indices[: (self.total_size - len(indices))]
+        assert len(indices) == self.total_size
+
+        # subsample
+        indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
+        assert len(indices) == self.num_samples
+
+        return iter(indices)
+
+    def __len__(self):
+        return self.num_samples
 
 
 def get_tpu_sampler(dataset: Dataset):
@@ -208,13 +247,19 @@ class Trainer:
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
 
-        sampler = get_tpu_sampler(eval_dataset) if is_tpu_available() else None
+        if is_tpu_available():
+            sampler = SequentialDistributedSampler(
+                eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
+            )
+        elif self.args.local_rank != -1:
+            sampler = SequentialDistributedSampler(eval_dataset)
+        else:
+            sampler = SequentialSampler(eval_dataset)
 
         data_loader = DataLoader(
             eval_dataset,
             sampler=sampler,
             batch_size=self.args.eval_batch_size,
-            shuffle=False,
             collate_fn=self.data_collator.collate_batch,
         )
 
@@ -225,13 +270,19 @@ class Trainer:
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
         # We use the same batch_size as for eval.
-        sampler = get_tpu_sampler(test_dataset) if is_tpu_available() else None
+        if is_tpu_available():
+            sampler = SequentialDistributedSampler(
+                test_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
+            )
+        elif self.args.local_rank != -1:
+            sampler = SequentialDistributedSampler(test_dataset)
+        else:
+            sampler = SequentialSampler(test_dataset)
 
         data_loader = DataLoader(
             test_dataset,
             sampler=sampler,
             batch_size=self.args.eval_batch_size,
-            shuffle=False,
             collate_fn=self.data_collator.collate_batch,
         )
 
@@ -711,10 +762,18 @@ class Trainer:
                     else:
                         label_ids = np.append(label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
 
-        if is_tpu_available() and preds is not None and label_ids is not None:
+        if self.args.local_rank != -1:
+            # In distributed mode, concatenate all results:
+            if preds is not None:
+                preds = self.distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
+            if label_ids is not None:
+                label_ids = self.distributed_concat(label_ids, num_total_examples=self.num_examples(dataloader))
+        elif is_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
-            preds = xm.mesh_reduce("eval_preds", preds, np.concatenate)
-            label_ids = xm.mesh_reduce("eval_out_label_ids", label_ids, np.concatenate)
+            if preds is not None:
+                preds = xm.mesh_reduce("eval_preds", preds, np.concatenate)
+            if label_ids is not None:
+                label_ids = xm.mesh_reduce("eval_out_label_ids", label_ids, np.concatenate)
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
@@ -729,3 +788,19 @@ class Trainer:
                 metrics[f"eval_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
+
+    def distributed_concat(self, arr: np.ndarray, num_total_examples: int) -> np.ndarray:
+        assert self.args.local_rank != -1
+
+        def create_copy():
+            return torch.from_numpy(arr).to(self.args.device)
+
+        output_tensors = [create_copy() for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather(output_tensors, create_copy())
+
+        concat = torch.cat(output_tensors, dim=0)
+        output = concat.detach().cpu().numpy()
+
+        # truncate the dummy elements added by SequentialDistributedSampler
+        output = output[:num_total_examples]
+        return output
