@@ -1,6 +1,6 @@
 # DistilRoBERTa + Sentiment Analysis 😂😢😡😃😯
 
-This in an adaption version of [@omarsar0](https://twitter.com/omarsar0) [tutorial](https://t.co/WMnATW0Hwf?amp=1)
+This in an adapted version of [@omarsar0](https://twitter.com/omarsar0) [tutorial](https://t.co/WMnATW0Hwf?amp=1)
 He explains everything so detailed and provided the dataset. I just changed some parameters and created the ```config.json```file to upload it to [🤗Transformers HUB](https://huggingface.co/) 
 
 
@@ -28,7 +28,7 @@ The base model used is [DistilRoBERTa](https://huggingface.co/distilroberta-base
 
 ## Results after training 🏋️‍♀️🧾
 
-emotion |precision    |recall|  f1-score|   support|
+|emotion |precision    |recall|  f1-score|   support|
 |-------|-------------|------|----------|----------|
 |sadness| 0.973868  |0.949066  |0.961307|      589|
 |joy   |0.970313  |0.901306  |0.934537|       689|

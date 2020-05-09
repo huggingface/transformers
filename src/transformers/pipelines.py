@@ -22,8 +22,9 @@ import pickle
 import sys
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
+from itertools import chain
 from os.path import abspath, exists
-from typing import List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -96,19 +97,50 @@ class DefaultArgumentHandler(ArgumentHandler):
     Default varargs argument parser handling parameters for each Pipeline
     """
 
-    def __call__(self, *args, **kwargs):
-        if "X" in kwargs:
-            return kwargs["X"]
-        elif "data" in kwargs:
-            return kwargs["data"]
-        elif len(args) == 1:
-            if isinstance(args[0], list):
-                return args[0]
-            else:
+    @staticmethod
+    def handle_kwargs(kwargs: Dict) -> List:
+        if len(kwargs) == 1:
+            output = list(kwargs.values())
+        else:
+            output = list(chain(kwargs.values()))
+
+        return DefaultArgumentHandler.handle_args(output)
+
+    @staticmethod
+    def handle_args(args: Sequence[Any]) -> List[str]:
+
+        # Only one argument, let's do case by case
+        if len(args) == 1:
+            if isinstance(args[0], str):
                 return [args[0]]
+            elif not isinstance(args[0], list):
+                return list(args)
+            else:
+                return args[0]
+
+        # Multiple arguments (x1, x2, ...)
         elif len(args) > 1:
-            return list(args)
-        raise ValueError("Unable to infer the format of the provided data (X=, data=, ...)")
+            if all([isinstance(arg, str) for arg in args]):
+                return list(args)
+
+            # If not instance of list, then it should instance of iterable
+            elif isinstance(args, Iterable):
+                return list(chain.from_iterable(chain(args)))
+            else:
+                raise ValueError(
+                    "Invalid input type {}. Pipeline supports Union[str, Iterable[str]]".format(type(args))
+                )
+        else:
+            return []
+
+    def __call__(self, *args, **kwargs):
+        if len(kwargs) > 0 and len(args) > 0:
+            raise ValueError("Pipeline cannot handle mixed args and kwargs")
+
+        if len(kwargs) > 0:
+            return DefaultArgumentHandler.handle_kwargs(kwargs)
+        else:
+            return DefaultArgumentHandler.handle_args(args)
 
 
 class PipelineDataFormat:
@@ -418,20 +450,20 @@ class Pipeline(_ScikitCompat):
         """
         return {name: tensor.to(self.device) for name, tensor in inputs.items()}
 
-    def _parse_and_tokenize(self, *texts, pad_to_max_length=False, **kwargs):
+    def _parse_and_tokenize(self, *args, pad_to_max_length=True, **kwargs):
         """
         Parse arguments and tokenize
         """
         # Parse arguments
-        inputs = self._args_parser(*texts, **kwargs)
+        inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer.batch_encode_plus(
             inputs, add_special_tokens=True, return_tensors=self.framework, pad_to_max_length=pad_to_max_length,
         )
 
         return inputs
 
-    def __call__(self, *texts, **kwargs):
-        inputs = self._parse_and_tokenize(*texts, **kwargs)
+    def __call__(self, *args, **kwargs):
+        inputs = self._parse_and_tokenize(*args, **kwargs)
         return self._forward(inputs)
 
     def _forward(self, inputs, return_tensors=False):
@@ -538,6 +570,7 @@ class TextGenerationPipeline(Pipeline):
     # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
     # in https://github.com/rusiaaman/XLNet-gen#methodology
     # and https://medium.com/@amanrusia/xlnet-speaks-comparison-to-gpt-2-ea1a4e9ba39e
+
     PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
     (except for Alexei and Maria) are discovered.
     The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
@@ -549,19 +582,40 @@ class TextGenerationPipeline(Pipeline):
     the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
     with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
+    ALLOWED_MODELS = [
+        "XLNetLMHeadModel",
+        "TransfoXLLMHeadModel",
+        "ReformerModelWithLMHead",
+        "GPT2LMHeadModel",
+        "OpenAIGPTLMHeadModel",
+        "CTRLLMHeadModel",
+        "TFXLNetLMHeadModel",
+        "TFTransfoXLLMHeadModel",
+        "TFGPT2LMHeadModel",
+        "TFOpenAIGPTLMHeadModel",
+        "TFCTRLLMHeadModel",
+    ]
+
     def __call__(
-        self, *texts, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
-        text_inputs = self._args_parser(*texts)
+        if self.model.__class__.__name__ not in self.ALLOWED_MODELS:
+            raise NotImplementedError(
+                "Generation is currently not supported for {}. Please select a model from {} for generation.".format(
+                    self.model.__class__.__name__, self.ALLOWED_MODELS
+                )
+            )
+
+        text_inputs = self._args_parser(*args)
 
         results = []
         for prompt_text in text_inputs:
             # Manage correct placement of the tensors
             with self.device_placement():
                 if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
-                    inputs = self._parse_and_tokenize(self.PADDING_TEXT + prompt_text)
+                    inputs = self._parse_and_tokenize(self.PADDING_TEXT + prompt_text, pad_to_max_length=False)
                 else:
-                    inputs = self._parse_and_tokenize(prompt_text)
+                    inputs = self._parse_and_tokenize(prompt_text, pad_to_max_length=False)
 
                 # set input_ids to None to allow empty prompt
                 if inputs["input_ids"].shape[-1] == 0:
@@ -582,7 +636,7 @@ class TextGenerationPipeline(Pipeline):
 
             result = []
             for generated_sequence in output_sequences:
-                generated_sequence = generated_sequence.tolist()
+                generated_sequence = generated_sequence.numpy().tolist()
                 record = {}
                 if return_tensors:
                     record["generated_token_ids"] = generated_sequence
@@ -825,8 +879,8 @@ class NerPipeline(Pipeline):
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self.ignore_labels = ignore_labels
 
-    def __call__(self, *texts, **kwargs):
-        inputs = self._args_parser(*texts, **kwargs)
+    def __call__(self, *args, **kwargs):
+        inputs = self._args_parser(*args, **kwargs)
         answers = []
         for sentence in inputs:
 
@@ -1016,7 +1070,7 @@ class QuestionAnsweringPipeline(Pipeline):
         else:
             return SquadExample(None, question, context, None, None, None)
 
-    def __call__(self, *texts, **kwargs):
+    def __call__(self, *args, **kwargs):
         """
         Args:
             We support multiple use-cases, the following are exclusive:
@@ -1046,7 +1100,7 @@ class QuestionAnsweringPipeline(Pipeline):
             raise ValueError("max_answer_len parameter should be >= 1 (got {})".format(kwargs["max_answer_len"]))
 
         # Convert inputs to features
-        examples = self._args_parser(*texts, **kwargs)
+        examples = self._args_parser(*args, **kwargs)
         features_list = [
             squad_convert_examples_to_features(
                 [example],
@@ -1383,11 +1437,11 @@ class TranslationPipeline(Pipeline):
     """
 
     def __call__(
-        self, *texts, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
         r"""
         Args:
-            *texts: (list of strings) texts to be translated
+            *args: (list of strings) texts to be translated
             return_text: (bool, default=True) whether to add a decoded "translation_text" to each result
             return_tensors: (bool, default=False) whether to return the raw "translation_token_ids" to each result
 
@@ -1402,25 +1456,25 @@ class TranslationPipeline(Pipeline):
 
         prefix = self.model.config.prefix if self.model.config.prefix is not None else ""
 
-        if isinstance(texts[0], list):
+        if isinstance(args[0], list):
             assert (
                 self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
-            texts = ([prefix + text for text in texts[0]],)
+            args = ([prefix + text for text in args[0]],)
             pad_to_max_length = True
 
-        elif isinstance(texts[0], str):
-            texts = (prefix + texts[0],)
+        elif isinstance(args[0], str):
+            args = (prefix + args[0],)
             pad_to_max_length = False
         else:
             raise ValueError(
                 " `documents[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(
-                    texts[0]
+                    args[0]
                 )
             )
 
         with self.device_placement():
-            inputs = self._parse_and_tokenize(*texts, pad_to_max_length=pad_to_max_length)
+            inputs = self._parse_and_tokenize(*args, pad_to_max_length=pad_to_max_length)
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)

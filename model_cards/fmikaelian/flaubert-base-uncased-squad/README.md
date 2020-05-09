@@ -11,7 +11,7 @@ A baseline model for question-answering in french ([flaubert](https://github.com
 ## Training hyperparameters
 
 ```shell
-python3 ./examples/run_squad.py \
+python3 ./examples/question-answering/run_squad.py \
 --model_type flaubert \
 --model_name_or_path flaubert-base-uncased \
 --do_train \
