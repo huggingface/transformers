@@ -431,54 +431,35 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         else:
             return dataset
     else:
-        # no cached tensors, look for cached features instead
-        cached_features_file = os.path.join(
-            args.data_dir,
-            "cached_{}_{}_{}_{}".format(
-                "dev" if evaluate else "train",
-                list(filter(None, args.model_name_or_path.split("/"))).pop(),
-                str(args.max_seq_length),
-                str(task),
-            ),
+        # no cached tensors, process data from scratch
+        logger.info("Creating features from dataset file at %s", args.data_dir)
+        label_list = processor.get_labels()
+        if task in ["mnli", "mnli-mm"] and args.model_type in ["roberta", "xlmroberta"]:
+            # HACK(label indices are swapped in RoBERTa pretrained model)
+            label_list[1], label_list[2] = label_list[2], label_list[1]
+        get_examples = process.get_dev_examples if evaluate else processor.get_train_examples
+        examples = get_examples(args.data_dir)
+        features = convert_examples_to_features(
+            examples,
+            tokenizer,
+            label_list=label_list,
+            max_length=args.max_seq_length,
+            output_mode=output_mode,
+            pad_on_left=bool(args.model_type in ["xlnet"]),  # pad on the left for xlnet
+            pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
+            pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
         )
-        if os.path.exists(cached_features_file) and not args.overwrite_cache:
-            logger.info("Loading features from cached file %s", cached_features_file)
-            start_time = time.time()
-            features = torch.load(cached_features_file)
-            logger.info("\tFinished loading features")
-            logger.info(f"\tin {time.time() - start_time:.2f}s")
-        else:
-            logger.info("Creating features from dataset file at %s", args.data_dir)
-            label_list = processor.get_labels()
-            if task in ["mnli", "mnli-mm"] and args.model_type in ["roberta", "xlmroberta"]:
-                # HACK(label indices are swapped in RoBERTa pretrained model)
-                label_list[1], label_list[2] = label_list[2], label_list[1]
-            examples = (
-                processor.get_dev_examples(args.data_dir) if evaluate else processor.get_train_examples(args.data_dir)
-            )
-            features = convert_examples_to_features(
-                examples,
-                tokenizer,
-                label_list=label_list,
-                max_length=args.max_seq_length,
-                output_mode=output_mode,
-                pad_on_left=bool(args.model_type in ["xlnet"]),  # pad on the left for xlnet
-                pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
-                pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
-            )
-            logger.info("\tFinished creating features")
-            if args.local_rank in [-1, 0]:
-                logger.info("Saving features into cached file %s", cached_features_file)
-                torch.save(features, cached_features_file)
-                logger.info("\tFinished saving features")
+        logger.info("\tFinished creating features")
+        if args.local_rank in [-1, 0]:
+            logger.info("Saving features into cached file %s", cached_features_file)
+            torch.save(features, cached_features_file)
+            logger.info("\tFinished saving features")
 
         if args.local_rank == 0 and not evaluate:
             torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
-        logger.info("Converting features into tensors")
-        start_time = time.time()
-
         # Convert to Tensors and build dataset
+        logger.info("Converting features into tensors")
         all_guids = torch.tensor([f.guid for f in features], dtype=torch.long)
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
         all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
@@ -496,23 +477,10 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         else:
             dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_guids)
         logger.info("\tFinished converting features into tensors")
-        logger.info(f"\tin {time.time() - start_time:.2f}s")
         if args.local_rank in [-1, 0]:
-            cached_tensors_file = os.path.join(
-                args.data_dir,
-                "tensors_{}_{}_{}_{}".format(
-                    "dev" if evaluate else "train",
-                    list(filter(None, args.model_name_or_path.split("/"))).pop(),
-                    str(args.max_seq_length),
-                    str(task),
-                ),
-            )
-
             logger.info("Saving features into cached file %s", cached_tensors_file)
-            start_time = time.time()
             torch.save(dataset, cached_tensors_file)
             logger.info("\tFinished saving tensors")
-            logger.info(f"\tin {time.time() - start_time:.2f}s")
 
     if args.task_name == "record" and evaluate:
         answers = processor.get_answers(args.data_dir, "dev")
