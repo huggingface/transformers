@@ -386,18 +386,22 @@ class TFTrainer:
           labels: the batched labels.
           training: run the model in training mode or not
         """
-        if self.args.mode == "sequence-classification" or self.args.mode == "token-classification":
-            logits = self.model(features, training=training)[0]
-        else:
+        if self.args.mode == "multiple-choice":
             logits = self.model(features, training=training)
-
-        if self.args.mode == "token-classification":
-            active_loss = tf.reshape(labels, (-1,)) != -1
-            reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-            labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
-            loss = self.loss(labels, reduced_logits)
-        else:
             loss = self.loss(labels, logits)
+        else:    
+            if self.args.mode == "sequence-classification" or self.args.mode == "token-classification":
+                logits = self.model(features, training=training)[0]
+            else:
+                logits = self.model(features, training=training)
+
+            if self.args.mode == "token-classification":
+                active_loss = tf.reshape(labels, (-1,)) != -1
+                reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+                labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
+                loss = self.loss(labels, reduced_logits)
+            else:
+                loss = self.loss(labels, logits)
 
         loss += sum(self.model.losses) * (1.0 / self.args.n_gpu)
 
