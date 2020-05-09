@@ -110,7 +110,7 @@ def export_tensorflow(nlp: Pipeline, args: Namespace):
 
     try:
         import tensorflow as tf
-        from keras2onnx import convert_keras, save_model, build_io_names_tf2onnx, __version__ as k2ov
+        from keras2onnx import convert_keras, save_model, __version__ as k2ov
 
         print("TensorFlow: {}, keras2onnx: {}".format(tf.version.VERSION, k2ov))
 
