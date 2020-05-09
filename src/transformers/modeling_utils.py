@@ -17,7 +17,7 @@
 
 import logging
 import os
-from typing import Callable, Iterable, Tuple
+from typing import Callable, Iterable, Tuple, Dict
 
 import torch
 from torch import Tensor, device, dtype, nn
@@ -402,7 +402,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # Tie weights if needed
         self.tie_weights()
 
-    def prune_heads(self, heads_to_prune: dict):
+    def prune_heads(self, heads_to_prune: Dict):
         """ Prunes heads of the base model.
 
             Arguments:
@@ -777,7 +777,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         top_k: int = None,
         top_p: float = None,
         repetition_penalty: float = None,
-        bad_words_ids: Iterable = None,
+        bad_words_ids: Iterable[int] = None,
         bos_token_id: int = None,
         pad_token_id: int = None,
         eos_token_id: int = None,
@@ -1567,7 +1567,7 @@ def calc_banned_ngram_tokens(prev_input_ids: Tensor, num_hypos: int, no_repeat_n
     return banned_tokens
 
 
-def calc_banned_bad_words_ids(prev_input_ids: Iterable, bad_words_ids: Iterable) -> Iterable:
+def calc_banned_bad_words_ids(prev_input_ids: Iterable[int], bad_words_ids: Iterable[int]) -> Iterable[int]:
     banned_tokens = []
 
     def _tokens_match(prev_tokens, tokens):
@@ -1604,12 +1604,12 @@ def calc_banned_bad_words_ids(prev_input_ids: Iterable, bad_words_ids: Iterable)
 
 
 def top_k_top_p_filtering(
-    logits: Iterable,
+    logits: Tensor,
     top_k: int = 0,
     top_p: float = 1.0,
     filter_value: float = -float("Inf"),
     min_tokens_to_keep: int = 1,
-) -> Iterable:
+) -> Tensor:
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
             logits: logits distribution shape (batch size, vocabulary size)
