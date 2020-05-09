@@ -80,6 +80,10 @@ class MarianTokenizer(PreTrainedTokenizer):
         self.spm_target = sentencepiece.SentencePieceProcessor()
         self.spm_target.Load(target_spm)
 
+        # Multilingual target side: default to using first supported language code.
+        self.supported_language_codes: list = [k for k in self.encoder if k.startswith(">>") and k.endswith("<<")]
+        self.tgt_lang_id = None  # will not be used unless it is set through prepare_translation_batch
+
         # Note(SS): sentence_splitter would require lots of book-keeping.
         try:
             from mosestokenizer import MosesPunctuationNormalizer
@@ -92,9 +96,8 @@ class MarianTokenizer(PreTrainedTokenizer):
     def _convert_token_to_id(self, token):
         return self.encoder.get(token, self.encoder[self.unk_token])
 
-    def _tokenize(self, text: str, src=True) -> List[str]:
-        spm = self.spm_source if src else self.spm_target
-        return spm.EncodeAsPieces(text)
+    def _tokenize(self, text: str) -> List[str]:
+        return self.current_spm.EncodeAsPieces(text)
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the encoder."""
@@ -103,10 +106,6 @@ class MarianTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Uses target language sentencepiece model"""
         return self.spm_target.DecodePieces(tokens)
-
-    def _append_special_tokens_and_truncate(self, tokens: str, max_length: int,) -> List[int]:
-        ids: list = self.convert_tokens_to_ids(tokens)[:max_length]
-        return ids + [self.eos_token_id]
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
@@ -125,6 +124,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         pad_to_max_length: bool = True,
         return_tensors: str = "pt",
+        tgt_lang_code: Optional[str] = None,
     ) -> BatchEncoding:
         """
         Arguments:
@@ -133,33 +133,38 @@ class MarianTokenizer(PreTrainedTokenizer):
             max_length: (None) defer to config (1024 for mbart-large-en-ro)
             pad_to_max_length: (bool)
             return_tensors: (str) default "pt" returns pytorch tensors, pass None to return lists.
+            tgt_lang_code: Optional str: for generating with multilingual models, add a special token to the input.
+                Default no tgt language code, works pretty well. Check self.supported_language_codes for choices.
 
         Returns:
             BatchEncoding: with keys [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]
             all shaped bs, seq_len. (BatchEncoding is a dict of string -> tensor or lists).
             If no tgt_text is specified, the only keys will be input_ids and attention_mask.
         """
+        if tgt_lang_code is not None:
+            self.tgt_lang_id = self.encoder[tgt_lang_code]
+        self.current_spm = self.spm_source
         model_inputs: BatchEncoding = self.batch_encode_plus(
             src_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
-            src=True,
         )
         if tgt_texts is None:
             return model_inputs
 
+        self.current_spm = self.spm_target
         decoder_inputs: BatchEncoding = self.batch_encode_plus(
             tgt_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
-            src=False,
         )
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
+        self.current_spm = self.spm_source
         return model_inputs
 
     @property

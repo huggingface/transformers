@@ -25,7 +25,7 @@ from .utils import require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
-    from transformers import AutoTokenizer, MarianConfig, AutoConfig, AutoModelWithLMHead
+    from transformers import AutoTokenizer, MarianConfig, AutoConfig, AutoModelWithLMHead, MarianTokenizer, MarianMTModel
 
 
 class ModelManagementTests(unittest.TestCase):
@@ -61,24 +61,30 @@ class MarianIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.model_name = f"Helsinki-NLP/opus-mt-{cls.src}-{cls.tgt}"
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
+        cls.tokenizer: MarianTokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.eos_token_id = cls.tokenizer.eos_token_id
         return cls
 
     @cached_property
-    def model(self):
+    def model(self) -> MarianMTModel:
         model = AutoModelWithLMHead.from_pretrained(self.model_name).to(torch_device)
+        c = model.config
+        self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
+        self.assertEqual(c.max_length, 512)
+        self.assertEqual(c.decoder_start_token_id, c.pad_token_id)
+
         if torch_device == "cuda":
             return model.half()
         else:
             return model
 
-    def _assert_generated_batch_equal_expected(self):
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src_texts=self.src_text).to(torch_device)
-        self.assertEqual(self.model.device, model_inputs["input_ids"].device)
-        generated_ids = self.model.generate(
-            model_inputs["input_ids"], attention_mask=model_inputs["attention_mask"], num_beams=2,
+    def _assert_generated_batch_equal_expected(self, **tokenizer_kwargs):
+        model_inputs: dict = self.tokenizer.prepare_translation_batch(src_texts=self.src_text, **tokenizer_kwargs).to(
+            torch_device
         )
+        self.assertEqual(self.model.device, model_inputs["input_ids"].device)
+        generated_ids = self.model.generate(model_inputs["input_ids"], attention_mask=model_inputs["attention_mask"],
+                                            num_beams=2)
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(self.expected_text, generated_words)
 
@@ -86,7 +92,7 @@ class MarianIntegrationTest(unittest.TestCase):
 class TestMarian_EN_DE_More(MarianIntegrationTest):
     @slow
     def test_forward(self):
-        src, tgt = ["I am a small frog"], ["▁Ich ▁bin ▁ein ▁kleiner ▁Fro sch"]
+        src, tgt = ["I am a small frog"], ["Ich bin ein kleiner Frosch."]
         expected = [38, 121, 14, 697, 38848, 0]
 
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt).to(torch_device)
@@ -109,6 +115,7 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         input_ids = batch["input_ids"][0]
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, input_ids.tolist())
+
 
     def test_unk_support(self):
         t = self.tokenizer
@@ -167,12 +174,8 @@ class TestMarian_FR_EN(MarianIntegrationTest):
 class TestMarian_RU_FR(MarianIntegrationTest):
     src = "ru"
     tgt = "fr"
-    src_text = [
-        "Ð¢Ñ‹ Ð¾Ñ‚Ð´Ð¾Ñ…Ð½ÑƒÐ»?",
-    ]
-    expected_text = [
-        "Tu t'es reposÃ© ?",
-    ]
+    src_text = ["Он показал мне рукопись своей новой пьесы."]
+    expected_text = ["Il me montre un manuscrit de sa nouvelle pièce."]
 
     @slow
     def test_batch_generation_ru_fr(self):
@@ -182,7 +185,7 @@ class TestMarian_RU_FR(MarianIntegrationTest):
 class TestMarian_MT_EN(MarianIntegrationTest):
     src = "mt"
     tgt = "en"
-    src_text = ["Il - BabiloniÅ¼i b'mod Å¼baljat ikkonkludew li l - Alla l - veru kien dgÄ§ajjef."]
+    src_text = ["Il - Babiloniżi b'mod żbaljat ikkonkludew li l - Alla l - veru kien dgħajjef."]
     expected_text = ["The Babylonians wrongly concluded that the true God was weak."]
 
     @slow
@@ -190,27 +193,29 @@ class TestMarian_MT_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
-class TestMarian_SV_TW(MarianIntegrationTest):
-    src = "sv"
-    tgt = "tw"
-    # wrong but init fails
-    src_text = ["Il - BabiloniÅ¼i b'mod Å¼baljat ikkonkludew li l - Alla l - veru kien dgÄ§ajjef."]
-    expected_text = ["The Babylonians wrongly concluded that the true God was weak."]
+class TestMarian_DE_Multi(MarianIntegrationTest):
+    src = "de"
+    tgt = "ch_group"
+    src_text = [">>zh<< Er aber sprach: Das ist die Gottlosigkeit."]
+    expected_text = ["▁但他 说 这是 无 神 论"]
+    # expected_text = ["天 使 說 , 這 是 罪 惡 . 他 就 把 婦 人 扔 在 量 器 中 , 將 那 片 圓 鉛 扔 在 量 器 的 口 上".replace(' ','')]
+    #a = '他却说,这是罪恶,他把纸片扔进电磁脉冲 扔在了口上'
+    #b = '他却说,这是罪恶,他把纸片扔在Epha 扔到洞口.'
+    code = '>>zh<<'
 
     @slow
-    def test_batch_generation_sv_tw(self):
-        self._assert_generated_batch_equal_expected()
+    def test_batch_generation_de_multi_tgt(self):
+        self._assert_generated_batch_equal_expected(tgt_lang_code=self.code)
 
-
-group_names = {"cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh": "ch_group"}
-
-
-class TestMarian_Multi_DE(MarianIntegrationTest):
-    src = "ch_group"
-    tgt = "de"
-    src_text = ["ä»–ä¸æ˜¯æ¯ä¸€å¤©éƒ½ä¾†é€™è£¡."]
-    expected_text = ["Er kommt nicht jeden Tag hierher."]
-
-    @slow
-    def test_batch_generation_multi_de(self):
-        self._assert_generated_batch_equal_expected()
+    @unittest.skip("Language codes are not yet supported.")
+    def test_lang_code(self):
+        t = 'Er aber sprach'
+        zh_code = self.code
+        tok_fn = self.tokenizer.prepare_translation_batch
+        pass_code = tok_fn(src_texts=[t], tgt_lang_code=zh_code)['input_ids'][0]
+        preprocess_with_code = tok_fn(src_texts=[zh_code + '  ' + t])['input_ids'][0]
+        self.assertListEqual(pass_code.tolist(), preprocess_with_code.tolist())
+        for code in self.tokenizer.supported_language_codes:
+            self.assertIn(code, self.tokenizer.encoder)
+        pass_only_code = tok_fn(src_texts=[''], tgt_lang_code=zh_code)['input_ids'][0].tolist()
+        self.assertListEqual(pass_only_code, [self.tokenizer.encoder[zh_code], self.tokenizer.eos_token_id])
