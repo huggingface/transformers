@@ -212,7 +212,7 @@ for i in range(100):
     token = torch.argmax(output[..., -1, :])
 
     generated += [token.tolist()]
-    context = token.unsqueeze(0)
+    context = token.unsqueeze(0).unsqueeze(0)
 
 sequence = tokenizer.decode(generated)
 
