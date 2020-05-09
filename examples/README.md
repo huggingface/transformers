@@ -53,4 +53,28 @@ pip install -r ./examples/requirements.txt
 
 ## Running on TPUs
 
-Documentation to come.
+When using Tensorflow, TPUs are supported out of the box as a `tf.distribute.Strategy`.
+
+When using PyTorch, we support TPUs thanks to `pytorch/xla`. For more context and information on how to setup your TPU environment refer to Google's documentation and to the
+very detailed [pytorch/xla README](https://github.com/pytorch/xla/blob/master/README.md).
+
+In this repo, we provide a very simple launcher script named [xla_spawn.py](./xla_spawn.py) that lets you run our example scripts on multiple TPU cores without any boilerplate.
+Just pass a `--num_cores` flag to this script, then your regular training script with its arguments (this is similar to the `torch.distributed.launch` helper for torch.distributed).
+
+For example for `run_glue`:
+
+```bash
+python examples/xla_spawn.py --num_cores 8 \
+	examples/text-classification/run_glue.py
+	--model_name_or_path bert-base-cased \
+	--task_name mnli \
+	--data_dir ./data/glue_data/MNLI \
+	--output_dir ./models/tpu \
+	--overwrite_output_dir \
+	--do_train \
+	--do_eval \
+	--num_train_epochs 1 \
+	--save_steps 20000
+```
+
+Feedback and more use cases and benchmarks involving TPUs are welcome, please share with the community.
