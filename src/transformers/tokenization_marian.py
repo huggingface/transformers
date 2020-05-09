@@ -124,7 +124,6 @@ class MarianTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         pad_to_max_length: bool = True,
         return_tensors: str = "pt",
-        tgt_lang_code: Optional[str] = None,
     ) -> BatchEncoding:
         """
         Arguments:
@@ -133,16 +132,12 @@ class MarianTokenizer(PreTrainedTokenizer):
             max_length: (None) defer to config (1024 for mbart-large-en-ro)
             pad_to_max_length: (bool)
             return_tensors: (str) default "pt" returns pytorch tensors, pass None to return lists.
-            tgt_lang_code: Optional str: for generating with multilingual models, add a special token to the input.
-                Default no tgt language code, works pretty well. Check self.supported_language_codes for choices.
 
         Returns:
             BatchEncoding: with keys [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]
             all shaped bs, seq_len. (BatchEncoding is a dict of string -> tensor or lists).
             If no tgt_text is specified, the only keys will be input_ids and attention_mask.
         """
-        if tgt_lang_code is not None:
-            self.tgt_lang_id = self.encoder[tgt_lang_code]
         self.current_spm = self.spm_source
         model_inputs: BatchEncoding = self.batch_encode_plus(
             src_texts,
