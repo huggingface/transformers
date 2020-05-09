@@ -287,6 +287,7 @@ if is_torch_available():
     from .modeling_albert import (
         AlbertPreTrainedModel,
         AlbertModel,
+        AlbertForPreTraining,
         AlbertForMaskedLM,
         AlbertForSequenceClassification,
         AlbertForQuestionAnswering,
@@ -490,6 +491,7 @@ if is_tf_available():
         TFAlbertPreTrainedModel,
         TFAlbertMainLayer,
         TFAlbertModel,
+        TFAlbertForPreTraining,
         TFAlbertForMaskedLM,
         TFAlbertForSequenceClassification,
         TFAlbertForQuestionAnswering,
