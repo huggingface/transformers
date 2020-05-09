@@ -98,6 +98,9 @@ def make_registry(repo_path="Opus-MT-train/models"):
     return [(k, v["pre-processing"], v["download"]) for k, v in results.items()]
 
 
+CH_GROUP = "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh"
+
+
 def convert_all_sentencepiece_models(model_list=None, repo_path=None):
     """Requires 300GB"""
     save_dir = Path("marian_ckpt")
@@ -110,7 +113,8 @@ def convert_all_sentencepiece_models(model_list=None, repo_path=None):
             continue
         if not os.path.exists(save_dir / k / "pytorch_model.bin"):
             download_and_unzip(download, save_dir / k)
-        convert(save_dir / k, dest_dir / f"opus-mt-{k}")
+        pair_name = k.replace(CH_GROUP, "ch_group")
+        convert(save_dir / k, dest_dir / f"opus-mt-{pair_name}")
 
 
 def convert_whole_dir(path=Path("marian_ckpt/")):
