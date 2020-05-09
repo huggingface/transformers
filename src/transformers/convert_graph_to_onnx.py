@@ -1,10 +1,10 @@
 from argparse import ArgumentParser, Namespace
-from os import mkdir, listdir
-from os.path import exists, abspath, dirname
-from typing import Dict, Tuple, List
+from os import listdir, mkdir
+from os.path import abspath, dirname, exists
+from typing import Dict, List, Tuple
 
-from transformers import is_torch_available, is_tf_available
-from transformers.pipelines import SUPPORTED_TASKS, pipeline, Pipeline
+from transformers import is_tf_available, is_torch_available
+from transformers.pipelines import SUPPORTED_TASKS, Pipeline, pipeline
 from transformers.tokenization_utils import BatchEncoding
 
 
@@ -97,7 +97,7 @@ def export_pytorch(nlp: Pipeline, args: Namespace):
             do_constant_folding=False,
             use_external_data_format=True,
             enable_onnx_checker=True,
-            opset_version=args.opset
+            opset_version=args.opset,
         )
 
 
