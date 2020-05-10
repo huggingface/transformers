@@ -34,7 +34,7 @@ from transformers import (
     TFTrainingArguments,
     set_seed,
 )
-from utils_multiple_choice import Split, TFMultipleChoiceDataset, processors
+from .utils_multiple_choice import Split, TFMultipleChoiceDataset, processors
 
 
 logger = logging.getLogger(__name__)
