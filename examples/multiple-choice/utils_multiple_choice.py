@@ -32,8 +32,6 @@ from transformers import PreTrainedTokenizer, is_tf_available, is_torch_availabl
 
 logger = logging.getLogger(__name__)
 
-MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4, "syn", 5}
-
 
 @dataclass(frozen=True)
 class InputExample:
@@ -185,7 +183,6 @@ if is_tf_available():
                 pad_token=tokenizer.pad_token_id,
                 pad_token_segment_id=tokenizer.pad_token_type_id,
             )
-
             def gen():
                 for (ex_index, ex) in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
                     if ex_index % 10000 == 0:
@@ -215,9 +212,9 @@ if is_tf_available():
                 (
                     {
                         "example_id": tf.TensorShape([]),
-                        "input_ids": tf.TensorShape([MULTIPLE_CHOICE_TASKS_NUM_LABELS["task"], max_seq_length]),
-                        "attention_mask": tf.TensorShape([MULTIPLE_CHOICE_TASKS_NUM_LABELS["task"], max_seq_length]),
-                        "token_type_ids": tf.TensorShape([MULTIPLE_CHOICE_TASKS_NUM_LABELS["task"], max_seq_length]),
+                        "input_ids": tf.TensorShape([None, None]),
+                        "attention_mask": tf.TensorShape([None, None]),
+                        "token_type_ids": tf.TensorShape([None, None]),
                     },
                     tf.TensorShape([]),
                 ),
@@ -576,3 +573,4 @@ def convert_examples_to_features(
     return features
 
 processors = {"race": RaceProcessor, "swag": SwagProcessor, "arc": ArcProcessor, "syn": SynonymProcessor}
+MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4, "syn", 5}
