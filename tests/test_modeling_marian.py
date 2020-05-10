@@ -39,7 +39,7 @@ class ModelManagementTests(unittest.TestCase):
     @slow
     def test_model_count(self):
         model_list = HfApi().model_list()
-        expected_num_models = 1012
+        expected_num_models = 1011
         actual_num_models = len([x for x in model_list if x.modelId.startswith("Helsinki-NLP")])
         self.assertEqual(expected_num_models, actual_num_models)
 
@@ -74,7 +74,7 @@ class MarianIntegrationTest(unittest.TestCase):
         return cls
 
     @cached_property
-    def model(self) -> MarianMTModel:
+    def model(self):
         model = AutoModelWithLMHead.from_pretrained(self.model_name).to(torch_device)
         c = model.config
         self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
