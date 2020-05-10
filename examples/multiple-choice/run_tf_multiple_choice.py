@@ -130,18 +130,18 @@ def main():
     # download model & vocab.
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
-        # num_labels=num_labels,
-        # finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
     )
-    print(model_args.model_name_or_path)
     with training_args.strategy.scope():
         model = TFAutoModelForMultipleChoice.from_pretrained(
-            model_args.model_name_or_path, from_pt=True, config=config, cache_dir=model_args.cache_dir,
+            model_args.model_name_or_path,
+            from_pt=bool(".bin" in model_args.model_name_or_path),
+            config=config,
+            cache_dir=model_args.cache_dir,
         )
     # Get datasets
     train_dataset = (

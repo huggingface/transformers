@@ -183,6 +183,7 @@ if is_tf_available():
                 pad_token=tokenizer.pad_token_id,
                 pad_token_segment_id=tokenizer.pad_token_type_id,
             )
+
             def gen():
                 for (ex_index, ex) in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
                     if ex_index % 10000 == 0:
@@ -571,6 +572,7 @@ def convert_examples_to_features(
         logger.info("feature: %s" % f)
 
     return features
+
 
 processors = {"race": RaceProcessor, "swag": SwagProcessor, "arc": ArcProcessor, "syn": SynonymProcessor}
 MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4, "syn", 5}
