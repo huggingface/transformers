@@ -51,8 +51,8 @@ class TFTrainingArguments(TrainingArguments):
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
         else:
             try:
-                if tpu_name:
-                    tpu = tf.distribute.cluster_resolver.TPUClusterResolver(tpu_name)
+                if self.tpu_name:
+                    tpu = tf.distribute.cluster_resolver.TPUClusterResolver(self.tpu_name)
                 else:
                     tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
             except ValueError:
