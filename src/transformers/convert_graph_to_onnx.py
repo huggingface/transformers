@@ -1,7 +1,7 @@
 from argparse import ArgumentParser, Namespace
 from os import listdir, makedirs
 from os.path import abspath, dirname, exists
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
 
 from transformers import is_tf_available, is_torch_available
 from transformers.pipelines import SUPPORTED_TASKS, Pipeline, pipeline
