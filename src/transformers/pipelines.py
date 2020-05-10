@@ -1531,7 +1531,7 @@ SUPPORTED_TASKS = {
                 "tf": "distilbert-base-uncased-finetuned-sst-2-english",
             },
             "config": "distilbert-base-uncased-finetuned-sst-2-english",
-            "tokenizer": "distilbert-base-cased",
+            "tokenizer": "distilbert-base-uncased",
         },
     },
     "ner": {
