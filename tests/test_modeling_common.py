@@ -812,12 +812,12 @@ def nucleus_sampling(logits: np.ndarray, top_k: int = 50, top_p: float = 0.9, mi
 
     # PREVIOUS CODE
     # Sort descending
-    #    sorted_indices = jnp.argsort(logits, axis=-1)[::-1]
-    #    reverse_indices = jnp.argsort(sorted_indices, axis=-1)
-    #    sorted_logits = jnp.take_along_axis(logits, sorted_indices, axis=-1)
+    #        sorted_indices = jnp.argsort(logits, axis=-1)[::-1]
+    #        reverse_indices = jnp.argsort(sorted_indices, axis=-1)
+    #        sorted_logits = jnp.take_along_axis(logits, sorted_indices, axis=-1)
     #
     # Filter out top-k
-    #    logits = jnp.where(sorted_logits < sorted_logits[top_k], logits, filter_value)
+    #        logits = jnp.where(sorted_logits < sorted_logits[top_k], logits, filter_value)
 
     # ORIGINAL TORCH TOP P
     #    if top_p < 1.0:
