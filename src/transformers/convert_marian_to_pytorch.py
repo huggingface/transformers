@@ -12,6 +12,7 @@ import torch
 from tqdm import tqdm
 
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
+from transformers.hf_api import HfApi
 
 
 def remove_prefix(text: str, prefix: str):
@@ -36,6 +37,19 @@ def load_layers_(layer_lst: torch.nn.ModuleList, opus_state: dict, converter, is
         layer_tag = f"decoder_l{i + 1}_" if is_decoder else f"encoder_l{i + 1}_"
         sd = convert_encoder_layer(opus_state, layer_tag, converter)
         layer.load_state_dict(sd, strict=True)
+
+
+def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
+    """Find models that can accept src_lang as input and return tgt_lang as output."""
+    prefix = "Helsinki-NLP/opus-mt-"
+    api = HfApi()
+    model_list = api.model_list()
+    model_ids = [x.modelId for x in model_list if x.modelId.startswith("Helsinki-NLP")]
+    src_and_targ = [
+        remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m
+    ]  # + cant be loaded.
+    matching = [f"{prefix}{a}-{b}" for (a, b) in src_and_targ if src_lang in a and tgt_lang in b]
+    return matching
 
 
 def add_emb_entries(wemb, final_bias, n_special_tokens=1):
@@ -115,6 +129,25 @@ def convert_all_sentencepiece_models(model_list=None, repo_path=None):
             download_and_unzip(download, save_dir / k)
         pair_name = k.replace(CH_GROUP, "ch_group")
         convert(save_dir / k, dest_dir / f"opus-mt-{pair_name}")
+
+
+def lmap(f, x) -> List:
+    return list(map(f, x))
+
+
+def fetch_test_set(readmes_raw, pair):
+    import wget
+
+    download_url = readmes_raw[pair]["download"]
+    test_set_url = download_url[:-4] + ".test.txt"
+    fname = wget.download(test_set_url, f"opus_test_{pair}.txt")
+    lns = Path(fname).open().readlines()
+    src = lmap(str.strip, lns[::4])
+    gold = lmap(str.strip, lns[1::4])
+    mar_model = lmap(str.strip, lns[2::4])
+    assert len(gold) == len(mar_model) == len(src)
+    os.remove(fname)
+    return src, mar_model, gold
 
 
 def convert_whole_dir(path=Path("marian_ckpt/")):
