@@ -125,7 +125,9 @@ class TFTrainer:
         in the Tensorflow documentation and those contained in the transformers library.
         """
         if self.args.optimizer_name == "adamw":
-            self.optimizer = create_optimizer(self.args.learning_rate, self.train_steps, self.args.warmup_steps, self.args.end_lr)
+            self.optimizer = create_optimizer(
+                self.args.learning_rate, self.train_steps, self.args.warmup_steps, self.args.end_lr
+            )
         else:
             try:
                 self.optimizer = tf.keras.optimizers.get(

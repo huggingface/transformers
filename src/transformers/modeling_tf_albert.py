@@ -973,6 +973,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+
     @property
     def dummy_inputs(self):
         """ Dummy inputs to build the network.
@@ -1057,7 +1058,6 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
         flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
         flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
-
 
         flat_inputs = [
             flat_input_ids,

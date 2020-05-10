@@ -20,21 +20,21 @@ import logging
 import os
 from dataclasses import dataclass, field
 from typing import Dict, Optional
-import tensorflow_datasets as tfds
 
 import numpy as np
+import tensorflow_datasets as tfds
 
 from transformers import (
     AutoConfig,
-    TFAutoModelForMultipleChoice,
     AutoTokenizer,
     EvalPrediction,
     HfArgumentParser,
+    TFAutoModelForMultipleChoice,
     TFTrainer,
     TFTrainingArguments,
     set_seed,
 )
-from utils_multiple_choice import TFMultipleChoiceDataset, Split, processors
+from utils_multiple_choice import Split, TFMultipleChoiceDataset, processors
 
 
 logger = logging.getLogger(__name__)
@@ -109,10 +109,7 @@ def main():
         level=logging.INFO,
     )
     logger.warning(
-        "device: %s, n_gpu: %s, 16-bits training: %s",
-        training_args.device,
-        training_args.n_gpu,
-        training_args.fp16,
+        "device: %s, n_gpu: %s, 16-bits training: %s", training_args.device, training_args.n_gpu, training_args.fp16,
     )
     logger.info("Training/evaluation parameters %s", training_args)
 
@@ -133,8 +130,8 @@ def main():
     # download model & vocab.
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
-        #num_labels=num_labels,
-        #finetuning_task=data_args.task_name,
+        # num_labels=num_labels,
+        # finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
     )
     tokenizer = AutoTokenizer.from_pretrained(
@@ -144,10 +141,7 @@ def main():
     print(model_args.model_name_or_path)
     with training_args.strategy.scope():
         model = TFAutoModelForMultipleChoice.from_pretrained(
-            model_args.model_name_or_path,
-            from_pt=True,
-            config=config,
-            cache_dir=model_args.cache_dir,
+            model_args.model_name_or_path, from_pt=True, config=config, cache_dir=model_args.cache_dir,
         )
     # Get datasets
     train_dataset = (

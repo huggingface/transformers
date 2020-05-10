@@ -36,18 +36,18 @@ from .configuration_utils import PretrainedConfig
 from .modeling_tf_albert import (
     TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFAlbertForMaskedLM,
+    TFAlbertForMultipleChoice,
     TFAlbertForPreTraining,
     TFAlbertForQuestionAnswering,
     TFAlbertForSequenceClassification,
-    TFAlbertForMultipleChoice,
     TFAlbertModel,
 )
 from .modeling_tf_bert import (
     TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFBertForMaskedLM,
+    TFBertForMultipleChoice,
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
-    TFBertForMultipleChoice,
     TFBertForSequenceClassification,
     TFBertForTokenClassification,
     TFBertModel,
@@ -175,10 +175,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 )
 
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
-    [
-        (BertConfig, TFBertForMultipleChoice),
-        (AlbertConfig, TFAlbertForMultipleChoice),
-    ]
+    [(BertConfig, TFBertForMultipleChoice), (AlbertConfig, TFAlbertForMultipleChoice),]
 )
 
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(

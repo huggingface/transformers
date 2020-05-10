@@ -24,7 +24,7 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
-from transformers import PreTrainedTokenizer
+
 import tqdm
 
 from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available, torch_distributed_zero_first
@@ -33,6 +33,7 @@ from transformers import PreTrainedTokenizer, is_tf_available, is_torch_availabl
 logger = logging.getLogger(__name__)
 
 MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4, "syn", 5}
+
 
 @dataclass(frozen=True)
 class InputExample:
@@ -73,10 +74,14 @@ class Split(Enum):
     train = "train"
     dev = "dev"
     test = "test"
+
+
 if is_torch_available():
     import torch
     from torch.utils.data.dataset import Dataset
     from transformers import torch_distributed_zero_first
+
+
 class MultipleChoiceDataset(Dataset):
     """
     This will be superseded by a framework-agnostic approach
@@ -138,6 +143,7 @@ class MultipleChoiceDataset(Dataset):
     def __getitem__(self, i) -> InputFeatures:
         return self.features[i]
 
+
 if is_tf_available():
     import tensorflow as tf
 
@@ -148,7 +154,6 @@ if is_tf_available():
         """
 
         features: List[InputFeatures]
-
 
         def __init__(
             self,
@@ -195,9 +200,18 @@ if is_tf_available():
                         },
                         ex.label,
                     )
+
             self.dataset = tf.data.Dataset.from_generator(
                 gen,
-                ({"example_id": tf.int32, "input_ids": tf.int32, "attention_mask": tf.int32, "token_type_ids": tf.int32}, tf.int64),
+                (
+                    {
+                        "example_id": tf.int32,
+                        "input_ids": tf.int32,
+                        "attention_mask": tf.int32,
+                        "token_type_ids": tf.int32,
+                    },
+                    tf.int64,
+                ),
                 (
                     {
                         "example_id": tf.TensorShape([]),
@@ -217,6 +231,7 @@ if is_tf_available():
 
         def __getitem__(self, i) -> InputFeatures:
             return self.features[i]
+
 
 class DataProcessor:
     """Base class for data converters for multiple choice data sets."""
@@ -304,6 +319,7 @@ class RaceProcessor(DataProcessor):
                 )
         return examples
 
+
 class SynonymProcessor(DataProcessor):
     """Processor for the Synonym data set."""
 
@@ -348,6 +364,7 @@ class SynonymProcessor(DataProcessor):
         ]
 
         return examples
+
 
 class SwagProcessor(DataProcessor):
     """Processor for the SWAG data set."""

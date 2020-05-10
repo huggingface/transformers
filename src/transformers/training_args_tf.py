@@ -31,14 +31,10 @@ class TFTrainingArguments(TrainingArguments):
         },
     )
     tpu_name: str = field(
-        default=None,
-        metadata={
-            "help": "Name of TPU"
-        },
+        default=None, metadata={"help": "Name of TPU"},
     )
     end_lr: float = field(
-        default=0,
-        metadata={"help": 'End learninig rate for optimizer'},
+        default=0, metadata={"help": "End learninig rate for optimizer"},
     )
     eval_steps: int = field(default=1000, metadata={"help": "Run an evaluation every X steps."})
     debug: bool = field(
