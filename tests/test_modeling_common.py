@@ -801,18 +801,25 @@ def nucleus_sampling(logits: np.ndarray, top_k: int = 50, top_p: float = 0.9, mi
 
     filter_value = np.finfo("f4").min
 
-    if top_k < 0:  # TODO: does not work with jit
+    if top_k > 0:  # TODO: does not work with jit
         top_k = jnp.min([jnp.max([top_k, min_tokens_to_keep]), logits.shape[-1]])  # Safety check
         sorted_indices = jnp.flip(jnp.argsort(logits, axis=-1), axis=-1)
-
-        #        import ipdb
-        #        ipdb.set_trace()
-
-        logits = jnp.take_along_axis(logits, sorted_indices, axis=-1)
+        sorted_logits = jnp.take_along_axis(logits, sorted_indices, axis=-1)
 
         # Filter out top-k
-        logits = jnp.where(sorted_logits < sorted_logits[top_k], logits, filter_value)
+        top_k_logit_expand = sorted_logits[:, top_k - 1].tile((30, 1)).swapaxes(0, 1)
+        logits = jnp.where(logits < top_k_logit_expand, filter_value, logits)
 
+    # PREVIOUS CODE
+    # Sort descending
+    #    sorted_indices = jnp.argsort(logits, axis=-1)[::-1]
+    #    reverse_indices = jnp.argsort(sorted_indices, axis=-1)
+    #    sorted_logits = jnp.take_along_axis(logits, sorted_indices, axis=-1)
+    #
+    # Filter out top-k
+    #    logits = jnp.where(sorted_logits < sorted_logits[top_k], logits, filter_value)
+
+    # ORIGINAL TORCH TOP P
     #    if top_p < 1.0:
     #        sorted_logits, sorted_indices = .sort(logits, descending=True)
     #        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
@@ -830,27 +837,22 @@ def nucleus_sampling(logits: np.ndarray, top_k: int = 50, top_p: float = 0.9, mi
     #        indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
     #        logits[indices_to_remove] = filter_value
 
-    # Sort descending
-    return sorted_logits
+    # ORIGINAL ONNX
 
+    # Filter out top-k
+    #    sorted_logits = jnp.where(sorted_logits < sorted_logits[k], logits, INF)
+    #
+    # Compute the cumulative distribution from individual distribution
+    #    candidates_dist = jnp.cumsum(softmax(sorted_logits / theta), axis=-1)
+    #
+    # Filter out less probable candidates (Keep only p-% of the mass)
+    #    sorted_logits = jnp.where(candidates_dist > p, sorted_logits, INF)
+    #
+    # Sample
+    #    filtered_logits = jnp.take_along_axis(sorted_logits, reverse_indices, axis=-1)
+    #    return MultinomialLogits(filtered_logits / theta).sample(rng_key)
 
-#    sorted_indices = jnp.argsort(logits, axis=-1)[::-1]
-#    reverse_indices = jnp.argsort(sorted_indices, axis=-1)
-#
-#    sorted_logits = jnp.take_along_axis(logits, sorted_indices, axis=-1)
-#
-# Filter out top-k
-#    sorted_logits = jnp.where(sorted_logits < sorted_logits[k], logits, INF)
-#
-# Compute the cumulative distribution from individual distribution
-#    candidates_dist = jnp.cumsum(softmax(sorted_logits / theta), axis=-1)
-#
-# Filter out less probable candidates (Keep only p-% of the mass)
-#    sorted_logits = jnp.where(candidates_dist > p, sorted_logits, INF)
-#
-# Sample
-#    filtered_logits = jnp.take_along_axis(sorted_logits, reverse_indices, axis=-1)
-#    return MultinomialLogits(filtered_logits / theta).sample(rng_key)
+    return logits
 
 
 @require_torch
