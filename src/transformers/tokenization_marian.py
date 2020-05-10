@@ -22,7 +22,21 @@ PRETRAINED_VOCAB_FILES_MAP = {
 # Example URL https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/vocab.json
 
 
-class MarianSentencePieceTokenizer(PreTrainedTokenizer):
+class MarianTokenizer(PreTrainedTokenizer):
+    """Sentencepiece tokenizer for marian. Source and target languages have different SPM models.
+    The logic is use the relevant source_spm or target_spm to encode txt as pieces, then look up each piece in a vocab dictionary.
+
+    Examples::
+
+        from transformers import MarianTokenizer
+        tok = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
+        tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
+        batch_enc: BatchEncoding = tok.prepare_translation_batch(src_texts, tgt_texts=tgt_texts)
+        # keys  [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask].
+        # model(**batch) should work
+    """
+
     vocab_files_names = vocab_files_names
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {m: 512 for m in MODEL_NAMES}
@@ -49,6 +63,8 @@ class MarianSentencePieceTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
         )
         self.encoder = load_json(vocab)
+        if self.unk_token not in self.encoder:
+            raise KeyError("<unk> token must be in vocab")
         assert self.pad_token in self.encoder
         self.decoder = {v: k for k, v in self.encoder.items()}
 
@@ -64,8 +80,11 @@ class MarianSentencePieceTokenizer(PreTrainedTokenizer):
         self.spm_target = sentencepiece.SentencePieceProcessor()
         self.spm_target.Load(target_spm)
 
-        # Note(SS): splitter would require lots of book-keeping.
-        # self.sentence_splitter = MosesSentenceSplitter(source_lang)
+        # Multilingual target side: default to using first supported language code.
+        self.supported_language_codes: list = [k for k in self.encoder if k.startswith(">>") and k.endswith("<<")]
+        self.tgt_lang_id = None  # will not be used unless it is set through prepare_translation_batch
+
+        # Note(SS): sentence_splitter would require lots of book-keeping.
         try:
             from mosestokenizer import MosesPunctuationNormalizer
 
@@ -75,11 +94,10 @@ class MarianSentencePieceTokenizer(PreTrainedTokenizer):
             self.punc_normalizer = lambda x: x
 
     def _convert_token_to_id(self, token):
-        return self.encoder[token]
+        return self.encoder.get(token, self.encoder[self.unk_token])
 
-    def _tokenize(self, text: str, src=True) -> List[str]:
-        spm = self.spm_source if src else self.spm_target
-        return spm.EncodeAsPieces(text)
+    def _tokenize(self, text: str) -> List[str]:
+        return self.current_spm.EncodeAsPieces(text)
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the encoder."""
@@ -89,10 +107,6 @@ class MarianSentencePieceTokenizer(PreTrainedTokenizer):
         """Uses target language sentencepiece model"""
         return self.spm_target.DecodePieces(tokens)
 
-    def _append_special_tokens_and_truncate(self, tokens: str, max_length: int,) -> List[int]:
-        ids: list = self.convert_tokens_to_ids(tokens)[:max_length]
-        return ids + [self.eos_token_id]
-
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
@@ -100,7 +114,7 @@ class MarianSentencePieceTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    def decode_batch(self, token_ids, **kwargs) -> List[str]:
+    def batch_decode(self, token_ids, **kwargs) -> List[str]:
         return [self.decode(ids, **kwargs) for ids in token_ids]
 
     def prepare_translation_batch(
@@ -114,40 +128,38 @@ class MarianSentencePieceTokenizer(PreTrainedTokenizer):
         """
         Arguments:
             src_texts: list of src language texts
-            src_lang: default en_XX (english)
             tgt_texts: list of tgt language texts
-            tgt_lang: default ro_RO (romanian)
             max_length: (None) defer to config (1024 for mbart-large-en-ro)
             pad_to_max_length: (bool)
+            return_tensors: (str) default "pt" returns pytorch tensors, pass None to return lists.
 
         Returns:
             BatchEncoding: with keys [input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]
-            all shaped bs, seq_len. (BatchEncoding is a dict of string -> tensor or lists)
-
-        Examples:
-            from transformers import MarianS
+            all shaped bs, seq_len. (BatchEncoding is a dict of string -> tensor or lists).
+            If no tgt_text is specified, the only keys will be input_ids and attention_mask.
         """
+        self.current_spm = self.spm_source
         model_inputs: BatchEncoding = self.batch_encode_plus(
             src_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
-            src=True,
         )
         if tgt_texts is None:
             return model_inputs
 
+        self.current_spm = self.spm_target
         decoder_inputs: BatchEncoding = self.batch_encode_plus(
             tgt_texts,
             add_special_tokens=True,
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
-            src=False,
         )
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
+        self.current_spm = self.spm_source
         return model_inputs
 
     @property
