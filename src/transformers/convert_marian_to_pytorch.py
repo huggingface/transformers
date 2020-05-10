@@ -123,7 +123,7 @@ def convert_all_sentencepiece_models(model_list=None, repo_path=None):
     if model_list is None:
         model_list: list = make_registry(repo_path=repo_path)
     for k, prepro, download in tqdm(model_list):
-        if "SentencePiece" not in prepro:  # dont convert BPE models.
+        if "SentencePiece" not in prepro:  # never convert BPE models.
             continue
         if not os.path.exists(save_dir / k / "pytorch_model.bin"):
             download_and_unzip(download, save_dir / k)
