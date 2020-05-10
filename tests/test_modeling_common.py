@@ -20,6 +20,12 @@ import random
 import tempfile
 import unittest
 
+import jax.numpy as jnp
+import jax.random as rng
+from jax import jit
+from jax.nn import softmax
+from numpyro.distributions import MultinomialLogits
+
 from transformers import is_torch_available
 
 from .utils import require_torch, slow, torch_device
@@ -787,6 +793,66 @@ class ModelUtilsTest(unittest.TestCase):
             self.assertEqual(model.config, config)
 
 
+rng_key = rng.PRNGKey(0)
+
+
+# @jit
+def nucleus_sampling(logits: np.ndarray, top_k: int = 50, top_p: float = 0.9, min_tokens_to_keep=1):
+
+    filter_value = np.finfo("f4").min
+
+    if top_k < 0:  # TODO: does not work with jit
+        top_k = jnp.min([jnp.max([top_k, min_tokens_to_keep]), logits.shape[-1]])  # Safety check
+        sorted_indices = jnp.flip(jnp.argsort(logits, axis=-1), axis=-1)
+
+        #        import ipdb
+        #        ipdb.set_trace()
+
+        logits = jnp.take_along_axis(logits, sorted_indices, axis=-1)
+
+        # Filter out top-k
+        logits = jnp.where(sorted_logits < sorted_logits[top_k], logits, filter_value)
+
+    #    if top_p < 1.0:
+    #        sorted_logits, sorted_indices = .sort(logits, descending=True)
+    #        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+    #
+    # Remove tokens with cumulative probability above the threshold (token with 0 are kept)
+    #        sorted_indices_to_remove = cumulative_probs > top_p
+    #        if min_tokens_to_keep > 1:
+    # Keep at least min_tokens_to_keep (set to min_tokens_to_keep-1 because we add the first one below)
+    #            sorted_indices_to_remove[..., :min_tokens_to_keep] = 0
+    # Shift the indices to the right to keep also the first token above the threshold
+    #        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
+    #        sorted_indices_to_remove[..., 0] = 0
+    #
+    # scatter sorted tensors to original indexing
+    #        indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
+    #        logits[indices_to_remove] = filter_value
+
+    # Sort descending
+    return sorted_logits
+
+
+#    sorted_indices = jnp.argsort(logits, axis=-1)[::-1]
+#    reverse_indices = jnp.argsort(sorted_indices, axis=-1)
+#
+#    sorted_logits = jnp.take_along_axis(logits, sorted_indices, axis=-1)
+#
+# Filter out top-k
+#    sorted_logits = jnp.where(sorted_logits < sorted_logits[k], logits, INF)
+#
+# Compute the cumulative distribution from individual distribution
+#    candidates_dist = jnp.cumsum(softmax(sorted_logits / theta), axis=-1)
+#
+# Filter out less probable candidates (Keep only p-% of the mass)
+#    sorted_logits = jnp.where(candidates_dist > p, sorted_logits, INF)
+#
+# Sample
+#    filtered_logits = jnp.take_along_axis(sorted_logits, reverse_indices, axis=-1)
+#    return MultinomialLogits(filtered_logits / theta).sample(rng_key)
+
+
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
 
@@ -887,6 +953,117 @@ class UtilsFunctionsTest(unittest.TestCase):
         )
 
         output = top_k_top_p_filtering(logits, top_k=10, top_p=0.6, min_tokens_to_keep=4)
+        non_inf_output = output[output != -float("inf")].to(device=torch_device)
+        non_inf_idx = (output != -float("inf")).nonzero().to(device=torch_device)
+
+        self.assertTrue(torch.allclose(non_inf_expected_output, non_inf_output, atol=1e-12))
+        self.assertTrue(torch.all(torch.eq(non_inf_expected_idx, non_inf_idx)))
+
+    def test_top_k_top_p_filtering_jax(self):
+        logits = jnp.array(
+            [
+                [
+                    8.2220991,  # 3rd highest value; idx. 0
+                    -0.5620044,
+                    5.23229752,
+                    4.0386393,
+                    -6.8798378,
+                    -0.54785802,
+                    -3.2012153,
+                    2.92777176,
+                    1.88171953,
+                    7.35341276,  # 5th highest value; idx. 9
+                    8.43207833,  # 2nd highest value; idx. 10
+                    -9.85711836,
+                    -5.96209236,
+                    -1.13039161,
+                    -7.1115294,
+                    -0.8369633,
+                    -5.3186408,
+                    7.06427407,
+                    0.81369344,
+                    -0.82023817,
+                    -5.9179796,
+                    0.58813443,
+                    -6.99778438,
+                    4.71551189,
+                    -0.18771637,
+                    7.44020759,  # 4th highest value; idx. 25
+                    9.38450987,  # 1st highest value; idx. 26
+                    2.12662941,
+                    -9.32562038,
+                    2.35652522,
+                ],  # cummulative prob of 5 highest values <= 0.6
+                [
+                    0.58425518,
+                    4.53139238,
+                    -5.57510464,
+                    -6.28030699,
+                    -7.19529503,
+                    -4.02122551,
+                    1.39337037,
+                    -6.06707057,
+                    1.59480517,
+                    -9.643119,
+                    0.03907799,
+                    0.67231762,
+                    -8.88206726,
+                    6.27115922,  # 4th highest value; idx. 13
+                    2.28520723,
+                    4.82767506,
+                    4.30421368,
+                    8.8275313,  # 2nd highest value; idx. 17
+                    5.44029958,  # 5th highest value; idx. 18
+                    -4.4735794,
+                    7.38579536,  # 3rd highest value; idx. 20
+                    -2.91051663,
+                    2.61946077,
+                    -2.5674762,
+                    -9.48959302,
+                    -4.02922645,
+                    -1.35416918,
+                    9.67702323,  # 1st highest value; idx. 27
+                    -5.89478553,
+                    1.85370467,
+                ],  # cummulative prob of 5 highest values <= 0.6
+            ],
+            dtype=jnp.float32,
+        )
+
+        output = nucleus_sampling(logits, top_k=10, top_p=1.0)
+        output_numpy = np.copy(np.asarray(output))
+        output_numpy[output_numpy == np.finfo("f4").min] = -float("inf")
+
+        logits_torch = torch.tensor(np.asarray(logits), dtype=torch.float)
+        output_torch = top_k_top_p_filtering(logits_torch, top_k=10, top_p=1.0)
+
+        import ipdb
+
+        ipdb.set_trace()
+
+        non_inf_expected_idx = torch.tensor(
+            [[0, 0], [0, 9], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 18], [1, 20], [1, 27]],
+            dtype=torch.long,
+            device=torch_device,
+        )  # expected non filtered idx as noted above
+
+        non_inf_expected_output = torch.tensor(
+            [
+                8.2221,
+                7.3534,
+                8.4321,
+                7.4402,
+                9.3845,
+                6.2712,
+                8.8275,
+                5.4403,
+                7.3858,
+                9.6770,
+            ],  # expected non filtered values as noted above
+            dtype=torch.float,
+            device=torch_device,
+        )
+
         non_inf_output = output[output != -float("inf")].to(device=torch_device)
         non_inf_idx = (output != -float("inf")).nonzero().to(device=torch_device)
 
