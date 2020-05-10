@@ -125,7 +125,7 @@ class TFTrainer:
         in the Tensorflow documentation and those contained in the transformers library.
         """
         if self.args.optimizer_name == "adamw":
-            self.optimizer = create_optimizer(self.args.learning_rate, self.train_steps, self.args.warmup_steps)
+            self.optimizer = create_optimizer(self.args.learning_rate, self.train_steps, self.args.warmup_steps, self.args.end_lr)
         else:
             try:
                 self.optimizer = tf.keras.optimizers.get(
@@ -139,6 +139,7 @@ class TFTrainer:
                 self.optimizer = tf.keras.optimizers.get(
                     {"class_name": self.args.optimizer_name, "config": {"learning_rate": self.args.learning_rate}}
                 )
+        logger.info("Created an/a {} optimizer".format(self.optimizer))
 
     def _create_checkpoint_manager(self, max_to_keep: int = 5, load_model: bool = True) -> None:
         """
@@ -149,7 +150,14 @@ class TFTrainer:
           load_model: if we want to start the training from the latest checkpoint.
         """
         ckpt = tf.train.Checkpoint(optimizer=self.optimizer, model=self.model)
-        self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, PREFIX_CHECKPOINT_DIR, max_to_keep=max_to_keep)
+
+        logger.info("Saving model in {}".format(self.args.output_dir))
+
+        path = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
+        os.makedirs(path, exist_ok=True)
+        logger.info("Saving model in {}".format(path))
+
+        self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=max_to_keep)
 
         if load_model:
             ckpt.restore(self.model.ckpt_manager.latest_checkpoint).expect_partial()
@@ -386,22 +394,18 @@ class TFTrainer:
           labels: the batched labels.
           training: run the model in training mode or not
         """
-        if self.args.mode == "multiple-choice":
+        if self.args.mode == "sequence-classification" or self.args.mode == "token-classification":
+            logits = self.model(features, training=training)[0]
+        else:
             logits = self.model(features, training=training)
-            loss = self.loss(labels, logits)
-        else:    
-            if self.args.mode == "sequence-classification" or self.args.mode == "token-classification":
-                logits = self.model(features, training=training)[0]
-            else:
-                logits = self.model(features, training=training)
 
-            if self.args.mode == "token-classification":
-                active_loss = tf.reshape(labels, (-1,)) != -1
-                reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-                labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
-                loss = self.loss(labels, reduced_logits)
-            else:
-                loss = self.loss(labels, logits)
+        if self.args.mode == "token-classification":
+            active_loss = tf.reshape(labels, (-1,)) != -1
+            reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+            labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
+            loss = self.loss(labels, reduced_logits)
+        else:
+            loss = self.loss(labels, logits)
 
         loss += sum(self.model.losses) * (1.0 / self.args.n_gpu)
 
@@ -429,5 +433,6 @@ class TFTrainer:
 
         path = os.path.join(self.args.output_dir, "saved_model")
 
+        logger.info("Saving model in {}".format(path))
         os.makedirs(path, exist_ok=True)
         self.model.save_pretrained(self.args.output_dir)
