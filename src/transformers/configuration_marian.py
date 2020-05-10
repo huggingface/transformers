@@ -23,4 +23,5 @@ PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class MarianConfig(BartConfig):
+    model_type = "marian"
     pretrained_config_archive_map = PRETRAINED_CONFIG_ARCHIVE_MAP
