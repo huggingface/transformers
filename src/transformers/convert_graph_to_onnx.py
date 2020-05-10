@@ -1,7 +1,7 @@
 from argparse import ArgumentParser, Namespace
-from os import listdir, mkdir
+from os import listdir, makedirs
 from os.path import abspath, dirname, exists
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 from transformers import is_tf_available, is_torch_available
 from transformers.pipelines import SUPPORTED_TASKS, Pipeline, pipeline
@@ -57,26 +57,20 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
     return input_vars, output_names, dynamic_axes, tokens
 
 
-def load_graph_from_args(args: Namespace) -> Pipeline:
+def load_graph_from_args(task: str, framework: str, model: str, tokenizer: Optional[str] = None) -> Pipeline:
     # If no tokenizer provided
-    if args.tokenizer is None:
-        args.tokenizer = args.model
+    if tokenizer is None:
+        tokenizer = args.model
 
-    print("Loading pipeline (task: {}, model: {}, tokenizer: {})".format(args.task, args.model, args.tokenizer))
-
-    if args.opset == -1:
-        from onnx.defs import onnx_opset_version
-
-        print("Setting ONNX opset version to: {}".format(onnx_opset_version()))
-        args.opset = onnx_opset_version()
+    print("Loading pipeline (task: {}, model: {}, tokenizer: {})".format(task, model, tokenizer))
 
     # Allocate tokenizer and model
-    return pipeline(args.task, model=args.model, framework=args.framework)
+    return pipeline(task, model=model, framework=framework)
 
 
-def export_pytorch(nlp: Pipeline, args: Namespace):
+def convert_pytorch(nlp: Pipeline, opset: int, output: str):
     if not is_torch_available():
-        print("Cannot export {} because PyTorch is not installed. Please install torch first.".format(args.model))
+        print("Cannot convert because PyTorch is not installed. Please install torch first.")
         exit(1)
 
     import torch
@@ -85,25 +79,25 @@ def export_pytorch(nlp: Pipeline, args: Namespace):
     print("PyTorch: {}".format(torch.__version__))
 
     with torch.no_grad():
-        input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, args.framework)
+        input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "pt")
         tokens = tuple(tokens[key] for key in input_names)  # Need to be ordered
         export(
             nlp.model,
             tokens,
-            f=args.output,
+            f=output,
             input_names=input_names,
             output_names=output_names,
             dynamic_axes=dynamic_axes,
             do_constant_folding=False,
             use_external_data_format=True,
             enable_onnx_checker=True,
-            opset_version=args.opset,
+            opset_version=opset,
         )
 
 
-def export_tensorflow(nlp: Pipeline, args: Namespace):
+def convert_tensorflow(nlp: Pipeline, opset: int, output: str):
     if not is_tf_available():
-        print("Cannot export {} because TF is not installed. Please install torch first.".format(args.model))
+        print("Cannot convert {} because TF is not installed. Please install torch first.".format(args.model))
         exit(1)
 
     print("Please note TensorFlow doesn't support exporting model > 2Gb")
@@ -115,52 +109,67 @@ def export_tensorflow(nlp: Pipeline, args: Namespace):
         print("TensorFlow: {}, keras2onnx: {}".format(tf.version.VERSION, k2ov))
 
         # Build
-        input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, args.framework)
+        input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "tf")
 
         # Forward
         nlp.model.predict(list(tokens.data.values()))
-        onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=args.opset)
-        save_model(onnx_model, args.output)
+        onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=opset)
+        save_model(onnx_model, output)
 
     except ImportError as e:
-        print("Cannot import {} required to export TF model to ONNX. Please install {} first.".format(e.name, e.name))
+        print("Cannot import {} required to convert TF model to ONNX. Please install {} first.".format(e.name, e.name))
         exit(1)
+
+
+def convert(task: str, framework: str, model: str, tokenizer: Optional[str], opset: int, output: str):
+    if opset == -1:
+        from onnx.defs import onnx_opset_version
+
+        print("Setting ONNX opset version to: {}".format(onnx_opset_version()))
+        opset = onnx_opset_version()
+
+    # Load the pipeline
+    nlp = load_graph_from_args(task, framework, model, tokenizer)
+
+    parent = dirname(output)
+    if not exists(parent):
+        print("Creating folder {}".format(parent))
+        makedirs(parent)
+    elif len(listdir(parent)) > 0:
+        print("Folder {} is not empty, aborting conversion".format(parent))
+        exit(1)
+
+    # Export the graph
+    if args.framework == "pt":
+        convert_pytorch(nlp, opset, output)
+    else:
+        convert_tensorflow(nlp, opset, output)
+
+
+def verify(path: str):
+    from onnxruntime import InferenceSession, SessionOptions, GraphOptimizationLevel
+    from onnxruntime.capi.onnxruntime_pybind11_state import RuntimeException
+
+    print("Checking ONNX model loading from: {}".format(path))
+    try:
+        onnx_options = SessionOptions()
+        onnx_options.graph_optimization_level = GraphOptimizationLevel.ORT_ENABLE_ALL
+        _ = InferenceSession(path, onnx_options, providers=["CPUExecutionProvider"])
+        print("Model correctly loaded")
+    except RuntimeException as re:
+        print("Error while loading the model: {}".format(re))
 
 
 if __name__ == "__main__":
     parser = OnnxConverterArgumentParser()
     args = parser.parse_args()
 
-    # Ensure we have an absolute path for the output
+    # Make sure output is absolute path
     args.output = abspath(args.output)
 
-    # Create export folder if needed
-    if exists(dirname(args.output)) and len(listdir(dirname(args.output))) > 0:
-        raise ValueError("Folder {} already exists".format(args.output))
-    elif not exists(dirname(args.output)):
-        print("Creating folder {}".format(dirname(args.output)))
-        mkdir(dirname(args.output))
-    else:
-        print("Folder {} already exists and is empty: {}".format(dirname(args.output), "\u2713"))
+    # Convert
+    convert(args.task, args.framework, args.model, args.tokenizer, args.opset, args.output)
 
-    # Load the pipeline
-    nlp = load_graph_from_args(args)
-
-    # Export the graph
-    if args.framework == "pt":
-        export_pytorch(nlp, args)
-    else:
-        export_tensorflow(nlp, args)
-
+    # And verify
     if args.check_loading:
-        from onnxruntime import InferenceSession, SessionOptions, GraphOptimizationLevel
-        from onnxruntime.capi.onnxruntime_pybind11_state import RuntimeException
-
-        print("Checking ONNX model loading from: {}".format(args.output))
-        try:
-            onnx_options = SessionOptions()
-            onnx_options.graph_optimization_level = GraphOptimizationLevel.ORT_ENABLE_ALL
-            session = InferenceSession(args.output, onnx_options, providers=["CPUExecutionProvider"])
-            print("Model correctly loaded")
-        except RuntimeException as re:
-            print("Error while loading the model: {}".format(re))
+        verify(args.output)
