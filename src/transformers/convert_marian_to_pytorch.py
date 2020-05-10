@@ -11,7 +11,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from transformers import MarianConfig, MarianMTModel, MarianSentencePieceTokenizer
+from transformers import MarianConfig, MarianMTModel, MarianTokenizer
+from transformers.hf_api import HfApi
 
 
 def remove_prefix(text: str, prefix: str):
@@ -36,6 +37,19 @@ def load_layers_(layer_lst: torch.nn.ModuleList, opus_state: dict, converter, is
         layer_tag = f"decoder_l{i + 1}_" if is_decoder else f"encoder_l{i + 1}_"
         sd = convert_encoder_layer(opus_state, layer_tag, converter)
         layer.load_state_dict(sd, strict=True)
+
+
+def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
+    """Find models that can accept src_lang as input and return tgt_lang as output."""
+    prefix = "Helsinki-NLP/opus-mt-"
+    api = HfApi()
+    model_list = api.model_list()
+    model_ids = [x.modelId for x in model_list if x.modelId.startswith("Helsinki-NLP")]
+    src_and_targ = [
+        remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m
+    ]  # + cant be loaded.
+    matching = [f"{prefix}{a}-{b}" for (a, b) in src_and_targ if src_lang in a and tgt_lang in b]
+    return matching
 
 
 def add_emb_entries(wemb, final_bias, n_special_tokens=1):
@@ -81,7 +95,12 @@ def find_model_file(dest_dir):  # this one better
     return model_file
 
 
-def parse_readmes(repo_path):
+def make_registry(repo_path="Opus-MT-train/models"):
+    if not (Path(repo_path) / "fr-en" / "README.md").exists():
+        raise ValueError(
+            f"repo_path:{repo_path} does not exist: "
+            "You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git before calling."
+        )
     results = {}
     for p in Path(repo_path).ls():
         n_dash = p.name.count("-")
@@ -90,22 +109,53 @@ def parse_readmes(repo_path):
         else:
             lns = list(open(p / "README.md").readlines())
             results[p.name] = _parse_readme(lns)
-    return results
+    return [(k, v["pre-processing"], v["download"]) for k, v in results.items()]
 
 
-def download_all_sentencepiece_models(repo_path="Opus-MT-train/models"):
+CH_GROUP = "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh"
+
+
+def convert_all_sentencepiece_models(model_list=None, repo_path=None):
     """Requires 300GB"""
     save_dir = Path("marian_ckpt")
-    if not Path(repo_path).exists():
-        raise ValueError("You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git")
-    results: dict = parse_readmes(repo_path)
-    for k, v in tqdm(list(results.items())):
-        if os.path.exists(save_dir / k):
-            print(f"already have path {k}")
+    dest_dir = Path("marian_converted")
+    dest_dir.mkdir(exist_ok=True)
+    if model_list is None:
+        model_list: list = make_registry(repo_path=repo_path)
+    for k, prepro, download in tqdm(model_list):
+        if "SentencePiece" not in prepro:  # dont convert BPE models.
             continue
-        if "SentencePiece" not in v["pre-processing"]:
+        if not os.path.exists(save_dir / k / "pytorch_model.bin"):
+            download_and_unzip(download, save_dir / k)
+        pair_name = k.replace(CH_GROUP, "ch_group")
+        convert(save_dir / k, dest_dir / f"opus-mt-{pair_name}")
+
+
+def lmap(f, x) -> List:
+    return list(map(f, x))
+
+
+def fetch_test_set(readmes_raw, pair):
+    import wget
+
+    download_url = readmes_raw[pair]["download"]
+    test_set_url = download_url[:-4] + ".test.txt"
+    fname = wget.download(test_set_url, f"opus_test_{pair}.txt")
+    lns = Path(fname).open().readlines()
+    src = lmap(str.strip, lns[::4])
+    gold = lmap(str.strip, lns[1::4])
+    mar_model = lmap(str.strip, lns[2::4])
+    assert len(gold) == len(mar_model) == len(src)
+    os.remove(fname)
+    return src, mar_model, gold
+
+
+def convert_whole_dir(path=Path("marian_ckpt/")):
+    for subdir in tqdm(list(path.ls())):
+        dest_dir = f"marian_converted/{subdir.name}"
+        if (dest_dir / "pytorch_model.bin").exists():
             continue
-        download_and_unzip(v["download"], save_dir / k)
+        convert(source_dir, dest_dir)
 
 
 def _parse_readme(lns):
@@ -131,7 +181,7 @@ def _parse_readme(lns):
     return subres
 
 
-def write_metadata(dest_dir: Path):
+def save_tokenizer_config(dest_dir: Path):
     dname = dest_dir.name.split("-")
     dct = dict(target_lang=dname[-1], source_lang="-".join(dname[:-1]))
     save_json(dct, dest_dir / "tokenizer_config.json")
@@ -148,13 +198,17 @@ def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
     return added
 
 
+def find_vocab_file(model_dir):
+    return list(model_dir.glob("*vocab.yml"))[0]
+
+
 def add_special_tokens_to_vocab(model_dir: Path) -> None:
-    vocab = load_yaml(model_dir / "opus.spm32k-spm32k.vocab.yml")
+    vocab = load_yaml(find_vocab_file(model_dir))
     vocab = {k: int(v) for k, v in vocab.items()}
     num_added = add_to_vocab_(vocab, ["<pad>"])
     print(f"added {num_added} tokens to vocab")
     save_json(vocab, model_dir / "vocab.json")
-    write_metadata(model_dir)
+    save_tokenizer_config(model_dir)
 
 
 def save_tokenizer(self, save_directory):
@@ -251,7 +305,6 @@ class OpusState:
 
         # Process decoder.yml
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
-        # TODO: what are normalize and word-penalty?
         check_marian_cfg_assumptions(cfg)
         self.hf_config = MarianConfig(
             vocab_size=cfg["vocab_size"],
@@ -273,6 +326,9 @@ class OpusState:
             dropout=0.1,  # see opus-mt-train repo/transformer-dropout param.
             # default: add_final_layer_norm=False,
             num_beams=decoder_yml["beam-size"],
+            decoder_start_token_id=self.pad_token_id,
+            bad_words_ids=[[self.pad_token_id]],
+            max_length=512,
         )
 
     def _check_layer_entries(self):
@@ -349,12 +405,12 @@ def download_and_unzip(url, dest_dir):
     os.remove(filename)
 
 
-def main(source_dir, dest_dir):
+def convert(source_dir: Path, dest_dir):
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(exist_ok=True)
 
     add_special_tokens_to_vocab(source_dir)
-    tokenizer = MarianSentencePieceTokenizer.from_pretrained(str(source_dir))
+    tokenizer = MarianTokenizer.from_pretrained(str(source_dir))
     save_tokenizer(tokenizer, dest_dir)
 
     opus_state = OpusState(source_dir)
@@ -377,7 +433,7 @@ if __name__ == "__main__":
     source_dir = Path(args.src)
     assert source_dir.exists()
     dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
-    main(source_dir, dest_dir)
+    convert(source_dir, dest_dir)
 
 
 def load_yaml(path):

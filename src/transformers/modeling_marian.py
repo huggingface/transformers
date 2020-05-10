@@ -18,16 +18,30 @@
 from transformers.modeling_bart import BartForConditionalGeneration
 
 
-PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/pytorch_model.bin",
-}
-
-
 class MarianMTModel(BartForConditionalGeneration):
-    """Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
-    Model API is identical to BartForConditionalGeneration"""
+    r"""
+    Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
+    Model API is identical to BartForConditionalGeneration.
+    Available models are listed at `Model List <https://huggingface.co/models?search=Helsinki-NLP>`__
 
-    pretrained_model_archive_map = PRETRAINED_MODEL_ARCHIVE_MAP
+    Examples::
+
+        from transformers import MarianTokenizer, MarianMTModel
+        from typing import List
+        src = 'fr'  # source language
+        trg = 'en'  # target language
+        sample_text = "où est l'arrêt de bus ?"
+        mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'   # `Model List`__
+
+        model = MarianMTModel.from_pretrained(mname)
+        tok = MarianTokenizer.from_pretrained(mname)
+        batch = tok.prepare_translation_batch(src_texts=[sample_text])  # don't need tgt_text for inference
+        gen = model.generate(**batch)  # for forward pass: model(**batch)
+        words: List[str] = tok.decode_batch(gen, skip_special_tokens=True)  # returns "Where is the the bus stop ?"
+
+    """
+
+    pretrained_model_archive_map = {}  # see https://huggingface.co/models?search=Helsinki-NLP
 
     def prepare_scores_for_generation(self, scores, cur_len, max_length):
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
