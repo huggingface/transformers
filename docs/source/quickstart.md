@@ -33,7 +33,7 @@ A few other goals:
 
 The library is build around three types of classes for each model:
 
-- **model classes** which are PyTorch models (`torch.nn.Modules`) of the 8 models architectures currently provided in the library, e.g., `BertModel`
+- **model classes**  e.g., `BertModel` which are 20+ PyTorch models (`torch.nn.Modules`) that work with the pretrained weights provided in the library. In TF2, these are `tf.keras.Model`.
 - **configuration classes** which store all the parameters required to build a model, e.g., `BertConfig`. You don't always need to instantiate these your-self. In particular, if you are using a pretrained model without any modification, creating the model will automatically take care of instantiating the configuration (which is part of the model)
 - **tokenizer classes** which store the vocabulary for each model and provide methods for encoding/decoding strings in a list of token embeddings indices to be fed to a model, e.g., `BertTokenizer`
 
