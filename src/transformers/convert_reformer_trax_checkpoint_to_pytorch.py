@@ -93,7 +93,7 @@ def set_block_weights_in_torch(weights, torch_block, hidden_size):
         set_layer_weights_in_torch_local(attn_weights, torch_block.attention, hidden_size)
 
     # intermediate weighs
-    intermediate_weights = weights[2][0][2][2]
+    intermediate_weights = weights[2][0][1][2]
 
     # Chunked Feed Forward
     if len(intermediate_weights) == 4:
