@@ -2179,7 +2179,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         else:
             return text
 
-    def decode_batch(self, token_ids: List[List[int]], **kwargs) -> List[str]:
+    def batch_decode(self, token_ids: List[List[int]], **kwargs) -> List[str]:
         return [self.decode(ids, **kwargs) for ids in token_ids]
 
     @staticmethod
