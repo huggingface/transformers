@@ -8,21 +8,13 @@ from .utils import require_tf, require_torch, slow
 
 
 QA_FINETUNED_MODELS = [
-    (
-        ("bert-base-uncased", {"use_fast": False}),  # tokenizer
-        "sshleifer/tiny_bert-large-uncased-whole-word-masking-finetuned-squad",  # model
-        None,  # config
-    ),
-    (
-        ("distilbert-base-cased-distilled-squad", {"use_fast": False}),
-        "sshleifer/tiny_distilbert-base-cased-distilled-squad",
-        None,
-    ),
+    "sshleifer/tiny_bert-large-uncased-whole-word-masking-finetuned-squad",
+    "sshleifer/tiny_distilbert-base-cased-distilled-squad",
 ]
 
 TF_QA_FINETUNED_MODELS = [
-    (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad", None),
-    (("distilbert-base-cased-distilled-squad", {"use_fast": False}), "distilbert-base-cased-distilled-squad", None),
+    (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad"),
+    (("distilbert-base-cased-distilled-squad", {"use_fast": False}), "distilbert-base-cased-distilled-squad"),
 ]
 
 TF_NER_FINETUNED_MODELS = {
@@ -33,56 +25,28 @@ TF_NER_FINETUNED_MODELS = {
     )
 }
 
-NER_FINETUNED_MODELS = {
-    (
-        "bert-base-cased",
-        "sshleifer/tiny_dbmdz_bert-large-cased-finetuned-conll03-english",
-        "sshleifer/tiny_dbmdz_bert-large-cased-finetuned-conll03-english",
-    )
-}
+NER_FINETUNED_MODELS = ["sshleifer/tiny_dbmdz_bert-large-cased-finetuned-conll03-english",]
 
-FEATURE_EXTRACT_FINETUNED_MODELS = {
-    # ('xlnet-base-cased', 'xlnet-base-cased', None), # Disabled for now as it crash for TF2
-    ("distilbert-base-cased", "sshleifer/tiny_distilbert-base-cased", None),
-}
+FEATURE_EXTRACT_FINETUNED_MODELS = ["sshleifer/tiny_distilbert-base-cased"]
 
-TF_FEATURE_EXTRACT_FINETUNED_MODELS = {
-    # ('xlnet-base-cased', 'xlnet-base-cased', None), # Disabled for now as it crash for TF2
-    ("distilbert-base-cased", "distilbert-base-cased", None),
-}
+# xlnet-base-cased disabled for now, since it crashes for TF2
+TF_FEATURE_EXTRACT_FINETUNED_MODELS = ["distilbert-base-cased"]
 
-TF_TEXT_CLASSIF_FINETUNED_MODELS = {
-    (
-        "bert-base-uncased",
-        "distilbert-base-uncased-finetuned-sst-2-english",
-        "distilbert-base-uncased-finetuned-sst-2-english",
-    )
-}
 
-TEXT_CLASSIF_FINETUNED_MODELS = {
-    (
-        "distilbert-base-cased",
-        "sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english",
-        "sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english",
-    )
-}
+TF_TEXT_CLASSIF_FINETUNED_MODELS = ["distilbert-base-uncased-finetuned-sst-2-english"]
 
-TEXT_GENERATION_FINETUNED_MODELS = {
-    # model = tokenizer
-    "sshleifer/tiny-gpt2",
-}
+TEXT_CLASSIF_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english",]
 
-TF_TEXT_GENERATION_FINETUNED_MODELS = {
-    ("gpt2", "gpt2"),
-    ("xlnet-base-cased", "xlnet-base-cased"),
-}
+TEXT_GENERATION_FINETUNED_MODELS = ["sshleifer/tiny-gpt2",]
+
+TF_TEXT_GENERATION_FINETUNED_MODELS = ['gpt2', "xlnet-base-cased"]
 
 FILL_MASK_FINETUNED_MODELS = [
-    (("distilroberta-base", {"use_fast": False}), "sshleifer/tiny-distilroberta-base", None),
+    (("distilroberta-base", {"use_fast": False}), "sshleifer/tiny-distilroberta-base"),
 ]
 
 TF_FILL_MASK_FINETUNED_MODELS = [
-    (("distilroberta-base", {"use_fast": False}), "distilroberta-base", None),
+    (("distilroberta-base", {"use_fast": False}), "distilroberta-base"),
 ]
 
 SUMMARIZATION_FINETUNED_MODELS = {
@@ -218,8 +182,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
         mandatory_keys = {"entity", "word", "score"}
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
-        for tokenizer, model, config in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model, config=config, tokenizer=tokenizer)
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name)
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
     @require_tf
@@ -236,8 +200,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
         mandatory_keys = {"label", "score"}
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
-        for tokenizer, model, config in TEXT_CLASSIF_FINETUNED_MODELS:
-            nlp = pipeline(task="sentiment-analysis", model=model, config=config, tokenizer=tokenizer)
+        for model_name in TEXT_CLASSIF_FINETUNED_MODELS:
+            nlp = pipeline(task="sentiment-analysis", model=model_name, tokenizer=model_name)
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
     @require_tf
@@ -253,16 +217,16 @@ class MonoColumnInputTestCase(unittest.TestCase):
     def test_torch_feature_extraction(self):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
-        for tokenizer, model, config in FEATURE_EXTRACT_FINETUNED_MODELS:
-            nlp = pipeline(task="feature-extraction", model=model, config=config, tokenizer=tokenizer)
+        for model_name in FEATURE_EXTRACT_FINETUNED_MODELS:
+            nlp = pipeline(task="feature-extraction", model=model_name, tokenizer=model_name)
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
 
     @require_tf
     def test_tf_feature_extraction(self):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
-        for tokenizer, model, config in TF_FEATURE_EXTRACT_FINETUNED_MODELS:
-            nlp = pipeline(task="feature-extraction", model=model, config=config, tokenizer=tokenizer, framework="tf")
+        for model_name in TF_FEATURE_EXTRACT_FINETUNED_MODELS:
+            nlp = pipeline(task="feature-extraction", model=model_name, tokenizer=model_name, framework="tf")
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
 
     @require_torch
@@ -273,8 +237,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
             "The largest city in France is <mask>",
         ]
         invalid_inputs = [None]
-        for tokenizer, model, config in FILL_MASK_FINETUNED_MODELS:
-            nlp = pipeline(task="fill-mask", model=model, config=config, tokenizer=tokenizer, topk=2)
+        for tok_name, model_name in FILL_MASK_FINETUNED_MODELS:
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=tok_name, topk=2)
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, mandatory_keys, expected_check_keys=["sequence"],
             )
@@ -419,8 +383,8 @@ class MultiColumnInputTestCase(unittest.TestCase):
             {"question": "What is does with empty context ?", "context": None},
         ]
 
-        for tokenizer, model, config in QA_FINETUNED_MODELS:
-            nlp = pipeline(task="question-answering", model=model, config=config, tokenizer=tokenizer)
+        for model_name in QA_FINETUNED_MODELS:
+            nlp = pipeline(task="question-answering", model=model_name, tokenizer=model_name)
             self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
 
     @require_tf
@@ -441,8 +405,8 @@ class MultiColumnInputTestCase(unittest.TestCase):
             {"question": "What is does with empty context ?", "context": None},
         ]
 
-        for tokenizer, model, config in TF_QA_FINETUNED_MODELS:
-            nlp = pipeline(task="question-answering", model=model, config=config, tokenizer=tokenizer, framework="tf")
+        for tokenizer, model in TF_QA_FINETUNED_MODELS:
+            nlp = pipeline(task="question-answering", model=model,  tokenizer=tokenizer, framework="tf")
             self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
 
 
