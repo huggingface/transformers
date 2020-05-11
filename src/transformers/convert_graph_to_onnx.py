@@ -187,7 +187,7 @@ def convert(framework: str, model: str, output: str, tokenizer: Optional[str] = 
         exit(1)
 
     # Export the graph
-    if args.framework == "pt":
+    if framework == "pt":
         convert_pytorch(nlp, opset, output)
     else:
         convert_tensorflow(nlp, opset, output)
