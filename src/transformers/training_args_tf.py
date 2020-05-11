@@ -56,6 +56,8 @@ class TFTrainingArguments(TrainingArguments):
                 strategy = tf.distribute.experimental.TPUStrategy(tpu)
             elif len(gpus) == 0:
                 strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
+            elif len(gpus) == 1:
+                strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
             elif len(gpus) > 1:
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
                 strategy = tf.distribute.MirroredStrategy()
