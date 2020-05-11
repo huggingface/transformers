@@ -39,6 +39,7 @@ from .configuration_auto import (
     XLMRobertaConfig,
     XLNetConfig,
 )
+from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .modeling_albert import (
     ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -98,6 +99,7 @@ from .modeling_flaubert import (
     FlaubertWithLMHeadModel,
 )
 from .modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, GPT2LMHeadModel, GPT2Model
+from .modeling_marian import MarianMTModel
 from .modeling_openai import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_reformer import ReformerModel, ReformerModelWithLMHead
 from .modeling_roberta import (
@@ -214,6 +216,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForMaskedLM),
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
+        (MarianConfig, MarianMTModel),
         (BartConfig, BartForConditionalGeneration),
         (RobertaConfig, RobertaForMaskedLM),
         (BertConfig, BertForMaskedLM),
@@ -903,7 +906,7 @@ class AutoModelForQuestionAnswering:
         Examples::
 
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            model = AutoModelForSequenceClassification.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = AutoModelForQuestionAnswering.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.items():
             if isinstance(config, config_class):

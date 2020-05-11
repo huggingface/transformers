@@ -38,6 +38,7 @@ from .configuration_auto import (
     XLMRobertaConfig,
     XLNetConfig,
 )
+from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_bart import BartTokenizer
@@ -49,6 +50,7 @@ from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFas
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+from .tokenization_marian import MarianTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -69,6 +71,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (AlbertConfig, (AlbertTokenizer, None)),
         (CamembertConfig, (CamembertTokenizer, None)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
+        (MarianConfig, (MarianTokenizer, None)),
         (BartConfig, (BartTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, None)),
