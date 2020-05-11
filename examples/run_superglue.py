@@ -132,7 +132,7 @@ def train(args, train_dataset, model, tokenizer):
         args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
     else: # number of training steps = number of epochs * number of batches
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
-        num_warmup_steps = int(args.warmup_ratio * t_total)
+    num_warmup_steps = int(args.warmup_ratio * t_total)
 
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ["bias", "LayerNorm.weight"]
@@ -314,11 +314,11 @@ def train(args, train_dataset, model, tokenizer):
                         torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                         logger.info("\tSaved model checkpoint to %s", output_dir)
 
-            if args.max_steps > 0 and global_step > args.max_steps:
+            if args.max_steps > 0 and global_step >= args.max_steps:
                 epoch_iterator.close()
                 break
-        if args.max_steps > 0 and global_step > args.max_steps:
-            train_iterator.close()
+        if args.max_steps > 0 and global_step >= args.max_steps:
+            #train_iterator.close()
             break
 
     if args.local_rank in [-1, 0]:

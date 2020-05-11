@@ -3,7 +3,7 @@ if [ ${HOSTNAME} = "cassio.cs.nyu.edu" ]; then
     export root_ckpt_dir="${CKPTS}"
 else
     export root_data_dir="${BPROC}"
-    export root_ckpt_dir="${BCKPTS}"
+    export root_ckpt_dir="${SCKPTS}"
 fi
 
 export model_type="roberta"
@@ -20,14 +20,15 @@ function train() {
                                      --output_dir ${out_dir} --overwrite_output_dir \
                                      --model_type ${model_type} --model_name_or_path ${model} \
                                      --use_gpuid ${gpuid} --seed ${seed} \
-                                     --do_train --num_train_epochs 10 \
+                                     --do_train ${opt_len_train} \
                                      --do_eval --eval_and_save_steps ${eval_freq} \
                                      --learning_rate ${lr} \
                                      --warmup_ratio 0.06 \
                                      --weight_decay 0.01 \
                                      --per_gpu_train_batch_size 4 \
                                      --gradient_accumulation_steps ${grad_acc_steps} \
-                                     --logging_steps 100
+                                     --logging_steps 100 \
+                                     --fp16 --fp16_opt_level O2
 
 }
 
@@ -54,7 +55,7 @@ function debug() {
                                      --warmup_ratio 0.06 \
                                      --weight_decay 0.01 \
                                      --per_gpu_train_batch_size 4 \
-                                     --gradient_accumulation_steps 1 \
+                                     --gradient_accumulation_steps 2 \
                                      --logging_steps 100 \
                                      --fp16 --fp16_opt_level O2
 }
@@ -73,6 +74,8 @@ function debug_eval() {
                                      --logging_steps 100
 }
 
+
+export opt_len_train="--num_train_epochs 10"
 function boolq() { # 85.2
     export task="boolq"
     export data_dir="${root_data_dir}/mtl-sentence-representations/BoolQ"
@@ -90,6 +93,7 @@ function cb() { # 98.2/96.4 acc/f1
 }
 
 function copa() { # bad results
+    # goal: ~90.6
     export task="copa"
     export data_dir="${root_data_dir}/mtl-sentence-representations/COPA"
     #export lr=0.00003
@@ -105,12 +109,13 @@ function multirc() { # 80.1 / 48.8 F1/EM (LR 1e-5); 77.7/41.6 (LR 3e-6)
     export eval_freq=851
 }
 
-function record() { # really slowly training...
+function record() {
     export task="record"
     export data_dir="${root_data_dir}/mtl-sentence-representations/ReCoRD"
     export lr=0.00003
     export grad_acc_steps=8 
     export eval_freq=1000 # total steps (w/ bz 32): 561510 !
+    export opt_len_train="--max_steps 10000"
 }
 
 function rte() { # 85.9 acc
@@ -127,9 +132,11 @@ function wic() { # 71.3
     export lr=0.00003
     export grad_acc_steps=8
     export eval_freq=77
+    #export opt_len_train="--max_steps 5" # debugging
 }
 
 function wsc() { # 70.6 (avg acc + f1, LR 1e-5); 70.6 LR 3e-6; 60.3 LR 1e-6
+    # goal: ~89.0
     export task="wsc"
     export data_dir="${root_data_dir}/mtl-sentence-representations/WSC"
     #export lr=0.00003
@@ -166,7 +173,7 @@ fi
 #export out_dir="${root_ckpt_dir}/transformers/superglue/${model}/${task}/${dt}"
 
 # hyperparam outdirs 
-export out_dir="${root_ckpt_dir}/transformers/superglue/${model}/${task}/lr${lr}-bz${bz}-seed${seed}"
+export out_dir="${root_ckpt_dir}/transformers/superglue/${model}/${task}/lr${lr}-bz${grad_acc_steps}-seed${seed}"
 
 mkdir -p ${out_dir}
 
