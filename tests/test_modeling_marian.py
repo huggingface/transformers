@@ -197,7 +197,6 @@ class TestMarian_RU_FR(MarianIntegrationTest):
 class TestMarian_MT_EN(MarianIntegrationTest):
     src = "mt"
     tgt = "en"
-    # src_text = ["Il - Babiloniżi b'mod żbaljat ikkonkludew li l - Alla l - veru kien dgħajjef."]
     src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil - marda kerha tal - ġdiem."]
     expected_text = ["Touching gently, Jesus healed a man who was affected by the sad disease of leprosy."]
 
