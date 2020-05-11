@@ -153,13 +153,7 @@ class TFTrainer:
         """
         ckpt = tf.train.Checkpoint(optimizer=self.optimizer, model=self.model)
 
-        logger.info("Saving model in {}".format(self.args.output_dir))
-
-        path = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
-        os.makedirs(path, exist_ok=True)
-        logger.info("Saving model in {}".format(path))
-
-        self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, path, max_to_keep=max_to_keep)
+        self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, PREFIX_CHECKPOINT_DIR, max_to_keep=max_to_keep)
 
         if load_model:
             ckpt.restore(self.model.ckpt_manager.latest_checkpoint).expect_partial()
