@@ -960,7 +960,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Bert Model with a multiple choice classification head on top (a linear layer on top of
+    """Albert Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     ALBERT_START_DOCSTRING,
 )
@@ -1015,14 +1015,16 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
     Examples::
 
         import tensorflow as tf
-        from transformers import BertTokenizer, TFBertForMultipleChoice
+        from transformers import AlbertTokenizer, TFAlbertForMultipleChoice
 
-        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        model = TFBertForMultipleChoice.from_pretrained('bert-base-uncased')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-        input_ids = tf.constant([tokenizer.encode(s) for s in choices])[None, :]  # Batch size 1, 2 choices
-        outputs = model(input_ids)
-        classification_scores = outputs[0]
+        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        model = TFAlbertForMultipleChoice.from_pretrained('albert-base-v2')
+
+        example1 = ["This is a context", "Is it a context? Yes"]
+        example2 = ["This is a context", "Is it a context? No"]
+        encoding = tokenizer.batch_encode_plus([example1, example2], return_tensors='tf', truncation_strategy="only_first", pad_to_max_length=True, max_length=128)
+        outputs = model(encoding["input_ids"][None, :])
+        logits = outputs[0]
 
         """
         if isinstance(inputs, (tuple, list)):

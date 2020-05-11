@@ -671,7 +671,7 @@ class TFAutoModelWithLMHead(object):
 class TFAutoModelForMultipleChoice(object):
     r"""
         :class:`~transformers.TFAutoModelForMultipleChoice` is a generic model class
-        that will be instantiated as one of the sequence classification model classes of the library
+        that will be instantiated as one of the multiple choice model classes of the library
         when created with the `TFAutoModelForMultipleChoice.from_pretrained(pretrained_model_name_or_path)`
         class method.
 
@@ -681,11 +681,8 @@ class TFAutoModelForMultipleChoice(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: TFDistilBertForMultipleChoice (DistilBERT model)
-            - contains `roberta`: TFRobertaForMultipleChoice (RoBERTa model)
+            - contains `albert`: TFAlbertForMultipleChoice (Albert model)
             - contains `bert`: TFBertForMultipleChoice (Bert model)
-            - contains `xlnet`: TFXLNetForMultipleChoice (XLNet model)
-            - contains `xlm`: TFXLMForMultipleChoice (XLM model)
 
         This class cannot be instantiated using `__init__()` (throws an error).
     """
@@ -704,16 +701,13 @@ class TFAutoModelForMultipleChoice(object):
 
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
-                    - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
-                    - isInstance of `roberta` configuration class: RobertaModel (RoBERTa model)
+                    - isInstance of `albert` configuration class: AlbertModel (Albert model)
                     - isInstance of `bert` configuration class: BertModel (Bert model)
-                    - isInstance of `xlnet` configuration class: XLNetModel (XLNet model)
-                    - isInstance of `xlm` configuration class: XLMModel (XLM model)
 
         Examples::
 
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
-            model = AutoModelForSequenceClassification.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = AutoModelForMulitpleChoice.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.items():
             if isinstance(config, config_class):
@@ -729,7 +723,7 @@ class TFAutoModelForMultipleChoice(object):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r""" Instantiates one of the sequence classification model classes of the library
+        r""" Instantiates one of the multiple choice model classes of the library
         from a pre-trained model configuration.
 
         The `from_pretrained()` method takes care of returning the correct model class instance
@@ -738,11 +732,8 @@ class TFAutoModelForMultipleChoice(object):
 
         The model class to instantiate is selected as the first pattern matching
         in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: TFDistilBertForSequenceClassification (DistilBERT model)
-            - contains `roberta`: TFRobertaForSequenceClassification (RoBERTa model)
-            - contains `bert`: TFBertForSequenceClassification (Bert model)
-            - contains `xlnet`: TFXLNetForSequenceClassification (XLNet model)
-            - contains `xlm`: TFXLMForSequenceClassification (XLM model)
+            - contains `albert`: TFRobertaForMultiple (Albert model)
+            - contains `bert`: TFBertForMultipleChoice (Bert model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -798,13 +789,13 @@ class TFAutoModelForMultipleChoice(object):
 
         Examples::
 
-            model = TFAutoModelForSequenceClassification.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
-            model = TFAutoModelForSequenceClassification.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
-            model = TFAutoModelForSequenceClassification.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
+            model = TFAutoModelFormultipleChoice.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
+            model = TFAutoModelFormultipleChoice.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = TFAutoModelFormultipleChoice.from_pretrained('bert-base-uncased', output_attention=True)  # Update configuration during loading
             assert model.config.output_attention == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
-            model = TFAutoModelForSequenceClassification.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
+            model = TFAutoModelFormultipleChoice.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
 
         """
         config = kwargs.pop("config", None)
