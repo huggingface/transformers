@@ -229,7 +229,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 Increasing the size will add newly initialized vectors at the end
                 Reducing the size will remove vectors from the end
                 If not provided or None: return the provided token Embedding Module.
-        Return: ``torch.nn.Embeddings``
+        Return: ``Embedding layer (i.e. TFSharedEmbeddings or TFBertEmbeddings)``
             Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
         """
         if new_num_tokens is None:
