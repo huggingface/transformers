@@ -65,6 +65,7 @@ from transformers import (
 from transformers import superglue_compute_metrics as compute_metrics
 from transformers import superglue_convert_examples_to_features as convert_examples_to_features
 from transformers import superglue_tasks_num_spans as task_spans
+from transformers import superglue_tasks_metrics as task_metrics
 from transformers import superglue_output_modes as output_modes
 from transformers import superglue_processors as processors
 
@@ -162,6 +163,7 @@ def train(args, train_dataset, model, tokenizer):
         except ImportError:
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
+        logger.info("Training with fp16.")
 
     # multi-gpu training (should be after apex fp16 initialization)
     if args.n_gpu > 1:
@@ -213,6 +215,7 @@ def train(args, train_dataset, model, tokenizer):
     train_iterator = range(epochs_trained, int(args.num_train_epochs))
 
     set_seed(args)  # Added here for reproductibility
+    best_val_metric = None
     for epoch_n in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc=f"Epoch {epoch_n}", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
@@ -260,14 +263,6 @@ def train(args, train_dataset, model, tokenizer):
 
                 results = None
                 logs = {}
-                if args.evaluate_steps > 0 and global_step % args.evaluate_steps == 0 and args.local_rank == -1:
-                    # Only evaluate when single GPU otherwise metrics may not average well
-                    results = evaluate(args, model, tokenizer, use_tqdm=False)
-                    for key, value in results.items():
-                        eval_key = "eval_{}".format(key)
-                        logs[eval_key] = value
-                    logging.info(json.dumps({**logs, **{"step": global_step}}))
-
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     if (
                         args.local_rank == -1 and args.log_evaluate_during_training and results is None
@@ -288,24 +283,36 @@ def train(args, train_dataset, model, tokenizer):
                     #print(json.dumps({**logs, **{"step": global_step}}))
                     logging.info(json.dumps({**logs, **{"step": global_step}}))
 
+                if args.local_rank in [-1, 0] and args.eval_and_save_steps > 0 and global_step % args.eval_and_save_steps == 0:
+                    # evaluate
+                    results = evaluate(args, model, tokenizer, use_tqdm=False)
+                    for key, value in results.items():
+                        logs[f"eval_{key}"] = value
+                    logger.info(json.dumps({**logs, **{"step": global_step}}))
 
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                    # Save model checkpoint
-                    output_dir = os.path.join(args.output_dir, "checkpoint-{}".format(global_step))
-                    if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
-                    model_to_save = (
-                        model.module if hasattr(model, "module") else model
-                    )  # Take care of distributed/parallel training
-                    model_to_save.save_pretrained(output_dir)
-                    tokenizer.save_pretrained(output_dir)
+                    # save
+                    output_dirs = [os.path.join(args.output_dir, f"checkpoint-{global_step}")]
+                    curr_val_metric = results[task_metrics[args.task_name]]
+                    if best_val_metric is None or curr_val_metric > best_val_metric:
+                        # check if best model so far
+                        logger.info("Congratulations, best model so far!")
+                        output_dirs.append(os.path.join(args.output_dir, "checkpoint-best"))
+                        best_val_metric = curr_val_metric
 
-                    torch.save(args, os.path.join(output_dir, "training_args.bin"))
-                    logger.info("Saving model checkpoint to %s", output_dir)
-
-                    torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-                    torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
-                    logger.info("Saving optimizer and scheduler states to %s", output_dir)
+                    for output_dir in output_dirs:
+                        # in each dir, save model, tokenizer, args, optimizer, scheduler
+                        if not os.path.exists(output_dir):
+                            os.makedirs(output_dir)
+                        model_to_save = (
+                            model.module if hasattr(model, "module") else model
+                        )  # Take care of distributed/parallel training
+                        logger.info("Saving model checkpoint to %s", output_dir)
+                        model_to_save.save_pretrained(output_dir)
+                        tokenizer.save_pretrained(output_dir)
+                        torch.save(args, os.path.join(output_dir, "training_args.bin"))
+                        torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+                        torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                        logger.info("\tSaved model checkpoint to %s", output_dir)
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
@@ -589,8 +596,7 @@ def main():
 
     parser.add_argument("--log_energy_consumption", action="store_true", help="Whether to track energy consumption")
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
-    parser.add_argument("--evaluate_steps", type=int, default=500, help="Evaluate every X updates steps.")
-    parser.add_argument("--save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
+    parser.add_argument("--eval_and_save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
     parser.add_argument(
         "--eval_all_checkpoints",
         action="store_true",
@@ -761,7 +767,7 @@ def main():
             tracker.launch_impact_monitor()
 
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
-        checkpoints = [args.output_dir]
+        checkpoints = [os.path.join(args.output_dir, "checkpoint-best")]
         if args.eval_all_checkpoints:
             checkpoints = list(
                 os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
@@ -769,7 +775,7 @@ def main():
             logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
-            global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
+            global_step = checkpoint.split("-")[-1]# if len(checkpoints) > 1 else ""
             prefix = checkpoint.split("/")[-1] if checkpoint.find("checkpoint") != -1 else ""
 
             model = model_class.from_pretrained(checkpoint)

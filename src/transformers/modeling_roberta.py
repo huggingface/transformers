@@ -804,7 +804,7 @@ class RobertaForSpanClassification(BertPreTrainedModel):
         for batch_spans in spans.transpose(0, 1):
             # spans: n_spans x bz x 2 (start, end)
 
-            span_mask = torch.zeros(sequence_output.shape).to(sequence_output.device)
+            span_mask = torch.zeros_like(sequence_output)
             for batch_idx, (start, end) in enumerate(batch_spans):
                 span_mask[batch_idx, start:end+1] = 1
 

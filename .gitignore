@@ -153,3 +153,6 @@ debug.env
 
 #ctags
 tags
+
+# job runs
+*.out

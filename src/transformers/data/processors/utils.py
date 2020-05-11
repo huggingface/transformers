@@ -74,7 +74,7 @@ class SpanClassificationExample(object):
     text_a: str
     spans_a: List[Tuple[int]]
     text_b: Optional[str] = None
-    spans_a: Optional[List[Tuple[int]]] = None
+    spans_b: Optional[List[Tuple[int]]] = None
     label: Optional[str] = None
 
     def to_json_string(self):

@@ -29,4 +29,4 @@ from .processors import (
 
 
 if is_sklearn_available():
-    from .metrics import glue_compute_metrics, superglue_compute_metrics, xnli_compute_metrics
+    from .metrics import glue_compute_metrics, superglue_compute_metrics, xnli_compute_metrics, superglue_tasks_metrics

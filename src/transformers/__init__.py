@@ -59,6 +59,7 @@ from .data import (
     superglue_convert_examples_to_features,
     superglue_output_modes,
     superglue_processors,
+    superglue_tasks_metrics,
     superglue_tasks_num_labels,
     superglue_tasks_num_spans,
     is_sklearn_available,

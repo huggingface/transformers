@@ -153,10 +153,11 @@ if _has_sklearn:
                 em = int(sum([p == l for p, l in preds_and_labels]) == len(preds_and_labels))
                 ems.append(em)
 
-            return {
-                    "f1": sum(f1s) / len(f1s),
-                    "em": sum(ems) / len(ems)
-                    }
+            avg_f1 = sum(f1s) / len(f1s)
+            avg_em = sum(ems) / len(ems)
+            em_and_f1 = (avg_em + avg_f1) / 2
+            return {"f1": avg_f1, "em": avg_em, "em_and_f1": em_and_f1}
+
         elif task_name == "record":
             assert len(guids) == len(preds), "Different number of predictions and IDs!"
             qst2ans = defaultdict(list)
@@ -182,10 +183,10 @@ if _has_sklearn:
                 f1s.append(f1)
                 ems.append(em)
 
-            return {
-                    "f1": sum(f1s) / len(f1s),
-                    "em": sum(ems) / len(ems)
-                    }
+            avg_f1 = sum(f1s) / len(f1s)
+            avg_em = sum(ems) / len(ems)
+            em_and_f1 = (avg_em + avg_f1) / 2
+            return {"f1": avg_f1, "em": avg_em, "em_and_f1": em_and_f1}
 
         elif task_name == "rte":
             return {"acc": simple_accuracy(preds, labels)}
@@ -202,3 +203,15 @@ if _has_sklearn:
             return {"acc": simple_accuracy(preds, labels)}
         else:
             raise KeyError(task_name)
+
+    superglue_tasks_metrics = {
+        "boolq": "acc",
+        "cb": "acc_and_f1",
+        "copa": "acc",
+        "multirc": "em_and_f1",
+        "record": "em_and_f1",
+        "rte": "acc",
+        "wic": "acc",
+        "wsc": "acc_and_f1",
+    }
+

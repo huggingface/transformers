@@ -21,7 +21,7 @@ function train() {
                                      --model_type ${model_type} --model_name_or_path ${model} \
                                      --use_gpuid ${gpuid} --seed ${seed} \
                                      --do_train --num_train_epochs 10 \
-                                     --do_eval --evaluate_steps ${eval_freq} \
+                                     --do_eval --eval_and_save_steps ${eval_freq} \
                                      --learning_rate ${lr} \
                                      --warmup_ratio 0.06 \
                                      --weight_decay 0.01 \
@@ -36,7 +36,7 @@ function evaluate() {
                                      --output_dir ${out_dir} --overwrite_output_dir \
                                      --model_type ${model_type} --model_name_or_path ${model} \
                                      --use_gpuid ${gpuid} --seed ${seed} \
-                                     --do_eval --log_energy_consumption
+                                     --do_eval #--log_energy_consumption
 }
 
 function analyze() {
@@ -49,7 +49,22 @@ function debug() {
                                      --model_type ${model_type} --model_name_or_path ${model} \
                                      --use_gpuid ${gpuid} --seed ${seed} \
                                      --do_train --num_train_epochs 1 \
-                                     --do_eval --evaluate_steps ${eval_freq} \
+                                     --do_eval --eval_and_save_steps ${eval_freq} \
+                                     --learning_rate ${lr} \
+                                     --warmup_ratio 0.06 \
+                                     --weight_decay 0.01 \
+                                     --per_gpu_train_batch_size 4 \
+                                     --gradient_accumulation_steps 1 \
+                                     --logging_steps 100 \
+                                     --fp16 --fp16_opt_level O2
+}
+
+function debug_eval() {
+    python -m pdb examples/run_superglue.py --data_dir ${data_dir} --task_name ${task} \
+                                     --output_dir ${out_dir} --overwrite_output_dir \
+                                     --model_type ${model_type} --model_name_or_path ${model} \
+                                     --use_gpuid ${gpuid} --seed ${seed} \
+                                     --do_eval --eval_and_save_steps ${eval_freq} \
                                      --learning_rate ${lr} \
                                      --warmup_ratio 0.06 \
                                      --weight_decay 0.01 \
@@ -163,6 +178,8 @@ elif [ ${mode} == "analyze" ]; then
     analyze
 elif [ ${mode} == "debug" ]; then
     debug
+elif [ ${mode} == "debug_eval" ]; then
+    debug_eval
 else
     echo "Command ${mode} not found"
 
