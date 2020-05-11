@@ -207,7 +207,7 @@ context = torch.tensor([generated])
 past = None
 
 for i in range(100):
-    output, past = model(context, past=past, use_cache=True)
+    output, past = model(context, past=past)
     token = torch.argmax(output[..., -1, :]).view(1, 1)
     context = torch.cat((context, token), -1)
 
