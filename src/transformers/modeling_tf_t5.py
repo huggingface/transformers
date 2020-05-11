@@ -547,7 +547,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         use_cache=False,
         training=False,
     ):
-
+        logger.info(input_ids)
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -848,6 +848,15 @@ class TFT5Model(TFT5PreTrainedModel):
 
     def get_output_embeddings(self):
         return self.shared
+    
+    def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
+        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+        self.decoder.set_embed_tokens(embed_tokens)
 
     def get_encoder(self):
         return self.encoder
@@ -970,6 +979,15 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
     def get_output_embeddings(self):
         return self.shared
 
+    def set_input_embeddings(self, new_embeddings):
+        self.shared = new_embeddings
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
+        embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+        self.decoder.set_embed_tokens(embed_tokens)
+
     def get_encoder(self):
         return self.encoder
 
@@ -1037,6 +1055,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
+            logger.info('encoder')
             encoder_outputs = self.encoder(
                 input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask,
             )
@@ -1052,6 +1071,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
                 decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
 
         # Decode
+        logger.info('decoder')
         decoder_outputs = self.decoder(
             decoder_input_ids,
             attention_mask=decoder_attention_mask,
@@ -1072,8 +1092,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         sequence_output = decoder_outputs[0] * (self.model_dim ** -0.5)
         embed_tokens = self.get_output_embeddings()
         lm_logits = embed_tokens(sequence_output, mode="linear")
+            
         decoder_outputs = (lm_logits,) + decoder_outputs[1:]
-
         return decoder_outputs + encoder_outputs
 
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, **kwargs):

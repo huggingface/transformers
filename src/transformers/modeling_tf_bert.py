@@ -487,8 +487,8 @@ class TFBertMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.embeddings
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+    def set_input_embeddings(self, new_embeddings):
+        return self.embeddings.word_embeddings.assign(new_embeddings)
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
