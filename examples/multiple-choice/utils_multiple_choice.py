@@ -27,7 +27,7 @@ from typing import List, Optional
 
 import tqdm
 
-from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available, torch_distributed_zero_first
+from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
 
 
 logger = logging.getLogger(__name__)
@@ -79,67 +79,66 @@ if is_torch_available():
     from torch.utils.data.dataset import Dataset
     from transformers import torch_distributed_zero_first
 
+    class MultipleChoiceDataset(Dataset):
+        """
+        This will be superseded by a framework-agnostic approach
+        soon.
+        """
 
-class MultipleChoiceDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach
-    soon.
-    """
+        features: List[InputFeatures]
 
-    features: List[InputFeatures]
+        def __init__(
+            self,
+            data_dir: str,
+            tokenizer: PreTrainedTokenizer,
+            task: str,
+            max_seq_length: Optional[int] = None,
+            overwrite_cache=False,
+            mode: Split = Split.train,
+            local_rank=-1,
+        ):
+            processor = processors[task]()
 
-    def __init__(
-        self,
-        data_dir: str,
-        tokenizer: PreTrainedTokenizer,
-        task: str,
-        max_seq_length: Optional[int] = None,
-        overwrite_cache=False,
-        mode: Split = Split.train,
-        local_rank=-1,
-    ):
-        processor = processors[task]()
+            cached_features_file = os.path.join(
+                data_dir,
+                "cached_{}_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length), task,),
+            )
+            with torch_distributed_zero_first(local_rank):
+                # Make sure only the first process in distributed training processes the dataset,
+                # and the others will use the cache.
 
-        cached_features_file = os.path.join(
-            data_dir,
-            "cached_{}_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length), task,),
-        )
-        with torch_distributed_zero_first(local_rank):
-            # Make sure only the first process in distributed training processes the dataset,
-            # and the others will use the cache.
-
-            if os.path.exists(cached_features_file) and not overwrite_cache:
-                logger.info(f"Loading features from cached file {cached_features_file}")
-                self.features = torch.load(cached_features_file)
-            else:
-                logger.info(f"Creating features from dataset file at {data_dir}")
-                label_list = processor.get_labels()
-                if mode == Split.dev:
-                    examples = processor.get_dev_examples(data_dir)
-                elif mode == Split.test:
-                    examples = processor.get_test_examples(data_dir)
+                if os.path.exists(cached_features_file) and not overwrite_cache:
+                    logger.info(f"Loading features from cached file {cached_features_file}")
+                    self.features = torch.load(cached_features_file)
                 else:
-                    examples = processor.get_train_examples(data_dir)
-                logger.info("Training examples: %s", len(examples))
-                # TODO clean up all this to leverage built-in features of tokenizers
-                self.features = convert_examples_to_features(
-                    examples,
-                    label_list,
-                    max_seq_length,
-                    tokenizer,
-                    pad_on_left=bool(tokenizer.padding_side == "left"),
-                    pad_token=tokenizer.pad_token_id,
-                    pad_token_segment_id=tokenizer.pad_token_type_id,
-                )
-                if local_rank in [-1, 0]:
-                    logger.info("Saving features into cached file %s", cached_features_file)
-                    torch.save(self.features, cached_features_file)
+                    logger.info(f"Creating features from dataset file at {data_dir}")
+                    label_list = processor.get_labels()
+                    if mode == Split.dev:
+                        examples = processor.get_dev_examples(data_dir)
+                    elif mode == Split.test:
+                        examples = processor.get_test_examples(data_dir)
+                    else:
+                        examples = processor.get_train_examples(data_dir)
+                    logger.info("Training examples: %s", len(examples))
+                    # TODO clean up all this to leverage built-in features of tokenizers
+                    self.features = convert_examples_to_features(
+                        examples,
+                        label_list,
+                        max_seq_length,
+                        tokenizer,
+                        pad_on_left=bool(tokenizer.padding_side == "left"),
+                        pad_token=tokenizer.pad_token_id,
+                        pad_token_segment_id=tokenizer.pad_token_type_id,
+                    )
+                    if local_rank in [-1, 0]:
+                        logger.info("Saving features into cached file %s", cached_features_file)
+                        torch.save(self.features, cached_features_file)
 
-    def __len__(self):
-        return len(self.features)
+        def __len__(self):
+            return len(self.features)
 
-    def __getitem__(self, i) -> InputFeatures:
-        return self.features[i]
+        def __getitem__(self, i) -> InputFeatures:
+            return self.features[i]
 
 
 if is_tf_available():

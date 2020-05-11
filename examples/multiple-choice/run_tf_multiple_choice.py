@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 import numpy as np
-import tensorflow_datasets as tfds
 
 from transformers import (
     AutoConfig,
@@ -130,6 +129,8 @@ def main():
     # download model & vocab.
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        num_labels=num_labels,
+        finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
     )
     tokenizer = AutoTokenizer.from_pretrained(
