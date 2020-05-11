@@ -199,8 +199,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         Return: ``tf.Variable``
             Pointer to the input tokens Embeddings Module of the model
         """
-        logger.info("I am here..")
-        base_model = getattr(self, self.base_model_prefix, self)
+        #base_model = getattr(self, self.base_model_prefix, self)
+        base_model = self
         model_embeds = base_model._resize_token_embeddings(new_num_tokens)
         if new_num_tokens is None:
             return model_embeds
@@ -209,8 +209,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         self.config.vocab_size = new_num_tokens
         base_model.vocab_size = new_num_tokens
 
-        # # tie weights
-        # self.tie_weights()
         return model_embeds
     
     def _resize_token_embeddings(self, new_num_tokens):
