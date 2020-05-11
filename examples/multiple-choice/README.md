@@ -51,6 +51,3 @@ python ./examples/multiple-choice/run_tf_multiple_choice.py \
 --gradient_accumulation_steps 2 \
 --overwrite_output
 ```
-
-
-![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1X9d1TY1I7r8d3rCJ9vWiy0UgvJM6BqQ4)
