@@ -1,3 +1,4 @@
+
 # XLM-R + NER
 
 This model is a fine-tuned  [XLM-Roberta-base](https://arxiv.org/abs/1911.02116) over the 40 languages proposed in [XTREME]([https://github.com/google-research/xtreme](https://github.com/google-research/xtreme)) from [Wikiann](https://aclweb.org/anthology/P17-1178). This is still an on-going work and the results will be updated everytime an improvement is reached. 
@@ -12,6 +13,7 @@ O
 
 ## Metrics on evaluation set:
 ### Average over the 40 languages
+Number of documents: 262300
 ```
            precision    recall  f1-score   support
 
@@ -24,6 +26,7 @@ macro avg       0.86      0.87      0.87    333298
 ```
 
 ### Afrikaans
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -36,6 +39,7 @@ macro avg       0.87      0.91      0.89      1469
 ``` 
 
 ### Arabic
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -48,6 +52,7 @@ macro avg       0.87      0.88      0.88     10754
 ```
 
 ### Basque
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -60,6 +65,7 @@ macro avg       0.89      0.89      0.89     12954
 ```
 
 ### Bengali
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -72,6 +78,7 @@ macro avg       0.91      0.92      0.91      1095
 ```
 
 ### Bulgarian
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -84,6 +91,7 @@ macro avg       0.91      0.92      0.91     14116
 ```
 
 ### Burmese
+Number of documents: 100
 ```
            precision    recall  f1-score   support
 
@@ -96,6 +104,7 @@ macro avg       0.57      0.65      0.60       103
 ```
 
 ### Chinese
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -108,6 +117,7 @@ macro avg       0.76      0.78      0.77     11558
 ```
 
 ### Dutch
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -120,6 +130,7 @@ macro avg       0.91      0.92      0.91     13120
 ```
 
 ### English
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -132,6 +143,7 @@ macro avg       0.82      0.83      0.83     13973
 ```
 
 ### Estonian
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -144,6 +156,7 @@ macro avg       0.90      0.91      0.90     13558
 ```
 
 ### Finnish
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -156,6 +169,7 @@ macro avg       0.89      0.89      0.89     13930
 ```
 
 ### French
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -168,6 +182,7 @@ macro avg       0.89      0.90      0.90     12933
 ```
 
 ### Georgian
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -180,6 +195,7 @@ macro avg       0.84      0.86      0.85     12615
 ```
 
 ### German
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -192,6 +208,7 @@ macro avg       0.86      0.86      0.86     13638
 ```
 
 ### Greek
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -204,6 +221,7 @@ macro avg       0.88      0.90      0.89     12101
 ```
 
 ### Hebrew
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -216,6 +234,7 @@ macro avg       0.82      0.83      0.83     12934
 ```
 
 ### Hindi
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -228,6 +247,7 @@ macro avg       0.84      0.87      0.85      1211
 ```
 
 ### Hungarian
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -240,6 +260,7 @@ macro avg       0.91      0.92      0.91     13879
 ```
 
 ### Indonesian
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -252,6 +273,7 @@ macro avg       0.91      0.92      0.92     11376
 ```
 
 ### Italian
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -264,6 +286,7 @@ macro avg       0.90      0.90      0.90     13412
 ```
 
 ### Japanese
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -276,6 +299,7 @@ macro avg       0.69      0.72      0.70     12277
 ```
 
 ### Javanese
+Number of documents: 100
 ```
            precision    recall  f1-score   support
 
@@ -288,6 +312,7 @@ macro avg       0.78      0.82      0.80       112
 ```
 
 ### Kazakh
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -300,6 +325,7 @@ macro avg       0.81      0.83      0.81      1135
 ```
 
 ### Korean
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -312,6 +338,7 @@ macro avg       0.83      0.83      0.83     13329
 ```
 
 ### Malay
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -324,6 +351,7 @@ macro avg       0.91      0.92      0.91      1088
 ```
 
 ### Malayalam
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -336,6 +364,7 @@ macro avg       0.78      0.80      0.79      1155
 ```
 
 ### Marathi
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -348,6 +377,7 @@ macro avg       0.85      0.86      0.85      1190
 ```
 
 ### Persian
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -360,6 +390,7 @@ macro avg       0.92      0.92      0.92     10494
 ```
 
 ### Portuguese
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -372,6 +403,7 @@ macro avg       0.90      0.91      0.90     12673
 ```
 
 ### Russian
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -384,6 +416,7 @@ macro avg       0.87      0.88      0.88     12051
 ```
 
 ### Spanish
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -396,6 +429,7 @@ macro avg       0.90      0.91      0.90     12153
 ```
 
 ### Swahili
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -408,6 +442,7 @@ macro avg       0.88      0.89      0.88      1202
 ```
 
 ### Tagalog
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -420,6 +455,7 @@ macro avg       0.90      0.92      0.91      1027
 ```
 
 ### Tamil
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -432,6 +468,7 @@ macro avg       0.82      0.83      0.82      1183
 ```
 
 ### Telugu
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -444,6 +481,7 @@ macro avg       0.73      0.77      0.75      1193
 ```
 
 ### Thai
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -456,6 +494,7 @@ macro avg       0.68      0.74      0.71     14722
 ```
 
 ### Turkish
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -468,6 +507,7 @@ macro avg       0.91      0.92      0.91     13360
 ```
 
 ### Urdu
+Number of documents: 1000
 ```
            precision    recall  f1-score   support
 
@@ -480,6 +520,7 @@ macro avg       0.92      0.94      0.93      1011
 ```
 
 ### Vietnamese
+Number of documents: 10000
 ```
            precision    recall  f1-score   support
 
@@ -492,6 +533,7 @@ macro avg       0.89      0.90      0.90     11107
 ```
 
 ### Yoruba
+Number of documents: 100
 ```
            precision    recall  f1-score   support
 
@@ -504,7 +546,7 @@ macro avg       0.63      0.68      0.63       107
 ```
 
 ## Reproduce the results
-Download and prepare the dataset from the [[https://github.com/google-research/xtreme#download-the-data](https://github.com/google-research/xtreme#download-the-data)](XTREME repo). Next, from the root of the transformers repo run:
+Download and prepare the dataset from the [XTREME repo](https://github.com/google-research/xtreme#download-the-data). Next, from the root of the transformers repo run:
 ```
 cd examples/ner
 python run_tf_ner.py \
@@ -533,8 +575,9 @@ nlp_ner = pipeline(
     model="jplu/tf-xlm-r-ner-40-lang",
     tokenizer=(
         'jplu/tf-xlm-r-ner-40-lang',  
-        {"use_fast": True}
-))
+        {"use_fast": True}),
+    framework="tf"
+)
 
 text_fr = "Barack Obama est né à Hawaï."
 text_en = "Barack Obama was born in Hawaii."
