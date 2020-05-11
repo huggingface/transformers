@@ -187,7 +187,7 @@ class TestMarian_RU_FR(MarianIntegrationTest):
     src = "ru"
     tgt = "fr"
     src_text = ["Он показал мне рукопись своей новой пьесы."]
-    expected_text = ["Il me montre un manuscrit de sa nouvelle pièce."]
+    expected_text = ["Il m'a montré le manuscrit de sa nouvelle pièce."]
 
     @slow
     def test_batch_generation_ru_fr(self):
@@ -197,10 +197,10 @@ class TestMarian_RU_FR(MarianIntegrationTest):
 class TestMarian_MT_EN(MarianIntegrationTest):
     src = "mt"
     tgt = "en"
-    src_text = ["Il - Babiloniżi b'mod żbaljat ikkonkludew li l - Alla l - veru kien dgħajjef."]
-    expected_text = ["The Babylonians wrongly concluded that the true God was weak."]
+    # src_text = ["Il - Babiloniżi b'mod żbaljat ikkonkludew li l - Alla l - veru kien dgħajjef."]
+    src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil - marda kerha tal - ġdiem."]
+    expected_text = ["Touching gently, Jesus healed a man who was affected by the sad disease of leprosy."]
 
-    @unittest.skip("")  # Known Issue: This model generates a string of .... at the end of the translation.
     def test_batch_generation_mt_en(self):
         self._assert_generated_batch_equal_expected()
 
@@ -210,11 +210,7 @@ class TestMarian_DE_Multi(MarianIntegrationTest):
     tgt = "ch_group"
     src_text = ["Er aber sprach: Das ist die Gottlosigkeit."]
 
-    @slow
-    def test_translation_de_multi_does_not_error(self):
-        self.translate_src_text()
-
-    @unittest.skip("")  # "Language codes are not yet supported."
+    @unittest.skip("")  # Known Issue: This model generates a string of .... at the end of the translation.
     def test_batch_generation_de_multi_tgt(self):
         self._assert_generated_batch_equal_expected()
 

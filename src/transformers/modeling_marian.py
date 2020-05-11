@@ -43,7 +43,8 @@ class MarianMTModel(BartForConditionalGeneration):
 
     pretrained_model_archive_map = {}  # see https://huggingface.co/models?search=Helsinki-NLP
 
-    def prepare_scores_for_generation(self, scores, cur_len, max_length):
+    def prepare_logits_for_generation(self, logits, cur_len, max_length):
+        logits[:, self.config.pad_token_id] = float("-inf")
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
-            self._force_token_ids_generation(scores, self.config.eos_token_id)
-        return scores
+            self._force_token_ids_generation(logits, self.config.eos_token_id)
+        return logits
