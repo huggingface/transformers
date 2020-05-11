@@ -207,13 +207,11 @@ context = torch.tensor([generated])
 past = None
 
 for i in range(100):
-    print(i)
-    output, past = model(context, past=past)
-    token = torch.argmax(output[..., -1, :])
+    output, past = model(context, past=past, use_cache=True)
+    token = torch.argmax(output[..., -1, :]).view(1, 1)
+    context = torch.cat((context, token), -1)
 
-    generated += [token.tolist()]
-    context = token.unsqueeze(0)
-
+generated = context.tolist()[0]
 sequence = tokenizer.decode(generated)
 
 print(sequence)
