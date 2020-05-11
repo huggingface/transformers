@@ -21,9 +21,9 @@ import tempfile
 import unittest
 from importlib import import_module
 
-from transformers import is_tf_available, is_torch_available
+from transformers import is_tf_available
 
-from .utils import _tf_gpu_memory_limit, require_tf
+from .utils import _tf_gpu_memory_limit, require_tf, require_torch
 
 
 if is_tf_available():
@@ -134,10 +134,8 @@ class TFModelTesterMixin:
         max_diff = np.amax(np.abs(out_1 - out_2))
         self.assertLessEqual(max_diff, 1e-5)
 
+    @require_torch
     def test_pt_tf_model_equivalence(self):
-        if not is_torch_available():
-            return
-
         import torch
         import transformers
 

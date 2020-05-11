@@ -12,7 +12,8 @@ jobs:
             - checkout
             - run: sudo pip install .[sklearn,tf-cpu,torch,testing]
             - run: sudo pip install codecov pytest-cov
-            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/ --cov
+            - run: python -m pytest -n 8 --dist=loadfile -s -v ./tests/test_modeling_tf* -k model_equivalence --cov
+            - run: python -m pytest -sv ./tests/ -k batch_encode_plus_tensors --cov
             - run: codecov
 
     run_tests_torch:
