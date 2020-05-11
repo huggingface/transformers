@@ -1,11 +1,21 @@
 from argparse import ArgumentParser
+from itertools import takewhile
 from os import listdir, makedirs
 from os.path import abspath, dirname, exists
 from typing import Dict, List, Optional, Tuple
 
-from transformers import is_tf_available, is_torch_available
+from transformers import is_tf_available, is_torch_available, GPT2Model
 from transformers.pipelines import Pipeline, pipeline
 from transformers.tokenization_utils import BatchEncoding
+
+
+# Some models require some special handling of their inputs
+SPECIAL_MODEL_ARGS_FILTERING = {
+    "GPT2Model": {
+        "insert": (None, 2)
+    },
+
+}
 
 
 class OnnxConverterArgumentParser(ArgumentParser):
@@ -24,17 +34,44 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument("output")
 
 
+def ensure_valid_input(model, tokens, input_names):
+    """
+    Ensure input are presented in the correct order, without any None
+    Args:
+        model: The model used to forward the input data
+        tokens: BatchEncoding holding the input data
+        input_names: The name of the inputs
+
+    Returns: Tuple
+
+    """
+    model_args_name = model.forward.__code__.co_varnames
+    model_args_pos = [(model_args_name.index(name) - 1, name) for name in input_names]
+    model_args = [None] * (max(map(lambda x: x[0], model_args_pos)) + 1)
+
+    for arg_pos, arg_name in model_args_pos:
+        model_args[arg_pos] = tokens[arg_name]
+
+    model_args = tuple(model_args)  # Need to be ordered
+    return tuple(takewhile(lambda arg: arg is not None, model_args))
+
+
 def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], Dict, BatchEncoding]:
     def build_shape_dict(tensor, is_input: bool, seq_len: int):
-        axes = {0: "batch"}
-        if is_input:
-            if len(tensor.shape) == 2:
-                axes[1] = "sequence"
-            else:
-                raise ValueError("Unable to infer tensor axes ({})".format(len(tensor.shape)))
+        if isinstance(tensor, (tuple, list)):
+            return [build_shape_dict(t, is_input, seq_len) for t in tensor]
+
         else:
-            seq_axes = [dim for dim, shape in enumerate(tensor.shape) if shape == seq_len]
-            axes.update({dim: "sequence" for dim in seq_axes})
+            # Let's assume batch is the first axis with only 1 element (~~ might not be always true ...)
+            axes = {[axis for axis, numel in enumerate(tensor.shape) if numel == 1][0]: "batch"}
+            if is_input:
+                if len(tensor.shape) == 2:
+                    axes[1] = "sequence"
+                else:
+                    raise ValueError("Unable to infer tensor axes ({})".format(len(tensor.shape)))
+            else:
+                seq_axes = [dim for dim, shape in enumerate(tensor.shape) if shape == seq_len]
+                axes.update({dim: "sequence" for dim in seq_axes})
 
         return axes
 
@@ -45,13 +82,23 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
     if not isinstance(outputs, (list, tuple)):
         outputs = (outputs,)
 
-    # Generate names
-    output_names = ["output_{}".format(i) for i in range(len(outputs))]
+    # Generate input names & axes
     input_vars = list(tokens.keys())
-
-    # Define dynamic axes
     input_dynamic_axes = {k: build_shape_dict(v, True, seq_len) for k, v in tokens.items()}
-    output_dynamic_axes = {k: build_shape_dict(v, False, seq_len) for k, v in zip(output_names, outputs)}
+
+    # flatten potentially grouped outputs (past for gpt2, attentions)
+    outputs_flat = []
+    for output in outputs:
+        if isinstance(output, (tuple, list)):
+            outputs_flat.extend(output)
+        else:
+            outputs_flat.append(output)
+
+    # Generate output names & axes
+    output_names = ["output_{}".format(i) for i in range(len(outputs_flat))]
+    output_dynamic_axes = {k: build_shape_dict(v, False, seq_len) for k, v in zip(output_names, outputs_flat)}
+
+    # Create the aggregated axes representation
     dynamic_axes = dict(input_dynamic_axes, **output_dynamic_axes)
     return input_vars, output_names, dynamic_axes, tokens
 
@@ -79,10 +126,11 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: str):
 
     with torch.no_grad():
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "pt")
-        tokens = tuple(tokens[key] for key in input_names)  # Need to be ordered
+        model_args = ensure_valid_input(nlp.model, tokens, input_names)
+
         export(
             nlp.model,
-            tokens,
+            model_args,
             f=output,
             input_names=input_names,
             output_names=output_names,
