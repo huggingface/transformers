@@ -106,7 +106,7 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
 def load_graph_from_args(framework: str, model: str, tokenizer: Optional[str] = None) -> Pipeline:
     # If no tokenizer provided
     if tokenizer is None:
-        tokenizer = args.model
+        tokenizer = model
 
     print("Loading pipeline (model: {}, tokenizer: {})".format(model, tokenizer))
 
