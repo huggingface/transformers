@@ -209,7 +209,11 @@ class TestMarian_DE_Multi(MarianIntegrationTest):
     tgt = "ch_group"
     src_text = ["Er aber sprach: Das ist die Gottlosigkeit."]
 
-    @unittest.skip("")  # Known Issue: This model generates a string of .... at the end of the translation.
+    @slow
+    def test_translation_de_multi_does_not_error(self):
+        self.translate_src_text()
+
+    @unittest.skip("")  # "Language codes are not yet supported."
     def test_batch_generation_de_multi_tgt(self):
         self._assert_generated_batch_equal_expected()
 
