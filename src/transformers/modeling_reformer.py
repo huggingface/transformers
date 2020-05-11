@@ -36,7 +36,8 @@ from .modeling_utils import PreTrainedModel, apply_chunking_to_forward
 logger = logging.getLogger(__name__)
 
 REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "google/reformer-crime-and-punishment": "https://cdn.huggingface.co/google/reformer-crime-and-punishment/pytorch_model.bin"
+    "google/reformer-crime-and-punishment": "https://cdn.huggingface.co/google/reformer-crime-and-punishment/pytorch_model.bin",
+    "google/reformer-enwik8": "https://cdn.huggingface.co/google/reformer-enwik8/pytorch_model.bin",
 }
 
 
