@@ -725,3 +725,14 @@ Here is an example doing translation using a model and a tokenizer. The process 
     outputs = model.generate(inputs, max_length=40, num_beams=4, early_stopping=True)
 
     print(outputs)
+Text Generation
+----------------------------------------------------
+
+In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a continuation from the given context. As an example, is it shown how *GPT-2* can be used in pipelines to generate text. As a default all models apply *Top-K* sampling when used in pipelines as configured in their respective configurations (see `gpt-2 config <https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json>_` for example).
+
+::
+
+    from transformers import pipeline
+
+    text_generator = pipeline("text-generation")
+    print(text_generator("Today, I will", max_length=50))
