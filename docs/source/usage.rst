@@ -728,11 +728,77 @@ Here is an example doing translation using a model and a tokenizer. The process 
 Text Generation
 ----------------------------------------------------
 
-In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a continuation from the given context. As an example, is it shown how *GPT-2* can be used in pipelines to generate text. As a default all models apply *Top-K* sampling when used in pipelines as configured in their respective configurations (see `gpt-2 config <https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json>_` for example).
+In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a continuation from the given context. As an example, is it shown how *GPT-2* can be used in pipelines to generate text. As a default all models apply *Top-K* sampling when used in pipelines as configured in their respective configurations (see `gpt-2 config <https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json>`_ for example).
 
 ::
 
     from transformers import pipeline
 
     text_generator = pipeline("text-generation")
-    print(text_generator("Today, I will", max_length=50))
+    print(text_generator("As far as I am concerned, I will", max_length=50))
+
+
+Here the model generates a random text with a total maximal length of *50* tokens from context *"As far as I am concerned, I will"*.
+The default arguments of ``PreTrainedModel.generate()`` can directly be overriden in the pipeline as is shown above for the argument ``max_length``.
+
+Here is an example for text generation using XLNet and its tokenzier. 
+
+::
+
+    ## PYTORCH CODE
+    from transformers import AutoModelWithLMHead, AutoTokenizer
+
+    model = AutoModelWithLMHead.from_pretrained("xlnet-base-cased")
+    tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
+
+    # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
+    PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+    (except for Alexei and Maria) are discovered.
+    The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+    remainder of the story. 1883 Western Siberia,
+    a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+    Rasputin has a vision and denounces one of the men as a horse thief. Although his
+    father initially slaps him for making such an accusation, Rasputin watches as the
+    man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+    the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+    with people, even a bishop, begging for his blessing. <eod> </s> <eos>""" 
+
+    prompt = "Today the weather is really nice and I am planning on "
+    inputs = tokenizer.encode(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="pt")
+    
+    prompt_length = len(tokenizer.decode(inputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
+    outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
+    generated = prompt + tokenizer.decode(outputs[0])[prompt_length:]
+
+    print(generated)
+    ## TENSORFLOW CODE
+    from transformers import TFAutoModelWithLMHead, AutoTokenizer
+
+    model = TFAutoModelWithLMHead.from_pretrained("xlnet-base-cased")
+    tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
+
+    # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
+    PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+    (except for Alexei and Maria) are discovered.
+    The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+    remainder of the story. 1883 Western Siberia,
+    a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+    Rasputin has a vision and denounces one of the men as a horse thief. Although his
+    father initially slaps him for making such an accusation, Rasputin watches as the
+    man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+    the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+    with people, even a bishop, begging for his blessing. <eod> </s> <eos>""" 
+
+    prompt = "Today the weather is really nice and I am planning on "
+    inputs = tokenizer.encode(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="tf")
+
+    prompt_length = len(tokenizer.decode(inputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
+    outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
+    generated = prompt + tokenizer.decode(outputs[0])[prompt_length:]
+
+    print(generated)
+
+Text generation is currently possible with *GPT-2*, *OpenAi-GPT*, *CTRL*, *XLNet*, *Transfo-XL* and *Reformer* in PyTorch and for most models in Tensorflow as well. As can be seen in the example above *XLNet* and *Transfo-xl* often need to be padded to work well.
+GPT-2 is usually a good choice for *open-ended text generation* given that it was trained on millions on webpages on a causal language modeling objective.
+
+For more information on how to apply different decoding strategies for text generation, please also refer to our generation blog post `here <https://huggingface.co/blog/how-to-generate>`_.
