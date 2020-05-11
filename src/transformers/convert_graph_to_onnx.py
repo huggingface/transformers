@@ -164,8 +164,9 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: str):
         save_model(onnx_model, output)
 
     except ImportError as e:
-        print("Cannot import {} required to convert TF model to ONNX. Please install {} first.".format(e.name, e.name))
-        exit(1)
+        raise Exception(
+            "Cannot import {} required to convert TF model to ONNX. Please install {} first.".format(e.name, e.name)
+        )
 
 
 def convert(framework: str, model: str, output: str, tokenizer: Optional[str] = None, opset: int = -1):
@@ -183,8 +184,7 @@ def convert(framework: str, model: str, output: str, tokenizer: Optional[str] = 
         print("Creating folder {}".format(parent))
         makedirs(parent)
     elif len(listdir(parent)) > 0:
-        print("Folder {} is not empty, aborting conversion".format(parent))
-        exit(1)
+        raise Exception("Folder {} is not empty, aborting conversion".format(parent))
 
     # Export the graph
     if framework == "pt":
@@ -214,9 +214,13 @@ if __name__ == "__main__":
     # Make sure output is absolute path
     args.output = abspath(args.output)
 
-    # Convert
-    convert(args.framework, args.model, args.tokenizer, args.opset, args.output)
+    try:
+        # Convert
+        convert(args.framework, args.model, args.tokenizer, args.opset, args.output)
 
-    # And verify
-    if args.check_loading:
-        verify(args.output)
+        # And verify
+        if args.check_loading:
+            verify(args.output)
+    except Exception as e:
+        print("Error while converting the model: {}".format(e))
+        exit(1)
