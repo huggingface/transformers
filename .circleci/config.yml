@@ -123,6 +123,7 @@ workflows:
         jobs:
             - check_code_quality
             - check_repository_consistency
+            - run_tests_torch_and_tf
             - run_examples_torch
             - run_tests_custom_tokenizers
             - run_tests_torch
