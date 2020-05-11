@@ -103,15 +103,15 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
     return input_vars, output_names, dynamic_axes, tokens
 
 
-def load_graph_from_args(task: str, framework: str, model: str, tokenizer: Optional[str] = None) -> Pipeline:
+def load_graph_from_args(framework: str, model: str, tokenizer: Optional[str] = None) -> Pipeline:
     # If no tokenizer provided
     if tokenizer is None:
         tokenizer = args.model
 
-    print("Loading pipeline (task: {}, model: {}, tokenizer: {})".format(task, model, tokenizer))
+    print("Loading pipeline (model: {}, tokenizer: {})".format(model, tokenizer))
 
     # Allocate tokenizer and model
-    return pipeline(task, model=model, framework=framework)
+    return pipeline("feature-extraction", model=model, framework=framework)
 
 
 def convert_pytorch(nlp: Pipeline, opset: int, output: str):
@@ -168,7 +168,7 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: str):
         exit(1)
 
 
-def convert(task: str, framework: str, model: str, tokenizer: Optional[str], opset: int, output: str):
+def convert(framework: str, model: str, output: str, tokenizer: Optional[str] = None, opset: int = -1):
     if opset == -1:
         from onnx.defs import onnx_opset_version
 
@@ -176,7 +176,7 @@ def convert(task: str, framework: str, model: str, tokenizer: Optional[str], ops
         opset = onnx_opset_version()
 
     # Load the pipeline
-    nlp = load_graph_from_args(task, framework, model, tokenizer)
+    nlp = load_graph_from_args(framework, model, tokenizer)
 
     parent = dirname(output)
     if not exists(parent):
@@ -215,7 +215,7 @@ if __name__ == "__main__":
     args.output = abspath(args.output)
 
     # Convert
-    convert("feature-extraction", args.framework, args.model, args.tokenizer, args.opset, args.output)
+    convert(args.framework, args.model, args.tokenizer, args.opset, args.output)
 
     # And verify
     if args.check_loading:
