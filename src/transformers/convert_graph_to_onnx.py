@@ -4,7 +4,7 @@ from os.path import abspath, dirname, exists
 from typing import Dict, List, Optional, Tuple
 
 from transformers import is_tf_available, is_torch_available
-from transformers.pipelines import SUPPORTED_TASKS, Pipeline, pipeline
+from transformers.pipelines import Pipeline, pipeline
 from transformers.tokenization_utils import BatchEncoding
 
 
@@ -18,7 +18,6 @@ class OnnxConverterArgumentParser(ArgumentParser):
 
         self.add_argument("--model", type=str, required=True, help="Model's id or path (ex: bert-base-cased)")
         self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: bert-base-cased)")
-        self.add_argument("--task", type=str, default=None, choices=list(SUPPORTED_TASKS.keys()), help="Model's task")
         self.add_argument("--framework", type=str, choices=["pt", "tf"], help="Framework for loading the model")
         self.add_argument("--opset", type=int, default=-1, help="ONNX opset to use (-1 = latest)")
         self.add_argument("--check-loading", action="store_true", help="Check ONNX is able to load the model")
@@ -168,7 +167,7 @@ if __name__ == "__main__":
     args.output = abspath(args.output)
 
     # Convert
-    convert(args.task, args.framework, args.model, args.tokenizer, args.opset, args.output)
+    convert("feature-extraction", args.framework, args.model, args.tokenizer, args.opset, args.output)
 
     # And verify
     if args.check_loading:
