@@ -2438,7 +2438,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             )
 
         # Needed if we have to return a tensor
-        pad_to_max_length = pad_to_max_length or (return_tensors is not None)
+        pad_to_max_length = pad_to_max_length or (return_tensors is not None and len(batch_text_or_text_pairs) > 1)
 
         # Throw an error if we can pad because there is no padding token
         if pad_to_max_length and self.pad_token_id is None:

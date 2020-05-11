@@ -6,7 +6,7 @@ import re
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -20,7 +20,8 @@ from tqdm.auto import tqdm, trange
 from .data.data_collator import DataCollator, DefaultDataCollator
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .training_args import TrainingArguments
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
+from .training_args import TrainingArguments, is_tpu_available
 
 
 try:
@@ -34,6 +35,11 @@ except ImportError:
 def is_apex_available():
     return _has_apex
 
+
+if is_tpu_available():
+    import torch_xla.core.xla_model as xm
+    import torch_xla.debug.metrics as met
+    import torch_xla.distributed.parallel_loader as pl
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -87,28 +93,10 @@ def torch_distributed_zero_first(local_rank: int):
         torch.distributed.barrier()
 
 
-class EvalPrediction(NamedTuple):
-    """
-    Evaluation output (always contains labels), to be used
-    to compute metrics.
-    """
-
-    predictions: np.ndarray
-    label_ids: np.ndarray
-
-
-class PredictionOutput(NamedTuple):
-    predictions: np.ndarray
-    label_ids: Optional[np.ndarray]
-    metrics: Optional[Dict[str, float]]
-
-
-class TrainOutput(NamedTuple):
-    global_step: int
-    training_loss: float
-
-
-PREFIX_CHECKPOINT_DIR = "checkpoint"
+def get_tpu_sampler(dataset: Dataset):
+    if xm.xrt_world_size() <= 1:
+        return RandomSampler(dataset)
+    return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
 
 
 class Trainer:
@@ -125,6 +113,7 @@ class Trainer:
     compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None
     prediction_loss_only: bool
     tb_writer: Optional["SummaryWriter"] = None
+    optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None
 
     def __init__(
         self,
@@ -136,6 +125,7 @@ class Trainer:
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         prediction_loss_only=False,
         tb_writer: Optional["SummaryWriter"] = None,
+        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None,
     ):
         """
         Trainer is a simple but feature-complete training and eval loop for PyTorch,
@@ -155,6 +145,7 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
         self.prediction_loss_only = prediction_loss_only
+        self.optimizers = optimizers
         if tb_writer is not None:
             self.tb_writer = tb_writer
         elif is_tensorboard_available() and self.args.local_rank in [-1, 0]:
@@ -169,44 +160,87 @@ class Trainer:
             )
         set_seed(self.args.seed)
         # Create output directory if needed
-        if self.args.local_rank in [-1, 0]:
+        if self.is_local_master():
             os.makedirs(self.args.output_dir, exist_ok=True)
+        if is_tpu_available():
+            # Set an xla_device flag on the model's config.
+            # We'll find a more elegant and not need to do this in the future.
+            self.model.config.xla_device = True
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
-        train_sampler = (
-            RandomSampler(self.train_dataset) if self.args.local_rank == -1 else DistributedSampler(self.train_dataset)
-        )
-        return DataLoader(
+        if is_tpu_available():
+            train_sampler = get_tpu_sampler(self.train_dataset)
+        else:
+            train_sampler = (
+                RandomSampler(self.train_dataset)
+                if self.args.local_rank == -1
+                else DistributedSampler(self.train_dataset)
+            )
+
+        data_loader = DataLoader(
             self.train_dataset,
             batch_size=self.args.train_batch_size,
             sampler=train_sampler,
             collate_fn=self.data_collator.collate_batch,
         )
 
+        if is_tpu_available():
+            data_loader = pl.ParallelLoader(data_loader, [self.args.device]).per_device_loader(self.args.device)
+
+        return data_loader
+
     def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
         if eval_dataset is None and self.eval_dataset is None:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
-        return DataLoader(
-            eval_dataset if eval_dataset is not None else self.eval_dataset,
+
+        eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+
+        sampler = get_tpu_sampler(eval_dataset) if is_tpu_available() else None
+
+        data_loader = DataLoader(
+            eval_dataset,
+            sampler=sampler,
             batch_size=self.args.eval_batch_size,
             shuffle=False,
             collate_fn=self.data_collator.collate_batch,
         )
 
+        if is_tpu_available():
+            data_loader = pl.ParallelLoader(data_loader, [self.args.device]).per_device_loader(self.args.device)
+
+        return data_loader
+
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
         # We use the same batch_size as for eval.
-        return DataLoader(
+        sampler = get_tpu_sampler(test_dataset) if is_tpu_available() else None
+
+        data_loader = DataLoader(
             test_dataset,
+            sampler=sampler,
             batch_size=self.args.eval_batch_size,
             shuffle=False,
             collate_fn=self.data_collator.collate_batch,
         )
+
+        if is_tpu_available():
+            data_loader = pl.ParallelLoader(data_loader, [self.args.device]).per_device_loader(self.args.device)
+
+        return data_loader
 
     def get_optimizers(
         self, num_training_steps: int
     ) -> Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]:
+        """
+        Setup the optimizer and the learning rate scheduler.
+
+        We provide a reasonable default that works well.
+        If you want to use something else, you can pass a tuple in the Trainer's init,
+        or override this method in a subclass.
+        """
+        if self.optimizers is not None:
+            return self.optimizers
         # Prepare optimizer and schedule (linear warmup and decay)
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
@@ -235,6 +269,16 @@ class Trainer:
         # keep track of model topology and gradients
         wandb.watch(self.model)
 
+    def num_examples(self, dataloader: Union[DataLoader, "pl.PerDeviceLoader"]) -> int:
+        """
+        Helper to get num of examples from a DataLoader, by accessing its Dataset.
+        """
+        if is_tpu_available():
+            assert isinstance(dataloader, pl.PerDeviceLoader)
+            return len(dataloader._loader._loader.dataset)
+        else:
+            return len(dataloader.dataset)
+
     def train(self, model_path: Optional[str] = None):
         """
         Main training entry point.
@@ -245,7 +289,6 @@ class Trainer:
                 If present, we will try reloading the optimizer/scheduler states from there.
         """
         train_dataloader = self.get_train_dataloader()
-
         if self.args.max_steps > 0:
             t_total = self.args.max_steps
             num_train_epochs = (
@@ -294,16 +337,19 @@ class Trainer:
             self._setup_wandb()
 
         # Train!
+        if is_tpu_available():
+            total_train_batch_size = self.args.train_batch_size * xm.xrt_world_size()
+        else:
+            total_train_batch_size = (
+                self.args.train_batch_size
+                * self.args.gradient_accumulation_steps
+                * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
+            )
         logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", len(train_dataloader.dataset))
+        logger.info("  Num examples = %d", self.num_examples(train_dataloader))
         logger.info("  Num Epochs = %d", num_train_epochs)
-        logger.info("  Instantaneous batch size per GPU = %d", self.args.per_gpu_train_batch_size)
-        logger.info(
-            "  Total train batch size (w. parallel, distributed & accumulation) = %d",
-            self.args.train_batch_size
-            * self.args.gradient_accumulation_steps
-            * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1),
-        )
+        logger.info("  Instantaneous batch size per device = %d", self.args.per_gpu_train_batch_size)
+        logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", total_train_batch_size)
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", t_total)
 
@@ -332,10 +378,10 @@ class Trainer:
         logging_loss = 0.0
         model.zero_grad()
         train_iterator = trange(
-            epochs_trained, int(num_train_epochs), desc="Epoch", disable=self.args.local_rank not in [-1, 0],
+            epochs_trained, int(num_train_epochs), desc="Epoch", disable=not self.is_local_master()
         )
         for epoch in train_iterator:
-            epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=self.args.local_rank not in [-1, 0])
+            epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master())
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
@@ -355,12 +401,16 @@ class Trainer:
                     else:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
-                    optimizer.step()
+                    if is_tpu_available():
+                        xm.optimizer_step(optimizer)
+                    else:
+                        optimizer.step()
+
                     scheduler.step()
                     model.zero_grad()
                     global_step += 1
 
-                    if self.args.local_rank in [-1, 0]:
+                    if self.is_local_master():
                         if (self.args.logging_steps > 0 and global_step % self.args.logging_steps == 0) or (
                             global_step == 1 and self.args.logging_first_step
                         ):
@@ -394,6 +444,7 @@ class Trainer:
                                 assert model is self.model
                             # Save model checkpoint
                             output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{global_step}")
+
                             self.save_model(output_dir)
                             self._rotate_checkpoints()
                             torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
@@ -406,6 +457,9 @@ class Trainer:
             if self.args.max_steps > 0 and global_step > self.args.max_steps:
                 train_iterator.close()
                 break
+            if self.args.tpu_metrics_debug:
+                # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
+                xm.master_print(met.metrics_report())
 
         if self.tb_writer:
             self.tb_writer.close()
@@ -436,12 +490,21 @@ class Trainer:
 
         return loss.item()
 
+    def is_local_master(self) -> bool:
+        if is_tpu_available():
+            return xm.is_master_ordinal(local=True)
+        else:
+            return self.args.local_rank in [-1, 0]
+
     def is_world_master(self) -> bool:
         """
         This will be True only in one process, even in distributed mode,
         even when training on multiple machines.
         """
-        return self.args.local_rank == -1 or torch.distributed.get_rank() == 0
+        if is_tpu_available():
+            return xm.is_master_ordinal(local=False)
+        else:
+            return self.args.local_rank == -1 or torch.distributed.get_rank() == 0
 
     def save_model(self, output_dir: Optional[str] = None):
         """
@@ -518,6 +581,11 @@ class Trainer:
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
         output = self._prediction_loop(eval_dataloader, description="Evaluation")
+
+        if self.args.tpu_metrics_debug:
+            # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
+            xm.master_print(met.metrics_report())
+
         return output.metrics
 
     def predict(self, test_dataset: Dataset) -> PredictionOutput:
@@ -548,9 +616,13 @@ class Trainer:
             model = self.model
         model.to(self.args.device)
 
+        if is_tpu_available():
+            batch_size = dataloader._loader._loader.batch_size
+        else:
+            batch_size = dataloader.batch_size
         logger.info("***** Running %s *****", description)
-        logger.info("  Num examples = %d", len(dataloader.dataset))
-        logger.info("  Batch size = %d", dataloader.batch_size)
+        logger.info("  Num examples = %d", self.num_examples(dataloader))
+        logger.info("  Batch size = %d", batch_size)
         eval_losses: List[float] = []
         preds: np.ndarray = None
         label_ids: np.ndarray = None
@@ -580,6 +652,11 @@ class Trainer:
                         label_ids = inputs["labels"].detach().cpu().numpy()
                     else:
                         label_ids = np.append(label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
+
+        if is_tpu_available():
+            # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
+            preds = xm.mesh_reduce("eval_preds", preds, np.concatenate)
+            label_ids = xm.mesh_reduce("eval_out_label_ids", label_ids, np.concatenate)
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))

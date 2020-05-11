@@ -107,3 +107,5 @@ The library currently contains PyTorch and Tensorflow implementations, pre-train
     model_doc/t5
     model_doc/electra
     model_doc/dialogpt
+    model_doc/reformer
+    model_doc/marian
