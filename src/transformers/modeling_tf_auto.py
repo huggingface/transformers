@@ -668,7 +668,7 @@ class TFAutoModelWithLMHead(object):
         )
 
 
-class TFAutoModelForMultipleChoice(object):
+class TFAutoModelForMultipleChoice:
     r"""
         :class:`~transformers.TFAutoModelForMultipleChoice` is a generic model class
         that will be instantiated as one of the multiple choice model classes of the library
