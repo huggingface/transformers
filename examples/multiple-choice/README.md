@@ -31,7 +31,7 @@ eval_loss = 0.44457291918821606
 ```
 
 
-##Tensorflow
+## Tensorflow
 
 ```bash
 export SWAG_DIR=/path/to/swag_data_dir
@@ -52,5 +52,5 @@ python ./examples/multiple-choice/run_tf_multiple_choice.py \
 --overwrite_output
 ```
 
-#Run it in colab
+# Run it in colab
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ViktorAlm/notebooks/blob/master/MPC_GPU_Demo_for_TF_and_PT.ipynb)
