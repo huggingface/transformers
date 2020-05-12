@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - master
+    paths: 
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
   # pull_request:
   repository_dispatch:
 
