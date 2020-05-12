@@ -168,12 +168,15 @@ def main():
         )
 
     # Get datasets
-    if not data_args.data_dir and data_args.version_2_with_negative:
-        logger.warn("tensorflow_datasets does not handle version 2 of SQuAD. Switch to version 1 automatically")
+    if not data_args.data_dir:
+        if data_args.version_2_with_negative:
+            logger.warn("tensorflow_datasets does not handle version 2 of SQuAD. Switch to version 1 automatically")
+
         try:
             import tensorflow_datasets as tfds
         except ImportError:
             raise ImportError("If not data_dir is specified, tensorflow_datasets needs to be installed.")
+
         tfds_examples = tfds.load("squad")
         train_examples = SquadV1Processor().get_examples_from_dataset(tfds_examples, evaluate=False) if training_args.do_train else None
         eval_examples = SquadV1Processor().get_examples_from_dataset(tfds_examples, evaluate=True) if training_args.do_eval else None
