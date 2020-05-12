@@ -799,6 +799,6 @@ Here is an example for text generation using XLNet and its tokenzier.
     print(generated)
 
 Text generation is currently possible with *GPT-2*, *OpenAi-GPT*, *CTRL*, *XLNet*, *Transfo-XL* and *Reformer* in PyTorch and for most models in Tensorflow as well. As can be seen in the example above *XLNet* and *Transfo-xl* often need to be padded to work well.
-GPT-2 is usually a good choice for *open-ended text generation* given that it was trained on millions on webpages on a causal language modeling objective.
+GPT-2 is usually a good choice for *open-ended text generation* because it was trained on millions on webpages with a causal language modeling objective.
 
 For more information on how to apply different decoding strategies for text generation, please also refer to our generation blog post `here <https://huggingface.co/blog/how-to-generate>`_.
