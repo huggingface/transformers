@@ -7,13 +7,7 @@ from transformers.pipelines import DefaultArgumentHandler, Pipeline
 from .utils import require_tf, require_torch, slow
 
 
-QA_FINETUNED_MODELS = [
-    "sshleifer/tiny_distilbert-base-cased-distilled-squad",
-]
-TF_QA_FINETUNED_MODELS = [
-    "bert-large-uncased-whole-word-masking-finetuned-squad",
-    "distilbert-base-cased-distilled-squad",
-]
+QA_FINETUNED_MODELS = ["sshleifer/tiny_distilbert-base-cased-distilled-squad"]
 
 # TF also tested using this s3dir
 NER_FINETUNED_MODELS = ["sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"]
@@ -24,7 +18,7 @@ TEXT_CLASSIF_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-uncased-finetun
 TEXT_GENERATION_FINETUNED_MODELS = ["sshleifer/tiny-gpt2"]
 
 FILL_MASK_FINETUNED_MODELS = ["sshleifer/tiny-distilroberta-base"]
-TF_FILL_MASK_FINETUNED_MODELS = ["distilroberta-base"]
+TF_FILL_MASK_FINETUNED_MODELS = ["distilroberta-base"]  # @slow
 
 SUMMARIZATION_FINETUNED_MODELS = ["sshleifer/bart-tiny-random", "patrickvonplaten/t5-tiny-random"]
 TF_SUMMARIZATION_FINETUNED_MODELS = ["patrickvonplaten/t5-tiny-random"]
