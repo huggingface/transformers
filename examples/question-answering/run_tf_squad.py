@@ -1,5 +1,6 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -185,7 +186,7 @@ def main():
         train_examples = processor.get_train_examples(data_args.data_dir) if training_args.do_train else None
         eval_examples = processor.get_dev_examples(data_args.data_dir) if training_args.do_eval else None
 
-    train_features, train_dataset = (
+    train_dataset = (
         squad_convert_examples_to_features(
             examples=train_examples,
             tokenizer=tokenizer,
@@ -199,7 +200,7 @@ def main():
         else None
     )
 
-    eval_features, eval_dataset = (
+    eval_dataset = (
         squad_convert_examples_to_features(
             examples=eval_examples,
             tokenizer=tokenizer,
