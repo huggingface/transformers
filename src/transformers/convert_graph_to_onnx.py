@@ -107,8 +107,7 @@ def load_graph_from_args(framework: str, model: str, tokenizer: Optional[str] = 
 
 def convert_pytorch(nlp: Pipeline, opset: int, output: str):
     if not is_torch_available():
-        print("Cannot convert because PyTorch is not installed. Please install torch first.")
-        exit(1)
+        raise Exception("Cannot convert because PyTorch is not installed. Please install torch first.")
 
     import torch
     from torch.onnx import export
@@ -135,10 +134,11 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: str):
 
 def convert_tensorflow(nlp: Pipeline, opset: int, output: str):
     if not is_tf_available():
-        print("Cannot convert {} because TF is not installed. Please install torch first.".format(args.model))
-        exit(1)
+        raise Exception(
+            "Cannot convert {} because TF is not installed. Please install torch first.".format(args.model)
+        )
 
-    print("Please note TensorFlow doesn't support exporting model > 2Gb")
+    print("/!\\ Please note TensorFlow doesn't support exporting model > 2Gb /!\\")
 
     try:
         import tensorflow as tf
