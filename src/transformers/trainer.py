@@ -61,21 +61,18 @@ def is_tensorboard_available():
 try:
     import wandb
 
-    _has_wandb = True
+    wandb.ensure_configured()
+    if wandb.api.api_key is None:
+        _has_wandb = False
+        wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
+    else:
+        _has_wandb = False if os.getenv("WANDB_DISABLED") else True
 except ImportError:
     _has_wandb = False
 
 
 def is_wandb_available():
-    global _has_wandb
-    if _has_wandb:
-        wandb.ensure_configured()
-        if wandb.api.api_key is None:
-            _has_wandb = False
-            wandb.termwarn(
-                "W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable."
-            )
-    return False if os.getenv("WANDB_DISABLED") else _has_wandb
+    return _has_wandb
 
 
 logger = logging.getLogger(__name__)
@@ -164,8 +161,8 @@ class Trainer:
             )
         if not is_wandb_available():
             logger.info(
-                "You are instantiating a Trainer but W&B is not installed. To use wandb logging, \
-                    run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+                "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
+                "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
             )
         set_seed(self.args.seed)
         # Create output directory if needed
