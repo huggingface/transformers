@@ -197,7 +197,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
 
     @require_torch
-    def test_fill_mask(self, framework):
+    def test_torch_fill_mask(self):
         mandatory_keys = {"sequence", "score", "token"}
         valid_inputs = [
             "My name is <mask>",
@@ -206,7 +206,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         invalid_inputs = [None]
         for model_name in FILL_MASK_FINETUNED_MODELS:
             tok_arg = (model_name, {"use_fast": False})
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=tok_arg, topk=2, framework=framework)
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=tok_arg, topk=2, framework='pt')
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, mandatory_keys, expected_check_keys=["sequence"],
             )
@@ -267,7 +267,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
         for model_name in TF_SUMMARIZATION_FINETUNED_MODELS:
-            nlp = pipeline(task="summarization", model=model_name, tokenizer=model_name, framework="tf")
+            nlp = pipeline(task="summarization", model=model_name, tokenizer=model_name, framework="tf",)
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, mandatory_keys,
             )
@@ -359,7 +359,7 @@ class MultiColumnInputTestCase(unittest.TestCase):
     @require_tf
     def test_tf_question_answering(self):
         for model_name in QA_FINETUNED_MODELS:
-            nlp = pipeline(task="question-answering", model=model_name, tokenizer=model_name, framework="tf")
+            nlp = pipeline(task="question-answering", model=model_name, tokenizer=model_name, from_pt=True, framework="tf")
             self._test_multicolumn_pipeline(nlp)
 
 
