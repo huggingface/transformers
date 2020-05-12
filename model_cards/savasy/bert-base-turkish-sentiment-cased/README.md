@@ -121,8 +121,8 @@ Suppose your file has lots of lines of comment and label (1 or 0) at the end  (t
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
 
 f="/path/to/your/file/yourfile.tsv"
-model = AutoModelForSequenceClassification.from_pretrained(folder)
-tokenizer = AutoTokenizer.from_pretrained(folder)
+model = AutoModelForSequenceClassification.from_pretrained("savasy/bert-base-turkish-sentiment-cased")
+tokenizer = AutoTokenizer.from_pretrained("savasy/bert-base-turkish-sentiment-cased")
 sa= pipeline("sentiment-analysis", tokenizer=tokenizer, model=model)
 
 i,crr=0,0
