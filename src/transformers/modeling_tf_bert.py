@@ -487,6 +487,15 @@ class TFBertMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
+    def _resize_token_embeddings(self, new_num_tokens):
+        old_embeddings = self.get_input_embeddings()
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        self.set_input_embeddings(new_embeddings)
+        return self.get_input_embeddings()
+    
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
         """ Build a resized Embedding Module from a provided token Embedding Module.
             Increasing the size will add newly initialized vectors at the end
