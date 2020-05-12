@@ -51,3 +51,6 @@ python ./examples/multiple-choice/run_tf_multiple_choice.py \
 --gradient_accumulation_steps 2 \
 --overwrite_output
 ```
+
+#Run it in colab
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ViktorAlm/notebooks/blob/master/MPC_GPU_Demo_for_TF_and_PT.ipynb)
