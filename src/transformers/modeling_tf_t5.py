@@ -1013,7 +1013,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
 
     def get_output_embeddings(self):
         return self.shared
-
+    
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         # retrieve correct absolute scope for embed token wrapper
@@ -1022,6 +1022,42 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         embed_tokens = _NoLayerEmbedTokens(self.shared, abs_scope_name=shared_abs_scope_name)
         self.encoder.set_embed_tokens(embed_tokens)
         self.decoder.set_embed_tokens(embed_tokens)
+
+    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
+        """ Build a resized Embedding Module from a provided token Embedding Module.
+            Increasing the size will add newly initialized vectors at the end
+            Reducing the size will remove vectors from the end
+
+        Args:
+            new_num_tokens: (`optional`) int
+                New number of tokens in the embedding matrix.
+                Increasing the size will add newly initialized vectors at the end
+                Reducing the size will remove vectors from the end
+                If not provided or None: return the provided token Embedding Module.
+        Return: ``Embedding layer (i.e. TFSharedEmbeddings or TFBertEmbeddings)``
+            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
+        """
+        if new_num_tokens is None:
+            return old_embeddings
+
+        old_num_tokens, old_embedding_dim = old_embeddings.weights[0].shape
+        if old_num_tokens == new_num_tokens:
+            return old_embeddings
+
+        # Build new embeddings
+        new_embeddings = old_embeddings.__class__(new_num_tokens, old_embedding_dim)
+
+        # initialize all new embeddings (in particular added tokens)
+        new_embeddings.build([new_num_tokens, old_embedding_dim])
+        init_weights = new_embeddings.get_weights()[0]
+
+        # Copy token embeddings from the previous weights
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        _weights_to_carry_over = old_embeddings.weights[0][:num_tokens_to_copy, :]
+        init_weights[:num_tokens_to_copy] = _weights_to_carry_over
+        new_embeddings.set_weights([init_weights])
+
+        return new_embeddings
 
     def get_encoder(self):
         return self.encoder
