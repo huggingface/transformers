@@ -235,6 +235,8 @@ class TFAlbertSelfOutput(tf.keras.layers.Layer):
 
 
 class TFAlbertAttention(TFBertSelfAttention):
+    """ Contains the complete attention sublayer, including both dropouts and layer norm. """
+
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
@@ -244,6 +246,9 @@ class TFAlbertAttention(TFBertSelfAttention):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.pruned_heads = set()
+        # Two different dropout probabilities; see https://github.com/google-research/albert/blob/master/modeling.py#L971-L993
+        self.attention_dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.output_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -276,7 +281,7 @@ class TFAlbertAttention(TFBertSelfAttention):
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs, training=training)
+        attention_probs = self.attention_dropout(attention_probs, training=training)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -294,7 +299,7 @@ class TFAlbertAttention(TFBertSelfAttention):
         hidden_states = self_outputs[0]
 
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.output_dropout(hidden_states, training=training)
         attention_output = self.LayerNorm(hidden_states + input_tensor)
 
         # add attentions if we output them
@@ -327,12 +332,13 @@ class TFAlbertLayer(tf.keras.layers.Layer):
     def call(self, inputs, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
+        # Layer norm and dropout is included in TFAlbertAttention
         attention_outputs = self.attention([hidden_states, attention_mask, head_mask], training=training)
         ffn_output = self.ffn(attention_outputs[0])
         ffn_output = self.activation(ffn_output)
         ffn_output = self.ffn_output(ffn_output)
+        ffn_output = self.dropout(ffn_output, training=training)
 
-        hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = self.full_layer_layer_norm(ffn_output + attention_outputs[0])
 
         # add attentions if we output them
