@@ -485,10 +485,42 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.pooler = TFBertPooler(config, name="pooler")
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
-    def set_input_embeddings(self, new_embeddings):
-        return self.embeddings.word_embeddings.assign(new_embeddings)
+    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
+        """ Build a resized Embedding Module from a provided token Embedding Module.
+            Increasing the size will add newly initialized vectors at the end
+            Reducing the size will remove vectors from the end
+
+        Args:
+            new_num_tokens: (`optional`) int
+                New number of tokens in the embedding matrix.
+                Increasing the size will add newly initialized vectors at the end
+                Reducing the size will remove vectors from the end
+                If not provided or None: return the provided token Embedding Module.
+        Return: ``Embedding layer (i.e. TFSharedEmbeddings or TFBertEmbeddings)``
+            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
+        """
+        old_num_tokens, old_embedding_dim = old_embeddings.shape
+        if old_num_tokens == new_num_tokens:
+            return self.get_input_embeddings()
+
+        # Build new embeddings
+        new_embeddings = self.add_weight("weight",
+                shape=[new_num_tokens, h_dim],
+                initializer=get_initializer(self.config.initializer_range),
+                dtype=tf.float32)
+
+        # initialize all new embeddings (in particular added tokens)
+        init_weights = new_embeddings.get_weights()[0]
+
+        # Copy token embeddings from the previous weights
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        _weights_to_carry_over = old_embeddings[:num_tokens_to_copy, :]
+        init_weights[:num_tokens_to_copy] = _weights_to_carry_over
+        new_embeddings.set_weights([init_weights])
+
+        return new_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
