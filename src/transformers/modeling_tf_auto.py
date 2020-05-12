@@ -175,7 +175,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 )
 
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
-    [(BertConfig, TFBertForMultipleChoice), (AlbertConfig, TFAlbertForMultipleChoice),]
+    [(BertConfig, TFBertForMultipleChoice), (AlbertConfig, TFAlbertForMultipleChoice)]
 )
 
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
