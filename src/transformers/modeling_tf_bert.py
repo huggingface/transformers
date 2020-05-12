@@ -520,15 +520,14 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         init_weights = self.add_weight(old_embeddings.name,
                 shape=[new_num_tokens, old_embedding_dim],
                 initializer=get_initializer(self.initializer_range),
-                dtype=tf.float32)
+                dtype=tf.float32).numpy()
 
         # Copy token embeddings from the previous weights
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
         _weights_to_carry_over = old_embeddings[:num_tokens_to_copy, :]
         init_weights[:num_tokens_to_copy] = _weights_to_carry_over
-        new_embeddings.set_weights([init_weights])
 
-        return new_embeddings
+        return init_weights
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
