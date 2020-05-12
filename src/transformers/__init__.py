@@ -359,6 +359,7 @@ if is_tf_available():
     from .modeling_tf_auto import (
         TFAutoModel,
         TFAutoModelForPreTraining,
+        TFAutoModelForMultipleChoice,
         TFAutoModelForSequenceClassification,
         TFAutoModelForQuestionAnswering,
         TFAutoModelWithLMHead,
@@ -493,6 +494,7 @@ if is_tf_available():
         TFAlbertModel,
         TFAlbertForPreTraining,
         TFAlbertForMaskedLM,
+        TFAlbertForMultipleChoice,
         TFAlbertForSequenceClassification,
         TFAlbertForQuestionAnswering,
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,

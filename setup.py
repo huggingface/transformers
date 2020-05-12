@@ -79,9 +79,9 @@ extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rt
 extras["quality"] = [
     "black",
     "isort @ git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort",
-    "flake8",
+    "flake8==3.7.9",
 ]
-extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "scikit-learn", "tensorflow", "torch"]
+extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "scikit-learn", "tensorflow <= 2.1", "torch"]
 
 setup(
     name="transformers",
