@@ -40,7 +40,7 @@ python run_language_modeling.py \
 
 ## Model in action / Example of usage ✒
 
-You can get the following script [here](https://github.com/huggingface/transformers/blob/master/examples/run_generation.py)
+You can get the following script [here](https://github.com/huggingface/transformers/blob/master/examples/text-generation/run_generation.py)
 
 ```bash
 python run_generation.py \

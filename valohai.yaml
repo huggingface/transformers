@@ -1,13 +1,13 @@
 ---
 
 - step:
-    name: Execute python examples/run_glue.py
+    name: Execute python examples/text-classification/run_glue.py
     image: pytorch/pytorch:nightly-devel-cuda10.0-cudnn7
     command:
       - python /valohai/repository/utils/download_glue_data.py --data_dir=/glue_data
       - pip install -e .
       - pip install -r examples/requirements.txt
-      - python examples/run_glue.py --do_train --data_dir=/glue_data/{parameter-value:task_name} {parameters}
+      - python examples/text-classification/run_glue.py --do_train --data_dir=/glue_data/{parameter-value:task_name} {parameters}
     parameters:
       - name: model_type
         pass-as: --model_type={v}

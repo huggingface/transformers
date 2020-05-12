@@ -690,4 +690,8 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         # test that forward pass is just a lookup, there is no ignore padding logic
         input_ids = torch.tensor([[4, 10, pad, pad, pad]], dtype=torch.long, device=torch_device)
         no_cache_pad_zero = emb1(input_ids)
-        self.assertTrue(torch.allclose(torch.Tensor(self.desired_weights), no_cache_pad_zero[:3, :5], atol=1e-3))
+        self.assertTrue(
+            torch.allclose(
+                torch.tensor(self.desired_weights, device=torch_device), no_cache_pad_zero[:3, :5], atol=1e-3
+            )
+        )

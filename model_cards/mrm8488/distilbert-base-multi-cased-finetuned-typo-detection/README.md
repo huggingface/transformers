@@ -11,7 +11,7 @@ thumbnail:
 
 - Dataset: [GitHub Typo Corpus](https://github.com/mhagiwara/github-typo-corpus) 📚 for 15 languages
 
-- [Fine-tune script on NER dataset provided by Huggingface](https://github.com/huggingface/transformers/blob/master/examples/run_ner.py) 🏋️‍♂️
+- [Fine-tune script on NER dataset provided by Huggingface](https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py) 🏋️‍♂️
 
 ## Metrics on test set 📋
 
