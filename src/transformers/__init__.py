@@ -152,6 +152,7 @@ from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 from .trainer_utils import EvalPrediction
 from .training_args import TrainingArguments
 from .training_args_tf import TFTrainingArguments
+from .benchmark_args import BenchmarkArguments
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
