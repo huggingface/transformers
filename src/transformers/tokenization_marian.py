@@ -139,6 +139,7 @@ class MarianTokenizer(PreTrainedTokenizer):
             If no tgt_text is specified, the only keys will be input_ids and attention_mask.
         """
         self.current_spm = self.spm_source
+        src_texts = [self.punc_normalizer(t) for t in src_texts]
         model_inputs: BatchEncoding = self.batch_encode_plus(
             src_texts,
             add_special_tokens=True,
