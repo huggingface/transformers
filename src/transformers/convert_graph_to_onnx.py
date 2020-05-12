@@ -9,15 +9,6 @@ from transformers.pipelines import Pipeline, pipeline
 from transformers.tokenization_utils import BatchEncoding
 
 
-# Some models require some special handling of their inputs
-SPECIAL_MODEL_ARGS_FILTERING = {
-    "GPT2Model": {
-        "insert": (None, 2)
-    },
-
-}
-
-
 class OnnxConverterArgumentParser(ArgumentParser):
     """
     Wraps all the script arguments supported to export transformers models to ONNX IR
