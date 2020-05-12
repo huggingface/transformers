@@ -479,6 +479,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
+        self.initializer_range = config.initializer_range
 
         self.embeddings = TFBertEmbeddings(config, name="embeddings")
         self.encoder = TFBertEncoder(config, name="encoder")
@@ -517,7 +518,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         # Build new embeddings
         new_embeddings = self.add_weight("weight",
                 shape=[new_num_tokens, old_embedding_dim],
-                initializer=get_initializer(self.config.initializer_range),
+                initializer=get_initializer(self.initializer_range),
                 dtype=tf.float32)
 
         # initialize all new embeddings (in particular added tokens)
