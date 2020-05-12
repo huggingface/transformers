@@ -238,11 +238,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         if old_num_tokens == new_num_tokens:
             return self.get_input_embeddings()
 
-        # Build new embeddings
-        # initialize all new embeddings (in particular added tokens)
-        new_embeddings = self.add_weight(old_embeddings.name,
+        # initialize new embeddings
+        # todo: initializer range is not always passed in config. 
+        init_range = getattr(self.config, 'initializer_range', 0.02)
+        new_embeddings = self.add_weight("weight",
                 shape=[new_num_tokens, old_embedding_dim],
-                initializer=get_initializer(self.initializer_range),
+                initializer=get_initializer(init_range),
                 dtype=tf.float32)
         init_weights = new_embeddings.numpy()
 

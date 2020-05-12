@@ -849,7 +849,7 @@ class TFT5Model(TFT5PreTrainedModel):
         return self.shared.weight
     
     def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
+        self.shared.weight = new_embeddings
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass

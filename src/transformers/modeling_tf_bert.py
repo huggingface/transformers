@@ -520,7 +520,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
         # Build new embeddings
         # initialize all new embeddings (in particular added tokens)
-        new_embeddings = self.add_weight(old_embeddings.name,
+        new_embeddings = self.add_weight("weight",
                 shape=[new_num_tokens, old_embedding_dim],
                 initializer=get_initializer(self.initializer_range),
                 dtype=tf.float32)
