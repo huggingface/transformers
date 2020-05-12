@@ -1,9 +1,9 @@
 name: Self-hosted runner (push)
 
 on: 
-  # push:
-  #   branches:
-  #     - master
+  push:
+    branches:
+      - master
   # pull_request:
   repository_dispatch:
 
@@ -31,8 +31,8 @@ jobs:
     - name: Install dependencies
       run: |
         source .env/bin/activate
-        pip install .[sklearn,tf,torch,testing]
-        pip uninstall -y tensorflow
+        pip install torch==1.4.0
+        pip install .[sklearn,testing]
 
     - name: Are GPUs recognized by our DL frameworks
       run: |
