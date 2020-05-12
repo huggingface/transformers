@@ -63,7 +63,8 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    data_dir: str = field(
+    data_dir: Optional[str] = field(
+        default=None,
         metadata={"help": "The input data dir. Should contain the .json files for the SQuAD task."}
     )
     max_seq_length: int = field(
