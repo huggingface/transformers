@@ -95,6 +95,37 @@ def find_model_file(dest_dir):  # this one better
     return model_file
 
 
+### Group Names
+CH_GROUP = "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh"
+ROM_GROUP = "fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la"
+SCANDINAVIA = "da+fo+is+no+nb+nn+sv"
+NORTH_EU = "de+nl+fy+af+da+fo+is+no+nb+nn+sv"
+enelesfi = "en+el+es+fi"
+sami = "se+sma+smj+smn+sms"
+norway = "nb_NO+nb+nn_NO+nn+nog+no_nb+no"
+celtic = "ga+cy+br+gd+kw+gv"
+norway2 = "fi+nb+no+nn+ru+sv+en"
+GROUPS = [
+    (CH_GROUP, "ZH"),
+    (ROM_GROUP, "ROMANCE"),
+    (NORTH_EU, "NORTH_EU"),
+    (SCANDINAVIA, "SCANDINAVIA"),
+    (sami, "SAMI"),
+    (norway, "NORWAY"),
+    (celtic, "INSULAR_CELTIC"),  # https://en.wikipedia.org/wiki/Insular_Celtic_languages
+]
+
+
+def replace_with_group_name(x):
+    for substr, grp_name in GROUPS:
+        x = x.replace(substr, grp_name)
+    return x.replace("+", "_")
+
+
+def get_clean_model_id_mapping(bad_model_ids):
+    return {x: replace_with_group_name(x) for x in bad_model_ids}
+
+
 def make_registry(repo_path="Opus-MT-train/models"):
     if not (Path(repo_path) / "fr-en" / "README.md").exists():
         raise ValueError(

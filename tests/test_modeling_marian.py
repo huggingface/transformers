@@ -33,6 +33,7 @@ if is_torch_available():
         MarianTokenizer,
         MarianMTModel,
     )
+    from transformers.convert_marian_to_pytorch import replace_with_group_name
 
 
 class ModelManagementTests(unittest.TestCase):
@@ -205,27 +206,29 @@ class TestMarian_MT_EN(MarianIntegrationTest):
 
 
 class TestMarian_DE_Multi(MarianIntegrationTest):
-    src = "de"
-    tgt = "ch_group"
-    src_text = ["Er aber sprach: Das ist die Gottlosigkeit."]
+    src = "fi"
+    tgt = "ZH"
+    src_text = [
+        '>>zh<< Ja Herra sanoi: "Pane hänelle nimeksi Loo-Ammi, sillä te ette ole minun kansani, enkä minä tahdo olla teidän omanne.'
+    ]
+    expected_text = ["耶 和 華 說 , 你 們 給 他 起 名 叫 羅 亞 米 , 因 為 你 們 不 是 我 的 子 民 , 我 也 不 願 意 作 你 們 的 子 民"]
 
     @slow
     def test_translation_de_multi_does_not_error(self):
         self.translate_src_text()
 
-    @unittest.skip("")  # "Language codes are not yet supported."
+    @slow
     def test_batch_generation_de_multi_tgt(self):
         self._assert_generated_batch_equal_expected()
 
-    @unittest.skip("")  # "Language codes are not yet supported."
-    def test_lang_code(self):
-        t = "Er aber sprach"
-        zh_code = self.code
-        tok_fn = self.tokenizer.prepare_translation_batch
-        pass_code = tok_fn(src_texts=[t], tgt_lang_code=zh_code)["input_ids"][0]
-        preprocess_with_code = tok_fn(src_texts=[zh_code + "  " + t])["input_ids"][0]
-        self.assertListEqual(pass_code.tolist(), preprocess_with_code.tolist())
-        for code in self.tokenizer.supported_language_codes:
-            self.assertIn(code, self.tokenizer.encoder)
-        pass_only_code = tok_fn(src_texts=[""], tgt_lang_code=zh_code)["input_ids"][0].tolist()
-        self.assertListEqual(pass_only_code, [self.tokenizer.encoder[zh_code], self.tokenizer.eos_token_id])
+
+@require_torch
+class TestConversionUtils(unittest.TestCase):
+    def test_renaming_multilingual(self):
+        old_names = [
+            "opus-mt-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-fi",
+            "opus-mt-cmn+cn-fi",  # no group
+            "opus_mt-en-de",  # standard name
+        ]
+        expected = ["opus-mt-ZH-fi", "opus-mt-cmn_cn-fi", "opus_mt-en-de"]
+        self.assertListEqual(expected, [replace_with_group_name(x) for x in old_names])
