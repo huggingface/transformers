@@ -94,6 +94,23 @@ def require_tf(test_case):
     return test_case
 
 
+def multigpu(test_case):
+    """
+    Decorator marking a test that requires a multi-GPU setup.
+
+    These tests are skipped on a machine without multiple GPUs.
+
+    """
+    if not _torch_available:
+        return unittest.skip("test requires PyTorch")(test_case)
+
+    import torch
+
+    if torch.cuda.device_count() < 2:
+        return unittest.skip("test requires multiple GPUs")(test_case)
+    return test_case
+
+
 if _torch_available:
     # Set the USE_CUDA environment variable to select a GPU.
     torch_device = "cuda" if parse_flag_from_env("USE_CUDA") else "cpu"

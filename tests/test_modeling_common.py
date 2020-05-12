@@ -23,7 +23,7 @@ from typing import List
 
 from transformers import is_torch_available
 
-from .utils import require_torch, slow, torch_device
+from .utils import multigpu, require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -757,6 +757,19 @@ class ModelTesterMixin:
                     if generated_ids_slice[i - len(bad_word_ids) : i] == bad_word_ids:
                         return True
         return False
+
+    @multigpu
+    def test_multigpu_data_parallel_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            model.to(0)
+            model = torch.nn.DataParallel(model)
+            model.eval()
+            with torch.no_grad():
+                input_ids = torch.ones([16, 10], dtype=torch.long, device=0)
+                _ = model(input_ids)
 
 
 global_rng = random.Random()
