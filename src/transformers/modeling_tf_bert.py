@@ -489,7 +489,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
+        # TODO: assign
+        self.embeddings.word_embeddings.assign(value)
+        logger.info(self.embeddings.word_embeddings)
 
     def _resize_token_embeddings(self, new_num_tokens):
         old_embeddings = self.get_input_embeddings()
