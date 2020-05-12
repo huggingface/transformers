@@ -126,7 +126,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: str):
             input_names=input_names,
             output_names=output_names,
             dynamic_axes=dynamic_axes,
-            do_constant_folding=False,
+            do_constant_folding=True,
             use_external_data_format=True,
             enable_onnx_checker=True,
             opset_version=opset,
