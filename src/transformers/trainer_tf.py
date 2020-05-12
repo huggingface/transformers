@@ -333,7 +333,7 @@ class TFTrainer:
         gradients = [(tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients]
         vars = self.model.trainable_variables
 
-        if self.args.mode == "token-classification":
+        if self.args.mode in ["token-classification", "question-answering"]:
             vars = [var for var in self.model.trainable_variables if "pooler" not in var.name]
 
         self.optimizer.apply_gradients(list(zip(gradients, vars)))
@@ -373,7 +373,7 @@ class TFTrainer:
         per_example_loss, _ = self._run_model(features, labels, True)
         vars = self.model.trainable_variables
 
-        if self.args.mode == "token-classification":
+        if self.args.mode in ["token-classification", "question-answering"]:
             vars = [var for var in self.model.trainable_variables if "pooler" not in var.name]
 
         gradients = self.optimizer.get_gradients(per_example_loss, vars)
@@ -400,6 +400,10 @@ class TFTrainer:
             reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
             labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
             loss = self.loss(labels, reduced_logits)
+        elif self.args.mode == "question-answering":
+            start_loss = self.loss(labels["start_position"], logits[0])
+            end_loss = self.loss(labels["end_position"], logits[1])
+            loss = (start_loss + end_loss) / 2.0
         else:
             loss = self.loss(labels, logits)
 
