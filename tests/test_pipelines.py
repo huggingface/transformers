@@ -8,43 +8,32 @@ from .utils import require_tf, require_torch, slow
 
 
 QA_FINETUNED_MODELS = [
-    "sshleifer/tiny_bert-large-uncased-whole-word-masking-finetuned-squad",
     "sshleifer/tiny_distilbert-base-cased-distilled-squad",
 ]
-
 TF_QA_FINETUNED_MODELS = [
-    (("bert-base-uncased", {"use_fast": False}), "bert-large-uncased-whole-word-masking-finetuned-squad"),
-    (("distilbert-base-cased-distilled-squad", {"use_fast": False}), "distilbert-base-cased-distilled-squad"),
+    "bert-large-uncased-whole-word-masking-finetuned-squad",
+    "distilbert-base-cased-distilled-squad",
 ]
 
-NER_FINETUNED_MODELS = ["sshleifer/tiny_dbmdz_bert-large-cased-finetuned-conll03-english"]
-TF_NER_FINETUNED_MODELS = ["dbmdz/bert-large-cased-finetuned-conll03-english"]
+# TF also tested using this s3dir
+NER_FINETUNED_MODELS = ["sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"]
 
-FEATURE_EXTRACT_FINETUNED_MODELS = ["sshleifer/tiny_distilbert-base-cased"]
 # xlnet-base-cased disabled for now, since it crashes TF2
-TF_FEATURE_EXTRACT_FINETUNED_MODELS = ["distilbert-base-cased"]
-
+FEATURE_EXTRACT_FINETUNED_MODELS = ["sshleifer/tiny_distilbert-base-cased"]
 TEXT_CLASSIF_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english"]
-TF_TEXT_CLASSIF_FINETUNED_MODELS = ["distilbert-base-uncased-finetuned-sst-2-english"]
-
 TEXT_GENERATION_FINETUNED_MODELS = ["sshleifer/tiny-gpt2"]
-TF_TEXT_GENERATION_FINETUNED_MODELS = ['gpt2', "xlnet-base-cased"]
 
 FILL_MASK_FINETUNED_MODELS = ["sshleifer/tiny-distilroberta-base"]
 TF_FILL_MASK_FINETUNED_MODELS = ["distilroberta-base"]
 
-SUMMARIZATION_FINETUNED_MODELS = {
-    # model, tokenizer
-    ("sshleifer/bart-tiny-random", "bart-large-cnn"),
-    ("patrickvonplaten/t5-tiny-random", "t5-small"),
-}
-TF_SUMMARIZATION_FINETUNED_MODELS = {("patrickvonplaten/t5-tiny-random", "t5-small")}
+SUMMARIZATION_FINETUNED_MODELS = ["sshleifer/bart-tiny-random", "patrickvonplaten/t5-tiny-random"]
+TF_SUMMARIZATION_FINETUNED_MODELS = ["patrickvonplaten/t5-tiny-random"]
 
-TRANSLATION_FINETUNED_MODELS = {
-    ("patrickvonplaten/t5-tiny-random", "t5-small", "translation_en_to_de"),
-    ("patrickvonplaten/t5-tiny-random", "t5-small", "translation_en_to_ro"),
-}
-TF_TRANSLATION_FINETUNED_MODELS = {("patrickvonplaten/t5-tiny-random", "t5-small", "translation_en_to_fr")}
+TRANSLATION_FINETUNED_MODELS = [
+    ("patrickvonplaten/t5-tiny-random", "translation_en_to_de"),
+    ("patrickvonplaten/t5-tiny-random", "translation_en_to_ro"),
+]
+TF_TRANSLATION_FINETUNED_MODELS = [("patrickvonplaten/t5-tiny-random", "translation_en_to_fr")]
 
 
 class DefaultArgumentHandlerTestCase(unittest.TestCase):
@@ -175,8 +164,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
         mandatory_keys = {"entity", "word", "score"}
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
-        for tokenizer, model, config in TF_NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model, config=config, tokenizer=tokenizer, framework="tf")
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf")
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
     @require_torch
@@ -193,7 +182,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         mandatory_keys = {"label", "score"}
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
-        for model_name in TF_TEXT_CLASSIF_FINETUNED_MODELS:
+        for model_name in TEXT_CLASSIF_FINETUNED_MODELS:
             nlp = pipeline(task="sentiment-analysis", model=model_name, tokenizer=model_name, framework="tf")
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
 
@@ -209,12 +198,12 @@ class MonoColumnInputTestCase(unittest.TestCase):
     def test_tf_feature_extraction(self):
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
-        for model_name in TF_FEATURE_EXTRACT_FINETUNED_MODELS:
+        for model_name in FEATURE_EXTRACT_FINETUNED_MODELS:
             nlp = pipeline(task="feature-extraction", model=model_name, tokenizer=model_name, framework="tf")
             self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, {})
 
     @require_torch
-    def test_torch_fill_mask(self):
+    def test_fill_mask(self, framework):
         mandatory_keys = {"sequence", "score", "token"}
         valid_inputs = [
             "My name is <mask>",
@@ -222,14 +211,15 @@ class MonoColumnInputTestCase(unittest.TestCase):
         ]
         invalid_inputs = [None]
         for model_name in FILL_MASK_FINETUNED_MODELS:
-            tok_arg = (model_name, {'use_fast': False})
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=tok_arg, topk=2)
+            tok_arg = (model_name, {"use_fast": False})
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=tok_arg, topk=2, framework=framework)
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, mandatory_keys, expected_check_keys=["sequence"],
             )
 
     @require_tf
-    def test_tf_fill_mask(self):
+    @slow
+    def test_slow_tf_fill_mask(self):
         mandatory_keys = {"sequence", "score", "token"}
         valid_inputs = [
             "My name is <mask>",
@@ -255,8 +245,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
             ],
         ]
         for model_name in TF_FILL_MASK_FINETUNED_MODELS:
-            tok_arg = (model_name, {'use_fast': False})
-            nlp = pipeline(task="fill-mask", model=model_name,  tokenizer=tok_arg, framework="tf", topk=2)
+            tok_arg = (model_name, {"use_fast": False})
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=tok_arg, framework="tf", topk=2)
             self._test_mono_column_pipeline(
                 nlp,
                 valid_inputs,
@@ -271,8 +261,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
-        for model, tokenizer in SUMMARIZATION_FINETUNED_MODELS:
-            nlp = pipeline(task="summarization", model=model, tokenizer=tokenizer)
+        for model in SUMMARIZATION_FINETUNED_MODELS:
+            nlp = pipeline(task="summarization", model=model, tokenizer=model)
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, mandatory_keys,
             )
@@ -282,8 +272,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
-        for model, tokenizer in TF_SUMMARIZATION_FINETUNED_MODELS:
-            nlp = pipeline(task="summarization", model=model, tokenizer=tokenizer, framework="tf")
+        for model_name in TF_SUMMARIZATION_FINETUNED_MODELS:
+            nlp = pipeline(task="summarization", model=model_name, tokenizer=model_name, framework="tf")
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, mandatory_keys,
             )
@@ -293,8 +283,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["translation_text"]
-        for model, tokenizer, task in TRANSLATION_FINETUNED_MODELS:
-            nlp = pipeline(task=task, model=model, tokenizer=tokenizer)
+        for model_name, task in TRANSLATION_FINETUNED_MODELS:
+            nlp = pipeline(task=task, model=model_name, tokenizer=model_name)
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, mandatory_keys,
             )
@@ -304,8 +294,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
         valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["translation_text"]
-        for model, tokenizer, task in TF_TRANSLATION_FINETUNED_MODELS:
-            nlp = pipeline(task=task, model=model, tokenizer=tokenizer, framework="tf")
+        for model, task in TF_TRANSLATION_FINETUNED_MODELS:
+            nlp = pipeline(task=task, model=model, tokenizer=model, framework="tf")
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, mandatory_keys,
             )
@@ -324,15 +314,29 @@ class MonoColumnInputTestCase(unittest.TestCase):
     def test_tf_text_generation(self):
         valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
         invalid_inputs = [None]
-        for model_name in TF_TEXT_GENERATION_FINETUNED_MODELS:
-            nlp = pipeline(task="text-generation", model=model_name, framework="tf")
+        for model_name in TEXT_GENERATION_FINETUNED_MODELS:
+            nlp = pipeline(task="text-generation", model=model_name, tokenizer=model_name, framework="tf")
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, {},
             )
 
 
 class MultiColumnInputTestCase(unittest.TestCase):
-    def _test_multicolumn_pipeline(self, nlp, valid_inputs: list, invalid_inputs: list, output_keys: Iterable[str]):
+    def _test_multicolumn_pipeline(self, nlp):
+        output_keys = {"score", "answer", "start", "end"}
+        valid_inputs = [
+            {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
+            {
+                "question": "In what field is HuggingFace working ?",
+                "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+            },
+        ]
+        invalid_inputs = [
+            {"question": "", "context": "This is a test to try empty question edge case"},
+            {"question": None, "context": "This is a test to try empty question edge case"},
+            {"question": "What is does with empty context ?", "context": ""},
+            {"question": "What is does with empty context ?", "context": None},
+        ]
         self.assertIsNotNone(nlp)
 
         mono_result = nlp(valid_inputs[0])
@@ -354,46 +358,15 @@ class MultiColumnInputTestCase(unittest.TestCase):
 
     @require_torch
     def test_torch_question_answering(self):
-        mandatory_output_keys = {"score", "answer", "start", "end"}
-        valid_samples = [
-            {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
-            {
-                "question": "In what field is HuggingFace working ?",
-                "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
-            },
-        ]
-        invalid_samples = [
-            {"question": "", "context": "This is a test to try empty question edge case"},
-            {"question": None, "context": "This is a test to try empty question edge case"},
-            {"question": "What is does with empty context ?", "context": ""},
-            {"question": "What is does with empty context ?", "context": None},
-        ]
-
         for model_name in QA_FINETUNED_MODELS:
             nlp = pipeline(task="question-answering", model=model_name, tokenizer=model_name)
-            self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
+            self._test_multicolumn_pipeline(nlp)
 
     @require_tf
-    @slow
     def test_tf_question_answering(self):
-        mandatory_output_keys = {"score", "answer", "start", "end"}
-        valid_samples = [
-            {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
-            {
-                "question": "In what field is HuggingFace working ?",
-                "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
-            },
-        ]
-        invalid_samples = [
-            {"question": "", "context": "This is a test to try empty question edge case"},
-            {"question": None, "context": "This is a test to try empty question edge case"},
-            {"question": "What is does with empty context ?", "context": ""},
-            {"question": "What is does with empty context ?", "context": None},
-        ]
-
-        for tokenizer, model in TF_QA_FINETUNED_MODELS:
-            nlp = pipeline(task="question-answering", model=model,  tokenizer=tokenizer, framework="tf")
-            self._test_multicolumn_pipeline(nlp, valid_samples, invalid_samples, mandatory_output_keys)
+        for model_name in QA_FINETUNED_MODELS:
+            nlp = pipeline(task="question-answering", model=model_name, tokenizer=model_name, framework="tf")
+            self._test_multicolumn_pipeline(nlp)
 
 
 class PipelineCommonTests(unittest.TestCase):
