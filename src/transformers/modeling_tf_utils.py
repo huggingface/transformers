@@ -216,6 +216,44 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         self.set_input_embeddings(new_embeddings)
         return self.get_input_embeddings()
 
+    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
+        """ Build a resized Embedding Module from a provided token Embedding Module.
+            Increasing the size will add newly initialized vectors at the end
+            Reducing the size will remove vectors from the end
+
+        Args:
+            old_embeddings: Variable
+            new_num_tokens: (`optional`) int
+                New number of tokens in the embedding matrix.
+                Increasing the size will add newly initialized vectors at the end
+                Reducing the size will remove vectors from the end
+                If not provided or None: return the provided token Embedding Module.
+        Return: ``Embedding layer (i.e. TFSharedEmbeddings or TFBertEmbeddings)``
+            Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
+        """
+        if new_num_tokens is None:
+            return old_embeddings
+
+        old_num_tokens, old_embedding_dim = old_embeddings.shape
+        if old_num_tokens == new_num_tokens:
+            return self.get_input_embeddings()
+
+        # Build new embeddings
+        # initialize all new embeddings (in particular added tokens)
+        new_embeddings = self.add_weight(old_embeddings.name,
+                shape=[new_num_tokens, old_embedding_dim],
+                initializer=get_initializer(self.initializer_range),
+                dtype=tf.float32)
+        init_weights = new_embeddings.numpy()
+
+        # Copy token embeddings from the previous weights
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        _weights_to_carry_over = old_embeddings[:num_tokens_to_copy, :]
+        init_weights[:num_tokens_to_copy] = _weights_to_carry_over
+        new_embeddings.assign(init_weights)
+
+        return new_embeddings
+
 
     def prune_heads(self, heads_to_prune):
         """ Prunes heads of the base model.
