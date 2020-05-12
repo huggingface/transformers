@@ -102,7 +102,6 @@ class MemorySummary(NamedTuple):
     cumulative: List[MemoryState]
     current: List[MemoryState]
     total: Memory
-    max_memory: Memory
 
 
 MemoryTrace = List[UsedMemoryState]
@@ -301,13 +300,13 @@ def stop_memory_tracing(
 
     if memory_trace is not None and len(memory_trace) > 1:
         memory_diff_trace = []
+        memory_curr_trace = []
 
         cumulative_memory_dict = defaultdict(lambda: [0, 0, 0])
-        current_memory_dict = defaultdict(lambda: [0, 0, 0])
 
         for (
-            (frame, cpu_mem, gpu_mem, next_reserved_gpu_mem),
-            (next_frame, next_cpu_mem, next_gpu_mem, next_reserved_gpu_mem),
+            (frame, cpu_mem, gpu_mem),
+            (next_frame, next_cpu_mem, next_gpu_mem),
         ) in zip(memory_trace[:-1], memory_trace[1:]):
             cpu_mem_inc = next_cpu_mem - cpu_mem
             gpu_mem_inc = next_gpu_mem - gpu_mem
@@ -318,13 +317,15 @@ def stop_memory_tracing(
                 )
             )
 
+            memory_curr_trace.append(
+                MemoryState(
+                    frame=frame, cpu=Memory(next_cpu_mem), gpu=Memory(next_gpu_mem), cpu_gpu=Memory(next_gpu_mem + next_cpu_mem),
+                )
+            )
+
             cumulative_memory_dict[frame][0] += cpu_mem_inc
             cumulative_memory_dict[frame][1] += gpu_mem_inc
             cumulative_memory_dict[frame][2] += cpu_gpu_mem_inc
-
-            current_memory_dict[frame][0] += cumulative_memory_dict[0]
-            current_memory_dict[frame][1] += cumulative_memory_dict[1]
-            current_memory_dict[frame][2] += cumulative_memory_dict[2]
 
         cumulative_memory = sorted(
             list(cumulative_memory_dict.items()), key=lambda x: x[1][2], reverse=True
@@ -336,34 +337,20 @@ def stop_memory_tracing(
             for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in cumulative_memory
         )
 
-        current_memory = sorted(
-            list(current_memory_dict.items()), key=lambda x: x[1][2], reverse=True
-        )  # order by the total CPU + GPU memory increase
-        current_memory = list(
-            MemoryState(
-                frame=frame, cpu=Memory(cpu_mem_inc), gpu=Memory(gpu_mem_inc), cpu_gpu=Memory(cpu_gpu_mem_inc),
-            )
-            for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in current_memory
-        )
+        memory_curr_trace = sorted(memory_curr_trace, key=lambda x: x.cpu_gpu.bytes, reverse=True)
 
         if ignore_released_memory:
             total_memory = sum(max(0, step_trace.cpu_gpu.bytes) for step_trace in memory_diff_trace)
         else:
             total_memory = sum(step_trace.cpu_gpu.bytes for step_trace in memory_diff_trace)
 
-        if is_torch_available() and torch.cuda.is_available():
-            max_memory = torch.cuda.max_memory_reserved()
-            torch.cuda.reset_peak_memory_stats()
-
-        max_memory = Memory(max_memory)
         total_memory = Memory(total_memory)
 
         return MemorySummary(
             sequential=memory_diff_trace,
             cumulative=cumulative_memory,
-            current=current_memory,
+            current=memory_curr_trace,
             total=total_memory,
-            max_memory=max_memory,
         )
 
     return None
