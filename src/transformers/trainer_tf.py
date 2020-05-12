@@ -125,7 +125,9 @@ class TFTrainer:
         in the Tensorflow documentation and those contained in the transformers library.
         """
         if self.args.optimizer_name == "adamw":
-            self.optimizer = create_optimizer(self.args.learning_rate, self.train_steps, self.args.warmup_steps)
+            self.optimizer = create_optimizer(
+                self.args.learning_rate, self.train_steps, self.args.warmup_steps, self.args.end_lr
+            )
         else:
             try:
                 self.optimizer = tf.keras.optimizers.get(
@@ -139,6 +141,7 @@ class TFTrainer:
                 self.optimizer = tf.keras.optimizers.get(
                     {"class_name": self.args.optimizer_name, "config": {"learning_rate": self.args.learning_rate}}
                 )
+        logger.info("Created an/a {} optimizer".format(self.optimizer))
 
     def _create_checkpoint_manager(self, max_to_keep: int = 5, load_model: bool = True) -> None:
         """
@@ -149,6 +152,7 @@ class TFTrainer:
           load_model: if we want to start the training from the latest checkpoint.
         """
         ckpt = tf.train.Checkpoint(optimizer=self.optimizer, model=self.model)
+
         self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, PREFIX_CHECKPOINT_DIR, max_to_keep=max_to_keep)
 
         if load_model:
@@ -425,5 +429,6 @@ class TFTrainer:
 
         path = os.path.join(self.args.output_dir, "saved_model")
 
+        logger.info("Saving model in {}".format(path))
         os.makedirs(path, exist_ok=True)
         self.model.save_pretrained(self.args.output_dir)
