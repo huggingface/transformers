@@ -173,7 +173,11 @@ class BatchEncoding(UserDict):
 
     """
 
-    def __init__(self, data: Optional[Dict[str, Any]] = None, encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None):
+    def __init__(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None,
+    ):
         super().__init__(data)
 
         if isinstance(encoding, EncodingFast):
