@@ -25,11 +25,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
 
-import torch
 import tqdm
-from torch.utils.data.dataset import Dataset
 
-from transformers import PreTrainedTokenizer, torch_distributed_zero_first
+from transformers import PreTrainedTokenizer, is_tf_available, is_torch_available
 
 
 logger = logging.getLogger(__name__)
@@ -76,66 +74,160 @@ class Split(Enum):
     test = "test"
 
 
-class MultipleChoiceDataset(Dataset):
-    """
-    This will be superseded by a framework-agnostic approach
-    soon.
-    """
+if is_torch_available():
+    import torch
+    from torch.utils.data.dataset import Dataset
+    from transformers import torch_distributed_zero_first
 
-    features: List[InputFeatures]
+    class MultipleChoiceDataset(Dataset):
+        """
+        This will be superseded by a framework-agnostic approach
+        soon.
+        """
 
-    def __init__(
-        self,
-        data_dir: str,
-        tokenizer: PreTrainedTokenizer,
-        task: str,
-        max_seq_length: Optional[int] = None,
-        overwrite_cache=False,
-        mode: Split = Split.train,
-        local_rank=-1,
-    ):
-        processor = processors[task]()
+        features: List[InputFeatures]
 
-        cached_features_file = os.path.join(
-            data_dir,
-            "cached_{}_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length), task,),
-        )
-        with torch_distributed_zero_first(local_rank):
-            # Make sure only the first process in distributed training processes the dataset,
-            # and the others will use the cache.
+        def __init__(
+            self,
+            data_dir: str,
+            tokenizer: PreTrainedTokenizer,
+            task: str,
+            max_seq_length: Optional[int] = None,
+            overwrite_cache=False,
+            mode: Split = Split.train,
+            local_rank=-1,
+        ):
+            processor = processors[task]()
 
-            if os.path.exists(cached_features_file) and not overwrite_cache:
-                logger.info(f"Loading features from cached file {cached_features_file}")
-                self.features = torch.load(cached_features_file)
-            else:
-                logger.info(f"Creating features from dataset file at {data_dir}")
-                label_list = processor.get_labels()
-                if mode == Split.dev:
-                    examples = processor.get_dev_examples(data_dir)
-                elif mode == Split.test:
-                    examples = processor.get_test_examples(data_dir)
+            cached_features_file = os.path.join(
+                data_dir,
+                "cached_{}_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length), task,),
+            )
+            with torch_distributed_zero_first(local_rank):
+                # Make sure only the first process in distributed training processes the dataset,
+                # and the others will use the cache.
+
+                if os.path.exists(cached_features_file) and not overwrite_cache:
+                    logger.info(f"Loading features from cached file {cached_features_file}")
+                    self.features = torch.load(cached_features_file)
                 else:
-                    examples = processor.get_train_examples(data_dir)
-                logger.info("Training examples: %s", len(examples))
-                # TODO clean up all this to leverage built-in features of tokenizers
-                self.features = convert_examples_to_features(
-                    examples,
-                    label_list,
-                    max_seq_length,
-                    tokenizer,
-                    pad_on_left=bool(tokenizer.padding_side == "left"),
-                    pad_token=tokenizer.pad_token_id,
-                    pad_token_segment_id=tokenizer.pad_token_type_id,
-                )
-                if local_rank in [-1, 0]:
-                    logger.info("Saving features into cached file %s", cached_features_file)
-                    torch.save(self.features, cached_features_file)
+                    logger.info(f"Creating features from dataset file at {data_dir}")
+                    label_list = processor.get_labels()
+                    if mode == Split.dev:
+                        examples = processor.get_dev_examples(data_dir)
+                    elif mode == Split.test:
+                        examples = processor.get_test_examples(data_dir)
+                    else:
+                        examples = processor.get_train_examples(data_dir)
+                    logger.info("Training examples: %s", len(examples))
+                    # TODO clean up all this to leverage built-in features of tokenizers
+                    self.features = convert_examples_to_features(
+                        examples,
+                        label_list,
+                        max_seq_length,
+                        tokenizer,
+                        pad_on_left=bool(tokenizer.padding_side == "left"),
+                        pad_token=tokenizer.pad_token_id,
+                        pad_token_segment_id=tokenizer.pad_token_type_id,
+                    )
+                    if local_rank in [-1, 0]:
+                        logger.info("Saving features into cached file %s", cached_features_file)
+                        torch.save(self.features, cached_features_file)
 
-    def __len__(self):
-        return len(self.features)
+        def __len__(self):
+            return len(self.features)
 
-    def __getitem__(self, i) -> InputFeatures:
-        return self.features[i]
+        def __getitem__(self, i) -> InputFeatures:
+            return self.features[i]
+
+
+if is_tf_available():
+    import tensorflow as tf
+
+    class TFMultipleChoiceDataset:
+        """
+        This will be superseded by a framework-agnostic approach
+        soon.
+        """
+
+        features: List[InputFeatures]
+
+        def __init__(
+            self,
+            data_dir: str,
+            tokenizer: PreTrainedTokenizer,
+            task: str,
+            max_seq_length: Optional[int] = 128,
+            overwrite_cache=False,
+            mode: Split = Split.train,
+        ):
+            processor = processors[task]()
+
+            logger.info(f"Creating features from dataset file at {data_dir}")
+            label_list = processor.get_labels()
+            if mode == Split.dev:
+                examples = processor.get_dev_examples(data_dir)
+            elif mode == Split.test:
+                examples = processor.get_test_examples(data_dir)
+            else:
+                examples = processor.get_train_examples(data_dir)
+            logger.info("Training examples: %s", len(examples))
+            # TODO clean up all this to leverage built-in features of tokenizers
+            self.features = convert_examples_to_features(
+                examples,
+                label_list,
+                max_seq_length,
+                tokenizer,
+                pad_on_left=bool(tokenizer.padding_side == "left"),
+                pad_token=tokenizer.pad_token_id,
+                pad_token_segment_id=tokenizer.pad_token_type_id,
+            )
+
+            def gen():
+                for (ex_index, ex) in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
+                    if ex_index % 10000 == 0:
+                        logger.info("Writing example %d of %d" % (ex_index, len(examples)))
+
+                    yield (
+                        {
+                            "example_id": 0,
+                            "input_ids": ex.input_ids,
+                            "attention_mask": ex.attention_mask,
+                            "token_type_ids": ex.token_type_ids,
+                        },
+                        ex.label,
+                    )
+
+            self.dataset = tf.data.Dataset.from_generator(
+                gen,
+                (
+                    {
+                        "example_id": tf.int32,
+                        "input_ids": tf.int32,
+                        "attention_mask": tf.int32,
+                        "token_type_ids": tf.int32,
+                    },
+                    tf.int64,
+                ),
+                (
+                    {
+                        "example_id": tf.TensorShape([]),
+                        "input_ids": tf.TensorShape([None, None]),
+                        "attention_mask": tf.TensorShape([None, None]),
+                        "token_type_ids": tf.TensorShape([None, None]),
+                    },
+                    tf.TensorShape([]),
+                ),
+            )
+
+        def get_dataset(self):
+            return self.dataset
+
+        def __len__(self):
+            return len(self.features)
+
+        def __getitem__(self, i) -> InputFeatures:
+            return self.features[i]
 
 
 class DataProcessor:
@@ -222,6 +314,52 @@ class RaceProcessor(DataProcessor):
                         label=truth,
                     )
                 )
+        return examples
+
+
+class SynonymProcessor(DataProcessor):
+    """Processor for the Synonym data set."""
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {} train".format(data_dir))
+        return self._create_examples(self._read_csv(os.path.join(data_dir, "mctrain.csv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {} dev".format(data_dir))
+        return self._create_examples(self._read_csv(os.path.join(data_dir, "mchp.csv")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        logger.info("LOOKING AT {} dev".format(data_dir))
+
+        return self._create_examples(self._read_csv(os.path.join(data_dir, "mctest.csv")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["0", "1", "2", "3", "4"]
+
+    def _read_csv(self, input_file):
+        with open(input_file, "r", encoding="utf-8") as f:
+            return list(csv.reader(f))
+
+    def _create_examples(self, lines: List[List[str]], type: str):
+        """Creates examples for the training and dev sets."""
+
+        examples = [
+            InputExample(
+                example_id=line[0],
+                question="",  # in the swag dataset, the
+                # common beginning of each
+                # choice is stored in "sent2".
+                contexts=[line[1], line[1], line[1], line[1], line[1]],
+                endings=[line[2], line[3], line[4], line[5], line[6]],
+                label=line[7],
+            )
+            for line in lines  # we skip the line with the column names
+        ]
+
         return examples
 
 
@@ -435,7 +573,5 @@ def convert_examples_to_features(
     return features
 
 
-processors = {"race": RaceProcessor, "swag": SwagProcessor, "arc": ArcProcessor}
-
-
-MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4}
+processors = {"race": RaceProcessor, "swag": SwagProcessor, "arc": ArcProcessor, "syn": SynonymProcessor}
+MULTIPLE_CHOICE_TASKS_NUM_LABELS = {"race", 4, "swag", 4, "arc", 4, "syn", 5}
