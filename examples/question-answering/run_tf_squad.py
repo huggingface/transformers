@@ -32,6 +32,7 @@ from transformers import (
 )
 from transformers.data.processors.squad import SquadV1Processor, SquadV2Processor
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,8 +66,7 @@ class DataTrainingArguments:
     """
 
     data_dir: Optional[str] = field(
-        default=None,
-        metadata={"help": "The input data dir. Should contain the .json files for the SQuAD task."}
+        default=None, metadata={"help": "The input data dir. Should contain the .json files for the SQuAD task."}
     )
     max_seq_length: int = field(
         default=128,
@@ -77,9 +77,7 @@ class DataTrainingArguments:
     )
     doc_stride: int = field(
         default=128,
-        metadata={
-            "help": "When splitting up a long document into chunks, how much stride to take between chunks."
-        },
+        metadata={"help": "When splitting up a long document into chunks, how much stride to take between chunks."},
     )
     max_query_length: int = field(
         default=64,
@@ -108,7 +106,10 @@ class DataTrainingArguments:
         default=20, metadata={"help": "If null_score - best_non_null is greater than the threshold predict null."}
     )
     lang_id: int = field(
-        default=0, metadata={"help": "language id of input for language-specific xlm models (see tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)"}
+        default=0,
+        metadata={
+            "help": "language id of input for language-specific xlm models (see tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)"
+        },
     )
 
 
@@ -179,8 +180,16 @@ def main():
             raise ImportError("If not data_dir is specified, tensorflow_datasets needs to be installed.")
 
         tfds_examples = tfds.load("squad")
-        train_examples = SquadV1Processor().get_examples_from_dataset(tfds_examples, evaluate=False) if training_args.do_train else None
-        eval_examples = SquadV1Processor().get_examples_from_dataset(tfds_examples, evaluate=True) if training_args.do_eval else None
+        train_examples = (
+            SquadV1Processor().get_examples_from_dataset(tfds_examples, evaluate=False)
+            if training_args.do_train
+            else None
+        )
+        eval_examples = (
+            SquadV1Processor().get_examples_from_dataset(tfds_examples, evaluate=True)
+            if training_args.do_eval
+            else None
+        )
     else:
         processor = SquadV2Processor() if data_args.version_2_with_negative else SquadV1Processor()
         train_examples = processor.get_train_examples(data_args.data_dir) if training_args.do_train else None
@@ -215,12 +224,7 @@ def main():
     )
 
     # Initialize our Trainer
-    trainer = TFTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-    )
+    trainer = TFTrainer(model=model, args=training_args, train_dataset=train_dataset, eval_dataset=eval_dataset,)
 
     # Training
     if training_args.do_train:
