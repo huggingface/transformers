@@ -516,13 +516,11 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             return self.get_input_embeddings()
 
         # Build new embeddings
-        new_embeddings = self.add_weight("weight",
+        # initialize all new embeddings (in particular added tokens)
+        init_weights = self.add_weight(old_embeddings.name,
                 shape=[new_num_tokens, old_embedding_dim],
                 initializer=get_initializer(self.initializer_range),
                 dtype=tf.float32)
-
-        # initialize all new embeddings (in particular added tokens)
-        init_weights = new_embeddings.get_weights()[0]
 
         # Copy token embeddings from the previous weights
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
