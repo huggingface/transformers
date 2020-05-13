@@ -66,9 +66,10 @@ There are many supported regional language codes, like ``>>es_ES<<`` (Spain) and
 
 
 Examples:
-- 'Helsinki-NLP/opus-mt-INSULAR_CELTIC-en': from all insular celtic languages to english.
-- 'Helsinki-NLP/opus-mt-NORTH_EU-NORTH_EU', from all NORTH_EU languages to all NORTH_EU languages, use a special language code like ``>>de<<`` to specify output language.
-- 'Helsinki-NLP/opus-mt-ROMANCE-en': translates from many romance languages to english
+
+    - 'Helsinki-NLP/opus-mt-INSULAR_CELTIC-en': from all insular celtic languages to english.
+    - 'Helsinki-NLP/opus-mt-NORTH_EU-NORTH_EU', from all NORTH_EU languages to all NORTH_EU languages, use a special language code like ``>>de<<`` to specify output language.
+    - 'Helsinki-NLP/opus-mt-ROMANCE-en': translates from many romance languages to english
 
 Multilingual Group Members:
 
