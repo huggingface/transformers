@@ -979,7 +979,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         return self.shared.weight
     
     def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
+        self.shared.weight = new_embeddings
         # retrieve correct absolute scope for embed token wrapper
         with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
             pass
@@ -1087,8 +1087,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             decoder_outputs = decoder_outputs[:1] + past + decoder_outputs[2:]
 
         sequence_output = decoder_outputs[0] * (self.model_dim ** -0.5)
-        embed_tokens = self.get_output_embeddings()
-        lm_logits = embed_tokens(sequence_output, mode="linear")            
+        embed_tokens = self.decoder.get_output_embeddings()
+        lm_logits = embed_tokens(sequence_output, mode="linear")     
         decoder_outputs = (lm_logits,) + decoder_outputs[1:]
 
         return decoder_outputs + encoder_outputs
