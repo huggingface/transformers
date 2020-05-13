@@ -234,7 +234,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         if new_num_tokens is None:
             return old_embeddings
 
-        old_num_tokens, old_embedding_dim = old_embeddings.shape
+        old_num_tokens, old_embedding_dim = old_embeddings.weight.shape
         if old_num_tokens == new_num_tokens:
             return self.get_input_embeddings()
 
@@ -249,7 +249,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         # Copy token embeddings from the previous weights
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        _weights_to_carry_over = old_embeddings[:num_tokens_to_copy, :]
+        _weights_to_carry_over = old_embeddings.weight[:num_tokens_to_copy, :]
         init_weights[:num_tokens_to_copy] = _weights_to_carry_over
         new_embeddings.assign(init_weights)
 

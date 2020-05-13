@@ -843,10 +843,10 @@ class TFT5Model(TFT5PreTrainedModel):
         self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
 
     def get_input_embeddings(self):
-        return self.shared.weight
+        return self.shared
 
     def get_output_embeddings(self):
-        return self.shared.weight
+        return self.shared
     
     def set_input_embeddings(self, new_embeddings):
         self.shared.weight = new_embeddings
@@ -973,10 +973,10 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
 
     def get_input_embeddings(self):
-        return self.shared.weight
+        return self.shared
 
     def get_output_embeddings(self):
-        return self.shared.weight
+        return self.shared
     
     def set_input_embeddings(self, new_embeddings):
         self.shared.weight = new_embeddings
