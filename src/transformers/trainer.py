@@ -119,8 +119,8 @@ class Trainer:
     prediction_loss_only: bool
     tb_writer: Optional["SummaryWriter"] = None
     optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None
-    global_step: int
-    epoch: float
+    global_step: Optional[int] = None
+    epoch: Optional[float] = None
 
     def __init__(
         self,
@@ -161,7 +161,9 @@ class Trainer:
             logger.warning(
                 "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
             )
-        if not is_wandb_available():
+        if is_wandb_available():
+            self._setup_wandb()
+        else:
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
@@ -355,8 +357,6 @@ class Trainer:
         if self.tb_writer is not None:
             self.tb_writer.add_text("args", self.args.to_json_string())
             self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
-        if is_wandb_available():
-            self._setup_wandb()
 
         # Train!
         if is_tpu_available():
@@ -483,7 +483,8 @@ class Trainer:
         return TrainOutput(self.global_step, tr_loss / self.global_step)
 
     def _log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
-        logs["epoch"] = self.epoch
+        if self.epoch is not None:
+            logs["epoch"] = self.epoch
         if self.tb_writer:
             for k, v in logs.items():
                 self.tb_writer.add_scalar(k, v, self.global_step)
