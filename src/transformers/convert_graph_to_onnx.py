@@ -20,7 +20,7 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument("--model", type=str, required=True, help="Model's id or path (ex: bert-base-cased)")
         self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: bert-base-cased)")
         self.add_argument("--framework", type=str, choices=["pt", "tf"], help="Framework for loading the model")
-        self.add_argument("--opset", type=int, default=11, help="ONNX opset to use (-1 = latest)")
+        self.add_argument("--opset", type=int, default=11, help="ONNX opset to use")
         self.add_argument("--check-loading", action="store_true", help="Check ONNX is able to load the model")
         self.add_argument("output")
 
@@ -160,7 +160,7 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: str):
         )
 
 
-def convert(framework: str, model: str, output: str, tokenizer: Optional[str] = None, opset: int = -1):
+def convert(framework: str, model: str, output: str, opset: int, tokenizer: Optional[str] = None):
     print("ONNX opset version set to: {}".format(opset))
 
     # Load the pipeline
@@ -203,7 +203,7 @@ if __name__ == "__main__":
 
     try:
         # Convert
-        convert(args.framework, args.model, args.output, args.tokenizer, args.opset)
+        convert(args.framework, args.model, args.output,  args.opset, args.tokenizer)
 
         # And verify
         if args.check_loading:
