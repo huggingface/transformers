@@ -762,14 +762,26 @@ class ModelTesterMixin:
     def test_multigpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+        # some params shouldn't be scattered by nn.DataParallel
+        # so just remove them if they are present.
+        blacklist_non_batched_params = "head_mask"
+        for k in blacklist_non_batched_params:
+            inputs_dict.pop(k, None)
+
+        # move input tensors to cuda:O
+        for k, v in inputs_dict.items():
+            if torch.is_tensor(v):
+                inputs_dict[k] = v.to(0)
+
         for model_class in self.all_model_classes:
             model = model_class(config=config)
             model.to(0)
-            model = torch.nn.DataParallel(model)
             model.eval()
+
+            # Wrap model in nn.DataParallel
+            model = torch.nn.DataParallel(model)
             with torch.no_grad():
-                input_ids = torch.ones([16, 10], dtype=torch.long, device=0)
-                _ = model(input_ids)
+                _ = model(**inputs_dict)
 
 
 global_rng = random.Random()
