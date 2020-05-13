@@ -2195,7 +2195,6 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             .replace(" ' ", "'")
             .replace(" n't", "n't")
             .replace(" 'm", "'m")
-            .replace(" do not", " don't")
             .replace(" 's", "'s")
             .replace(" 've", "'ve")
             .replace(" 're", "'re")
