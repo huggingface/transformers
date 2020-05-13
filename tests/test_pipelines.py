@@ -9,7 +9,6 @@ from .utils import require_tf, require_torch, slow
 
 QA_FINETUNED_MODELS = ["sshleifer/tiny_distilbert-base-cased-distilled-squad"]
 
-# TF also tested using this s3dir
 NER_FINETUNED_MODELS = ["sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"]
 
 # xlnet-base-cased disabled for now, since it crashes TF2
