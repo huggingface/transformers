@@ -226,7 +226,11 @@ class TFTrainer:
         else:
             metrics = {}
 
-        metrics["loss"] = loss.numpy()
+        metrics["eval_loss"] = loss.numpy()
+
+        for key in list(metrics.keys()):
+            if not key.startswith("eval_"):
+                metrics[f"eval_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
@@ -390,7 +394,7 @@ class TFTrainer:
           labels: the batched labels.
           training: run the model in training mode or not
         """
-        if self.args.mode == "sequence-classification" or self.args.mode == "token-classification":
+        if self.args.mode == "text-classification" or self.args.mode == "token-classification":
             logits = self.model(features, training=training)[0]
         else:
             logits = self.model(features, training=training)

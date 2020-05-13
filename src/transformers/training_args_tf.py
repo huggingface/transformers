@@ -21,9 +21,9 @@ class TFTrainingArguments(TrainingArguments):
         },
     )
     mode: str = field(
-        default="sequence-classification",
+        default="text-classification",
         metadata={
-            "help": 'Type of task, one of "sequence-classification", "token-classification", "question-answering"'
+            "help": 'Type of task, one of "text-classification", "token-classification", "question-answering"'
         },
     )
     loss_name: str = field(
