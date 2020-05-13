@@ -146,6 +146,7 @@ class CombinedModel(nn.Module):
             max_predictions_per_seq,
             proposal_distribution=1.0
     ):
+        input_ids = input_ids.clone()
         inputs_which_can_be_masked = torch.ones_like(input_ids)
         for token in tokens_to_ignore:
             inputs_which_can_be_masked -= torch.eq(input_ids, token).long()
@@ -213,8 +214,9 @@ class CombinedModel(nn.Module):
             position_ids=None,
             head_mask=None,
             inputs_embeds=None,
-            labels=None
+            labels=None,
     ):
+        # get the masked positions as well as their original values
         masked_input_ids, masked_lm_positions = self.mask_inputs(
             input_ids,
             self.tokenizer.mask_token_id,
@@ -223,22 +225,34 @@ class CombinedModel(nn.Module):
             30
         )
 
+        # only masked values should be counted in the loss; build a tensor containing the true values and -100 otherwise
+        masked_lm_labels = torch.full_like(input_ids, -100)
+        masked_lm_labels.scatter_(-1, masked_lm_positions, masked_input_ids)
+
+        # mask the inputs with the mask token
+        masked_tokens = torch.full_like(masked_input_ids, self.tokenizer.mask_token_id)
+        masked_lm_inputs = input_ids.clone()
+        masked_lm_inputs.scatter_(-1, masked_lm_positions, masked_tokens)
+        masked_lm_inputs[..., 0] = 101
+
         generator_loss, generator_output = self.generator(
-            masked_input_ids,
+            masked_lm_inputs,
             attention_mask,
             token_type_ids,
             position_ids,
             head_mask,
             position_ids,
-            masked_lm_labels=labels
+            masked_lm_labels=masked_lm_labels
         )[:2]
 
+        # get the generator's predicted value on each masked position
         fake_logits = self.gather_positions(generator_output, masked_lm_positions)
         fake_argmaxes = fake_logits.argmax(-1)
-        fake_tokens = masked_input_ids.scatter(-1, masked_lm_positions, fake_argmaxes)
+
+        # create a tensor containing the predicted tokens
+        fake_tokens = input_ids.scatter(-1, masked_lm_positions, fake_argmaxes)
         fake_tokens[:, 0] = input_ids[:, 0]
 
-        # discriminator_output
         discriminator_loss, discriminator_output = self.discriminator(
             fake_tokens,
             attention_mask,
@@ -255,8 +269,8 @@ class CombinedModel(nn.Module):
 
         return (
             total_loss,
-            (discriminator_predictions, generator_output),
-            (fake_tokens, masked_input_ids)
+            (generator_output, discriminator_output),
+            (fake_tokens, discriminator_predictions)
         )
 
     def save_pretrained(self, directory):
