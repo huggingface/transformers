@@ -17,6 +17,7 @@ nlp({
 
 ```python
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering
+import torch
 
 tokenizer = AutoTokenizer.from_pretrained("lserinol/bert-turkish-question-answering")
 model = AutoModelForQuestionAnswering.from_pretrained("lserinol/bert-turkish-question-answering")

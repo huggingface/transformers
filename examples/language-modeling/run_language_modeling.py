@@ -265,7 +265,7 @@ def main():
 
         eval_output = trainer.evaluate()
 
-        perplexity = math.exp(eval_output["loss"])
+        perplexity = math.exp(eval_output["eval_loss"])
         result = {"perplexity": perplexity}
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results_lm.txt")

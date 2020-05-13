@@ -1,4 +1,5 @@
 import json
+import re
 import warnings
 from typing import Dict, List, Optional, Union
 
@@ -14,7 +15,7 @@ vocab_files_names = {
     "vocab": "vocab.json",
     "tokenizer_config_file": "tokenizer_config.json",
 }
-MODEL_NAMES = ("opus-mt-en-de",)
+MODEL_NAMES = ("opus-mt-en-de",)  # TODO(SS): the only required constant is vocab_files_names
 PRETRAINED_VOCAB_FILES_MAP = {
     k: {m: f"{S3_BUCKET_PREFIX}/Helsinki-NLP/{m}/{fname}" for m in MODEL_NAMES}
     for k, fname in vocab_files_names.items()
@@ -41,6 +42,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {m: 512 for m in MODEL_NAMES}
     model_input_names = ["attention_mask"]  # actually attention_mask, decoder_attention_mask
+    language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
     def __init__(
         self,
@@ -72,8 +74,6 @@ class MarianTokenizer(PreTrainedTokenizer):
         self.target_lang = target_lang
 
         # load SentencePiece model for pre-processing
-        self.paths = {}
-
         self.spm_source = sentencepiece.SentencePieceProcessor()
         self.spm_source.Load(source_spm)
 
@@ -82,9 +82,7 @@ class MarianTokenizer(PreTrainedTokenizer):
 
         # Multilingual target side: default to using first supported language code.
         self.supported_language_codes: list = [k for k in self.encoder if k.startswith(">>") and k.endswith("<<")]
-        self.tgt_lang_id = None  # will not be used unless it is set through prepare_translation_batch
 
-        # Note(SS): sentence_splitter would require lots of book-keeping.
         try:
             from mosestokenizer import MosesPunctuationNormalizer
 
@@ -93,11 +91,23 @@ class MarianTokenizer(PreTrainedTokenizer):
             warnings.warn("Recommended: pip install mosestokenizer")
             self.punc_normalizer = lambda x: x
 
+    def normalize(self, x: str) -> str:
+        """Cover moses empty string edge case. They return empty list for '' input!"""
+        return self.punc_normalizer(x) if x else ""
+
     def _convert_token_to_id(self, token):
         return self.encoder.get(token, self.encoder[self.unk_token])
 
+    def remove_language_code(self, text: str):
+        """Remove language codes like <<fr>> before sentencepiece"""
+        match = self.language_code_re.match(text)
+        code: list = [match.group(0)] if match else []
+        return code, self.language_code_re.sub("", text)
+
     def _tokenize(self, text: str) -> List[str]:
-        return self.current_spm.EncodeAsPieces(text)
+        code, text = self.remove_language_code(text)
+        pieces = self.current_spm.EncodeAsPieces(text)
+        return code + pieces
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the encoder."""
@@ -125,7 +135,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         pad_to_max_length: bool = True,
         return_tensors: str = "pt",
     ) -> BatchEncoding:
-        """
+        """Prepare model inputs for translation. For best performance, translate one sentence at a time.
         Arguments:
             src_texts: list of src language texts
             tgt_texts: list of tgt language texts
@@ -138,7 +148,10 @@ class MarianTokenizer(PreTrainedTokenizer):
             all shaped bs, seq_len. (BatchEncoding is a dict of string -> tensor or lists).
             If no tgt_text is specified, the only keys will be input_ids and attention_mask.
         """
+        if "" in src_texts:
+            raise ValueError(f"found empty string in src_texts: {src_texts}")
         self.current_spm = self.spm_source
+        src_texts = [self.normalize(t) for t in src_texts]  # this does not appear to do much
         model_inputs: BatchEncoding = self.batch_encode_plus(
             src_texts,
             add_special_tokens=True,

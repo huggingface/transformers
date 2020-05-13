@@ -98,7 +98,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
         trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
         result = trainer.evaluate()
-        self.assertLess(result["loss"], 0.2)
+        self.assertLess(result["eval_loss"], 0.2)
 
     def test_trainer_eval_lm(self):
         MODEL_ID = "distilroberta-base"
