@@ -67,8 +67,8 @@ extras = {}
 
 extras["mecab"] = ["mecab-python3"]
 extras["sklearn"] = ["scikit-learn"]
-extras["tf"] = ["tensorflow"]
-extras["tf-cpu"] = ["tensorflow-cpu"]
+extras["tf"] = ["tensorflow", "keras2onnx"]
+extras["tf-cpu"] = ["tensorflow-cpu", "keras2onnx"]
 extras["torch"] = ["torch"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
