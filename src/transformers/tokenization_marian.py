@@ -42,7 +42,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {m: 512 for m in MODEL_NAMES}
     model_input_names = ["attention_mask"]  # actually attention_mask, decoder_attention_mask
-    language_code_re: re.Pattern = re.compile(">>.+<<")
+    language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
     def __init__(
         self,
