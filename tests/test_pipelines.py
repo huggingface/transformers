@@ -18,7 +18,7 @@ TEXT_CLASSIF_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-uncased-finetun
 TEXT_GENERATION_FINETUNED_MODELS = ["sshleifer/tiny-gpt2"]
 
 FILL_MASK_FINETUNED_MODELS = ["sshleifer/tiny-distilroberta-base"]
-TF_FILL_MASK_FINETUNED_MODELS = ["distilroberta-base"]  # @slow
+LARGE_FILL_MASK_FINETUNED_MODELS = ["distilroberta-base"]  # @slow
 
 SUMMARIZATION_FINETUNED_MODELS = ["sshleifer/bart-tiny-random", "patrickvonplaten/t5-tiny-random"]
 TF_SUMMARIZATION_FINETUNED_MODELS = ["patrickvonplaten/t5-tiny-random"]
@@ -28,6 +28,17 @@ TRANSLATION_FINETUNED_MODELS = [
     ("patrickvonplaten/t5-tiny-random", "translation_en_to_ro"),
 ]
 TF_TRANSLATION_FINETUNED_MODELS = [("patrickvonplaten/t5-tiny-random", "translation_en_to_fr")]
+
+expected_fill_mask_result = [
+    [
+        {"sequence": "<s> My name is:</s>", "score": 0.009954338893294334, "token": 35},
+        {"sequence": "<s> My name is John</s>", "score": 0.0080940006300807, "token": 610},
+    ],
+    [
+        {"sequence": "<s> The largest city in France is Paris</s>", "score": 0.3185044229030609, "token": 2201},
+        {"sequence": "<s> The largest city in France is Lyon</s>", "score": 0.21112334728240967, "token": 12790},
+    ],
+]
 
 
 class DefaultArgumentHandlerTestCase(unittest.TestCase):
@@ -205,48 +216,62 @@ class MonoColumnInputTestCase(unittest.TestCase):
         ]
         invalid_inputs = [None]
         for model_name in FILL_MASK_FINETUNED_MODELS:
-            tok_arg = (model_name, {"use_fast": False})
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=tok_arg, topk=2, framework='pt')
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
             self._test_mono_column_pipeline(
                 nlp, valid_inputs, invalid_inputs, mandatory_keys, expected_check_keys=["sequence"],
             )
 
-    @require_tf
-    @slow
-    def test_slow_tf_fill_mask(self):
+    @require_torch
+    def test_tf_fill_mask(self):
         mandatory_keys = {"sequence", "score", "token"}
         valid_inputs = [
             "My name is <mask>",
             "The largest city in France is <mask>",
         ]
         invalid_inputs = [None]
-        expected_multi_result = [
-            [
-                {"sequence": "<s> My name is:</s>", "score": 0.009954338893294334, "token": 35},
-                {"sequence": "<s> My name is John</s>", "score": 0.0080940006300807, "token": 610},
-            ],
-            [
-                {
-                    "sequence": "<s> The largest city in France is Paris</s>",
-                    "score": 0.3185044229030609,
-                    "token": 2201,
-                },
-                {
-                    "sequence": "<s> The largest city in France is Lyon</s>",
-                    "score": 0.21112334728240967,
-                    "token": 12790,
-                },
-            ],
+        for model_name in FILL_MASK_FINETUNED_MODELS:
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2,)
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, invalid_inputs, mandatory_keys, expected_check_keys=["sequence"],
+            )
+
+    @require_torch
+    @slow
+    def test_torch_fill_mask_results(self):
+        mandatory_keys = {"sequence", "score", "token"}
+        valid_inputs = [
+            "My name is <mask>",
+            "The largest city in France is <mask>",
         ]
-        for model_name in TF_FILL_MASK_FINETUNED_MODELS:
-            tok_arg = (model_name, {"use_fast": False})
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=tok_arg, framework="tf", topk=2)
+        invalid_inputs = [None]
+        for model_name in LARGE_FILL_MASK_FINETUNED_MODELS:
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
             self._test_mono_column_pipeline(
                 nlp,
                 valid_inputs,
                 invalid_inputs,
                 mandatory_keys,
-                expected_multi_result=expected_multi_result,
+                expected_multi_result=expected_fill_mask_result,
+                expected_check_keys=["sequence"],
+            )
+
+    @require_tf
+    @slow
+    def test_tf_fill_mask_results(self):
+        mandatory_keys = {"sequence", "score", "token"}
+        valid_inputs = [
+            "My name is <mask>",
+            "The largest city in France is <mask>",
+        ]
+        invalid_inputs = [None]
+        for model_name in LARGE_FILL_MASK_FINETUNED_MODELS:
+            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2)
+            self._test_mono_column_pipeline(
+                nlp,
+                valid_inputs,
+                invalid_inputs,
+                mandatory_keys,
+                expected_multi_result=expected_fill_mask_result,
                 expected_check_keys=["sequence"],
             )
 
@@ -284,6 +309,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             )
 
     @require_tf
+    @slow
     def test_tf_translation(self):
         valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
         invalid_inputs = [4, "<mask>"]
@@ -315,8 +341,8 @@ class MonoColumnInputTestCase(unittest.TestCase):
             )
 
 
-class MultiColumnInputTestCase(unittest.TestCase):
-    def _test_multicolumn_pipeline(self, nlp):
+class QAPipelineTests(unittest.TestCase):
+    def _test_qa_pipeline(self, nlp):
         output_keys = {"score", "answer", "start", "end"}
         valid_inputs = [
             {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
@@ -354,13 +380,15 @@ class MultiColumnInputTestCase(unittest.TestCase):
     def test_torch_question_answering(self):
         for model_name in QA_FINETUNED_MODELS:
             nlp = pipeline(task="question-answering", model=model_name, tokenizer=model_name)
-            self._test_multicolumn_pipeline(nlp)
+            self._test_qa_pipeline(nlp)
 
     @require_tf
     def test_tf_question_answering(self):
         for model_name in QA_FINETUNED_MODELS:
-            nlp = pipeline(task="question-answering", model=model_name, tokenizer=model_name, from_pt=True, framework="tf")
-            self._test_multicolumn_pipeline(nlp)
+            nlp = pipeline(
+                task="question-answering", model=model_name, tokenizer=model_name, from_pt=True, framework="tf"
+            )
+            self._test_qa_pipeline(nlp)
 
 
 class PipelineCommonTests(unittest.TestCase):
