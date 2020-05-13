@@ -53,6 +53,13 @@ OpenAIGPTTokenizer
     :members: save_vocabulary
 
 
+OpenAIGPTTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.OpenAIGPTTokenizerFast
+    :members:
+
+
 OpenAIGPTModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 

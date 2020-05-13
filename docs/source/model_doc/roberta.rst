@@ -46,6 +46,13 @@ RobertaTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
+RobertaTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.RobertaTokenizerFast
+    :members: build_inputs_with_special_tokens
+
+
 RobertaModel
 ~~~~~~~~~~~~~~~~~~~~
 

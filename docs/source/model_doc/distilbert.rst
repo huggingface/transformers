@@ -44,6 +44,13 @@ DistilBertTokenizer
     :members:
 
 
+DistilBertTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.DistilBertTokenizerFast
+    :members:
+
+
 DistilBertModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
