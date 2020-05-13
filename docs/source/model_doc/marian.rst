@@ -24,6 +24,7 @@ Implementation Notes
     - no layernorm_embedding (``MarianConfig.normalize_embedding=False``)
     - the model starts generating with pad_token_id (which has 0 token_embedding) as the prefix. (Bart uses <s/>)
 - Code to bulk convert models can be found in ``convert_marian_to_pytorch.py``
+
 Naming
 ~~~~~~
 - All  model names use the following format: ``Helsinki-NLP/opus-mt-{src}-{tgt}``
@@ -65,11 +66,10 @@ Sometimes, models were trained on collections of languages that do not resolve t
 There are many supported regional language codes, like ``>>es_ES<<`` (Spain) and ``>>es_AR<<`` (Argentina), I have not found these to provide different results than just using ``>>es<<``.
 
 
-Examples:
+For Example:
+    - ``Helsinki-NLP/opus-mt-NORTH_EU-NORTH_EU``: translates from all NORTH_EU languages (see mapping below) to all NORTH_EU languages. Use a special language code like ``>>de<<`` to specify output language.
+    - ``Helsinki-NLP/opus-mt-ROMANCE-en``: translates from many romance languages to english, no codes needed since there is only 1 tgt language.
 
-    - 'Helsinki-NLP/opus-mt-INSULAR_CELTIC-en': from all insular celtic languages to english.
-    - 'Helsinki-NLP/opus-mt-NORTH_EU-NORTH_EU', from all NORTH_EU languages to all NORTH_EU languages, use a special language code like ``>>de<<`` to specify output language.
-    - 'Helsinki-NLP/opus-mt-ROMANCE-en': translates from many romance languages to english
 
 Multilingual Group Members:
 
