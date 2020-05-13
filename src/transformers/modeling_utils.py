@@ -769,6 +769,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     def generate(
         self,
         input_ids=None,
+        decoder_input_ids=None,
         max_length=None,
         min_length=None,
         do_sample=None,
@@ -803,6 +804,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
                 The sequence used as a prompt for the generation. If `None` the method initializes
                 it as an empty `torch.LongTensor` of shape `(1,)`.
+
+            decoder_input_ids: (`optional`) `torch.LongTensor` of shape `(batch_size, sequence_length)`
+                The sequence used as a prompt for the generation from a decoder in an encoder-decoder model.
+                 If `None` the method initializes it as an empty `torch.LongTensor` of shape `(1,)`.
 
             max_length: (`optional`) int
                 The max length of the sequence to be generated.  Between `min_length` and infinity. Default to 20.
@@ -990,6 +995,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         else:
             assert input_ids.dim() == 2, "Input prompt should be of shape (batch_size, sequence length)."
 
+        if decoder_input_ids is not None:
+            assert self.config.is_encoder_decoder, "``decoder_input_ids` are only used if model is encoder-decoder!"
+
+        if self.config.is_encoder_decoder:
+            # manage decoder_start_token_id, and make sure decoder_input_ids is not None
+            if decoder_start_token_id is None:
+                decoder_start_token_id = bos_token_id
+
+            assert (
+                decoder_start_token_id is not None
+            ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
+
+            # make sure that decoder_input_ids is always something valid
+            if decoder_input_ids is None:
+                # if no decoder input ids given, but model is an encoder-decoder, create decoder input ids from BOS
+                assert isinstance(decoder_start_token_id, int) and decoder_start_token_id >= 0, (
+                    "you should either supply a context to complete as `input_ids` input "
+                    "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
+                )
+                decoder_input_ids = torch.full(
+                    (batch_size, 1), decoder_start_token_id, dtype=torch.long, device=next(self.parameters()).device,
+                )
+            else:
+                assert decoder_input_ids.size(0) == batch_size, "Batch sizes of `input_ids` and `decoder_input_ids` are different."
+                assert decoder_input_ids.dim() == 2, "Must be batch of sequences"
+
         # not allow to duplicate outputs when greedy decoding
         if do_sample is False:
             if num_beams == 1:
@@ -1038,12 +1069,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             effective_batch_mult = 1
 
         if self.config.is_encoder_decoder:
-            if decoder_start_token_id is None:
-                decoder_start_token_id = bos_token_id
-
-            assert (
-                decoder_start_token_id is not None
-            ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
             assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
             assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
 
@@ -1052,30 +1077,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             encoder_outputs: tuple = encoder(input_ids, attention_mask=attention_mask)
 
+            # since we already encoded input_ids, we can replace them with decoder_input_ids for the decoder
+            input_ids = decoder_input_ids
+
         # Expand input ids if num_beams > 1 or num_return_sequences > 1
         if num_return_sequences > 1 or num_beams > 1:
+            # expand input ids (which are decoder_input_ids if model is encoder-decoder)
             input_ids_len = input_ids.shape[-1]
             input_ids = input_ids.unsqueeze(1).expand(batch_size, effective_batch_mult * num_beams, input_ids_len)
-            attention_mask = attention_mask.unsqueeze(1).expand(
-                batch_size, effective_batch_mult * num_beams, input_ids_len
-            )
-
             input_ids = input_ids.contiguous().view(
                 effective_batch_size * num_beams, input_ids_len
             )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
+
+            # expand attention mask
+            attention_mask_len = attention_mask.shape[-1]
+            attention_mask = attention_mask.unsqueeze(1).expand(
+                batch_size, effective_batch_mult * num_beams, attention_mask_len
+            )
             attention_mask = attention_mask.contiguous().view(
-                effective_batch_size * num_beams, input_ids_len
-            )  # shape: (batch_size * num_return_sequences * num_beams, cur_len)
+                effective_batch_size * num_beams, attention_mask_len
+            )  # shape: (batch_size * num_return_sequences * num_beams, input_len)
 
         if self.config.is_encoder_decoder:
-            # create empty decoder_input_ids
-            input_ids = torch.full(
-                (effective_batch_size * num_beams, 1),
-                decoder_start_token_id,
-                dtype=torch.long,
-                device=next(self.parameters()).device,
-            )
-            cur_len = 1
+            # no need for empty decoder_input_ids, above code guarantees it's either provided as argument
+            #   or generated from BOS token (and expanded)
+            cur_len = input_ids.size(-1)
 
             assert (
                 batch_size == encoder_outputs[0].shape[0]
