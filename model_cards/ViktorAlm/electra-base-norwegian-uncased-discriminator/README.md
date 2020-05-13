@@ -1,5 +1,5 @@
 # Norwegian Electra
-![Image of norwegian electra](https://i.imgur.com/yxnE5GC.png)
+![Image of norwegian electra](https://i.imgur.com/8Bw9hnN.png)
 
 Trained on Oscar + wikipedia + opensubtitles + some other data I had with the awesome power of TPUs(V3-8)
 
