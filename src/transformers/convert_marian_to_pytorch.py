@@ -104,7 +104,7 @@ GROUPS = [
     ("da+fo+is+no+nb+nn+sv", "SCANDINAVIA"),
     ("se+sma+smj+smn+sms", "SAMI"),
     ("nb_NO+nb+nn_NO+nn+nog+no_nb+no", "NORWAY"),
-    ("ga+cy+br+gd+kw+gv", "INSULAR_CELTIC"),  # https://en.wikipedia.org/wiki/Insular_Celtic_languages
+    ("ga+cy+br+gd+kw+gv", "CELTIC"),  # https://en.wikipedia.org/wiki/Insular_Celtic_languages
 ]
 GROUP_TO_OPUS_NAME = {
     "opus-mt-ZH-de": "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-de",
@@ -117,7 +117,7 @@ GROUP_TO_OPUS_NAME = {
     "opus-mt-en-ROMANCE": "en-fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO"
     "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
     "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la",
-    "opus-mt-en-INSULAR_CELTIC": "en-ga+cy+br+gd+kw+gv",
+    "opus-mt-en-CELTIC": "en-ga+cy+br+gd+kw+gv",
     "opus-mt-es-NORWAY": "es-nb_NO+nb+nn_NO+nn+nog+no_nb+no",
     "opus-mt-fi_nb_no_nn_ru_sv_en-SAMI": "fi+nb+no+nn+ru+sv+en-se+sma+smj+smn+sms",
     "opus-mt-fi-ZH": "fi-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh",
@@ -125,7 +125,7 @@ GROUP_TO_OPUS_NAME = {
     "opus-mt-ROMANCE-en": "fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO"
     "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
     "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la-en",
-    "opus-mt-INSULAR_CELTIC-en": "ga+cy+br+gd+kw+gv-en",
+    "opus-mt-CELTIC-en": "ga+cy+br+gd+kw+gv-en",
     "opus-mt-sv-ZH": "sv-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh",
     "opus-mt-sv-NORWAY": "sv-nb_NO+nb+nn_NO+nn+nog+no_nb+no",
 }

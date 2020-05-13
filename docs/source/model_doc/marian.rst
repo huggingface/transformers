@@ -82,7 +82,7 @@ Multilingual Group Members:
      'SCANDINAVIA': ['da', 'fo', 'is', 'no', 'nb', 'nn', 'sv'],
      'SAMI': ['se', 'sma', 'smj', 'smn', 'sms'],
      'NORWAY': ['nb_NO', 'nb', 'nn_NO', 'nn', 'nog', 'no_nb', 'no'],
-     'INSULAR_CELTIC': ['ga', 'cy', 'br', 'gd', 'kw', 'gv']
+     'CELTIC': ['ga', 'cy', 'br', 'gd', 'kw', 'gv']
     }
 
 Code to see available pretrained models:
