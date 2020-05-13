@@ -847,7 +847,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
     def get_output_embeddings(self):
         return self.shared
-    
+
     def set_input_embeddings(self, new_embeddings):
         self.shared.weight = new_embeddings
         # retrieve correct absolute scope for embed token wrapper
@@ -977,7 +977,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
 
     def get_output_embeddings(self):
         return self.shared
-    
+
     def set_input_embeddings(self, new_embeddings):
         self.shared.weight = new_embeddings
         # retrieve correct absolute scope for embed token wrapper
@@ -1088,7 +1088,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
 
         sequence_output = decoder_outputs[0] * (self.model_dim ** -0.5)
         embed_tokens = self.decoder.get_output_embeddings()
-        lm_logits = embed_tokens(sequence_output, mode="linear")     
+        lm_logits = embed_tokens(sequence_output, mode="linear")
         decoder_outputs = (lm_logits,) + decoder_outputs[1:]
 
         return decoder_outputs + encoder_outputs

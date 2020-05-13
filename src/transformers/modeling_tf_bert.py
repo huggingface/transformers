@@ -496,7 +496,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
         self.set_input_embeddings(new_embeddings)
         return self.get_input_embeddings()
-    
+
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
         """ Build a resized Embedding Module from a provided token Embedding Module.
             Increasing the size will add newly initialized vectors at the end
@@ -520,10 +520,12 @@ class TFBertMainLayer(tf.keras.layers.Layer):
 
         # Build new embeddings
         # initialize all new embeddings (in particular added tokens)
-        new_embeddings = self.add_weight("weight",
-                shape=[new_num_tokens, old_embedding_dim],
-                initializer=get_initializer(self.initializer_range),
-                dtype=tf.float32)
+        new_embeddings = self.add_weight(
+            "weight",
+            shape=[new_num_tokens, old_embedding_dim],
+            initializer=get_initializer(self.initializer_range),
+            dtype=tf.float32,
+        )
         init_weights = new_embeddings.numpy()
 
         # Copy token embeddings from the previous weights

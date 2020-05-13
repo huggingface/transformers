@@ -160,7 +160,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             return base_model.get_input_embeddings()
         else:
             raise NotImplementedError
-    
+
     def set_input_embeddings(self, value):
         """
         Set model's input embeddings
@@ -174,7 +174,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             base_model.set_input_embeddings(value)
         else:
             raise NotImplementedError
-    
 
     def get_output_embeddings(self):
         """
@@ -203,13 +202,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         model_embeds = base_model._resize_token_embeddings(new_num_tokens)
         if new_num_tokens is None:
             return model_embeds
-        
+
         # Update base model and current model config
         self.config.vocab_size = new_num_tokens
         base_model.vocab_size = new_num_tokens
 
         return model_embeds
-    
+
     def _resize_token_embeddings(self, new_num_tokens):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
@@ -239,12 +238,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             return self.get_input_embeddings()
 
         # initialize new embeddings
-        # todo: initializer range is not always passed in config. 
-        init_range = getattr(self.config, 'initializer_range', 0.02)
-        new_embeddings = self.add_weight("weight",
-                shape=[new_num_tokens, old_embedding_dim],
-                initializer=get_initializer(init_range),
-                dtype=tf.float32)
+        # todo: initializer range is not always passed in config.
+        init_range = getattr(self.config, "initializer_range", 0.02)
+        new_embeddings = self.add_weight(
+            "weight",
+            shape=[new_num_tokens, old_embedding_dim],
+            initializer=get_initializer(init_range),
+            dtype=tf.float32,
+        )
         init_weights = new_embeddings.numpy()
 
         # Copy token embeddings from the previous weights
@@ -254,7 +255,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         new_embeddings.assign(init_weights)
 
         return new_embeddings
-
 
     def prune_heads(self, heads_to_prune):
         """ Prunes heads of the base model.
