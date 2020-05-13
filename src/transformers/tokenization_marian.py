@@ -1,4 +1,5 @@
 import json
+import re
 import warnings
 from typing import Dict, List, Optional, Union
 
@@ -14,7 +15,7 @@ vocab_files_names = {
     "vocab": "vocab.json",
     "tokenizer_config_file": "tokenizer_config.json",
 }
-MODEL_NAMES = ("opus-mt-en-de",)
+MODEL_NAMES = ("opus-mt-en-de",)  # TODO(SS): the only required constant is vocab_files_names
 PRETRAINED_VOCAB_FILES_MAP = {
     k: {m: f"{S3_BUCKET_PREFIX}/Helsinki-NLP/{m}/{fname}" for m in MODEL_NAMES}
     for k, fname in vocab_files_names.items()
@@ -41,6 +42,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {m: 512 for m in MODEL_NAMES}
     model_input_names = ["attention_mask"]  # actually attention_mask, decoder_attention_mask
+    language_code_re = re.compile(">>.+<<")
 
     def __init__(
         self,
@@ -82,7 +84,6 @@ class MarianTokenizer(PreTrainedTokenizer):
 
         # Multilingual target side: default to using first supported language code.
         self.supported_language_codes: list = [k for k in self.encoder if k.startswith(">>") and k.endswith("<<")]
-        self.tgt_lang_id = None  # will not be used unless it is set through prepare_translation_batch
 
         # Note(SS): sentence_splitter would require lots of book-keeping.
         try:
@@ -96,8 +97,16 @@ class MarianTokenizer(PreTrainedTokenizer):
     def _convert_token_to_id(self, token):
         return self.encoder.get(token, self.encoder[self.unk_token])
 
+    def remove_language_code(self, text: str):
+        """Remove language codes like <<fr>> before sentencepiece"""
+        match = re.match(self.language_code_re, text)
+        code: list = [match.group(0)] if match else []
+        return code, re.sub(self.language_code_re, "", text)
+
     def _tokenize(self, text: str) -> List[str]:
-        return self.current_spm.EncodeAsPieces(text)
+        code, text = self.remove_language_code(text)
+        pieces = self.current_spm.EncodeAsPieces(text)
+        return code + pieces
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the encoder."""

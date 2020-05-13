@@ -33,16 +33,21 @@ if is_torch_available():
         MarianTokenizer,
         MarianMTModel,
     )
-    from transformers.convert_marian_to_pytorch import convert_hf_name_to_opus_name, convert_opus_name_to_hf_name
+    from transformers.convert_marian_to_pytorch import (
+        convert_hf_name_to_opus_name,
+        convert_opus_name_to_hf_name,
+        ORG_NAME,
+    )
 
 
 class ModelManagementTests(unittest.TestCase):
     @slow
-    def test_model_count(self):
+    def test_model_names(self):
         model_list = HfApi().model_list()
-        expected_num_models = 1011
-        actual_num_models = len([x for x in model_list if x.modelId.startswith("Helsinki-NLP")])
-        self.assertEqual(expected_num_models, actual_num_models)
+        model_ids = [x.modelId for x in model_list if x.modelId.startswith(ORG_NAME)]
+        bad_model_ids = [mid for mid in model_ids if "+" in model_ids]
+        self.assertListEqual([], bad_model_ids)
+        self.assertGreater(len(model_ids), 500)
 
 
 @require_torch
@@ -205,20 +210,24 @@ class TestMarian_MT_EN(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
-class TestMarian_DE_Multi(MarianIntegrationTest):
-    src = "fi"
-    tgt = "ZH"
+class TestMarian_en_ROMANCE(MarianIntegrationTest):
+    """Multilingual on target side."""
+
+    src = "en"
+    tgt = "ROMANCE"
     src_text = [
-        '>>zh<< Ja Herra sanoi: "Pane hänelle nimeksi Loo-Ammi, sillä te ette ole minun kansani, enkä minä tahdo olla teidän omanne.'
+        ">>fr<< Don't spend so much time watching TV.",
+        ">>pt<< Your message has been sent.",
+        ">>es<< He's two years older than me.",
     ]
-    expected_text = ["耶 和 華 說 , 你 們 給 他 起 名 叫 羅 亞 米 , 因 為 你 們 不 是 我 的 子 民 , 我 也 不 願 意 作 你 們 的 子 民"]
+    expected_text = [
+        "Ne passez pas autant de temps à regarder la télé.",
+        "A sua mensagem foi enviada.",
+        "Es dos años más viejo que yo.",
+    ]
 
     @slow
-    def test_translation_de_multi_does_not_error(self):
-        self.translate_src_text()
-
-    @slow
-    def test_batch_generation_de_multi_tgt(self):
+    def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
 
 
