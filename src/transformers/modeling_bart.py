@@ -450,8 +450,8 @@ class BartDecoder(nn.Module):
         input_ids,
         encoder_hidden_states,
         encoder_padding_mask,
-        decoder_padding_mask,
-        decoder_causal_mask,
+        decoder_padding_mask=None,
+        decoder_causal_mask=None,
         decoder_cached_states=None,
         use_cache=False,
         **unused
