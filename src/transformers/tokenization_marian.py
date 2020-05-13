@@ -42,7 +42,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = {m: 512 for m in MODEL_NAMES}
     model_input_names = ["attention_mask"]  # actually attention_mask, decoder_attention_mask
-    language_code_re = re.compile(">>.+<<")
+    language_code_re: re.Pattern = re.compile(">>.+<<")
 
     def __init__(
         self,
@@ -74,8 +74,6 @@ class MarianTokenizer(PreTrainedTokenizer):
         self.target_lang = target_lang
 
         # load SentencePiece model for pre-processing
-        self.paths = {}
-
         self.spm_source = sentencepiece.SentencePieceProcessor()
         self.spm_source.Load(source_spm)
 
@@ -99,9 +97,9 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def remove_language_code(self, text: str):
         """Remove language codes like <<fr>> before sentencepiece"""
-        match = re.match(self.language_code_re, text)
+        match = self.language_code_re.match(text)
         code: list = [match.group(0)] if match else []
-        return code, re.sub(self.language_code_re, "", text)
+        return code, self.language_code_re.sub("", text)
 
     def _tokenize(self, text: str) -> List[str]:
         code, text = self.remove_language_code(text)
