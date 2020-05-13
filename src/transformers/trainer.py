@@ -119,6 +119,8 @@ class Trainer:
     prediction_loss_only: bool
     tb_writer: Optional["SummaryWriter"] = None
     optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None
+    global_step: int
+    epoch: float
 
     def __init__(
         self,
@@ -172,8 +174,6 @@ class Trainer:
             # Set an xla_device flag on the model's config.
             # We'll find a more elegant and not need to do this in the future.
             self.model.config.xla_device = True
-        self.global_step = 0
-        self.epoch = 0
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
@@ -375,6 +375,8 @@ class Trainer:
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", t_total)
 
+        self.global_step = 0
+        self.epoch = 0
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
         # Check if continuing training from a checkpoint
@@ -436,22 +438,15 @@ class Trainer:
                         if (self.args.logging_steps > 0 and self.global_step % self.args.logging_steps == 0) or (
                             self.global_step == 1 and self.args.logging_first_step
                         ):
-                            logs = {}
-                            loss_scalar = (tr_loss - logging_loss) / self.args.logging_steps
-                            learning_rate_scalar = scheduler.get_last_lr()[0]
-                            logs["learning_rate"] = learning_rate_scalar
-                            logs["loss"] = loss_scalar
+                            logs: Dict[str, float] = {}
+                            logs["loss"] = (tr_loss - logging_loss) / self.args.logging_steps
+                            logs["learning_rate"] = scheduler.get_last_lr()[0]
                             logging_loss = tr_loss
 
                             self._log(logs)
 
                             if self.args.evaluate_during_training:
-                                results = self.evaluate()
-                                for key, value in results.items():
-                                    eval_key = "eval_{}".format(key)
-                                    logs[eval_key] = value
-
-                            epoch_iterator.write(json.dumps({**logs, **{"step": self.global_step}}))
+                                self.evaluate()
 
                         if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                             # In all cases (even distributed/parallel), self.model is always a reference
@@ -487,13 +482,18 @@ class Trainer:
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         return TrainOutput(self.global_step, tr_loss / self.global_step)
 
-    def _log(self, logs: Dict[str, torch.Tensor]) -> None:
+    def _log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         logs["epoch"] = self.epoch
         if self.tb_writer:
             for k, v in logs.items():
                 self.tb_writer.add_scalar(k, v, self.global_step)
         if is_wandb_available():
             wandb.log(logs, step=self.global_step)
+        output = json.dumps({**logs, **{"step": self.global_step}})
+        if iterator is not None:
+            iterator.write(output)
+        else:
+            print(output)
 
     def _training_step(
         self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer
@@ -610,11 +610,7 @@ class Trainer:
 
         output = self._prediction_loop(eval_dataloader, description="Evaluation")
 
-        logs = {}
-        for key, value in output.metrics.items():
-            eval_key = "eval_{}".format(key)
-            logs[eval_key] = value
-        self._log(logs)
+        self._log(output.metrics)
 
         if self.args.tpu_metrics_debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -697,6 +693,12 @@ class Trainer:
         else:
             metrics = {}
         if len(eval_losses) > 0:
-            metrics["loss"] = np.mean(eval_losses)
+            metrics["eval_loss"] = np.mean(eval_losses)
+
+        # Prefix all keys with eval_
+        for key, value in metrics.items():
+            if not key.startswith("eval_"):
+                del metrics[key]
+                metrics[f"eval_{key}"] = value
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)

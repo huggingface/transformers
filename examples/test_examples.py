@@ -72,7 +72,7 @@ class ExamplesTests(unittest.TestCase):
             """.split()
         with patch.object(sys, "argv", testargs):
             result = run_glue.main()
-            del result["loss"]
+            del result["eval_loss"]
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
 
