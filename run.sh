@@ -5,9 +5,12 @@ else
     export root_data_dir="${BPROC}"
     export root_ckpt_dir="${SCKPTS}"
 fi
+export root_data_dir="/misc/vlgscratch4/BowmanGroup/awang/processed_data"
+export root_ckpt_dir="/misc/vlgscratch4/BowmanGroup/awang/processed_data/ckpts"
 
-export model_type="roberta"
-export model="roberta-large"
+export model_type="bert"
+export model="bert-base-uncased"
+export casing_config="--do_lower_case"
 # NOTE: USE --do_lower_case if using an uncased model (e.g. bert-base-uncased) !!!
 export mode=${1:evaluate}
 export gpuid=${3:-0}
@@ -18,7 +21,7 @@ export grad_acc_steps=${6:-1}
 function train() {
     python examples/run_superglue.py --data_dir ${data_dir} --task_name ${task} \
                                      --output_dir ${out_dir} --overwrite_output_dir \
-                                     --model_type ${model_type} --model_name_or_path ${model} \
+                                     --model_type ${model_type} --model_name_or_path ${model} ${casing_config} \
                                      --use_gpuid ${gpuid} --seed ${seed} \
                                      --do_train ${opt_len_train} \
                                      --do_eval --eval_and_save_steps ${eval_freq} \
@@ -27,15 +30,15 @@ function train() {
                                      --weight_decay 0.01 \
                                      --per_gpu_train_batch_size 4 \
                                      --gradient_accumulation_steps ${grad_acc_steps} \
-                                     --logging_steps 100 \
-                                     --fp16 --fp16_opt_level O2
+                                     --logging_steps 100 #\
+                                     #--fp16 --fp16_opt_level O2
 
 }
 
 function evaluate() {
     python examples/run_superglue.py --data_dir ${data_dir} --task_name ${task} \
                                      --output_dir ${out_dir} --overwrite_output_dir \
-                                     --model_type ${model_type} --model_name_or_path ${model} \
+                                     --model_type ${model_type} --model_name_or_path ${model} ${casing_config} \
                                      --use_gpuid ${gpuid} --seed ${seed} \
                                      --do_eval #--log_energy_consumption
 }
@@ -47,7 +50,7 @@ function analyze() {
 function debug() {
     python -m pdb examples/run_superglue.py --data_dir ${data_dir} --task_name ${task} \
                                      --output_dir ${out_dir} --overwrite_output_dir \
-                                     --model_type ${model_type} --model_name_or_path ${model} \
+                                     --model_type ${model_type} --model_name_or_path ${model} ${casing_config} \
                                      --use_gpuid ${gpuid} --seed ${seed} \
                                      --do_train --num_train_epochs 1 \
                                      --do_eval --eval_and_save_steps ${eval_freq} \
@@ -63,7 +66,7 @@ function debug() {
 function debug_eval() {
     python -m pdb examples/run_superglue.py --data_dir ${data_dir} --task_name ${task} \
                                      --output_dir ${out_dir} --overwrite_output_dir \
-                                     --model_type ${model_type} --model_name_or_path ${model} \
+                                     --model_type ${model_type} --model_name_or_path ${model} ${casing_config} \
                                      --use_gpuid ${gpuid} --seed ${seed} \
                                      --do_eval --eval_and_save_steps ${eval_freq} \
                                      --learning_rate ${lr} \
