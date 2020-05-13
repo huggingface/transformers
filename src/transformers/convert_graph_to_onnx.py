@@ -20,7 +20,7 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument("--model", type=str, required=True, help="Model's id or path (ex: bert-base-cased)")
         self.add_argument("--tokenizer", type=str, help="Tokenizer's id or path (ex: bert-base-cased)")
         self.add_argument("--framework", type=str, choices=["pt", "tf"], help="Framework for loading the model")
-        self.add_argument("--opset", type=int, default=-1, help="ONNX opset to use (-1 = latest)")
+        self.add_argument("--opset", type=int, default=11, help="ONNX opset to use (-1 = latest)")
         self.add_argument("--check-loading", action="store_true", help="Check ONNX is able to load the model")
         self.add_argument("output")
 
@@ -126,8 +126,8 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: str):
             output_names=output_names,
             dynamic_axes=dynamic_axes,
             do_constant_folding=True,
-            # use_external_data_format=True,
-            # enable_onnx_checker=True,
+            use_external_data_format=True,
+            enable_onnx_checker=True,
             opset_version=opset,
         )
 
@@ -161,11 +161,7 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: str):
 
 
 def convert(framework: str, model: str, output: str, tokenizer: Optional[str] = None, opset: int = -1):
-    if opset == -1:
-        from onnx.defs import onnx_opset_version
-
-        print("Setting ONNX opset version to: {}".format(onnx_opset_version()))
-        opset = onnx_opset_version()
+    print("ONNX opset version set to: {}".format(opset))
 
     # Load the pipeline
     nlp = load_graph_from_args(framework, model, tokenizer)
