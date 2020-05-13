@@ -480,9 +480,10 @@ transformers-cli login
 ```
 Upload your model:
 ```shell
-transformers-cli upload ./path/to/pretrained_model/
+transformers-cli upload ./path/to/pretrained_model_folder/
 
-# ^^ Upload folder containing weights/tokenizer/config
+# ^^ Upload folder containing weights/tokenizer/config. 
+# In this pretrained_model_folder, make sure the configuration file is entitled config.json.
 # saved via `.save_pretrained()`
 
 transformers-cli upload ./config.json [--filename folder/foobar.json]
