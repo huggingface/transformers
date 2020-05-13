@@ -404,48 +404,150 @@ Causal language modeling is the task of predicting the token following a sequenc
 model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
 for generation tasks.
 
-There is currently no pipeline to do causal language modeling/generation.
+Usually, the next token is predicted by sampling from the logits of the last hidden state the model produces from the input sequence.
 
-Here is an example using the tokenizer and model. leveraging the :func:`~transformers.PreTrainedModel.generate` method
-to generate the tokens following the initial sequence in PyTorch, and creating a simple loop in TensorFlow.
+Here is an example using the tokenizer and model and leveraging the :func:`~transformers.PreTrainedModel.top_k_top_p_filtering` method to sample the next token following an input sequence of tokens.
+
+::
+
+    ## PYTORCH CODE
+    from transformers import AutoModelWithLMHead, AutoTokenizer, top_k_top_p_filtering
+    import torch
+    from torch.nn import functional as F
+
+
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    model = AutoModelWithLMHead.from_pretrained("gpt2")
+
+    sequence = f"Hugging Face is based in DUMBO, New York City, and "
+
+    input_ids = tokenizer.encode(sequence, return_tensors="pt")
+
+    # get logits of last hidden state
+    next_token_logits = model(input_ids)[0][:, -1, :]
+
+    # filter
+    filtered_next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=50, top_p=1.0)
+
+    # sample
+    probs = F.softmax(filtered_next_token_logits, dim=-1)
+    next_token = torch.multinomial(probs, num_samples=1)
+
+    generated = torch.cat([input_ids, next_token], dim=-1)
+
+    resulting_string = tokenizer.decode(generated.tolist()[0])
+    print(resulting_string)
+    ## TENSORFLOW CODE
+    from transformers import TFAutoModelWithLMHead, AutoTokenizer, tf_top_k_top_p_filtering
+    import tensorflow as tf
+
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    model = TFAutoModelWithLMHead.from_pretrained("gpt2")
+
+    sequence = f"Hugging Face is based in DUMBO, New York City, and "
+
+    input_ids = tokenizer.encode(sequence, return_tensors="tf")
+
+    # get logits of last hidden state
+    next_token_logits = model(input_ids)[0][:, -1, :]
+
+    # filter
+    filtered_next_token_logits = tf_top_k_top_p_filtering(next_token_logits, top_k=50, top_p=1.0)
+
+    # sample
+    next_token = tf.random.categorical(filtered_next_token_logits, dtype=tf.int32, num_samples=1)
+
+    generated = tf.concat([input_ids, next_token], axis=1)
+
+    resulting_string = tokenizer.decode(generated.numpy().tolist()[0])
+    print(resulting_string)
+
+
+This outputs a (hopefully) coherent next token following the original sequence, which is in our case is the word *has*:
+
+::
+
+    Hugging Face is based in DUMBO, New York City, and has
+
+In the next section, we show how this functionality is leveraged in :func:`~transformers.PreTrainedModel.generate` to generate multiple tokens up to a user-defined length.
+
+Text Generation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a continuation from the given context. As an example, is it shown how *GPT-2* can be used in pipelines to generate text. As a default all models apply *Top-K* sampling when used in pipelines as configured in their respective configurations (see `gpt-2 config <https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json>`_ for example).
+
+::
+
+    from transformers import pipeline
+
+    text_generator = pipeline("text-generation")
+    print(text_generator("As far as I am concerned, I will", max_length=50))
+
+
+Here the model generates a random text with a total maximal length of *50* tokens from context *"As far as I am concerned, I will"*.
+The default arguments of ``PreTrainedModel.generate()`` can directly be overriden in the pipeline as is shown above for the argument ``max_length``.
+
+Here is an example for text generation using XLNet and its tokenzier. 
 
 ::
 
     ## PYTORCH CODE
     from transformers import AutoModelWithLMHead, AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    model = AutoModelWithLMHead.from_pretrained("gpt2")
+    model = AutoModelWithLMHead.from_pretrained("xlnet-base-cased")
+    tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
 
-    sequence = f"Hugging Face is based in DUMBO, New York City, and is"
+    # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
+    PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+    (except for Alexei and Maria) are discovered.
+    The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+    remainder of the story. 1883 Western Siberia,
+    a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+    Rasputin has a vision and denounces one of the men as a horse thief. Although his
+    father initially slaps him for making such an accusation, Rasputin watches as the
+    man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+    the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+    with people, even a bishop, begging for his blessing. <eod> </s> <eos>""" 
 
-    input = tokenizer.encode(sequence, return_tensors="pt")
-    generated = model.generate(input, max_length=50, do_sample=True)
+    prompt = "Today the weather is really nice and I am planning on "
+    inputs = tokenizer.encode(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="pt")
+    
+    prompt_length = len(tokenizer.decode(inputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
+    outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
+    generated = prompt + tokenizer.decode(outputs[0])[prompt_length:]
 
-    resulting_string = tokenizer.decode(generated.tolist()[0])
-    print(resulting_string)
+    print(generated)
     ## TENSORFLOW CODE
     from transformers import TFAutoModelWithLMHead, AutoTokenizer
-    import tensorflow as tf
 
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    model = TFAutoModelWithLMHead.from_pretrained("gpt2")
+    model = TFAutoModelWithLMHead.from_pretrained("xlnet-base-cased")
+    tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
 
-    sequence = f"Hugging Face is based in DUMBO, New York City, and is"
-    input = tokenizer.encode(sequence, return_tensors="tf")
-    generated = model.generate(input, max_length=50, do_sample=True)
+    # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
+    PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+    (except for Alexei and Maria) are discovered.
+    The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+    remainder of the story. 1883 Western Siberia,
+    a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+    Rasputin has a vision and denounces one of the men as a horse thief. Although his
+    father initially slaps him for making such an accusation, Rasputin watches as the
+    man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+    the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+    with people, even a bishop, begging for his blessing. <eod> </s> <eos>""" 
 
-    resulting_string = tokenizer.decode(generated.tolist()[0])
-    print(resulting_string)
+    prompt = "Today the weather is really nice and I am planning on "
+    inputs = tokenizer.encode(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="tf")
 
+    prompt_length = len(tokenizer.decode(inputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
+    outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
+    generated = prompt + tokenizer.decode(outputs[0])[prompt_length:]
 
-This outputs a (hopefully) coherent string from the original sequence, as the
-:func:`~transformers.PreTrainedModel.generate` samples from a top_p/tok_k distribution:
+    print(generated)
 
-::
+Text generation is currently possible with *GPT-2*, *OpenAi-GPT*, *CTRL*, *XLNet*, *Transfo-XL* and *Reformer* in PyTorch and for most models in Tensorflow as well. As can be seen in the example above *XLNet* and *Transfo-xl* often need to be padded to work well.
+GPT-2 is usually a good choice for *open-ended text generation* because it was trained on millions on webpages with a causal language modeling objective.
 
-    Hugging Face is based in DUMBO, New York City, and is a live-action TV series based on the novel by John
-    Carpenter, and its producers, David Kustlin and Steve Pichar. The film is directed by!
+For more information on how to apply different decoding strategies for text generation, please also refer to our generation blog post `here <https://huggingface.co/blog/how-to-generate>`_.
 
 
 Named Entity Recognition
