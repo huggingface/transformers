@@ -33,7 +33,7 @@ if is_torch_available():
         MarianTokenizer,
         MarianMTModel,
     )
-    from transformers.convert_marian_to_pytorch import replace_with_group_name
+    from transformers.convert_marian_to_pytorch import convert_hf_name_to_opus_name, convert_opus_name_to_hf_name
 
 
 class ModelManagementTests(unittest.TestCase):
@@ -228,7 +228,19 @@ class TestConversionUtils(unittest.TestCase):
         old_names = [
             "opus-mt-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-fi",
             "opus-mt-cmn+cn-fi",  # no group
-            "opus_mt-en-de",  # standard name
+            "opus-mt-en-de",  # standard name
+            "opus-mt-en-de",  # standard name
         ]
-        expected = ["opus-mt-ZH-fi", "opus-mt-cmn_cn-fi", "opus_mt-en-de"]
-        self.assertListEqual(expected, [replace_with_group_name(x) for x in old_names])
+        expected = ["opus-mt-ZH-fi", "opus-mt-cmn_cn-fi", "opus-mt-en-de", "opus-mt-en-de"]
+        self.assertListEqual(expected, [convert_opus_name_to_hf_name(x) for x in old_names])
+
+    def test_undoing_renaming(self):
+        hf_names = ["opus-mt-ZH-fi", "opus-mt-cmn_cn-fi", "opus-mt-en-de", "opus-mt-en-de"]
+        converted_opus_names = [convert_hf_name_to_opus_name(x) for x in hf_names]
+        expected_opus_names = [
+            "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-fi",
+            "cmn+cn-fi",
+            "en-de",  # standard name
+            "en-de",
+        ]
+        self.assertListEqual(expected_opus_names, converted_opus_names)
