@@ -1,12 +1,12 @@
 import tempfile
 import unittest
-
-from shutil import rmtree
 from os import sep
-from os.path import exists, dirname
-from tests.utils import require_torch, require_tf
+from os.path import dirname, exists
+from shutil import rmtree
+
+from tests.utils import require_tf, require_torch
 from transformers import BertConfig, BertTokenizerFast, FeatureExtractionPipeline
-from transformers.convert_graph_to_onnx import ensure_valid_input, infer_shapes, convert
+from transformers.convert_graph_to_onnx import convert, ensure_valid_input, infer_shapes
 
 
 class FuncContiguousArgs:
@@ -52,6 +52,7 @@ class OnnxExportTestCase(unittest.TestCase):
         Validate the dynamic axis generated for each parameters are correct
         """
         from transformers import BertModel
+
         model = BertModel(BertConfig.from_pretrained("bert-base-cased"))
         tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
         self._test_infer_dynamic_axis(model, tokenizer, "pt")
@@ -62,6 +63,7 @@ class OnnxExportTestCase(unittest.TestCase):
         Validate the dynamic axis generated for each parameters are correct
         """
         from transformers import TFBertModel
+
         model = TFBertModel(BertConfig.from_pretrained("bert-base-cased"))
         tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
         self._test_infer_dynamic_axis(model, tokenizer, "tf")

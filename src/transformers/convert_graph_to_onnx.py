@@ -203,7 +203,7 @@ if __name__ == "__main__":
 
     try:
         # Convert
-        convert(args.framework, args.model, args.output,  args.opset, args.tokenizer)
+        convert(args.framework, args.model, args.output, args.opset, args.tokenizer)
 
         # And verify
         if args.check_loading:
