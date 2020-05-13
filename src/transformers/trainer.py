@@ -696,9 +696,8 @@ class Trainer:
             metrics["eval_loss"] = np.mean(eval_losses)
 
         # Prefix all keys with eval_
-        for key, value in metrics.items():
+        for key in list(metrics.keys()):
             if not key.startswith("eval_"):
-                del metrics[key]
-                metrics[f"eval_{key}"] = value
+                metrics[f"eval_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
