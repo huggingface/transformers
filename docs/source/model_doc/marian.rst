@@ -2,23 +2,16 @@ MarianMTModel
 ----------------------------------------------------
 **DISCLAIMER:** If you see something strange,
 file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title>`__ and assign
-@sshleifer. Results should be similar, but not identical to, output in the test set linked to in each model card.
-
-These models are for machine translation.
-
-The list of supported language pairs can be found `here <https://huggingface.co/Helsinki-NLP>`__.
-
-Opus Project
-~~~~~~~~~~~~
-The 1,000+ models were originally trained by `Jörg Tiedemann <https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann>`__ using the `Marian <https://marian-nmt.github.io/>`_ C++ library, which supports fast training and translation.
-All models are transformer encoder-decoders with 6 layers in each component. Each model's performance is documented in a model card.
+@sshleifer. Translations should be similar, but not identical to, output in the test set linked to in each model card.
 
 Implementation Notes
 ~~~~~~~~~~~~~~~~~~~~
 - each model is about 298 MB on disk, there are 1,000+ models.
-
+- The list of supported language pairs can be found `here <https://huggingface.co/Helsinki-NLP>`__.
+- The 1,000+ models were originally trained by `Jörg Tiedemann <https://researchportal.helsinki.fi/en/persons/j%C3%B6rg-tiedemann>`__ using the `Marian <https://marian-nmt.github.io/>`_ C++ library, which supports fast training and translation.
+- All models are transformer encoder-decoders with 6 layers in each component. Each model's performance is documented in a model card.
 - the 80 opus models that require BPE preprocessing are not supported.
-- The modeling code is the same as ``BartModel`` with a few minor modifications:
+- The modeling code is the same as ``BartForConditionalGeneration`` with a few minor modifications:
     - static (sinusoid) positional embeddings (``MarianConfig.static_position_embeddings=True``)
     - a new final_logits_bias (``MarianConfig.add_bias_logits=True``)
     - no layernorm_embedding (``MarianConfig.normalize_embedding=False``)
@@ -29,14 +22,14 @@ Naming
 ~~~~~~
 - All  model names use the following format: ``Helsinki-NLP/opus-mt-{src}-{tgt}``
 - The language codes used to name models are inconsistent. Two digit codes can usually be found `here <https://developers.google.com/admin-sdk/directory/v1/languages>`_, three digit codes require googling "language code {code}".
-- Codes formatted like `es_AR` are usually ``code_{region}``. That one is spanish documents from Argentina.
+- Codes formatted like ``es_AR`` are usually ``code_{region}``. That one is spanish documents from Argentina.
 
 
 Multilingual Models
 ~~~~~~~~~~~~~~~~~~~~
 
 All  model names use the following format: ``Helsinki-NLP/opus-mt-{src}-{tgt}``:
-    - if ``src`` is in all caps, the model supports multiple input languages, you can figure out which ones by looking at the model card, or the mapping below.
+    - if ``src`` is in all caps, the model supports multiple input languages, you can figure out which ones by looking at the model card, or the Group Members `mapping <https://gist.github.com/sshleifer/6d20e7761931b08e73c3219027b97b8a>`_ .
     - if ``tgt`` is in all caps, the model can output multiple languages, and you should specify a language code by prepending the desired output language to the src_text
     - You can see a tokenizer's supported language codes in ``tokenizer.supported_language_codes``
 
@@ -55,23 +48,20 @@ Example of translating english to many romance languages, using language codes:
     tokenizer = MarianTokenizer.from_pretrained(model_name)
     print(tokenizer.supported_language_codes)
     model = MarianMTModel.from_pretrained(model_name)
-    translated = model.generate(**tokenizer.prepare_translation_batch(text))
+    translated = model.generate(**tokenizer.prepare_translation_batch(src_text))
     tgt_text = [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
     # ["c'est une phrase en anglais que nous voulons traduire en français",
     # 'Isto deve ir para o português.',
     # 'Y esto al español']
 
 Sometimes, models were trained on collections of languages that do not resolve to a group. In this case, _ is used as a separator for src or tgt, as in ``'Helsinki-NLP/opus-mt-en_el_es_fi-en_el_es_fi'``. These still require language codes.
-
-There are many supported regional language codes, like ``>>es_ES<<`` (Spain) and ``>>es_AR<<`` (Argentina), I have not found these to provide different results than just using ``>>es<<``.
-
+There are many supported regional language codes, like ``>>es_ES<<`` (Spain) and ``>>es_AR<<`` (Argentina), that do not seem to change translations. I have not found these to provide different results than just using ``>>es<<``.
 
 For Example:
-    - ``Helsinki-NLP/opus-mt-NORTH_EU-NORTH_EU``: translates from all NORTH_EU languages (see mapping below) to all NORTH_EU languages. Use a special language code like ``>>de<<`` to specify output language.
+    - ``Helsinki-NLP/opus-mt-NORTH_EU-NORTH_EU``: translates from all NORTH_EU languages (see `mapping <https://gist.github.com/sshleifer/6d20e7761931b08e73c3219027b97b8a>`_) to all NORTH_EU languages. Use a special language code like ``>>de<<`` to specify output language.
     - ``Helsinki-NLP/opus-mt-ROMANCE-en``: translates from many romance languages to english, no codes needed since there is only 1 tgt language.
 
 
-Multilingual Group Members:
 
 .. code-block:: python
 

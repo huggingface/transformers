@@ -83,7 +83,6 @@ class MarianTokenizer(PreTrainedTokenizer):
         # Multilingual target side: default to using first supported language code.
         self.supported_language_codes: list = [k for k in self.encoder if k.startswith(">>") and k.endswith("<<")]
 
-        # Note(SS): sentence_splitter would require lots of book-keeping.
         try:
             from mosestokenizer import MosesPunctuationNormalizer
 
@@ -91,6 +90,10 @@ class MarianTokenizer(PreTrainedTokenizer):
         except ImportError:
             warnings.warn("Recommended: pip install mosestokenizer")
             self.punc_normalizer = lambda x: x
+
+    def normalize(self, x: str) -> str:
+        """Cover moses empty string edge case. They return empty list for '' input!"""
+        return self.punc_normalizer(x) if x else ""
 
     def _convert_token_to_id(self, token):
         return self.encoder.get(token, self.encoder[self.unk_token])
@@ -132,7 +135,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         pad_to_max_length: bool = True,
         return_tensors: str = "pt",
     ) -> BatchEncoding:
-        """
+        """Prepare model inputs for translation. For best performance, translate one sentence at a time.
         Arguments:
             src_texts: list of src language texts
             tgt_texts: list of tgt language texts
@@ -145,8 +148,10 @@ class MarianTokenizer(PreTrainedTokenizer):
             all shaped bs, seq_len. (BatchEncoding is a dict of string -> tensor or lists).
             If no tgt_text is specified, the only keys will be input_ids and attention_mask.
         """
+        if "" in src_texts:
+            raise ValueError(f"found empty string in src_texts: {src_texts}")
         self.current_spm = self.spm_source
-        src_texts = [self.punc_normalizer(t) for t in src_texts]
+        src_texts = [self.normalize(t) for t in src_texts]  # this does not appear to do much
         model_inputs: BatchEncoding = self.batch_encode_plus(
             src_texts,
             add_special_tokens=True,

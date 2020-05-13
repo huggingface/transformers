@@ -31,7 +31,7 @@ class MarianMTModel(BartForConditionalGeneration):
         src = 'fr'  # source language
         trg = 'en'  # target language
         sample_text = "où est l'arrêt de bus ?"
-        mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'   # `Model List`__
+        mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'
 
         model = MarianMTModel.from_pretrained(mname)
         tok = MarianTokenizer.from_pretrained(mname)

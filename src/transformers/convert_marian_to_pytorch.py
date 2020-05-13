@@ -200,7 +200,7 @@ def make_registry(repo_path="Opus-MT-train/models"):
         else:
             lns = list(open(p / "README.md").readlines())
             results[p.name] = _parse_readme(lns)
-    return [(k, v["pre-processing"], v["download"]) for k, v in results.items()]
+    return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
 
 
 def convert_all_sentencepiece_models(model_list=None, repo_path=None):
@@ -210,7 +210,7 @@ def convert_all_sentencepiece_models(model_list=None, repo_path=None):
     dest_dir.mkdir(exist_ok=True)
     if model_list is None:
         model_list: list = make_registry(repo_path=repo_path)
-    for k, prepro, download in tqdm(model_list):
+    for k, prepro, download, test_set_url in tqdm(model_list):
         if "SentencePiece" not in prepro:  # dont convert BPE models.
             continue
         if not os.path.exists(save_dir / k / "pytorch_model.bin"):
@@ -223,12 +223,10 @@ def lmap(f, x) -> List:
     return list(map(f, x))
 
 
-def fetch_test_set(readmes_raw, pair):
+def fetch_test_set(test_set_url):
     import wget
 
-    download_url = readmes_raw[pair]["download"]
-    test_set_url = download_url[:-4] + ".test.txt"
-    fname = wget.download(test_set_url, f"opus_test_{pair}.txt")
+    fname = wget.download(test_set_url, f"opus_test.txt")
     lns = Path(fname).open().readlines()
     src = lmap(str.strip, lns[::4])
     gold = lmap(str.strip, lns[1::4])

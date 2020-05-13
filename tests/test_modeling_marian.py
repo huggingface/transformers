@@ -97,12 +97,12 @@ class MarianIntegrationTest(unittest.TestCase):
         self.assertListEqual(self.expected_text, generated_words)
 
     def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs: dict = self.tokenizer.prepare_translation_batch(src_texts=self.src_text, **tokenizer_kwargs).to(
+        model_inputs = self.tokenizer.prepare_translation_batch(src_texts=self.src_text, **tokenizer_kwargs).to(
             torch_device
         )
-        self.assertEqual(self.model.device, model_inputs["input_ids"].device)
+        self.assertEqual(self.model.device, model_inputs.input_ids.device)
         generated_ids = self.model.generate(
-            model_inputs["input_ids"], attention_mask=model_inputs["attention_mask"], num_beams=2
+            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
         )
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words
@@ -112,10 +112,10 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
     @slow
     def test_forward(self):
         src, tgt = ["I am a small frog"], ["Ich bin ein kleiner Frosch."]
-        expected = [38, 121, 14, 697, 38848, 0]
+        expected_ids = [38, 121, 14, 697, 38848, 0]
 
         model_inputs: dict = self.tokenizer.prepare_translation_batch(src, tgt_texts=tgt).to(torch_device)
-        self.assertListEqual(expected, model_inputs["input_ids"][0].tolist())
+        self.assertListEqual(expected_ids, model_inputs.input_ids[0].tolist())
 
         desired_keys = {
             "input_ids",
@@ -131,20 +131,19 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
 
     def test_tokenizer_equivalence(self):
         batch = self.tokenizer.prepare_translation_batch(["I am a small frog"]).to(torch_device)
-        input_ids = batch["input_ids"][0]
         expected = [38, 121, 14, 697, 38848, 0]
-        self.assertListEqual(expected, input_ids.tolist())
+        self.assertListEqual(expected, batch.input_ids[0].tolist())
 
     def test_unk_support(self):
         t = self.tokenizer
-        ids = t.prepare_translation_batch(["||"]).to(torch_device)["input_ids"][0].tolist()
+        ids = t.prepare_translation_batch(["||"]).to(torch_device).input_ids[0].tolist()
         expected = [t.unk_token_id, t.unk_token_id, t.eos_token_id]
         self.assertEqual(expected, ids)
 
     def test_pad_not_split(self):
-        input_ids_w_pad = self.tokenizer.prepare_translation_batch(["I am a small frog <pad>"])["input_ids"][0]
+        input_ids_w_pad = self.tokenizer.prepare_translation_batch(["I am a small frog <pad>"]).input_ids[0].tolist()
         expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad
-        self.assertListEqual(expected_w_pad, input_ids_w_pad.tolist())
+        self.assertListEqual(expected_w_pad, input_ids_w_pad)
 
     @slow
     def test_batch_generation_en_de(self):
@@ -195,7 +194,6 @@ class TestMarian_RU_FR(MarianIntegrationTest):
     src_text = ["Он показал мне рукопись своей новой пьесы."]
     expected_text = ["Il m'a montré le manuscrit de sa nouvelle pièce."]
 
-    @slow
     def test_batch_generation_ru_fr(self):
         self._assert_generated_batch_equal_expected()
 
@@ -229,6 +227,12 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
     @slow
     def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
+
+    def test_tokenizer_handles_empty(self):
+        normalized = self.tokenizer.normalize("")
+        self.assertIsInstance(normalized, str)
+        with self.assertRaises(ValueError):
+            self.tokenizer.prepare_translation_batch([""])
 
 
 @require_torch
