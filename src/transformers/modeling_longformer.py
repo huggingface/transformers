@@ -113,7 +113,7 @@ class LongformerSelfAttention(nn.Module):
         ending_mask = mask.flip(dims=(1, 3)).bool().to(device)
         return affected_seq_len, mask.bool().to(device), ending_mask
 
-    def mask_invalid_locations(self, input_tensor, w) -> torch.Tensor:
+    def _mask_invalid_locations(self, input_tensor, w) -> torch.Tensor:
         # TODO: replace this function and `_get_invalid_locations_mask` with a simpler one that doesn't require lru_cache
         affected_seq_len, beginning_mask, ending_mask = self._get_invalid_locations_mask(w, input_tensor.device)
         seq_len = input_tensor.size(1)
@@ -168,12 +168,12 @@ class LongformerSelfAttention(nn.Module):
         # separate bsz and num_heads dimensions again
         diagonal_attn = diagonal_attn.view(bsz, num_heads, seqlen, 2 * w + 1).transpose(2, 1)
 
-        self.mask_invalid_locations(diagonal_attn, w, 1, False)
+        self._mask_invalid_locations(diagonal_attn, w)
         return diagonal_attn
 
     def _sliding_chunks_matmul_pv(self, prob: torch.Tensor, v: torch.Tensor, w: int):
-        '''Same as sliding_chunks_matmul_qk but for prob and value tensors. It is expecting the same output
-        format from sliding_chunks_matmul_qk'''
+        '''Same as _sliding_chunks_matmul_qk but for prob and value tensors. It is expecting the same output
+        format from _sliding_chunks_matmul_qk'''
         bsz, seqlen, num_heads, head_dim = v.size()
         assert seqlen % (w * 2) == 0
         assert prob.size()[:3] == v.size()[:3]
@@ -262,8 +262,8 @@ class LongformerSelfAttention(nn.Module):
         q = q.view(seq_len, bsz, self.num_heads, self.head_dim).transpose(0, 1)
         k = k.view(seq_len, bsz, self.num_heads, self.head_dim).transpose(0, 1)
         # attn_weights = (bsz, seq_len, num_heads, window*2+1)
-        attn_weights = self.sliding_chunks_matmul_qk(q, k, self.one_sided_attention_window_size, padding_value=0)
-        self.mask_invalid_locations(attn_weights, self.attention_window, self.attention_dilation, False)
+        attn_weights = self._sliding_chunks_matmul_qk(q, k, self.one_sided_attention_window_size, padding_value=0)
+        self._mask_invalid_locations(attn_weights, self.one_sided_attention_window_size)
         if remove_from_windowed_attention_mask is not None:
             # This implementation is fast and takes very little memory because num_heads x hidden_size = 1
             # from (bsz x seq_len) to (bsz x seq_len x num_heads x hidden_size)
@@ -272,7 +272,7 @@ class LongformerSelfAttention(nn.Module):
             float_mask = remove_from_windowed_attention_mask.type_as(q).masked_fill(remove_from_windowed_attention_mask, -10000.0)
             ones = float_mask.new_ones(size=float_mask.size())  # tensor of ones
             # diagonal mask with zeros everywhere and -inf inplace of padding
-            d_mask = self.sliding_chunks_matmul_qk(ones, float_mask, self.one_sided_attention_window_size, padding_value=0)
+            d_mask = self._sliding_chunks_matmul_qk(ones, float_mask, self.one_sided_attention_window_size, padding_value=0)
             attn_weights += d_mask
         assert list(attn_weights.size()) == [bsz, seq_len, self.num_heads, self.one_sided_attention_window_size * 2 + 1]
 
@@ -305,7 +305,7 @@ class LongformerSelfAttention(nn.Module):
             attn = torch.matmul(selected_attn_probs.transpose(1, 2), selected_v.transpose(1, 2).type_as(selected_attn_probs)).transpose(1, 2)
             attn_probs = attn_probs.narrow(-1, max_num_extra_indices_per_batch, attn_probs.size(-1) - max_num_extra_indices_per_batch).contiguous()
 
-        attn += self.sliding_chunks_matmul_pv(attn_probs, v, self.one_sided_attention_window_size)
+        attn += self._sliding_chunks_matmul_pv(attn_probs, v, self.one_sided_attention_window_size)
 
         attn = attn.type_as(hidden_states)
         assert list(attn.size()) == [bsz, seq_len, self.num_heads, self.head_dim]
@@ -479,18 +479,19 @@ class LongformerModel(RobertaModel):
                     seqlen, seqlen + padding_len, attention_window
                 )
             )
-        if input_ids is not None:
-            input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
-        if attention_mask is not None:
-            attention_mask = F.pad(attention_mask, (0, padding_len), value=False)  # no attention on the padding tokens
-        if token_type_ids is not None:
-            token_type_ids = F.pad(token_type_ids, (0, padding_len), value=0)  # pad with token_type_id = 0
-        if position_ids is not None:
-            position_ids = F.pad(position_ids, (0, padding_len), value=0)  # pad with position_id = 0
-        if inputs_embeds is not None:
-            inputs_embeds = F.pad(inputs_embeds, (0, 0, 0, padding_len), value=0.0)  # pad with zero embeddings
+            if input_ids is not None:
+                input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
+            if attention_mask is not None:
+                attention_mask = F.pad(attention_mask, (0, padding_len), value=False)  # no attention on the padding tokens
+            if token_type_ids is not None:
+                token_type_ids = F.pad(token_type_ids, (0, padding_len), value=0)  # pad with token_type_id = 0
+            if position_ids is not None:
+                # pad with position_id = pad_token_id as in modeling_roberta.RobertaEmbeddings
+                position_ids = F.pad(position_ids, (0, padding_len), value=pad_token_id)
+            if inputs_embeds is not None:
+                inputs_embeds = F.pad(inputs_embeds, (0, 0, 0, padding_len), value=0.0)  # pad with zero embeddings
 
-        return input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
+        return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
     def forward(
@@ -537,8 +538,7 @@ class LongformerModel(RobertaModel):
 
         attention_window =  \
             self.config.attention_window if isinstance(self.config.attention_window, int) else max(self.config.attention_window)
-
-        input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self.pad_to_window_size(
+        padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_window_size(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -546,8 +546,7 @@ class LongformerModel(RobertaModel):
             inputs_embeds=inputs_embeds,
             attention_window=attention_window,
             pad_token_id=self.config.pad_token_id)
-
-        return self.forward(
+        output = super().forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -557,6 +556,8 @@ class LongformerModel(RobertaModel):
             encoder_hidden_states=None,
             encoder_attention_mask=None,
         )
+        # TODO: undo padding
+        return output
 
 
 @add_start_docstrings("""Longformer Model with a `language modeling` head on top. """, LONGFORMER_START_DOCSTRING)
