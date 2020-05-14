@@ -256,7 +256,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace):
         gradient_clip_val=args.max_grad_norm,
         checkpoint_callback=checkpoint_callback,
         callbacks=[LoggingCallback()],
-        logging_dir=args.logging_dir
+        logging_dir=args.logging_dir,
     )
 
     if args.fp16:
@@ -274,11 +274,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace):
         train_params["distributed_backend"] = "ddp"
 
     if args.logging_dir:
-        logger = pl.loggers.TensorBoardLogger(
-                    save_dir=args.logging_dir,
-                    version='',
-                    name=''
-                )
+        logger = pl.loggers.TensorBoardLogger(save_dir=args.logging_dir, version="", name="")
         train_params["logger"] = logger
 
     trainer = pl.Trainer(**train_params)
