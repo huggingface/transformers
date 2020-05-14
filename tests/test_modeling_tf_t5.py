@@ -293,6 +293,10 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_with_added_embeddings(*config_and_inputs)
 
+    def test_t5_lm_head_added_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_t5_lm_head_with_added_embeddings(*config_and_inputs)
+
     def test_t5_decoder_model_past_with_attn_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_decoder_model_attention_mask_past(*config_and_inputs)
