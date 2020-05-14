@@ -1513,7 +1513,7 @@ class TranslationPipeline(Pipeline):
             return results
 
 
-# Register all the supported task here
+# Register all the supported tasks here
 SUPPORTED_TASKS = {
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
@@ -1576,9 +1576,9 @@ SUPPORTED_TASKS = {
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
         "default": {
-            "model": {"pt": "bart-large-cnn", "tf": None},
+            "model": {"pt": "bart-large-cnn", "tf": "t5-small"},
             "config": None,
-            "tokenizer": ("bart-large-cnn", {"use_fast": False}),
+            "tokenizer": {"pt": ("bart-large-cnn", {"use_fast": False}), "tf": "t5-small"},
         },
     },
     "translation_en_to_fr": {
