@@ -24,7 +24,7 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from itertools import chain
 from os.path import abspath, exists
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -57,6 +57,10 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
     )
+
+if TYPE_CHECKING:
+    from .modeling_utils import PreTrainedModel
+    from .modeling_tf_utils import TFPreTrainedModel
 
 
 logger = logging.getLogger(__name__)
@@ -365,7 +369,7 @@ class Pipeline(_ScikitCompat):
 
     def __init__(
         self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
+        model: Union[PreTrainedModel, TFPreTrainedModel],
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
