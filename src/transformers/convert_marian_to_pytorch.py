@@ -226,7 +226,7 @@ def lmap(f, x) -> List:
 def fetch_test_set(test_set_url):
     import wget
 
-    fname = wget.download(test_set_url, f"opus_test.txt")
+    fname = wget.download(test_set_url, "opus_test.txt")
     lns = Path(fname).open().readlines()
     src = lmap(str.strip, lns[::4])
     gold = lmap(str.strip, lns[1::4])

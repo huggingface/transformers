@@ -80,7 +80,7 @@ class Distiller:
 
         self.mlm = params.mlm
         if self.mlm:
-            logger.info(f"Using MLM loss for LM step.")
+            logger.info("Using MLM loss for LM step.")
             self.mlm_mask_prop = params.mlm_mask_prop
             assert 0.0 <= self.mlm_mask_prop <= 1.0
             assert params.word_mask + params.word_keep + params.word_rand == 1.0
@@ -91,7 +91,7 @@ class Distiller:
                 self.pred_probs = self.pred_probs.half()
                 self.token_probs = self.token_probs.half()
         else:
-            logger.info(f"Using CLM loss for LM step.")
+            logger.info("Using CLM loss for LM step.")
 
         self.epoch = 0
         self.n_iter = 0
@@ -365,8 +365,8 @@ class Distiller:
             self.end_epoch()
 
         if self.is_master:
-            logger.info(f"Save very last checkpoint as `pytorch_model.bin`.")
-            self.save_checkpoint(checkpoint_name=f"pytorch_model.bin")
+            logger.info("Save very last checkpoint as `pytorch_model.bin`.")
+            self.save_checkpoint(checkpoint_name="pytorch_model.bin")
             logger.info("Training is finished")
 
     def step(self, input_ids: torch.tensor, attention_mask: torch.tensor, lm_labels: torch.tensor):
