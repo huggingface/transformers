@@ -2,7 +2,7 @@ import unittest
 from typing import Iterable, List, Optional
 
 from transformers import pipeline
-from transformers.pipelines import DefaultArgumentHandler, Pipeline
+from transformers.pipelines import SUPPORTED_TASKS, DefaultArgumentHandler, Pipeline
 
 from .utils import require_tf, require_torch, slow
 
@@ -361,18 +361,7 @@ class QAPipelineTests(unittest.TestCase):
 
 class PipelineCommonTests(unittest.TestCase):
 
-    pipelines = (
-        "ner",
-        "feature-extraction",
-        "question-answering",
-        "fill-mask",
-        "summarization",
-        "sentiment-analysis",
-        "translation_en_to_fr",
-        "translation_en_to_de",
-        "translation_en_to_ro",
-        "text-generation",
-    )
+    pipelines = SUPPORTED_TASKS.keys()
 
     @slow
     @require_tf
