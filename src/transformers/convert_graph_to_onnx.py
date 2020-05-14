@@ -150,7 +150,7 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: str):
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "tf")
 
         # Forward
-        nlp.model.predict(list(tokens.data.values()))
+        nlp.model.predict(tokens.data)
         onnx_model = convert_keras(nlp.model, nlp.model.name, target_opset=opset)
         save_model(onnx_model, output)
 
