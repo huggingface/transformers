@@ -679,7 +679,7 @@ class Trainer:
         model.eval()
 
         for inputs in tqdm(dataloader, desc=description):
-            has_labels = any(inputs.get(k) is not None for k in ["labels", "masked_lm_labels"])
+            has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
 
             for k, v in inputs.items():
                 inputs[k] = v.to(self.args.device)
