@@ -181,13 +181,12 @@ def convert(framework: str, model: str, output: str, opset: int, tokenizer: Opti
 
 
 def verify(path: str):
-    from onnxruntime import InferenceSession, SessionOptions, GraphOptimizationLevel
+    from onnxruntime import InferenceSession, SessionOptions
     from onnxruntime.capi.onnxruntime_pybind11_state import RuntimeException
 
     print("Checking ONNX model loading from: {}".format(path))
     try:
         onnx_options = SessionOptions()
-        onnx_options.graph_optimization_level = GraphOptimizationLevel.ORT_ENABLE_ALL
         _ = InferenceSession(path, onnx_options, providers=["CPUExecutionProvider"])
         print("Model correctly loaded")
     except RuntimeException as re:
