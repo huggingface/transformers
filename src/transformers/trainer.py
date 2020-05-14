@@ -781,17 +781,15 @@ class Trainer:
         elif is_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
             if preds is not None:
-                preds = preds.cpu().numpy()
-                preds = xm.mesh_reduce("eval_preds", preds, np.concatenate)
-                # TODO(can we reduce torch.Tensors directly, which would simplify the code)
+                preds = xm.mesh_reduce("eval_preds", preds, torch.cat)
             if label_ids is not None:
-                label_ids = label_ids.cpu().numpy()
-                label_ids = xm.mesh_reduce("eval_out_label_ids", label_ids, np.concatenate)
-        else:
-            if preds is not None:
-                preds = preds.cpu().numpy()
-            if label_ids is not None:
-                label_ids = label_ids.cpu().numpy()
+                label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
+
+        # Finally, turn the aggregated tensors into numpy arrays.
+        if preds is not None:
+            preds = preds.cpu().numpy()
+        if label_ids is not None:
+            label_ids = label_ids.cpu().numpy()
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
@@ -807,15 +805,14 @@ class Trainer:
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
-    def distributed_concat(self, tensor: torch.Tensor, num_total_examples: int) -> np.ndarray:
+    def distributed_concat(self, tensor: torch.Tensor, num_total_examples: int) -> torch.Tensor:
         assert self.args.local_rank != -1
 
         output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
         torch.distributed.all_gather(output_tensors, tensor)
 
         concat = torch.cat(output_tensors, dim=0)
-        output = concat.detach().cpu().numpy()
 
         # truncate the dummy elements added by SequentialDistributedSampler
-        output = output[:num_total_examples]
+        output = concat[:num_total_examples]
         return output
