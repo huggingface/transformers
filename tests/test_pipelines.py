@@ -209,7 +209,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt", topk=2,)
             self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, expected_check_keys=["sequence"])
 
-    @require_torch
+    @require_tf
     def test_tf_fill_mask(self):
         mandatory_keys = {"sequence", "score", "token"}
         valid_inputs = [
