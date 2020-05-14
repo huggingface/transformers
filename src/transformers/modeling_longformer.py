@@ -542,6 +542,7 @@ class LongformerModel(RobertaModel):
         sequence_output, pooled_output = model(input_ids, attention_mask=attention_mask)
         """
 
+        # padding
         attention_window =  \
             self.config.attention_window if isinstance(self.config.attention_window, int) else max(self.config.attention_window)
         padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_window_size(
@@ -552,6 +553,8 @@ class LongformerModel(RobertaModel):
             inputs_embeds=inputs_embeds,
             attention_window=attention_window,
             pad_token_id=self.config.pad_token_id)
+
+        # embed
         output = super().forward(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -562,7 +565,16 @@ class LongformerModel(RobertaModel):
             encoder_hidden_states=None,
             encoder_attention_mask=None,
         )
-        # TODO: undo padding
+
+        # undo padding
+        if padding_len > 0:
+            # `output` has the following tensors: sequence_output, pooled_output, (hidden_states), (attentions)
+            # `sequence_output`: unpad because the calling function is expecting a length == input_ids.size(1)
+            # `pooled_output`: independent of the sequence length
+            # `hidden_states`: mainly used for debugging and analysis, so keep the padding
+            # `attentions`: mainly used for debugging and analysis, so keep the padding
+            output = output[0][:, :-padding_len], *output[1:]
+
         return output
 
 
