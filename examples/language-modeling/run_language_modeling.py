@@ -118,13 +118,9 @@ class DataTrainingArguments:
 def get_dataset(args: DataTrainingArguments, tokenizer: PreTrainedTokenizer, evaluate=False, local_rank=-1):
     file_path = args.eval_data_file if evaluate else args.train_data_file
     if args.line_by_line:
-        return LineByLineTextDataset(
-            tokenizer=tokenizer, file_path=file_path, block_size=args.block_size, local_rank=local_rank
-        )
+        return LineByLineTextDataset(tokenizer=tokenizer, file_path=file_path, block_size=args.block_size)
     else:
-        return TextDataset(
-            tokenizer=tokenizer, file_path=file_path, block_size=args.block_size, local_rank=local_rank,
-        )
+        return TextDataset(tokenizer=tokenizer, file_path=file_path, block_size=args.block_size)
 
 
 def main():

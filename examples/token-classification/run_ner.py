@@ -171,7 +171,6 @@ def main():
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
             mode=Split.train,
-            local_rank=training_args.local_rank,
         )
         if training_args.do_train
         else None
@@ -185,7 +184,6 @@ def main():
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
             mode=Split.dev,
-            local_rank=training_args.local_rank,
         )
         if training_args.do_eval
         else None
@@ -261,7 +259,6 @@ def main():
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
             mode=Split.test,
-            local_rank=training_args.local_rank,
         )
 
         predictions, label_ids, metrics = trainer.predict(test_dataset)
