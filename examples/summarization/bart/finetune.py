@@ -152,6 +152,13 @@ class SummarizationTrainer(BaseTransformer):
             required=True,
             help="The input data dir. Should contain the dataset files for the CNN/DM summarization task.",
         )
+        parser.add_argument(
+            "--logging_dir",
+            default='tensorboard_logs',
+            type=str,
+            required=False,
+            help="The directory for tensorboard_logs",
+        )
         return parser
 
 
