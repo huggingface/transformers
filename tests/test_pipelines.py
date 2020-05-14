@@ -385,7 +385,7 @@ class QAPipelineTests(unittest.TestCase):
     def test_tf_question_answering(self):
         for model_name in QA_FINETUNED_MODELS:
             nlp = pipeline(
-                task="question-answering", model=model_name, tokenizer=model_name, from_pt=True, framework="tf"
+                task="question-answering", model=model_name, tokenizer=model_name, framework="tf"
             )
             self._test_qa_pipeline(nlp)
 
