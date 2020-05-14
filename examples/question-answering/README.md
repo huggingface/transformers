@@ -157,3 +157,23 @@ Larger batch size may improve the performance while costing more memory.
 }
 ```
 
+## SQuAD with the Tensorflow Trainer
+
+```bash
+python run_tf_squad.py \
+    --model_name_or_path bert-base-uncased \
+    --output_dir model \
+    --max-seq-length 384 \
+    --num_train_epochs 2 \
+    --per_gpu_train_batch_size 8 \
+    --per_gpu_eval_batch_size 16 \
+    --do_train \
+    --logging_dir logs \
+    --mode question-answering \
+    --logging_steps 10 \
+    --learning_rate 3e-5 \
+    --doc_stride 128 \
+    --optimizer_name adamw
+```
+
+For the moment the evaluation is not available in the Tensorflow Trainer only the training.

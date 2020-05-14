@@ -25,15 +25,15 @@ import numpy as np
 
 from transformers import (
     AutoConfig,
-    AutoModelForMultipleChoice,
     AutoTokenizer,
     EvalPrediction,
     HfArgumentParser,
-    Trainer,
-    TrainingArguments,
+    TFAutoModelForMultipleChoice,
+    TFTrainer,
+    TFTrainingArguments,
     set_seed,
 )
-from utils_multiple_choice import MultipleChoiceDataset, Split, processors
+from utils_multiple_choice import Split, TFMultipleChoiceDataset, processors
 
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if (
@@ -105,15 +105,10 @@ def main():
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO if training_args.local_rank in [-1, 0] else logging.WARN,
+        level=logging.INFO,
     )
     logger.warning(
-        "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-        training_args.local_rank,
-        training_args.device,
-        training_args.n_gpu,
-        bool(training_args.local_rank != -1),
-        training_args.fp16,
+        "device: %s, n_gpu: %s, 16-bits training: %s", training_args.device, training_args.n_gpu, training_args.fp16,
     )
     logger.info("Training/evaluation parameters %s", training_args)
 
@@ -132,7 +127,6 @@ def main():
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
@@ -143,16 +137,16 @@ def main():
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
     )
-    model = AutoModelForMultipleChoice.from_pretrained(
-        model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
-        config=config,
-        cache_dir=model_args.cache_dir,
-    )
-
+    with training_args.strategy.scope():
+        model = TFAutoModelForMultipleChoice.from_pretrained(
+            model_args.model_name_or_path,
+            from_pt=bool(".bin" in model_args.model_name_or_path),
+            config=config,
+            cache_dir=model_args.cache_dir,
+        )
     # Get datasets
     train_dataset = (
-        MultipleChoiceDataset(
+        TFMultipleChoiceDataset(
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,
             task=data_args.task_name,
@@ -164,7 +158,7 @@ def main():
         else None
     )
     eval_dataset = (
-        MultipleChoiceDataset(
+        TFMultipleChoiceDataset(
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,
             task=data_args.task_name,
@@ -181,28 +175,22 @@ def main():
         return {"acc": simple_accuracy(preds, p.label_ids)}
 
     # Initialize our Trainer
-    trainer = Trainer(
+    trainer = TFTrainer(
         model=model,
         args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
+        train_dataset=train_dataset.get_dataset() if train_dataset else None,
+        eval_dataset=eval_dataset.get_dataset() if eval_dataset else None,
         compute_metrics=compute_metrics,
     )
 
     # Training
     if training_args.do_train:
-        trainer.train(
-            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
-        )
+        trainer.train()
         trainer.save_model()
-        # For convenience, we also re-save the tokenizer to the same directory,
-        # so that you can share your model easily on huggingface.co/models =)
-        if trainer.is_world_master():
-            tokenizer.save_pretrained(training_args.output_dir)
-
+        tokenizer.save_pretrained(training_args.output_dir)
     # Evaluation
     results = {}
-    if training_args.do_eval and training_args.local_rank in [-1, 0]:
+    if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
         result = trainer.evaluate()
@@ -217,11 +205,6 @@ def main():
             results.update(result)
 
     return results
-
-
-def _mp_fn(index):
-    # For xla_spawn (TPUs)
-    main()
 
 
 if __name__ == "__main__":
