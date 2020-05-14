@@ -14,7 +14,7 @@ NER_FINETUNED_MODELS = ["sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03
 # xlnet-base-cased disabled for now, since it crashes TF2
 FEATURE_EXTRACT_FINETUNED_MODELS = ["sshleifer/tiny_distilbert-base-cased"]
 TEXT_CLASSIF_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english"]
-TEXT_GENERATION_FINETUNED_MODELS = ["sshleifer/tiny-gpt2"]
+TEXT_GENERATION_FINETUNED_MODELS = ["sshleifer/tiny-ctrl"]
 
 FILL_MASK_FINETUNED_MODELS = ["sshleifer/tiny-distilroberta-base"]
 LARGE_FILL_MASK_FINETUNED_MODELS = ["distilroberta-base"]  # @slow
