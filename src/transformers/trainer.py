@@ -703,7 +703,7 @@ class Trainer:
                     else:
                         label_ids = np.append(label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
 
-        if is_tpu_available():
+        if is_tpu_available() and preds is not None and label_ids is not None:
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
             preds = xm.mesh_reduce("eval_preds", preds, np.concatenate)
             label_ids = xm.mesh_reduce("eval_out_label_ids", label_ids, np.concatenate)
