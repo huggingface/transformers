@@ -154,10 +154,8 @@ class SummarizationTrainer(BaseTransformer):
         )
         parser.add_argument(
             "--logging_dir",
-            default="tensorboard_logs",
             type=str,
-            required=False,
-            help="The directory for tensorboard_logs",
+            help="The directory for tensorboard logs",
         )
         return parser
 
