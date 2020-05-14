@@ -498,7 +498,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         return self.get_input_embeddings()
 
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
-        """ Build a resized Embedding Module from a provided token Embedding Module.
+        """ Build a resized Embedding Variable from a provided token Embedding Module.
             Increasing the size will add newly initialized vectors at the end
             Reducing the size will remove vectors from the end
 
@@ -508,7 +508,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
                 Increasing the size will add newly initialized vectors at the end
                 Reducing the size will remove vectors from the end
                 If not provided or None: return the provided token Embedding Module.
-        Return: ``Embedding layer (i.e. TFSharedEmbeddings or TFBertEmbeddings)``
+        Return: ``tf.Variable``
             Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
         """
         if new_num_tokens is None:
