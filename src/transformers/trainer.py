@@ -104,6 +104,12 @@ class SequentialDistributedSampler(Sampler):
     """
     Distributed Sampler that subsamples indicies sequentially,
     making it easier to collate all results at the end.
+
+    Even though we only use this sampler for eval and predict (no training),
+    which means that the model params won't have to be synced (i.e. will not hang
+    for synchronization even if varied number of forward passes), we still add extra
+    samples to the sampler to make it evenly divisible (like in `DistributedSampler`)
+    to make it easy to `gather` or `reduce` resulting tensors at the end of the loop.
     """
 
     def __init__(self, dataset, num_replicas=None, rank=None):
@@ -486,26 +492,23 @@ class Trainer:
                     self.global_step += 1
                     self.epoch = epoch + (step + 1) / len(epoch_iterator)
 
-                    if self.is_local_master():
-                        if (self.args.logging_steps > 0 and self.global_step % self.args.logging_steps == 0) or (
-                            self.global_step == 1 and self.args.logging_first_step
-                        ):
-                            logs: Dict[str, float] = {}
-                            logs["loss"] = (tr_loss - logging_loss) / self.args.logging_steps
-                            # maintaining backward compatibility.
-                            # could use "scheduler.get_last_lr()[0]" instead for pytorch >= 1.4.0
-                            logs["learning_rate"] = (
-                                scheduler.get_last_lr()[0]
-                                if version.parse(torch.__version__) >= version.parse("1.4")
-                                else scheduler.get_lr()[0]
-                            )
+                    if (self.args.logging_steps > 0 and self.global_step % self.args.logging_steps == 0) or (
+                        self.global_step == 1 and self.args.logging_first_step
+                    ):
+                        logs: Dict[str, float] = {}
+                        logs["loss"] = (tr_loss - logging_loss) / self.args.logging_steps
+                        # backward compatibility for pytorch schedulers
+                        logs["learning_rate"] = (
+                            scheduler.get_last_lr()[0]
+                            if version.parse(torch.__version__) >= version.parse("1.4")
+                            else scheduler.get_lr()[0]
+                        )
+                        logging_loss = tr_loss
 
-                            logging_loss = tr_loss
+                        self._log(logs)
 
-                            self._log(logs)
-
-                            if self.args.evaluate_during_training:
-                                self.evaluate()
+                        if self.args.evaluate_during_training:
+                            self.evaluate()
 
                     if self.is_world_master():
                         if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
@@ -719,12 +722,15 @@ class Trainer:
 
         prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
 
+        model = self.model
+        model.to(self.args.device)
         # multi-gpu eval
-        if self.args.n_gpu > 1 and not isinstance(self.model, torch.nn.DataParallel):
-            model = torch.nn.DataParallel(self.model)
+        if self.args.n_gpu > 1:
+            model = torch.nn.DataParallel(model)
         else:
             model = self.model
-        model.to(self.args.device)
+        # Note: in torch.distributed mode, there's no point in wrapping the model
+        # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
 
         if is_tpu_available():
             batch_size = dataloader._loader._loader.batch_size
@@ -734,8 +740,8 @@ class Trainer:
         logger.info("  Num examples = %d", self.num_examples(dataloader))
         logger.info("  Batch size = %d", batch_size)
         eval_losses: List[float] = []
-        preds: np.ndarray = None
-        label_ids: np.ndarray = None
+        preds: torch.Tensor = None
+        label_ids: torch.Tensor = None
         model.eval()
 
         for inputs in tqdm(dataloader, desc=description):
@@ -754,17 +760,17 @@ class Trainer:
 
             if not prediction_loss_only:
                 if preds is None:
-                    preds = logits.detach().cpu().numpy()
+                    preds = logits.detach()
                 else:
-                    preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
+                    preds = torch.cat((preds, logits.detach()), dim=0)
                 if inputs.get("labels") is not None:
                     if label_ids is None:
-                        label_ids = inputs["labels"].detach().cpu().numpy()
+                        label_ids = inputs["labels"].detach()
                     else:
-                        label_ids = np.append(label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
+                        label_ids = torch.cat((label_ids, inputs["labels"].detach()), dim=0)
 
         if self.args.local_rank != -1:
-            # In distributed mode, concatenate all results:
+            # In distributed mode, concatenate all results from all nodes:
             if preds is not None:
                 preds = self.distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
             if label_ids is not None:
@@ -772,9 +778,17 @@ class Trainer:
         elif is_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
             if preds is not None:
+                preds = preds.cpu().numpy()
                 preds = xm.mesh_reduce("eval_preds", preds, np.concatenate)
+                # TODO(can we reduce torch.Tensors directly, which would simplify the code)
             if label_ids is not None:
+                label_ids = label_ids.cpu().numpy()
                 label_ids = xm.mesh_reduce("eval_out_label_ids", label_ids, np.concatenate)
+        else:
+            if preds is not None:
+                preds = preds.cpu().numpy()
+            if label_ids is not None:
+                label_ids = label_ids.cpu().numpy()
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
@@ -790,14 +804,11 @@ class Trainer:
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
-    def distributed_concat(self, arr: np.ndarray, num_total_examples: int) -> np.ndarray:
+    def distributed_concat(self, tensor: torch.Tensor, num_total_examples: int) -> np.ndarray:
         assert self.args.local_rank != -1
 
-        def create_copy():
-            return torch.from_numpy(arr).to(self.args.device)
-
-        output_tensors = [create_copy() for _ in range(torch.distributed.get_world_size())]
-        torch.distributed.all_gather(output_tensors, create_copy())
+        output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather(output_tensors, tensor)
 
         concat = torch.cat(output_tensors, dim=0)
         output = concat.detach().cpu().numpy()
