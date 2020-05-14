@@ -69,11 +69,13 @@ extras["mecab"] = ["mecab-python3"]
 extras["sklearn"] = ["scikit-learn"]
 extras["tf"] = [
     "tensorflow",
-    "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@5df283ee136a4e85fba7328f7cc8a7d2b8a3a968#egg=keras2onnx"
+    "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@5df283ee136a4e85fba7328f7cc8a7d2b8a3a968#egg=keras2onnx",
+    "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@e42677e43686b632b91fc974d3224e0bc8b04ab9#egg=onnxconverter-common"
 ]
 extras["tf-cpu"] = [
     "tensorflow-cpu",
-    "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@5df283ee136a4e85fba7328f7cc8a7d2b8a3a968#egg=keras2onnx"
+    "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@5df283ee136a4e85fba7328f7cc8a7d2b8a3a968#egg=keras2onnx",
+    "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@e42677e43686b632b91fc974d3224e0bc8b04ab9#egg=onnxconverter-common"
 ]
 extras["torch"] = ["torch"]
 
