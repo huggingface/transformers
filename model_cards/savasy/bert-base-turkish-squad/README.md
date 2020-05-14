@@ -1,4 +1,6 @@
-
+---
+language: turkish
+---
 # Turkish SQuAD  Model : Question Answering
 
 I fine-tuned Turkish-Bert-Model for Question-Answering problem with Turkish version of SQuAD; TQuAD 
