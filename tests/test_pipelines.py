@@ -308,7 +308,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
             self._test_mono_column_pipeline(nlp, valid_inputs, {})
 
 
-QA_FINETUNED_MODELS = ["sshleifer/tiny_distilbert-base-cased-distilled-squad"]
+QA_FINETUNED_MODELS = ["sshleifer/tiny-distilbert-base-cased-distilled-squad"]
 
 
 class QAPipelineTests(unittest.TestCase):
