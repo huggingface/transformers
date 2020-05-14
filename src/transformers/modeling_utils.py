@@ -113,6 +113,7 @@ class ModuleUtilsMixin:
         try:
             return next(self.parameters()).device
         except StopIteration:
+            # For nn.DataParallel compatibility in PyTorch 1.5
 
             def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
                 tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
