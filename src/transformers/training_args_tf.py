@@ -21,14 +21,20 @@ class TFTrainingArguments(TrainingArguments):
         },
     )
     mode: str = field(
-        default="sequence-classification",
-        metadata={"help": 'Type of task, one of "sequence-classification", "token-classification" '},
+        default="text-classification",
+        metadata={"help": 'Type of task, one of "text-classification", "token-classification", "question-answering"'},
     )
     loss_name: str = field(
         default="SparseCategoricalCrossentropy",
         metadata={
             "help": "Name of a Tensorflow loss. For the list see: https://www.tensorflow.org/api_docs/python/tf/keras/losses"
         },
+    )
+    tpu_name: str = field(
+        default=None, metadata={"help": "Name of TPU"},
+    )
+    end_lr: float = field(
+        default=0, metadata={"help": "End learning rate for optimizer"},
     )
     eval_steps: int = field(default=1000, metadata={"help": "Run an evaluation every X steps."})
     debug: bool = field(
@@ -45,7 +51,10 @@ class TFTrainingArguments(TrainingArguments):
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
         else:
             try:
-                tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
+                if self.tpu_name:
+                    tpu = tf.distribute.cluster_resolver.TPUClusterResolver(self.tpu_name)
+                else:
+                    tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
             except ValueError:
                 tpu = None
 
@@ -56,9 +65,11 @@ class TFTrainingArguments(TrainingArguments):
                 strategy = tf.distribute.experimental.TPUStrategy(tpu)
             elif len(gpus) == 0:
                 strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
+            elif len(gpus) == 1:
+                strategy = tf.distribute.OneDeviceStrategy(device="/gpu:0")
             elif len(gpus) > 1:
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
-                strategy = tf.distribute.MirroredStrategy(gpus)
+                strategy = tf.distribute.MirroredStrategy()
             else:
                 raise ValueError("Cannot find the proper strategy please check your environment properties.")
 

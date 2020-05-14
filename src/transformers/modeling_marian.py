@@ -31,19 +31,20 @@ class MarianMTModel(BartForConditionalGeneration):
         src = 'fr'  # source language
         trg = 'en'  # target language
         sample_text = "où est l'arrêt de bus ?"
-        mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'   # `Model List`__
+        mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'
 
         model = MarianMTModel.from_pretrained(mname)
         tok = MarianTokenizer.from_pretrained(mname)
         batch = tok.prepare_translation_batch(src_texts=[sample_text])  # don't need tgt_text for inference
         gen = model.generate(**batch)  # for forward pass: model(**batch)
-        words: List[str] = tok.decode_batch(gen, skip_special_tokens=True)  # returns "Where is the the bus stop ?"
+        words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the the bus stop ?"
 
     """
 
     pretrained_model_archive_map = {}  # see https://huggingface.co/models?search=Helsinki-NLP
 
-    def prepare_scores_for_generation(self, scores, cur_len, max_length):
+    def prepare_logits_for_generation(self, logits, cur_len, max_length):
+        logits[:, self.config.pad_token_id] = float("-inf")
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
-            self._force_token_ids_generation(scores, self.config.eos_token_id)
-        return scores
+            self._force_token_ids_generation(logits, self.config.eos_token_id)
+        return logits

@@ -173,7 +173,11 @@ class BatchEncoding(UserDict):
 
     """
 
-    def __init__(self, data: Dict[str, Any], encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None):
+    def __init__(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None,
+    ):
         super().__init__(data)
 
         if isinstance(encoding, EncodingFast):
@@ -2191,7 +2195,6 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             .replace(" ' ", "'")
             .replace(" n't", "n't")
             .replace(" 'm", "'m")
-            .replace(" do not", " don't")
             .replace(" 's", "'s")
             .replace(" 've", "'ve")
             .replace(" 're", "'re")
