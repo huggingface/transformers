@@ -91,7 +91,7 @@ def set_seed(seed: int):
 @contextmanager
 def torch_distributed_zero_first(local_rank: int):
     """
-    Decorator to make all processes in distributed training wait for the first one (locally) to do something.
+    Decorator to make all processes in distributed training wait for each local_master to do something.
     """
     if local_rank not in [-1, 0]:
         torch.distributed.barrier()
@@ -195,7 +195,7 @@ class Trainer:
         self.optimizers = optimizers
         if tb_writer is not None:
             self.tb_writer = tb_writer
-        elif is_tensorboard_available() and self.args.local_rank in [-1, 0]:
+        elif is_tensorboard_available() and self.is_world_master():
             self.tb_writer = SummaryWriter(log_dir=self.args.logging_dir)
         if not is_tensorboard_available():
             logger.warning(
@@ -210,7 +210,7 @@ class Trainer:
             )
         set_seed(self.args.seed)
         # Create output directory if needed
-        if self.is_local_master():
+        if self.is_world_master():
             os.makedirs(self.args.output_dir, exist_ok=True)
         if is_tpu_available():
             # Set an xla_device flag on the model's config.
@@ -507,6 +507,7 @@ class Trainer:
                             if self.args.evaluate_during_training:
                                 self.evaluate()
 
+                    if self.is_world_master():
                         if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                             # In all cases (even distributed/parallel), self.model is always a reference
                             # to the model we want to save.
@@ -599,7 +600,7 @@ class Trainer:
         Saving best-practices: if you use default names for the model,
         you can reload it using from_pretrained().
 
-        Will only save from the master process.
+        Will only save from the world_master process (unless in TPUs).
         """
 
         if is_tpu_available():
