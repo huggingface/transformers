@@ -2183,8 +2183,8 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         else:
             return text
 
-    def batch_decode(self, token_ids: List[List[int]], **kwargs) -> List[str]:
-        return [self.decode(ids, **kwargs) for ids in token_ids]
+    def batch_decode(self, sequences: List[List[int]], **kwargs) -> List[str]:
+        return [self.decode(seq, **kwargs) for seq in sequences]
 
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
