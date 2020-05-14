@@ -196,17 +196,16 @@ def squad_convert_example_to_features(example, max_seq_length, doc_stride, max_q
 
         # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
         # Original TF implem also keep the classification token (set to 0)
-        p_mask = np.array(span["token_type_ids"])
-        p_mask.fill(1)
+        p_mask = np.ones_like(span["token_type_ids"])
         if tokenizer.padding_side == "right":
             p_mask[len(truncated_query) + sequence_added_tokens :] = 0
         else:
             p_mask[-len(span["tokens"]) : -(len(truncated_query) + sequence_added_tokens)] = 0
 
         pad_token_indices = np.where(span["input_ids"] == tokenizer.pad_token_id)
-        special_token_indices = np.where(
-            np.array(tokenizer.get_special_tokens_mask(span["input_ids"], already_has_special_tokens=True))
-        )
+        special_token_indices = np.asarray(
+            tokenizer.get_special_tokens_mask(span["input_ids"], already_has_special_tokens=True)
+        ).nonzero()
 
         p_mask[pad_token_indices] = 1
         p_mask[special_token_indices] = 1
