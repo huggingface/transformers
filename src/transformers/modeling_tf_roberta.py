@@ -29,10 +29,10 @@ from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 logger = logging.getLogger(__name__)
 
 TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-tf_model.h5",
-    "roberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-tf_model.h5",
-    "roberta-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-tf_model.h5",
-    "distilroberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-tf_model.h5",
+    "roberta-base": "https://cdn.huggingface.co/roberta-base-tf_model.h5",
+    "roberta-large": "https://cdn.huggingface.co/roberta-large-tf_model.h5",
+    "roberta-large-mnli": "https://cdn.huggingface.co/roberta-large-mnli-tf_model.h5",
+    "distilroberta-base": "https://cdn.huggingface.co/distilroberta-base-tf_model.h5",
 }
 
 
@@ -49,8 +49,8 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
         """ Replace non-padding symbols with their position numbers. Position numbers begin at
         padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
         `utils.make_positions`.
-        :param torch.Tensor x:
-        :return torch.Tensor:
+        :param tf.Tensor x:
+        :return tf.Tensor:
         """
         mask = tf.cast(tf.math.not_equal(x, self.padding_idx), dtype=tf.int32)
         incremental_indicies = tf.math.cumsum(mask, axis=1) * mask
@@ -59,8 +59,8 @@ class TFRobertaEmbeddings(TFBertEmbeddings):
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """ We are provided embeddings directly. We cannot infer which are padded so just generate
         sequential position ids.
-        :param torch.Tensor inputs_embeds:
-        :return torch.Tensor:
+        :param tf.Tensor inputs_embeds:
+        :return tf.Tensor:
         """
         seq_length = shape_list(inputs_embeds)[1]
 
@@ -188,7 +188,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         pooler_output (:obj:`tf.Tensor` of shape :obj:`(batch_size, hidden_size)`):
@@ -271,7 +271,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -349,7 +349,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -406,7 +406,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -462,7 +462,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         start_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
@@ -481,7 +481,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel):
     Examples::
 
         # The checkpoint roberta-base is not fine-tuned for question answering. Please see the
-        # examples/run_squad.py example to see how to fine-tune a model to a question answering task.
+        # examples/question-answering/run_squad.py example to see how to fine-tune a model to a question answering task.
 
         import tensorflow as tf
         from transformers import RobertaTokenizer, TFRobertaForQuestionAnswering

@@ -1,6 +1,8 @@
 ---
 language: english
 thumbnail: https://huggingface.co/front/thumbnails/google.png
+
+license: apache-2.0
 ---
 
 ## ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators
@@ -23,7 +25,7 @@ fill_mask = pipeline(
 )
 
 print(
-	fill_mask(f"HuggingFace is creating a {nlp.tokenizer.mask_token} that the community uses to solve NLP tasks.")
+	fill_mask(f"HuggingFace is creating a {fill_mask.tokenizer.mask_token} that the community uses to solve NLP tasks.")
 )
 
 ```

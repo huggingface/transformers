@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Auto Model class. """
+""" Auto Tokenizer class. """
 
 
 import logging
@@ -30,6 +30,7 @@ from .configuration_auto import (
     FlaubertConfig,
     GPT2Config,
     OpenAIGPTConfig,
+    ReformerConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -37,6 +38,7 @@ from .configuration_auto import (
     XLMRobertaConfig,
     XLNetConfig,
 )
+from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_bart import BartTokenizer
@@ -48,7 +50,9 @@ from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFas
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+from .tokenization_marian import MarianTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_reformer import ReformerTokenizer
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLTokenizer, TransfoXLTokenizerFast
@@ -67,8 +71,10 @@ TOKENIZER_MAPPING = OrderedDict(
         (AlbertConfig, (AlbertTokenizer, None)),
         (CamembertConfig, (CamembertTokenizer, None)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
+        (MarianConfig, (MarianTokenizer, None)),
         (BartConfig, (BartTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
+        (ReformerConfig, (ReformerTokenizer, None)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),

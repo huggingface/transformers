@@ -20,7 +20,7 @@ import logging
 
 import torch
 
-from transformers import AlbertConfig, AlbertForMaskedLM, load_tf_weights_in_albert
+from transformers import AlbertConfig, AlbertForPreTraining, load_tf_weights_in_albert
 
 
 logging.basicConfig(level=logging.INFO)
@@ -30,7 +30,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, albert_config_file, pyt
     # Initialise PyTorch model
     config = AlbertConfig.from_json_file(albert_config_file)
     print("Building PyTorch model from configuration: {}".format(str(config)))
-    model = AlbertForMaskedLM(config)
+    model = AlbertForPreTraining(config)
 
     # Load weights from tf checkpoint
     load_tf_weights_in_albert(model, config, tf_checkpoint_path)

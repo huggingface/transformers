@@ -130,7 +130,10 @@ proc_data
 
 # examples
 runs
-examples/runs
+/runs_old
+/wandb
+/examples/runs
+/examples/**/*.args
 
 # data
 /data

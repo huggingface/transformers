@@ -22,8 +22,7 @@ from typing import List, Optional
 
 import sentencepiece as spm
 
-from transformers.tokenization_utils import PreTrainedTokenizer
-
+from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE
 
 
@@ -103,6 +102,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
 
     def __init__(
         self,
@@ -182,7 +182,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
                 Set to True if the token list is already formatted with special tokens for the model
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             if token_ids_1 is not None:
@@ -201,14 +201,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        A CamemBERT sequence pair mask has the following format:
-
-        ::
-
-            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-            | first sequence  | | second sequence |
-
-        if token_ids_1 is None, only returns the first portion of the mask (0s).
+        CamemBERT, like RoBERTa, does not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -217,15 +210,15 @@ class CamembertTokenizer(PreTrainedTokenizer):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
-            sequence(s).
+            :obj:`List[int]`: List of zeros.
+
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
 
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + sep) * [0] + len(token_ids_1 + sep) * [1]
+        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     @property
     def vocab_size(self):

@@ -19,17 +19,14 @@
 </p>
 
 <h3 align="center">
-<p>State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch
+<p>State-of-the-art Natural Language Processing for PyTorch and TensorFlow 2.0
 </h3>
 
-🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides state-of-the-art general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet, CTRL...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained models in 100+ languages and deep interoperability between TensorFlow 2.0 and PyTorch.
+🤗 Transformers (formerly known as `pytorch-transformers` and `pytorch-pretrained-bert`) provides state-of-the-art general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet, T5, CTRL...) for Natural Language Understanding (NLU) and Natural Language Generation (NLG) with over thousands of pretrained models in 100+ languages and deep interoperability between PyTorch & TensorFlow 2.0.
 
 [![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/0)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/0)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/1)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/1)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/2)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/2)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/3)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/3)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/4)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/4)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/5)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/5)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/6)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/6)[![](https://sourcerer.io/fame/clmnt/huggingface/transformers/images/7)](https://sourcerer.io/fame/clmnt/huggingface/transformers/links/7)
 
 ### Features
-
-- As easy to use as pytorch-transformers
-- As powerful and concise as Keras
 - High performance on NLU and NLG tasks
 - Low barrier to entry for educators and practitioners
 
@@ -41,7 +38,7 @@ State-of-the-art NLP for everyone
 Lower compute costs, smaller carbon footprint
 - Researchers can share trained models instead of always retraining
 - Practitioners can reduce compute time and production costs
-- 10 architectures with over 30 pretrained models, some in more than 100 languages
+- Dozens of architectures with over 1,000 pretrained models, some in more than 100 languages
 
 Choose the right framework for every part of a model's lifetime
 - Train state-of-the-art models in 3 lines of code
@@ -66,7 +63,7 @@ Choose the right framework for every part of a model's lifetime
 
 ## Installation
 
-This repo is tested on Python 3.6+, PyTorch 1.0.0+ and TensorFlow 2.0.0-rc1
+This repo is tested on Python 3.6+, PyTorch 1.0.0+ and TensorFlow 2.0.
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
@@ -166,8 +163,10 @@ At some point in the future, you'll be able to seamlessly move from pre-training
 16. **[BART](https://huggingface.co/transformers/model_doc/bart.html)** (from Facebook) released with the paper [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension](https://arxiv.org/pdf/1910.13461.pdf) by Mike Lewis, Yinhan Liu, Naman Goyal, Marjan Ghazvininejad, Abdelrahman Mohamed, Omer Levy, Ves Stoyanov and Luke Zettlemoyer.
 17. **[ELECTRA](https://huggingface.co/transformers/model_doc/electra.html)** (from Google Research/Stanford University) released with the paper [ELECTRA: Pre-training text encoders as discriminators rather than generators](https://arxiv.org/abs/2003.10555) by Kevin Clark, Minh-Thang Luong, Quoc V. Le, Christopher D. Manning.
 18. **[DialoGPT](https://huggingface.co/transformers/model_doc/dialogpt.html)** (from Microsoft Research) released with the paper [DialoGPT: Large-Scale Generative Pre-training for Conversational Response Generation](https://arxiv.org/abs/1911.00536) by Yizhe Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao, Jianfeng Gao, Jingjing Liu, Bill Dolan.
-18. **[Other community models](https://huggingface.co/models)**, contributed by the [community](https://huggingface.co/users).
-19. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
+19. **[Reformer](https://huggingface.co/transformers/model_doc/reformer.html)** (from Google Research) released with the paper [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
+20. **[MarianMT](https://huggingface.co/transformers/model_doc/marian.html)** Machine translation models trained using [OPUS](http://opus.nlpl.eu/) data by Jörg Tiedemann. The [Marian Framework](https://marian-nmt.github.io/) is being developed by the Microsoft Translator Team.
+21. **[Other community models](https://huggingface.co/models)**, contributed by the [community](https://huggingface.co/users).
+22. Want to contribute a new model? We have added a **detailed guide and templates** to guide you in the process of adding a new model. You can find them in the [`templates`](./templates) folder of the repository. Be sure to check the [contributing guidelines](./CONTRIBUTING.md) and contact the maintainers or open an issue to collect feedbacks before starting your PR.
 
 These implementations have been tested on several datasets (see the example scripts) and should match the performances of the original implementations (e.g. ~93 F1 on SQuAD for BERT Whole-Word-Masking, ~88 F1 on RocStories for OpenAI GPT, ~18.3 perplexity on WikiText 103 for Transformer-XL, ~0.916 Peason R coefficient on STS-B for XLNet). You can find more details on the performances in the Examples section of the [documentation](https://huggingface.co/transformers/examples.html).
 
@@ -306,8 +305,9 @@ setup your environment to run the examples.
 
 The library comprises several example scripts with SOTA performances for NLU and NLG tasks:
 
-- `run_glue.py`: an example fine-tuning Bert, XLNet and XLM on nine different GLUE tasks (*sequence-level classification*)
-- `run_squad.py`: an example fine-tuning Bert, XLNet and XLM on the question answering dataset SQuAD 2.0 (*token-level classification*)
+- `run_glue.py`: an example fine-tuning sequence classification models on nine different GLUE tasks (*sequence-level classification*)
+- `run_squad.py`: an example fine-tuning question answering models on the question answering dataset SQuAD 2.0 (*token-level classification*)
+- `run_ner.py`: an example fine-tuning token classification models on named entity recognition (*token-level classification*)
 - `run_generation.py`: an example using GPT, GPT-2, CTRL, Transformer-XL and XLNet for conditional language generation
 - other model-specific examples (see the documentation).
 
@@ -317,7 +317,7 @@ Here are three quick usage examples for these scripts:
 
 The [General Language Understanding Evaluation (GLUE) benchmark](https://gluebenchmark.com/) is a collection of nine sentence- or sentence-pair language understanding tasks for evaluating and analyzing natural language understanding systems.
 
-Before running anyone of these GLUE tasks you should download the
+Before running any of these GLUE tasks you should download the
 [GLUE data](https://gluebenchmark.com/tasks) by running
 [this script](https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e)
 and unpack it to some directory `$GLUE_DIR`.
@@ -332,8 +332,7 @@ pip install -r ./examples/requirements.txt
 export GLUE_DIR=/path/to/glue
 export TASK_NAME=MRPC
 
-python ./examples/run_glue.py \
-    --model_type bert \
+python ./examples/text-classification/run_glue.py \
     --model_name_or_path bert-base-uncased \
     --task_name $TASK_NAME \
     --do_train \
@@ -359,8 +358,7 @@ Parallel training is a simple way to use several GPUs (but is slower and less fl
 ```shell
 export GLUE_DIR=/path/to/glue
 
-python ./examples/run_glue.py \
-    --model_type xlnet \
+python ./examples/text-classification/run_glue.py \
     --model_name_or_path xlnet-large-cased \
     --do_train  \
     --do_eval   \
@@ -385,8 +383,7 @@ On this machine we thus have a batch size of 32, please increase `gradient_accum
 This example code fine-tunes the Bert Whole Word Masking model on the Microsoft Research Paraphrase Corpus (MRPC) corpus using distributed training on 8 V100 GPUs to reach a F1 > 92.
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node 8 ./examples/run_glue.py   \
-    --model_type bert \
+python -m torch.distributed.launch --nproc_per_node 8 ./examples/text-classification/run_glue.py   \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --task_name MRPC \
     --do_train   \
@@ -418,7 +415,7 @@ Training with these hyper-parameters gave us the following results:
 This example code fine-tunes BERT on the SQuAD dataset using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=8 ./examples/run_squad.py \
+python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answering/run_squad.py \
     --model_type bert \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
@@ -451,7 +448,7 @@ The generation script includes the [tricks](https://github.com/rusiaaman/XLNet-g
 Here is how to run the script with the small version of OpenAI GPT-2 model:
 
 ```shell
-python ./examples/run_generation.py \
+python ./examples/text-generation/run_generation.py \
     --model_type=gpt2 \
     --length=20 \
     --model_name_or_path=gpt2 \
@@ -459,7 +456,7 @@ python ./examples/run_generation.py \
 
 and from the Salesforce CTRL model:
 ```shell
-python ./examples/run_generation.py \
+python ./examples/text-generation/run_generation.py \
     --model_type=ctrl \
     --length=20 \
     --model_name_or_path=ctrl \

@@ -31,7 +31,7 @@ from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
 
-from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available
+from .file_utils import cached_path, hf_bucket_url, is_remote_url, is_tf_available, is_torch_available, torch_required
 
 
 if is_tf_available():
@@ -173,7 +173,11 @@ class BatchEncoding(UserDict):
 
     """
 
-    def __init__(self, data: Dict[str, Any], encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None):
+    def __init__(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None,
+    ):
         super().__init__(data)
 
         if isinstance(encoding, EncodingFast):
@@ -457,6 +461,12 @@ class BatchEncoding(UserDict):
             batch_index = 0
             char_index = batch_or_char_index
         return self._encodings[batch_index].char_to_word(char_index)
+
+    @torch_required
+    def to(self, device: str):
+        """Send all values to device by calling v.to(device)"""
+        self.data = {k: v.to(device) for k, v in self.data.items()}
+        return self
 
 
 class SpecialTokensMixin:
@@ -779,6 +789,30 @@ class PreTrainedTokenizer(SpecialTokensMixin):
     def max_len_sentences_pair(self):
         return self.model_max_length - self.num_special_tokens_to_add(pair=True)
 
+    @max_len_single_sentence.setter
+    def max_len_single_sentence(self, value):
+        """ For backward compatibility, allow to try to setup 'max_len_single_sentence' """
+        if value == self.model_max_length - self.num_special_tokens_to_add(pair=False):
+            logger.warning(
+                "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
+            )
+        else:
+            raise ValueError(
+                "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
+            )
+
+    @max_len_sentences_pair.setter
+    def max_len_sentences_pair(self, value):
+        """ For backward compatibility, allow to try to setup 'max_len_sentences_pair' """
+        if value == self.model_max_length - self.num_special_tokens_to_add(pair=True):
+            logger.warning(
+                "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
+            )
+        else:
+            raise ValueError(
+                "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
+            )
+
     def get_vocab(self):
         """ Returns the vocabulary as a dict of {token: index} pairs. `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the vocab. """
         raise NotImplementedError()
@@ -924,7 +958,9 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                             logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
                             full_file_name = None
                     else:
-                        full_file_name = hf_bucket_url(pretrained_model_name_or_path, postfix=file_name)
+                        full_file_name = hf_bucket_url(
+                            pretrained_model_name_or_path, filename=file_name, use_cdn=False
+                        )
 
                     vocab_files[file_id] = full_file_name
 
@@ -2159,7 +2195,6 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             .replace(" ' ", "'")
             .replace(" n't", "n't")
             .replace(" 'm", "'m")
-            .replace(" do not", " don't")
             .replace(" 's", "'s")
             .replace(" 've", "'ve")
             .replace(" 're", "'re")
@@ -2403,7 +2438,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             )
 
         # Needed if we have to return a tensor
-        pad_to_max_length = pad_to_max_length or (return_tensors is not None)
+        pad_to_max_length = pad_to_max_length or (return_tensors is not None and len(batch_text_or_text_pairs) > 1)
 
         # Throw an error if we can pad because there is no padding token
         if pad_to_max_length and self.pad_token_id is None:

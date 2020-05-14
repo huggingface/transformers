@@ -31,7 +31,7 @@ The model was fine-tuned on a Tesla P100 GPU and 25GB of RAM.
 The script is the following:
 
 ```python
-python transformers/examples/run_squad.py \
+python transformers/examples/question-answering/run_squad.py \
   --model_type distilbert \
   --model_name_or_path distilbert-base-multilingual-cased \
   --do_train \

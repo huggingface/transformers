@@ -66,3 +66,9 @@ SummarizationPipeline
 ==========================================
 
 .. autoclass:: transformers.SummarizationPipeline
+
+
+TextGenerationPipeline
+==========================================
+
+.. autoclass:: transformers.TextGenerationPipeline

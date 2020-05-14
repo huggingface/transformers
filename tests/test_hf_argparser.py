@@ -5,8 +5,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
-from transformers.hf_argparser import HfArgumentParser
-from transformers.training_args import TrainingArguments
+from transformers import HfArgumentParser, TrainingArguments
 
 
 @dataclass

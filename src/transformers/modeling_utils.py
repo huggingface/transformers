@@ -13,8 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch BERT model."""
 
+import inspect
 import logging
 import os
 from typing import Callable, Tuple
@@ -175,7 +175,7 @@ class ModuleUtilsMixin:
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    def get_head_mask(self, head_mask, num_hidden_layers):
+    def get_head_mask(self, head_mask, num_hidden_layers, is_attention_chunked=False):
         """
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -189,6 +189,8 @@ class ModuleUtilsMixin:
         """
         if head_mask is not None:
             head_mask = self._convert_head_mask_to_5d(head_mask, num_hidden_layers)
+            if is_attention_chunked is True:
+                head_mask = head_mask.unsqueeze(-1)
         else:
             head_mask = [None] * num_hidden_layers
 
@@ -302,7 +304,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
     def _tie_or_clone_weights(self, output_embeddings, input_embeddings):
-        """ Tie or clone module weights depending of weither we are using TorchScript or not
+        """ Tie or clone module weights depending of whether we are using TorchScript or not
         """
         if self.config.torchscript:
             output_embeddings.weight = nn.Parameter(input_embeddings.weight.clone())
@@ -527,6 +529,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_cdn = kwargs.pop("use_cdn", True)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -577,7 +580,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path, postfix=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
+                    pretrained_model_name_or_path,
+                    filename=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
+                    use_cdn=use_cdn,
                 )
 
             # redirect to the cache, if necessary
@@ -739,8 +744,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         return {"input_ids": input_ids}
 
-    def prepare_scores_for_generation(self, scores, **kwargs):
-        return scores
+    def prepare_logits_for_generation(self, logits, **kwargs):
+        return logits
 
     def _use_cache(self, outputs, use_cache):
         """During generation, decide whether to pass the `past` variable to the next forward pass."""
@@ -783,6 +788,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
+        **model_specific_kwargs
     ):
         r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
 
@@ -851,7 +857,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
                 Defaults to `None`.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
+                `What are attention masks? <../glossary.html#attention-mask>`__
 
             decoder_start_token_id=None: (`optional`) int
                 If an encoder-decoder model starts decoding with a different token than BOS.
@@ -859,6 +865,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             use_cache: (`optional`) bool
                 If `use_cache` is True, past key values are used to speed up decoding if applicable to model. Defaults to `True`.
+
+            model_specific_kwargs: (`optional`) dict
+                Additional model specific kwargs will be forwarded to the `forward` function of the model.
 
         Return:
 
@@ -1011,7 +1020,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             pad_token_id = eos_token_id
 
         # current position and vocab size
-        vocab_size = self.config.vocab_size
+        if hasattr(self.config, "vocab_size"):
+            vocab_size = self.config.vocab_size
+        elif (
+            self.config.is_encoder_decoder
+            and hasattr(self.config, "decoder")
+            and hasattr(self.config.decoder, "vocab_size")
+        ):
+            vocab_size = self.config.decoder.vocab_size
 
         # set effective batch size and effective batch multiplier according to do_sample
         if do_sample:
@@ -1106,6 +1122,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                model_specific_kwargs=model_specific_kwargs,
             )
         else:
             output = self._generate_no_beam_search(
@@ -1128,6 +1145,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                model_specific_kwargs=model_specific_kwargs,
             )
 
         return output
@@ -1153,6 +1171,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         encoder_outputs,
         attention_mask,
         use_cache,
+        model_specific_kwargs,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
             All returned sequence are generated independantly.
@@ -1165,7 +1184,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
 
             outputs = self(**model_inputs)
@@ -1278,6 +1297,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         encoder_outputs,
         attention_mask,
         use_cache,
+        model_specific_kwargs,
     ):
         """ Generate sequences for each example with beam search.
         """
@@ -1304,7 +1324,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **model_specific_kwargs
             )
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
@@ -1322,10 +1342,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if temperature != 1.0:
                 next_token_logits = next_token_logits / temperature
 
-            scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
             if self.config.is_encoder_decoder and do_sample is False:
-                # TODO (PVP) still a bit hacky here - there might be a better solutino
-                scores = self.prepare_scores_for_generation(scores, cur_len=cur_len, max_length=max_length)
+                # TODO (PVP) still a bit hacky here - there might be a better solution
+                next_token_logits = self.prepare_logits_for_generation(
+                    next_token_logits, cur_len=cur_len, max_length=max_length
+                )
+
+            scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             # set eos token prob to zero if min_length is not reached
             if eos_token_id is not None and cur_len < min_length:
@@ -1522,18 +1545,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             decoded = torch.stack(best).type(torch.long).to(next(self.parameters()).device)
 
         return decoded
-
-    # force one of token_ids to be generated by setting prob of all other tokens to 0.
-    def _force_token_ids_generation(self, scores, token_ids):
-        if isinstance(token_ids, int):
-            token_ids = [token_ids]
-        all_but_token_ids_mask = torch.tensor(
-            [x for x in range(self.config.vocab_size) if x not in token_ids],
-            dtype=torch.long,
-            device=next(self.parameters()).device,
-        )
-        assert len(scores.shape) == 2, "scores should be of rank 2 with shape: [batch_size, vocab_size]"
-        scores[:, all_but_token_ids_mask] = -float("inf")
 
     @staticmethod
     def _reorder_cache(past: Tuple, beam_idx: Tensor) -> Tuple[Tensor]:
@@ -2025,8 +2036,8 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()
-    incremental_indicies = torch.cumsum(mask, dim=1).type_as(mask) * mask
-    return incremental_indicies.long() + padding_idx
+    incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
+    return incremental_indices.long() + padding_idx
 
 
 def prune_linear_layer(layer, index, dim=0):
@@ -2089,3 +2100,66 @@ def prune_layer(layer, index, dim=None):
         return prune_conv1d_layer(layer, index, dim=1 if dim is None else dim)
     else:
         raise ValueError("Can't prune layer of class {}".format(layer.__class__))
+
+
+def apply_chunking_to_forward(
+    chunk_size: int, chunk_dim: int, forward_fn: Callable[..., torch.Tensor], *input_tensors
+) -> torch.Tensor:
+    """
+    This function chunks the `input_tensors` into smaller input tensor parts of size `chunk_size` over the dimension `chunk_dim`.
+    It then applies a layer `forward_fn` to each chunk independently to save memory.
+    If the `forward_fn` is independent across the `chunk_dim` this function will yield the
+    same result as not applying it.
+
+    Args:
+        chunk_size: int - the chunk size of a chunked tensor. `num_chunks` = `len(input_tensors[0]) / chunk_size`
+        chunk_dim: int - the dimension over which the input_tensors should be chunked
+        forward_fn: fn - the forward fn of the model
+        input_tensors: tuple(torch.Tensor) - the input tensors of `forward_fn` which are chunked
+    Returns:
+        a Tensor with the same shape the foward_fn would have given if applied
+
+
+    Examples::
+
+        # rename the usual forward() fn to forward_chunk()
+        def forward_chunk(self, hidden_states):
+            hidden_states = self.decoder(hidden_states)
+            return hidden_states
+
+        # implement a chunked forward function
+        def forward(self, hidden_states):
+            return apply_chunking_to_forward(self.chunk_size_lm_head, self.seq_len_dim, self.forward_chunk, hidden_states)
+    """
+
+    assert len(input_tensors) > 0, "{} has to be a tuple/list of tensors".format(input_tensors)
+    tensor_shape = input_tensors[0].shape
+    assert all(
+        input_tensor.shape == tensor_shape for input_tensor in input_tensors
+    ), "All input tenors have to be of the same shape"
+
+    # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compability
+    num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
+    assert num_args_in_forward_chunk_fn == len(
+        input_tensors
+    ), "forward_chunk_fn expects {} arguments, but only {} input tensors are given".format(
+        num_args_in_forward_chunk_fn, len(input_tensors)
+    )
+
+    if chunk_size > 0:
+        assert (
+            input_tensors[0].shape[chunk_dim] % chunk_size == 0
+        ), "The dimension to be chunked {} has to be a multiple of the chunk size {}".format(
+            input_tensors[0][chunk_dim], chunk_size
+        )
+
+        num_chunks = input_tensors[0].shape[chunk_dim] // chunk_size
+
+        # chunk input tensor into tuples
+        input_tensors_chunks = tuple(input_tensor.chunk(num_chunks, dim=chunk_dim) for input_tensor in input_tensors)
+        # apply forward fn to every tuple
+        output_chunks = tuple(forward_fn(*input_tensors_chunk) for input_tensors_chunk in zip(*input_tensors_chunks))
+        # concatenate output at same dimension
+        return torch.cat(output_chunks, dim=chunk_dim)
+
+    return forward_fn(*input_tensors)

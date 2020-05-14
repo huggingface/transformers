@@ -5,6 +5,8 @@ To create the package for pypi.
 
 1. Change the version in __init__.py, setup.py as well as docs/source/conf.py.
 
+2. Unpin specific versions from setup.py (like isort).
+
 2. Commit these changes with the message: "Release: VERSION"
 
 3. Add a tag in git to mark the release: "git tag VERSION -m'Adds tag VERSION for pypi' "
@@ -72,18 +74,18 @@ extras["torch"] = ["torch"]
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 extras["all"] = extras["serving"] + ["tensorflow", "torch"]
 
-extras["testing"] = ["pytest", "pytest-xdist"]
+extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator"]
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme"]
 extras["quality"] = [
     "black",
-    "isort @ git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort",
-    "flake8",
+    "isort",
+    "flake8==3.7.9",
 ]
 extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "scikit-learn", "tensorflow", "torch"]
 
 setup(
     name="transformers",
-    version="2.8.0",
+    version="2.9.1",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
@@ -96,11 +98,9 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.7.0rc7",
+        "tokenizers == 0.7.0",
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
-        # accessing files from S3 directly
-        "boto3",
         # filesystem locks e.g. to prevent parallel downloads
         "filelock",
         # for downloading models over HTTPS
