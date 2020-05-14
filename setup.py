@@ -67,6 +67,8 @@ extras = {}
 
 extras["mecab"] = ["mecab-python3"]
 extras["sklearn"] = ["scikit-learn"]
+
+# keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
 extras["tf"] = [
     "tensorflow",
     "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
