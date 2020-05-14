@@ -69,11 +69,11 @@ extras["mecab"] = ["mecab-python3"]
 extras["sklearn"] = ["scikit-learn"]
 extras["tf"] = [
     "tensorflow",
-    "keras2onnx @ git+https://github.com/onnx/keras2onnx/tree/v1.6.5"
+    "keras2onnx @ git+git://github.com/onnx/keras2onnx/tree/v1.6.5"
 ]
 extras["tf-cpu"] = [
     "tensorflow-cpu",
-    "keras2onnx @ git+https://github.com/onnx/keras2onnx/tree/v1.6.5"
+    "keras2onnx @ git+git://github.com/onnx/keras2onnx/tree/v1.6.5"
 ]
 extras["torch"] = ["torch"]
 
