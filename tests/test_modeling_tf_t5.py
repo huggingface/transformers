@@ -179,6 +179,42 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             # test that outputs are equal for slice
             tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
+        def create_and_check_t5_lm_head_with_added_embeddings(self, config, input_ids, input_mask, token_labels):
+            # test for different embeddding sizes
+            INPUT_SHAPE = [1, self.seq_length, self.hidden_size]
+            for size in [5000, 50000]:
+                # build the embeddings
+                model = TFT5ForConditionalGeneration(config=config)
+                model.shared.build(INPUT_SHAPE)
+                emb_old = model.get_input_embeddings()
+                emb_new = model.resize_token_embeddings(size)
+
+                # check that the weights for reshaped embeddings did not change.
+                val1 = list(emb_old.weight[:10].numpy())
+                val2 = list(emb_new.weight[:10].numpy())
+                tf.debugging.assert_near(val1, val2, rtol=1e-3)
+
+                # check that the the resized embeddings size matches the desired size.
+                self.parent.assertEqual(emb_new.weight.shape[0], size)
+
+        def create_and_check_t5_with_added_embeddings(self, config, input_ids, input_mask, token_labels):
+            # test for different embeddding sizes
+            INPUT_SHAPE = [1, self.seq_length, self.hidden_size]
+            for size in [5000, 50000]:
+                # build the embeddings
+                model = TFT5Model(config=config)
+                model.shared.build(INPUT_SHAPE)
+                emb_old = model.get_input_embeddings()
+                emb_new = model.resize_token_embeddings(size)
+
+                # check that the weights for reshaped embeddings did not change.
+                val1 = list(emb_old.weight[:10].numpy())
+                val2 = list(emb_new.weight[:10].numpy())
+                tf.debugging.assert_near(val1, val2, rtol=1e-3)
+
+                # check that the the resized embeddings size matches the desired size.
+                self.parent.assertEqual(emb_new.weight.shape[0], size)
+
         def create_and_check_t5_decoder_model_attention_mask_past(
             self, config, input_ids, decoder_input_ids, attention_mask
         ):
@@ -252,6 +288,10 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_t5_decoder_model_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_decoder_model_past(*config_and_inputs)
+
+    def test_t5_added_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_t5_with_added_embeddings(*config_and_inputs)
 
     def test_t5_decoder_model_past_with_attn_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

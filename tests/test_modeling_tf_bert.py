@@ -256,6 +256,26 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["start_logits"].shape), [self.batch_size, self.seq_length])
             self.parent.assertListEqual(list(result["end_logits"].shape), [self.batch_size, self.seq_length])
 
+        def create_and_check_bert_with_added_embeddings(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            # test for different embeddding sizes
+            INPUT_SHAPE = [1, self.seq_length, self.hidden_size]
+            for size in [5000, 50000]:
+                # build the embeddings
+                model = TFBertModel(config=config)
+                model.bert.embeddings.build(INPUT_SHAPE)
+                emb_old = model.get_input_embeddings()
+                emb_new = model.resize_token_embeddings(size)
+
+                # check that the weights for reshaped embeddings did not change.
+                val1 = list(emb_old.word_embeddings[:10].numpy())
+                val2 = list(emb_new.word_embeddings[:10].numpy())
+                tf.debugging.assert_near(val1, val2, rtol=1e-3)
+
+                # check that the the resized embeddings size matches the desired size.
+                self.parent.assertEqual(emb_new.word_embeddings.shape[0], size)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -308,6 +328,10 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_token_classification(*config_and_inputs)
+
+    def test_for_added_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bert_with_added_embeddings(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
