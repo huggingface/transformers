@@ -19,9 +19,19 @@ import pickle
 import shutil
 import tempfile
 from collections import OrderedDict
-from typing import Dict, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Tuple, Union
 
 from tests.utils import require_tf, require_torch
+
+
+if TYPE_CHECKING:
+    from transformers import (
+        PretrainedConfig,
+        PreTrainedTokenizer,
+        PreTrainedTokenizerFast,
+        PreTrainedModel,
+        TFPreTrainedModel,
+    )
 
 
 def merge_model_tokenizer_mappings(

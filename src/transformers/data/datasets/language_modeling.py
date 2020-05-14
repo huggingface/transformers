@@ -65,7 +65,7 @@ class TextDataset(Dataset):
                 with open(cached_features_file, "wb") as handle:
                     pickle.dump(self.examples, handle, protocol=pickle.HIGHEST_PROTOCOL)
                 logger.info(
-                    f"Saving features into cached file %s [took %.3f s]", cached_features_file, time.time() - start
+                    "Saving features into cached file %s [took %.3f s]", cached_features_file, time.time() - start
                 )
 
     def __len__(self):
