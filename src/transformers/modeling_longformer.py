@@ -32,7 +32,7 @@ from .modeling_bert import BertPreTrainedModel
 
 logger = logging.getLogger(__name__)
 
-# TODO: upload files
+# TODO: upload model and config files
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "longformer-base-4096": "https://ai2-s2-research.s3-us-west-2.amazonaws.com/longformer/longformer-base-4096/pytorch_model.bin",
     "longformer-large-4096": "https://ai2-s2-research.s3-us-west-2.amazonaws.com/longformer/longformer-large-4096/pytorch_model.bin",
@@ -525,15 +525,21 @@ class LongformerModel(RobertaModel):
 
     Examples::
 
-        from transformers import LongformerTokenizer, LongformerForMaskedLM
         import torch
+        from transformers import LongformerModel, LongformerTokenizer
 
+        model = LongformerModel.from_pretrained('longformer-base-4096')
         tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
-        model = LongformerForMaskedLM.from_pretrained('longformer-base-4096')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, masked_lm_labels=input_ids)
-        loss, prediction_scores = outputs[:2]
-        # TODO: better example
+
+        SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
+        input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
+
+        # Attention mask values -- 0: no attention, 1: local attention, 2: global attention
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device) # initialize to local attention
+        attention_mask[:, [1, 4, 21,]] = 2  # Set global attention based on the task. For example,
+                                            # classification: the <s> token
+                                            # QA: question tokens
+        sequence_output, pooled_output = model(input_ids, attention_mask=attention_mask)
         """
 
         attention_window =  \
@@ -611,16 +617,24 @@ class LongformerForMaskedLM(BertPreTrainedModel):
 
     Examples::
 
-        from transformers import LongformerTokenizer, LongformerForMaskedLM
         import torch
+        from transformers import LongformerForMaskedLM, LongformerTokenizer
 
-        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
         model = LongformerForMaskedLM.from_pretrained('longformer-base-4096')
-        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, masked_lm_labels=input_ids)
-        loss, prediction_scores = outputs[:2]
+        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
 
+        SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
+        input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
+
+        # Attention mask values -- 0: no attention, 1: local attention, 2: global attention
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device) # initialize to local attention
+        attention_mask[:, [1, 4, 21,]] = 2  # Set global attention based on the task. For example,
+                                            # classification: the <s> token
+                                            # QA: question tokens
+                                            # LM: potentially on the beginning of sentences and paragraphs
+        loss, prediction_scores = model(input_ids, attention_mask=attention_mask, masked_lm_labels=input_ids)
         """
+
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,

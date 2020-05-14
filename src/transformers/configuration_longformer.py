@@ -22,7 +22,6 @@ from .configuration_roberta import RobertaConfig
 
 logger = logging.getLogger(__name__)
 
-# TODO: upload files
 LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "longformer-base-4096": "https://ai2-s2-research.s3-us-west-2.amazonaws.com/longformer/longformer-base-4096/config.json",
     "longformer-large-4096": "https://ai2-s2-research.s3-us-west-2.amazonaws.com/longformer/longformer-large-4096/config.json",
