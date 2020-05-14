@@ -1,7 +1,9 @@
 import json
 import re
 import warnings
-from typing import Dict, List, Optional, Union
+from pathlib import Path
+from shutil import copyfile
+from typing import Dict, List, Optional, Tuple, Union
 
 import sentencepiece
 
@@ -69,7 +71,8 @@ class MarianTokenizer(PreTrainedTokenizer):
             raise KeyError("<unk> token must be in vocab")
         assert self.pad_token in self.encoder
         self.decoder = {v: k for k, v in self.encoder.items()}
-
+        self.spm_files = [source_spm, target_spm]
+        self.vocab_file = vocab
         self.source_lang = source_lang
         self.target_lang = target_lang
 
@@ -172,6 +175,25 @@ class MarianTokenizer(PreTrainedTokenizer):
         self.current_spm = self.spm_source
         return model_inputs
 
+    def save_vocabulary(self, save_directory: str) -> Tuple[str]:
+        """
+        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
+
+        Args:
+            save_directory (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
+        save_dir = Path(save_directory)
+        assert save_dir.is_dir(), f"{save_directory} should be a directory"
+        out_vocab_file = save_dir / vocab_files_names["vocab_file"]
+        save_json(self.encoder, out_vocab_file)
+        for f in self.spm_files:
+            copyfile(f, save_dir / Path(f).name)
+        return (out_vocab_file, *self.spm_files)
+
     @property
     def vocab_size(self) -> int:
         return len(self.encoder)
@@ -180,3 +202,8 @@ class MarianTokenizer(PreTrainedTokenizer):
 def load_json(path: str) -> Union[Dict, List]:
     with open(path, "r") as f:
         return json.load(f)
+
+
+def save_json(data, path: str) -> None:
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
