@@ -58,7 +58,8 @@ if __name__ == "__main__":
     logger.warning(
         "Process rank: %s, device: %s", training_args.local_rank, training_args.device,
     )
-    # Essentially, what we want to verify in the distributed case is 
+
+    # Essentially, what we want to verify in the distributed case is
     # that we get all samples back, in the right order.
     # (this is crucial for prediction for instance)
     for dataset_length in [101, 40, 7]:
