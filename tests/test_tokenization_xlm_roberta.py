@@ -17,7 +17,6 @@
 import os
 import unittest
 
-from transformers.file_utils import cached_property
 from transformers.tokenization_xlm_roberta import SPIECE_UNDERLINE, XLMRobertaTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -122,22 +121,22 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ],
         )
 
-    @cached_property
-    def big_tokenizer(self):
-        return XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
-
     @slow
     def test_tokenization_base_easy_symbols(self):
+        tokenizer = XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
+
         symbols = "Hello World!"
         original_tokenizer_encodings = [0, 35378, 6661, 38, 2]
         # xlmr = torch.hub.load('pytorch/fairseq', 'xlmr.base')  # xlmr.large has same tokenizer
         # xlmr.eval()
         # xlmr.encode(symbols)
 
-        self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
+        self.assertListEqual(original_tokenizer_encodings, tokenizer.encode(symbols))
 
     @slow
     def test_tokenization_base_hard_symbols(self):
+        tokenizer = XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
+
         symbols = 'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will add words that should not exsist and be tokenized to <unk>, such as saoneuhaoesuth'
         original_tokenizer_encodings = [
             0,
@@ -210,4 +209,4 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # xlmr.eval()
         # xlmr.encode(symbols)
 
-        self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
+        self.assertListEqual(original_tokenizer_encodings, tokenizer.encode(symbols))
