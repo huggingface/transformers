@@ -8,10 +8,15 @@ from collections import defaultdict
 import numpy as np
 
 
-TASK = "multirc"
+TASK = "wic"
 TASK2METRIC = {
+               "boolq": "acc",
+               "cb": "acc_and_f1",
                "copa": "acc",
                "multirc": "f1", #"em_and_f1",
+               "record": "em_and_f1",
+               "rte": "acc",
+               "wic": "acc",
                "wsc": "f1" #"acc_and_f1"
               }
 METRIC = TASK2METRIC[TASK]

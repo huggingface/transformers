@@ -5,12 +5,14 @@ else
     export root_data_dir="${BPROC}"
     export root_ckpt_dir="${SCKPTS}"
 fi
-export root_data_dir="/misc/vlgscratch4/BowmanGroup/awang/processed_data"
-export root_ckpt_dir="/misc/vlgscratch4/BowmanGroup/awang/processed_data/ckpts"
 
-export model_type="bert"
-export model="bert-base-uncased"
-export casing_config="--do_lower_case"
+# TODO(Alex): case for lions
+#export root_data_dir="/misc/vlgscratch4/BowmanGroup/awang/processed_data"
+#export root_ckpt_dir="/misc/vlgscratch4/BowmanGroup/awang/processed_data/ckpts"
+
+export model_type="roberta"
+export model="roberta-large"
+export casing_config=""
 # NOTE: USE --do_lower_case if using an uncased model (e.g. bert-base-uncased) !!!
 export mode=${1:evaluate}
 export gpuid=${3:-0}
@@ -30,8 +32,8 @@ function train() {
                                      --weight_decay 0.01 \
                                      --per_gpu_train_batch_size 4 \
                                      --gradient_accumulation_steps ${grad_acc_steps} \
-                                     --logging_steps 100 #\
-                                     #--fp16 --fp16_opt_level O2
+                                     --logging_steps 100 \
+                                     --fp16 --fp16_opt_level O2
 
 }
 
@@ -124,7 +126,7 @@ function record() {
 function rte() { # 85.9 acc
     export task="rte"
     export data_dir="${root_data_dir}/mtl-sentence-representations/RTE"
-    export lr=0.00003
+    #export lr=0.00003
     export grad_acc_steps=8
     export eval_freq=77
 }
@@ -132,9 +134,9 @@ function rte() { # 85.9 acc
 function wic() { # 71.3
     export task="wic"
     export data_dir="${root_data_dir}/mtl-sentence-representations/WiC"
-    export lr=0.00003
+    #export lr=0.00003
     export grad_acc_steps=8
-    export eval_freq=77
+    export eval_freq=169
     #export opt_len_train="--max_steps 5" # debugging
 }
 

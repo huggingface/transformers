@@ -2,7 +2,7 @@
 
 # Generic job script for all experiments on NYU CILVR machines.
 
-#SBATCH --time=7-00:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --gres=gpu:p40:1
 #SBATCH --mem=64000
 #SBATCH --mail-type=end
@@ -17,7 +17,7 @@ export PATH=/beegfs/aw3272/software/miniconda3/envs/tfmr/lib:$PATH
 export LD_LIBRARY_PATH=/beegfs/aw3272/software/miniconda3/envs/tfmr/lib:$LD_LIBRARY_PATH
 
 # Log what we're running and where.
-echo $SLURM_JOBID - `hostname` - ${job_name} >> ~/jiant_machine_assignments.txt
+echo $SLURM_JOBID - `hostname` - ${job_name} >> ~/projects/transformers/slurm_assignments.txt
 
 # Run.
 cd ~/projects/transformers
