@@ -7,7 +7,6 @@ import numpy as np
 import os
 import pickle
 import time
-import torch
 import sys
 
 from os.path import join as pjoin
@@ -16,11 +15,15 @@ from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampl
 from time import time
 from tqdm import tqdm, trange
 
-from transformers import AutoModel, AutoTokenizer
-from transformers import AdamW, get_linear_schedule_with_warmup
-
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk, streaming_bulk
+
+import faiss
+
+import torch
+
+from transformers import AutoModel, AutoTokenizer
+from transformers import AdamW, get_linear_schedule_with_warmup
 
 import nlp
 
@@ -426,9 +429,12 @@ def query_es_index(question, es_client, index_name='english_wiki_kilt_snippets_1
         }
     )
     hits = response['hits']['hits']
-    doc = '<P> ' + ' <P> '.join([hit['_source']['passage_text'] for hit in hits])
-    sources = [(hit['_id'], hit['_source']['article_title'], hit['_source']['section_title'], hit['_score']) for hit in hits]
-    return (doc, sources)
+    support_doc = '<P> ' + ' <P> '.join([hit['_source']['passage_text'] for hit in hits])
+    res_list = [dict([(k, hit['_source'][k]) for k in hit['_source'] if k != 'passage_text']) for hit in hits]
+    for r, hit in zip(res_list, hits):
+        r['passage_id'] = hit['_id']
+        r['score'] = hit['_score']
+    return support_doc, res_list
 
 ###############
 ### ELI5 torch dataset
@@ -535,35 +541,40 @@ def embed_question_for_retrieval(q_ls, tokenizer, qa_embedder, device='cuda:0'):
         q_reps = qa_embedder.embed_questions(q_ids, q_mask).cpu().type(torch.float)
     return q_reps.numpy()
 
-def make_qa_dense_index(qa_embedder, tokenizer, wiki_kilt,
-                        passage_len=100, overlap=0,
-                        batch_size=128,
-                        index_name='english_wiki_kilt_100w',
+def make_qa_dense_index(qa_embedder, tokenizer, passages_dset,
+                        batch_size=512, index_name='kilt_passages_reps.dat',
                         device='cuda:0'):
-    n_batches = 0
-    n_saved = 0
-    docs = []
-    reps = []
-    number_of_docs = 25000000
-    progress = tqdm(unit="docs", total=number_of_docs)
-    print('----- encoding documents')
-    passages = []
     st_time = time()
-    for doc in kilt_generate_snippets(wiki_kilt, passage_len, overlap):
-        passages += [doc]
-        if len(passages) == batch_size:
-            pre_batch = [{'question': 'Q', 'answer': passage['passage_text']} for passage in passages]
-            _, _, a_ids, a_mask = make_qa_retriever_batch(qa_embedder, tokenizer, max_len=128, max_start_idx=100000, device=device)
-            with torch.no_grad():
-                a_reps = qa_embedder.embed_answerss(a_ids, a_mask).cpu().type(torch.float)
-            docs += [d['_id'] for d in passages]
-            reps += [a_reps]
-            passages = []
-            n_batches += 1
-            if n_batches % 10 == 0:
-                print("{:5d} batches: {:.2f}".format(n_batches, time() - st_time))
-            progress.update(batch_size)
+    fp = np.memmap(index_name, dtype='float32', mode='w+', shape=(wiki_passages.num_rows, 128))
+    n_batches = math.ceil(wiki_passages.num_rows / batch_size)
+    for i in range(n_batches):
+        reps = embed_passages_for_retrieval(passages_dset[i * batch_size:(i+1) * batch_size], tokenizer, qa_embedder, device)
+        fp[i * batch_size:(i+1) * batch_size] = reps
+        if i % 50 == 0:
+            print(i, time() - st_time)
 
+# build a support document for the question out of Wikipedia snippets
+def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10):
+    q_rep = embed_question_for_retrieval([question], tokenizer, qa_embedder)
+    D, I = wiki_index.search(q_rep, n_results)
+    res_passages = [wiki_passages[int(i)] for i in I[0]]
+    support_doc = '<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
+    res_list = [dict([(k, p[k]) for k in wiki_passages.column_names if k != 'passage_text']) for p in res_passages]
+    for r, sc in zip(res_list, D[0]):
+        r['score'] = float(sc)
+    return support_doc, res_list
+
+# find nearest neighbors of an answer or declarative text in Wikipedia snippets
+def query_qa_dense_index_nn(passage, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10):
+    a_rep = embed_passages_for_retrieval({'passage_text': [passage]}, tokenizer, qa_embedder)
+    D, I = wiki_index.search(a_rep, n_results)
+    res_passages = [wiki_passages[int(i)] for i in I[0]]
+    support_doc = '<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
+    res_list = [dict([(k, p[k]) for k in wiki_passages.column_names if k != 'passage_text']) for p in res_passages]
+    for r, sc, i in zip(res_list, D[0], I[0]):
+        r['passage_id'] = int(i)
+        r['score'] = float(sc)
+    return support_doc, res_list
 
 #######################################################################################
 ##### Unused for now
