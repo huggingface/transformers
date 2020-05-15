@@ -19,19 +19,18 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from transformers.convert_marian_to_pytorch import ORG_NAME
-from transformers.file_utils import cached_property
 from transformers.tokenization_marian import MarianTokenizer, save_json, vocab_files_names
 from transformers.tokenization_utils import BatchEncoding
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .utils import require_torch, slow, torch_device
+from .utils import slow
 
 
 SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 mock_tokenizer_config = {"target_lang": "fi", "source_lang": "en"}
 zh_code = ">>zh<<"
+ORG_NAME = "Helsinki-NLP/"
 
 
 class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -69,5 +68,3 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertIsInstance(batch, BatchEncoding)
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, batch.input_ids[0])
-
-    # def test_special_tokens_mask_already_has_special_tokens(self):
