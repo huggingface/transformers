@@ -771,26 +771,26 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         raise NotImplementedError
 
     @property
-    def is_fast(self):
+    def is_fast(self) -> bool:
         return False
 
     @property
-    def max_len(self):
+    def max_len(self) -> int:
         """ Kept here for backward compatibility.
             Now renamed to `model_max_length` to avoid ambiguity.
         """
         return self.model_max_length
 
     @property
-    def max_len_single_sentence(self):
+    def max_len_single_sentence(self) -> int:
         return self.model_max_length - self.num_special_tokens_to_add(pair=False)
 
     @property
-    def max_len_sentences_pair(self):
+    def max_len_sentences_pair(self) -> int:
         return self.model_max_length - self.num_special_tokens_to_add(pair=True)
 
     @max_len_single_sentence.setter
-    def max_len_single_sentence(self, value):
+    def max_len_single_sentence(self, value) -> int:
         """ For backward compatibility, allow to try to setup 'max_len_single_sentence' """
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=False):
             logger.warning(
@@ -802,7 +802,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             )
 
     @max_len_sentences_pair.setter
-    def max_len_sentences_pair(self, value):
+    def max_len_sentences_pair(self, value) -> int:
         """ For backward compatibility, allow to try to setup 'max_len_sentences_pair' """
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=True):
             logger.warning(
@@ -1118,7 +1118,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         return vocab_files + (special_tokens_map_file, added_tokens_file)
 
-    def save_vocabulary(self, save_directory):
+    def save_vocabulary(self, save_directory) -> Tuple[str]:
         """ Save the tokenizer vocabulary to a directory. This method does *NOT* save added tokens
             and special token mappings.
 
@@ -2080,10 +2080,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
     def build_inputs_with_special_tokens(self, token_ids_0: List, token_ids_1: Optional[List] = None) -> List:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        A RoBERTa sequence has the following format:
-            single sequence: <s> X </s>
-            pair of sequences: <s> A </s></s> B </s>
+        by concatenating and adding special tokens. This implementation does not add special tokens.
         """
         if token_ids_1 is None:
             return token_ids_0

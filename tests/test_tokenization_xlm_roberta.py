@@ -17,8 +17,9 @@
 import os
 import unittest
 
-from transformers.tokenization_xlm_roberta import SPIECE_UNDERLINE, XLMRobertaTokenizer
 from transformers.file_utils import cached_property
+from transformers.tokenization_xlm_roberta import SPIECE_UNDERLINE, XLMRobertaTokenizer
+
 from .test_tokenization_common import TokenizerTesterMixin
 from .utils import slow
 
@@ -96,7 +97,29 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
         self.assertListEqual(
             back_tokens,
-            [SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "<unk>", "2", "0", "0", "0", ",", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "<unk>", ".",],
+            [
+                SPIECE_UNDERLINE + "I",
+                SPIECE_UNDERLINE + "was",
+                SPIECE_UNDERLINE + "b",
+                "or",
+                "n",
+                SPIECE_UNDERLINE + "in",
+                SPIECE_UNDERLINE + "",
+                "<unk>",
+                "2",
+                "0",
+                "0",
+                "0",
+                ",",
+                SPIECE_UNDERLINE + "and",
+                SPIECE_UNDERLINE + "this",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "f",
+                "al",
+                "s",
+                "<unk>",
+                ".",
+            ],
         )
 
     @cached_property

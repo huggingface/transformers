@@ -24,10 +24,10 @@ from typing import TYPE_CHECKING, Dict, Tuple, Union
 from tests.utils import require_tf, require_torch
 from transformers import PreTrainedTokenizer
 
+
 if TYPE_CHECKING:
     from transformers import (
         PretrainedConfig,
-
         PreTrainedTokenizerFast,
         PreTrainedModel,
         TFPreTrainedModel,
@@ -77,7 +77,10 @@ class TokenizerTesterMixin:
     def get_input_output_texts(self) -> Tuple[str, str]:
         """Feel free to overwrite"""
         # TODO: @property
-        return ("This is a test",  "This is a test", )
+        return (
+            "This is a test",
+            "This is a test",
+        )
 
     @staticmethod
     def convert_batch_encode_plus_format_to_encode_plus(batch_encode_plus_sequences):
@@ -256,7 +259,7 @@ class TokenizerTesterMixin:
         decoded = tokenizer.decode(encoded, skip_special_tokens=True)
         assert special_token not in decoded
 
-    def test_required_methods_tokenizer(self):
+    def test_internal_consistency(self):
         tokenizer = self.get_tokenizer()
         input_text, output_text = self.get_input_output_texts()
 
@@ -266,12 +269,11 @@ class TokenizerTesterMixin:
         self.assertListEqual(ids, ids_2)
 
         tokens_2 = tokenizer.convert_ids_to_tokens(ids)
+        self.assertNotEqual(len(tokens_2), 0)
         text_2 = tokenizer.decode(ids)
+        self.assertIsInstance(text_2, str)
 
         self.assertEqual(text_2, output_text)
-
-        self.assertNotEqual(len(tokens_2), 0)
-        self.assertIsInstance(text_2, str)
 
     def test_encode_decode_with_spaces(self):
         tokenizer = self.get_tokenizer()
@@ -432,10 +434,7 @@ class TokenizerTesterMixin:
 
     def test_special_tokens_mask(self):
         tokenizer = self.get_tokenizer()
-
         sequence_0 = "Encode this."
-        sequence_1 = "This one too please."
-
         # Testing single inputs
         encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
         encoded_sequence_dict = tokenizer.encode_plus(
@@ -445,13 +444,13 @@ class TokenizerTesterMixin:
         special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
         self.assertEqual(len(special_tokens_mask), len(encoded_sequence_w_special))
 
-        filtered_sequence = [
-            (x if not special_tokens_mask[i] else None) for i, x in enumerate(encoded_sequence_w_special)
-        ]
-        filtered_sequence = [x for x in filtered_sequence if x is not None]
+        filtered_sequence = [x for i, x in enumerate(encoded_sequence_w_special) if not special_tokens_mask[i]]
         self.assertEqual(encoded_sequence, filtered_sequence)
 
-        # Testing inputs pairs
+    def test_special_tokens_mask_input_pairs(self):
+        tokenizer = self.get_tokenizer()
+        sequence_0 = "Encode this."
+        sequence_1 = "This one too please."
         encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
         encoded_sequence += tokenizer.encode(sequence_1, add_special_tokens=False)
         encoded_sequence_dict = tokenizer.encode_plus(
@@ -467,7 +466,9 @@ class TokenizerTesterMixin:
         filtered_sequence = [x for x in filtered_sequence if x is not None]
         self.assertEqual(encoded_sequence, filtered_sequence)
 
-        # Testing with already existing special tokens
+    def test_special_tokens_mask_already_has_special_tokens(self):
+        tokenizer = self.get_tokenizer()
+        sequence_0 = "Encode this."
         if tokenizer.cls_token_id == tokenizer.unk_token_id and tokenizer.cls_token_id == tokenizer.unk_token_id:
             tokenizer.add_special_tokens({"cls_token": "</s>", "sep_token": "<s>"})
         encoded_sequence_dict = tokenizer.encode_plus(
@@ -517,13 +518,12 @@ class TokenizerTesterMixin:
         tokenizer.padding_side = "right"
         padded_sequence_right = tokenizer.encode(sequence, pad_to_max_length=True)
         padded_sequence_right_length = len(padded_sequence_right)
+        assert sequence_length == padded_sequence_right_length
+        assert encoded_sequence == padded_sequence_right
 
         tokenizer.padding_side = "left"
         padded_sequence_left = tokenizer.encode(sequence, pad_to_max_length=True)
         padded_sequence_left_length = len(padded_sequence_left)
-
-        assert sequence_length == padded_sequence_right_length
-        assert encoded_sequence == padded_sequence_right
         assert sequence_length == padded_sequence_left_length
         assert encoded_sequence == padded_sequence_left
 
@@ -620,6 +620,9 @@ class TokenizerTesterMixin:
         self.assertIsInstance(vocab, dict)
         self.assertEqual(len(vocab), len(tokenizer))
 
+    def test_conversion_reversible(self):
+        tokenizer = self.get_tokenizer()
+        vocab = tokenizer.get_vocab()
         for word, ind in vocab.items():
             self.assertEqual(tokenizer.convert_tokens_to_ids(word), ind)
             self.assertEqual(tokenizer.convert_ids_to_tokens(ind), word)
