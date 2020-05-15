@@ -57,14 +57,15 @@ class MarianTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         pad_token="<pad>",
         max_len=512,
+        **kwargs,
     ):
-
         super().__init__(
             # bos_token=bos_token,
             max_len=max_len,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
+            **kwargs,
         )
         self.encoder = load_json(vocab)
         if self.unk_token not in self.encoder:
@@ -82,6 +83,7 @@ class MarianTokenizer(PreTrainedTokenizer):
 
         self.spm_target = sentencepiece.SentencePieceProcessor()
         self.spm_target.Load(target_spm)
+        self.current_spm = self.spm_source
 
         # Multilingual target side: default to using first supported language code.
         self.supported_language_codes: list = [k for k in self.encoder if k.startswith(">>") and k.endswith("<<")]
@@ -176,27 +178,34 @@ class MarianTokenizer(PreTrainedTokenizer):
         return model_inputs
 
     def save_vocabulary(self, save_directory: str) -> Tuple[str]:
-        """
-        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
-
-        Args:
-            save_directory (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
         save_dir = Path(save_directory)
         assert save_dir.is_dir(), f"{save_directory} should be a directory"
-        out_vocab_file = save_dir / vocab_files_names["vocab_file"]
-        save_json(self.encoder, out_vocab_file)
+        save_json(self.encoder, save_dir / self.vocab_files_names["vocab"])
+        save_json(dict(source_lang=self.source_lang, target_lang=self.target_lang),
+                  save_dir / self.vocab_files_names['tokenizer_config_file'])
+
         for f in self.spm_files:
-            copyfile(f, save_dir / Path(f).name)
-        return (out_vocab_file, *self.spm_files)
+            dest_path = save_dir / Path(f).name
+            if not dest_path.exists():
+                copyfile(f, save_dir / Path(f).name)
+        return tuple(save_dir / f for f in self.vocab_files_names)
 
     @property
     def vocab_size(self) -> int:
-        return len(self.encoder)
+        return len(self.encoder) - len(self.added_tokens_encoder)
+
+    def get_vocab(self) -> Dict:
+        return self.encoder
+
+    def __getstate__(self) -> Dict:
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d: Dict) -> None:
+        self.__dict__ = d
+        self.sp_model = sentencepiece.SentencePieceProcessor()
+        self.spm_source, self.spm_target = (self.sp_model.Load(f) for f in self.spm_files)
 
 
 def load_json(path: str) -> Union[Dict, List]:
