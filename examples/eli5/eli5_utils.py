@@ -234,9 +234,8 @@ def kilt_article_snippets(article, passage_len=100, overlap=0):
         pre_toks = word_map[i * step_size: i * step_size + passage_len]
         passage_text = ' '.join([w.replace('Section::::', '').replace(':', ' ') if w.startswith('Section::::') else w.replace('BULLET::::', '')
                                  for p_id, s_id, w in pre_toks])
-        start_section_id = max([0] + [i for i, par in enumerate(paragraphs) if i <= pre_toks[0][0] and par.startswith('Section::::')])
+        start_section_id = max([0] + [j for j, par in enumerate(paragraphs) if i <= pre_toks[0][0] and par.startswith('Section::::')])
         passages += [{
-            'section_paragraph': start_section_id,
             'section_title': paragraphs[start_section_id].replace('Section::::', '').replace(':', ' -- '),
             'start_paragraph': pre_toks[0][0],
             'start_char_id': pre_toks[0][1],
@@ -318,12 +317,49 @@ class KiltSnippets(nlp.GeneratorBasedBuilder):
             yield id_, res_dct
 
 def wiki40b_article_snippets(article, passage_len=100, overlap=0):
-    return None
-    # TODO
+    paragraphs = article['text'].split('\n')
+    aticle_idx = paragraphs.index('_START_ARTICLE_')
+    article_title = paragraphs[aticle_idx] if aticle_idx < len(paragraphs) else ''
+    section_indices = [i+1 for i, par in enumerate(paragraphs[:-1]) if par == '_START_SECTION_']
+    par_tabs = [par.split(' ') for par in paragraphs]
+    word_map = [(i, len(' '.join(par[:j])), w)
+                for i, par in enumerate(par_tabs) if not par[0].startswith('_START_')
+                for j, w in enumerate(par) if i > 0]
+    step_size = passage_len - overlap
+    passages = []
+    for i in range(math.ceil(len(word_map) // step_size)):
+        pre_toks = word_map[i * step_size: i * step_size + passage_len]
+        start_section_id = max([0] + [j for j in section_indices if j <= pre_toks[0][0]])
+        passage_text = ' '.join([w for p_id, s_id, w in pre_toks])
+        passages += [{
+            'article_title': article_title,
+            'section_title': paragraphs[start_section_id],
+            'start_paragraph': pre_toks[0][0],
+            'start_char_id': pre_toks[0][1],
+            'end_paragraph': pre_toks[-1][0],
+            'end_char_id': pre_toks[-1][1] + len(pre_toks[-1][2]) + 1,
+            'passage_text': passage_text,
+                     }]
+    return passages
 
 def wiki40b_generate_snippets(article, passage_len=100, overlap=0):
-    return None
-    # TODO
+     for i, article in enumerate(wikipedia):
+        article_title = article['title']
+        for doc in kilt_article_snippets(article, passage_len, overlap):
+            part_id = json.dumps(
+                {
+                    'nlp_id': i,
+                    'kilt_id': article['wikidata_id'],
+                    'sp': doc['start_paragraph'],
+                    'sc': doc['start_char_id'],
+                    'ep': doc['end_paragraph'],
+                    'ec': doc['end_char_id'],
+                }
+            )
+            doc['_id'] = part_id
+            doc['nlp_id'] = i
+            doc['kilt_id'] = article['wikidata_id']
+            yield doc
 
 class Wiki40bSnippets(nlp.GeneratorBasedBuilder):
     name = "wiki40b_snippets_100w"
@@ -565,7 +601,7 @@ def evaluate_qa_retriever(model, dataset, tokenizer, args):
     )
     data_loader = DataLoader(
         dataset, batch_size=args.batch_size,
-        sampler=train_sampler, collate_fn=model_collate_fn
+        sampler=eval_sampler, collate_fn=model_collate_fn
     )
     epoch_iterator = tqdm(data_loader, desc="Iteration", disable=True)
     tot_loss = 0.
