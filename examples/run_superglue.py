@@ -291,7 +291,10 @@ def train(args, train_dataset, model, tokenizer):
                     logger.info(json.dumps({**logs, **{"step": global_step}}))
 
                     # save
-                    output_dirs = [os.path.join(args.output_dir, f"checkpoint-{global_step}")]
+                    if args.save_only_best:
+                        output_dirs = []
+                    else:
+                        output_dirs = [os.path.join(args.output_dir, f"checkpoint-{global_step}")]
                     curr_val_metric = results[task_metrics[args.task_name]]
                     if best_val_metric is None or curr_val_metric > best_val_metric:
                         # check if best model so far
@@ -597,6 +600,7 @@ def main():
     parser.add_argument("--log_energy_consumption", action="store_true", help="Whether to track energy consumption")
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
     parser.add_argument("--eval_and_save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
+    parser.add_argument("--save_only_best", action="stroe_true", help="Save only when hit best validation score.")
     parser.add_argument(
         "--eval_all_checkpoints",
         action="store_true",
