@@ -564,6 +564,21 @@ def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_i
         r['score'] = float(sc)
     return support_doc, res_list
 
+def batch_query_qa_dense_index(questions, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10):
+    q_rep = embed_question_for_retrieval(questions, tokenizer, qa_embedder)
+    D, I = wiki_index.search(q_rep, n_results)
+    res_passages_lst = [[wiki_passages[int(i)] for i in i_lst] for i_lst in I]
+    support_doc_lst = ['<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
+                       for res_passages in res_passages_lst]
+    all_res_lists = []
+    for res_passages in res_passages_lst:
+        res_list = [dict([(k, p[k]) for k in wiki_passages.column_names if k != 'passage_text'])
+                    for p in res_passages]
+        for r, sc in zip(res_list, D[0]):
+            r['score'] = float(sc)
+        all_res_lists += [res_list[:]]
+    return support_doc_lst, all_res_lists
+
 # find nearest neighbors of an answer or declarative text in Wikipedia snippets
 def query_qa_dense_index_nn(passage, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10):
     a_rep = embed_passages_for_retrieval({'passage_text': [passage]}, tokenizer, qa_embedder)
