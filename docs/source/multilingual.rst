@@ -80,7 +80,7 @@ You can then feed it all as input to your model:
     outputs = model(input_ids, langs=langs)
 
 
-The example `run_generation.py <https://github.com/huggingface/transformers/blob/master/examples/run_generation.py>`__
+The example `run_generation.py <https://github.com/huggingface/transformers/blob/master/examples/text-generation/run_generation.py>`__
 can generate text using the CLM checkpoints from XLM, using the language embeddings.
 
 XLM without Language Embeddings

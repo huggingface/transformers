@@ -173,7 +173,11 @@ class BatchEncoding(UserDict):
 
     """
 
-    def __init__(self, data: Dict[str, Any], encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None):
+    def __init__(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None,
+    ):
         super().__init__(data)
 
         if isinstance(encoding, EncodingFast):
@@ -2179,6 +2183,9 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         else:
             return text
 
+    def batch_decode(self, sequences: List[List[int]], **kwargs) -> List[str]:
+        return [self.decode(seq, **kwargs) for seq in sequences]
+
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
         """ Clean up a list of simple English tokenization artifacts like spaces before punctuations and abreviated forms.
@@ -2191,7 +2198,6 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             .replace(" ' ", "'")
             .replace(" n't", "n't")
             .replace(" 'm", "'m")
-            .replace(" do not", " don't")
             .replace(" 's", "'s")
             .replace(" 've", "'ve")
             .replace(" 're", "'re")
@@ -2435,7 +2441,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             )
 
         # Needed if we have to return a tensor
-        pad_to_max_length = pad_to_max_length or (return_tensors is not None)
+        pad_to_max_length = pad_to_max_length or (return_tensors is not None and len(batch_text_or_text_pairs) > 1)
 
         # Throw an error if we can pad because there is no padding token
         if pad_to_max_length and self.pad_token_id is None:

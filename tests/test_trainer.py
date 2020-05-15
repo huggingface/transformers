@@ -28,7 +28,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         MODEL_ID = "bert-base-cased-finetuned-mrpc"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         data_args = GlueDataTrainingArguments(
-            task_name="mrpc", data_dir="./examples/tests_samples/MRPC", overwrite_cache=True
+            task_name="mrpc", data_dir="./tests/fixtures/tests_samples/MRPC", overwrite_cache=True
         )
         dataset = GlueDataset(data_args, tokenizer=tokenizer, evaluate=True)
         data_collator = DefaultDataCollator()
@@ -39,7 +39,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         MODEL_ID = "distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         data_args = GlueDataTrainingArguments(
-            task_name="sts-b", data_dir="./examples/tests_samples/STS-B", overwrite_cache=True
+            task_name="sts-b", data_dir="./tests/fixtures/tests_samples/STS-B", overwrite_cache=True
         )
         dataset = GlueDataset(data_args, tokenizer=tokenizer, evaluate=True)
         data_collator = DefaultDataCollator()
@@ -91,14 +91,14 @@ class TrainerIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
         data_args = GlueDataTrainingArguments(
-            task_name="mrpc", data_dir="./examples/tests_samples/MRPC", overwrite_cache=True
+            task_name="mrpc", data_dir="./tests/fixtures/tests_samples/MRPC", overwrite_cache=True
         )
         eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, evaluate=True)
 
         training_args = TrainingArguments(output_dir="./examples", no_cuda=True)
         trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
         result = trainer.evaluate()
-        self.assertLess(result["loss"], 0.2)
+        self.assertLess(result["eval_loss"], 0.2)
 
     def test_trainer_eval_lm(self):
         MODEL_ID = "distilroberta-base"

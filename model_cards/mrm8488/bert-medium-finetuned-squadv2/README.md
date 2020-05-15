@@ -29,7 +29,7 @@ The smaller BERT models are intended for environments with restricted computatio
 ## Model training
 
 The model was trained on a Tesla P100 GPU and 25GB of RAM.
-The script for fine tuning can be found [here](https://github.com/huggingface/transformers/blob/master/examples/run_squad.py)
+The script for fine tuning can be found [here](https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_squad.py)
 
 ## Results:
 

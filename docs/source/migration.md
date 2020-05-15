@@ -1,5 +1,18 @@
-# Migrating from pytorch-pretrained-bert
+# Migrating from previous packages
 
+## Migrating from pytorch-transformers to transformers
+
+Here is a quick summary of what you should take care of when migrating from `pytorch-transformers` to `transformers`.
+
+### Positional order of some models' keywords inputs (`attention_mask`, `token_type_ids`...) changed
+
+To be able to use Torchscript (see #1010, #1204 and #1195) the specific order of some models **keywords inputs** (`attention_mask`, `token_type_ids`...) has been changed.
+
+If you used to call the models with keyword names for keyword arguments, e.g. `model(inputs_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)`, this should not cause any change.
+
+If you used to call the models with positional inputs for keyword arguments, e.g. `model(inputs_ids, attention_mask, token_type_ids)`, you may have to double check the exact order of input arguments.
+
+## Migrating from pytorch-pretrained-bert
 
 Here is a quick summary of what you should take care of when migrating from `pytorch-pretrained-bert` to `transformers`
 
