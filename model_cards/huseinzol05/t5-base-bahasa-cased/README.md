@@ -44,10 +44,7 @@ You can use this model by installing `torch` or `tensorflow` and Huggingface lib
 from transformers import T5Tokenizer, T5Model
 
 model = T5.from_pretrained('huseinzol05/t5-base-bahasa-cased')
-tokenizer = AlbertTokenizer.from_pretrained(
-    'huseinzol05/t5-base-bahasa-cased',
-    do_lower_case = False,
-)
+tokenizer = T5Tokenizer.from_pretrained('huseinzol05/t5-base-bahasa-cased')
 ```
 
 ## Example using T5ForConditionalGeneration
@@ -74,4 +71,4 @@ For further details on the model performance, simply checkout accuracy page from
 
 ## Acknowledgement
 
-Thanks to [Im Big](https://www.facebook.com/imbigofficial/), [LigBlou](https://www.facebook.com/ligblou), [Mesolitica](https://mesolitica.com/) and [KeyReply](https://www.keyreply.com/) for sponsoring AWS, Google and GPU clouds to train Albert for Bahasa. 
+Thanks to [Im Big](https://www.facebook.com/imbigofficial/), [LigBlou](https://www.facebook.com/ligblou), [Mesolitica](https://mesolitica.com/) and [KeyReply](https://www.keyreply.com/) for sponsoring AWS, Google and GPU clouds to train T5 for Bahasa. 
