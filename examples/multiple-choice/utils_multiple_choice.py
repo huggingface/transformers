@@ -535,7 +535,12 @@ def convert_examples_to_features(
                 text_b = example.question + " " + ending
 
             inputs = tokenizer.encode_plus(
-                text_a, text_b, add_special_tokens=True, max_length=max_length, pad_to_max_length=True,
+                text_a,
+                text_b,
+                add_special_tokens=True,
+                max_length=max_length,
+                pad_to_max_length=True,
+                return_overflowing_tokens=True,
             )
             if "num_truncated_tokens" in inputs and inputs["num_truncated_tokens"] > 0:
                 logger.info(
