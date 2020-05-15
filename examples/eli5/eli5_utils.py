@@ -437,14 +437,154 @@ def query_es_index(question, es_client, index_name='english_wiki_kilt_snippets_1
     return support_doc, res_list
 
 ###############
-### ELI5 torch dataset
+### ELI5 retriever training
 ###############
-class ELI5Dataset(Dataset):
+class ELI5DatasetQARetriver(Dataset):
 
-    def __init__(self, example_array, make_doc_fun, extra_answer_threshold=3):
-        self.data = example_array
+    def __init__(self, examples_array, extra_answer_threshold=3, min_answer_length=64, training=True):
+        self.data = examples_array
+        self.answer_thres = extra_answer_threshold
+        self.min_length = min_answer_length
+        self.training = training
+
+    def __len__(self):
+        return self.data.num_rows
+
+    def make_example(self, idx):
+        example = self.data[idx]
+        question = example['title']
+        if self.training:
+            answers = [a for i, (a, sc) in enumerate(zip(example['answers']['text'], example['answers']['score']))]
+            answer_tab = choice(answers).split(' ')
+            start_idx = randint(0, max(0, len(answer_tab) - self.min_length))
+            answer_span = ' '.join(answer_tab[start_idx:])
+        else:
+            answer_span = example['answers']['text'][0]
+        return (question, answer_span)
+
+    def __getitem__(self, idx):
+        return self.make_example(idx)
+
+class RetrievalQAEmbedder(torch.nn.Module):
+    def __init__(self, sent_encoder, dim):
+        super(RetrievalQAEmbedder, self).__init__()
+        self.sent_encoder = sent_encoder
+        self.project_q = torch.nn.Linear(dim, 128, bias=False)
+        self.project_a = torch.nn.Linear(dim, 128, bias=False)
+        self.ce_loss = torch.nn.CrossEntropyLoss(reduction='mean')
+
+    def embed_questions(self, q_ids, q_mask):
+        _, q_reps = self.sent_encoder(q_ids, attention_mask=q_mask)
+        return self.project_q(q_reps)
+
+    def embed_answers(self, a_ids, a_mask):
+        _, a_reps = self.sent_encoder(a_ids, attention_mask=a_mask)
+        return self.project_a(a_reps)
+
+    def forward(self, q_ids, q_mask, a_ids, a_mask):
+        device = next(self.parameters()).device
+        q_reps = self.embed_questions(q_ids, q_mask)
+        a_reps = self.embed_answers(a_ids, a_mask)
+        compare_scores = torch.mm(q_reps, a_reps.t())
+        loss_qa = self.ce_loss(compare_scores, torch.arange(compare_scores.shape[1]).to(device))
+        loss_aq = self.ce_loss(compare_scores.t(), torch.arange(compare_scores.shape[0]).to(device))
+        loss = (loss_qa + loss_aq) / 2
+        return loss
+
+def make_qa_retriever_model(model_name="google/bert_uncased_L-8_H-512_A-8", from_file=None, device="cuda:0"):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    bert_model = AutoModel.from_pretrained(model_name).to(device)
+    qa_embedder = RetrievalQAEmbedder(bert_model, 512).to(device)
+    if from_file is not None:
+        param_dict = torch.load(from_file) # has model weights, optimizer, and scheduler states
+        qa_embedder.load_state_dict(param_dict['model'])
+    return tokenizer, qa_embedder
+
+def make_qa_retriever_batch(qa_list, tokenizer, max_len=64, device="cuda:0"):
+    q_ls = [q for q, a in qa_list]
+    a_ls = [a for q, a in qa_list]
+    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=64, pad_to_max_length=True)
+    q_ids, q_mask = (
+        torch.LongTensor(q_toks['input_ids']).to(device),
+        torch.LongTensor(q_toks['attention_mask']).to(device),
+    )
+    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=64, pad_to_max_length=True)
+    a_ids, a_mask = (
+        torch.LongTensor(a_toks['input_ids']).to(device),
+        torch.LongTensor(a_toks['attention_mask']).to(device),
+    )
+    return (q_ids, q_mask, a_ids, a_mask)
+
+def train_qa_retriever_epoch(model, dataset, tokenizer, optimizer, scheduler, args, e=0):
+    model.train()
+    # make iterator
+    train_sampler = RandomSampler(dataset)
+    model_collate_fn = functools.partial(
+        make_qa_retriever_batch,
+        tokenizer=tokenizer, max_len=args.max_length, device='cuda:0'
+    )
+    data_loader = DataLoader(
+        dataset, batch_size=args.batch_size,
+        sampler=train_sampler, collate_fn=model_collate_fn
+    )
+    epoch_iterator = tqdm(data_loader, desc="Iteration", disable=True)
+    # accumulate loss since last print
+    loc_steps = 0
+    loc_loss = 0.0
+    st_time = time()
+    for step, batch in enumerate(epoch_iterator):
+        q_ids, q_mask, a_ids, a_mask = batch
+        loss = model(q_ids, q_mask, a_ids, a_mask)
+        # optimizer
+        loss.backward()
+        optimizer.step()
+        scheduler.step()
+        model.zero_grad()
+        # some printing within the epoch
+        loc_loss += loss.item()
+        loc_steps += 1
+        if step % args.print_freq == 0:
+            print(
+                "{:2d} {:5d} of {:5d} \t L: {:.3f} \t -- {:.3f}".format(
+                    e, step,
+                    len(dataset) // args.batch_size,
+                    loc_loss / loc_steps,
+                    time() - st_time,
+                )
+            )
+            loc_loss = 0
+            loc_steps = 0
+
+def evaluate_qa_retriever(model, dataset, tokenizer, args):
+    model.eval()
+    # make iterator
+    eval_sampler = SequentialSampler(dataset)
+    model_collate_fn = functools.partial(
+        make_qa_retriever_batch,
+        tokenizer=tokenizer, max_len=args.max_length, device='cuda:0'
+    )
+    data_loader = DataLoader(
+        dataset, batch_size=args.batch_size,
+        sampler=train_sampler, collate_fn=model_collate_fn
+    )
+    epoch_iterator = tqdm(data_loader, desc="Iteration", disable=True)
+    tot_loss = 0.
+    with torch.no_grad():
+        for step, batch in enumerate(epoch_iterator):
+            q_ids, q_mask, a_ids, a_mask = batch
+            loss = model(q_ids, q_mask, a_ids, a_mask)
+            tot_loss += loss.item()
+        return tot_loss / (step + 1)
+
+###############
+### ELI5 seq2seq model training
+###############
+class ELI5DatasetS2S(Dataset):
+
+    def __init__(self, examples_array, make_doc_fun, extra_answer_threshold=3, document_cache=None):
+        self.data = examples_array
         self.make_doc_function = make_doc_fun
-        self.document_cache = {}
+        self.document_cache = {} if document_cache is None else document_cache
         # make index of specific question-answer pairs from multi-answers
         self.qa_id_list = [(i, j)
                            for i, qa in enumerate(self.data) 
@@ -472,54 +612,8 @@ class ELI5Dataset(Dataset):
         return self.make_example(idx)
 
 ###############
-### ELI5-trained retrieval model
+### ELI5-trained retrieval model usage
 ###############
-class RetrievalQAEmbedder(torch.nn.Module):
-    def __init__(self, sent_encoder, dim):
-        super(RetrievalQAEmbedder, self).__init__()
-        self.sent_encoder = sent_encoder
-        self.project_q = torch.nn.Linear(dim, 128, bias=False)
-        self.project_a = torch.nn.Linear(dim, 128, bias=False)
-
-    def embed_questions(self, q_ids, q_mask):
-        _, q_reps = self.sent_encoder(q_ids, attention_mask=q_mask)
-        return self.project_q(q_reps)
-
-    def embed_answers(self, a_ids, a_mask):
-        _, a_reps = self.sent_encoder(a_ids, attention_mask=a_mask)
-        return self.project_a(a_reps)
-
-    def forward(self, q_ids, q_mask, a_ids, a_mask):
-        q_reps = self.embed_questions(q_ids, q_mask)
-        a_reps = self.embed_answerss(a_ids, a_mask)
-        compare_scores = torch.mm(q_reps, a_reps.t())
-        return compare_scores
-
-def make_qa_retriever_model(model_name="google/bert_uncased_L-8_H-512_A-8", from_file=None, device="cuda:0"):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    bert_model = AutoModel.from_pretrained(model_name).to(device)
-    qa_embedder = RetrievalQAEmbedder(bert_model, 512).to(device)
-    if from_file is not None:
-        param_dict = torch.load(from_file) # has model weights, optimizer, and scheduler states
-        qa_embedder.load_state_dict(param_dict['model'])
-    return tokenizer, qa_embedder
-
-def make_qa_retriever_training_batch(qa_list, tokenizer, max_len=64, max_start_idx=32, device='cuda:0'):
-    q_ls = [q for q, a in qa_list]
-    a_ls = [a  for q, a in qa_list]
-    a_ls = [' '.join(a.split()[randint(0, max(0, len(a.split()) - max_start_idx)):]) for a in a_ls]
-    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=64, pad_to_max_length=True)
-    q_ids, q_mask = (
-        torch.LongTensor(q_toks['input_ids']).to(device),
-        torch.LongTensor(q_toks['attention_mask']).to(device),
-    )
-    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=64, pad_to_max_length=True)
-    a_ids, a_mask = (
-        torch.LongTensor(a_toks['input_ids']).to(device),
-        torch.LongTensor(a_toks['attention_mask']).to(device),
-    )
-    return (q_ids, q_mask, a_ids, a_mask)
-
 def embed_passages_for_retrieval(passage_list, tokenizer, qa_embedder, device='cuda:0'):
     a_ls = [p for p in passage_list['passage_text']]
     a_toks = tokenizer.batch_encode_plus(a_ls, max_length=128, pad_to_max_length=True)
@@ -545,7 +639,7 @@ def make_qa_dense_index(qa_embedder, tokenizer, passages_dset,
                         batch_size=512, index_name='kilt_passages_reps.dat',
                         device='cuda:0'):
     st_time = time()
-    fp = np.memmap(index_name, dtype='float32', mode='w+', shape=(wiki_passages.num_rows, 128))
+    fp = np.memmap(index_name, dtype='float16', mode='w+', shape=(wiki_passages.num_rows, 128))
     n_batches = math.ceil(wiki_passages.num_rows / batch_size)
     for i in range(n_batches):
         reps = embed_passages_for_retrieval(passages_dset[i * batch_size:(i+1) * batch_size], tokenizer, qa_embedder, device)
@@ -591,113 +685,3 @@ def query_qa_dense_index_nn(passage, qa_embedder, tokenizer, wiki_passages, wiki
         r['score'] = float(sc)
     return support_doc, res_list
 
-#######################################################################################
-##### Unused for now
-#######################################################################################
-
-###############
-### KILT Wikipedia Arrow dataset
-###############
-def make_kilt_passage(paragraphs, section_title_id, text_id_list):
-    return {
-        'section_paragraph': section_title_id,
-        'section_title': paragraphs[section_title_id].replace('Section::::', '').replace(':', ' -- '),
-        'start_paragraph': text_id_list[0],
-        'start_char_id': 0,
-        'end_paragraph': text_id_list[-1],
-        'end_char_id': len(paragraphs[text_id_list[-1]]),
-        'passage_text': ' '.join([paragraphs[j].replace('BULLET::::', '') for j in text_id_list])
-    }
-
-def kilt_article_sections(article):
-    paragraphs = article['paragraphs']['paragraph']
-    section_title_id = 0
-    text_id_list = []
-    sections = []
-    for i, par in enumerate(paragraphs):
-        if par.startswith('Section::::'):
-            if len(text_id_list) > 0:
-                sections += [make_kilt_passage(paragraphs, section_title_id, text_id_list)]
-            section_title_id = i
-            text_id_list = []
-        else:
-            text_id_list += [i]
-    if len(text_id_list) > 0:
-        sections += [make_kilt_passage(paragraphs, section_title_id, text_id_list)]
-    return sections
-
-def kilt_article_paragraphs(article):
-    paragraphs = article['paragraphs']['paragraph']
-    section_title_id = 0
-    text_id_list = []
-    passages = []
-    for i, par in enumerate(paragraphs):
-        if par.startswith('Section::::'):
-            section_title_id = i
-        else:
-            text_id_list += [i]
-        if len(text_id_list) > 0 and (i == len(paragraphs) - 1 or \
-                '::::' not in par or \
-                par.startswith('BULLET::::') and not paragraphs[i+1].startswith('BULLET::::')):
-            passages += [make_kilt_passage(paragraphs, section_title_id, text_id_list)]
-            text_id_list = []
-    return passages
-
-def kilt_generate_paragraphs(wikipedia):
-    for i, article in enumerate(wikipedia):
-        article_title = article['title']
-        for doc in kilt_article_paragraphs(article):
-            part_id = json.dumps(
-                {
-                    'nlp_id': i,
-                    'kilt_id': article['kilt_id'],
-                    'sp': doc['start_paragraph'],
-                    'sc': doc['start_char_id'],
-                    'ep': doc['end_paragraph'],
-                    'ec': doc['end_char_id'],
-                }
-            )
-            doc['article_title'] = article_title
-            doc['_id'] = part_id
-            doc['nlp_id'] = i
-            yield doc
-
-###############
-### Sparse index
-###############
-def make_es_index_paragraphs(es_client, wiki_kilt, index_name='english_wiki_kilt_paragraphs'):
-    index_config = {
-      "settings": {
-        "number_of_shards": 1,
-        "analysis": {
-          "analyzer": {
-            "stop_standard": {"type": "standard", " stopwords": "_english_"}
-          }
-        }
-      },
-      "mappings": {
-        "properties": {
-          "article_title": {"type": "text", "analyzer": "standard", "similarity": "BM25"},
-          "section_title": {"type": "text", "analyzer": "standard", "similarity": "BM25"},
-          "passage_text": {"type": "text", "analyzer": "standard", "similarity": "BM25"}
-        }
-      }
-    }
-    es_client.indices.create(index = index_name, body = index_config)
-    number_of_docs = 25000000
-    progress = tqdm(unit="docs", total=number_of_docs)
-    successes = 0
-    for ok, action in streaming_bulk(
-            client=es_client, index=index_name, actions=kilt_generate_paragraphs(wiki_kilt),
-    ):
-        progress.update(1)
-        successes += ok
-    print("Indexed %d documents" % (successes,))
-
-
-# wiki_dir = '/home/yacine/.cache/huggingface/datasets/wiki_kilt/plain_text/1.0.0'
-# wiki_info = nlp.DatasetInfo.from_directory(wiki_dir)
-# wiki_kilt = nlp.arrow_reader.ArrowReader(path=wiki_dir, info=wiki_info)._read_files([{"filename": pjoin(wiki_dir, "wiki_kilt-train.arrow")}], wiki_info)
-# kilt_dbuilder = WikiKILT(data_dir='wiki_kilt')
-# kilt_dbuilder.download_and_prepare(ignore_checksums=True)
-# wiki_kilt = kilt_dbuilder.as_dataset(split=nlp.splits.Split.TRAIN)
