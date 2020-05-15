@@ -50,14 +50,8 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = MarianTokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
 
-
     def get_tokenizer(self, **kwargs):
         return MarianTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_input_output_texts(self):
-        input_text = "This is a test"
-        output_text = "This is a test"
-        return input_text, output_text
 
     def test_tokenizer_equivalence_en_de(self):
         en_de_tokenizer = MarianTokenizer.from_pretrained(f'{ORG_NAME}opus-mt-en-de')

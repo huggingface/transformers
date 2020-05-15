@@ -22,12 +22,12 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, Tuple, Union
 
 from tests.utils import require_tf, require_torch
-
+from transformers import PreTrainedTokenizer
 
 if TYPE_CHECKING:
     from transformers import (
         PretrainedConfig,
-        PreTrainedTokenizer,
+
         PreTrainedTokenizerFast,
         PreTrainedModel,
         TFPreTrainedModel,
@@ -67,14 +67,17 @@ class TokenizerTesterMixin:
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def get_tokenizer(self, **kwargs):
-        raise NotImplementedError
+    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
+        # TODO: delete identical implementations
+        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs):
         raise NotImplementedError
 
-    def get_input_output_texts(self):
-        raise NotImplementedError
+    def get_input_output_texts(self) -> Tuple[str, str]:
+        """Feel free to overwrite"""
+        # TODO: @property
+        return ("This is a test",  "This is a test", )
 
     @staticmethod
     def convert_batch_encode_plus_format_to_encode_plus(batch_encode_plus_sequences):
@@ -114,13 +117,13 @@ class TokenizerTesterMixin:
 
         # Now let's start the test
         tokenizer = self.get_tokenizer(max_len=42)
-
-        before_tokens = tokenizer.encode("He is very happy, UNwant\u00E9d,running", add_special_tokens=False)
+        sample_text = "He is very happy, UNwant\u00E9d,running"
+        before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
 
         tokenizer.save_pretrained(self.tmpdirname)
         tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname)
 
-        after_tokens = tokenizer.encode("He is very happy, UNwant\u00E9d,running", add_special_tokens=False)
+        after_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
         self.assertListEqual(before_tokens, after_tokens)
 
         self.assertEqual(tokenizer.max_len, 42)

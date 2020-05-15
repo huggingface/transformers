@@ -46,6 +46,10 @@ class MarianTokenizer(PreTrainedTokenizer):
     model_input_names = ["attention_mask"]  # actually attention_mask, decoder_attention_mask
     language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
+    def normalize(self, x: str) -> str:
+        """Cover moses empty string edge case. They return empty list for '' input!"""
+        return self.punc_normalizer(x) if x else ""
+
     def __init__(
         self,
         vocab=None,
@@ -60,7 +64,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         super().__init__(
-            # bos_token=bos_token,
+            # bos_token=bos_token,  unused. Start decoding with config.decoder_start_token_id
             max_len=max_len,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -95,10 +99,6 @@ class MarianTokenizer(PreTrainedTokenizer):
         except ImportError:
             warnings.warn("Recommended: pip install mosestokenizer")
             self.punc_normalizer = lambda x: x
-
-    def normalize(self, x: str) -> str:
-        """Cover moses empty string edge case. They return empty list for '' input!"""
-        return self.punc_normalizer(x) if x else ""
 
     def _convert_token_to_id(self, token):
         return self.encoder.get(token, self.encoder[self.unk_token])
@@ -181,7 +181,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         save_dir = Path(save_directory)
         assert save_dir.is_dir(), f"{save_directory} should be a directory"
         save_json(self.encoder, save_dir / self.vocab_files_names["vocab"])
-        save_json(dict(source_lang=self.source_lang, target_lang=self.target_lang),
+        save_json(dict(source_lang=self.source_lang, target_lang=self.target_lang, max_len=self.max_len),
                   save_dir / self.vocab_files_names['tokenizer_config_file'])
 
         for f in self.spm_files:

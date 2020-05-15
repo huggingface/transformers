@@ -1128,7 +1128,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         """
         raise NotImplementedError
 
-    def add_tokens(self, new_tokens):
+    def add_tokens(self, new_tokens: Union[str, List[str]]) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
@@ -1156,7 +1156,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         if not isinstance(new_tokens, list):
             new_tokens = [new_tokens]
 
-        to_add_tokens = []
+        tokens_to_add = []
         for token in new_tokens:
             assert isinstance(token, str)
             if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
@@ -1164,18 +1164,18 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             if (
                 token != self.unk_token
                 and self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)
-                and token not in to_add_tokens
+                and token not in tokens_to_add
             ):
-                to_add_tokens.append(token)
+                tokens_to_add.append(token)
                 logger.info("Adding %s to the vocabulary", token)
 
-        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(to_add_tokens))
+        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.unique_added_tokens_encoder = set(self.added_tokens_encoder.keys()).union(set(self.all_special_tokens))
         self.added_tokens_decoder.update(added_tok_decoder)
 
-        return len(to_add_tokens)
+        return len(tokens_to_add)
 
     def num_special_tokens_to_add(self, pair=False):
         """
