@@ -60,7 +60,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_tokenizer_equivalence_en_de(self):
-        en_de_tokenizer = MarianTokenizer.from_pretrained(f'{ORG_NAME}/opus-mt-en-de')
+        en_de_tokenizer = MarianTokenizer.from_pretrained(f'{ORG_NAME}opus-mt-en-de')
         batch = en_de_tokenizer.prepare_translation_batch(["I am a small frog"], return_tensors=None)
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, batch.input_ids[0])
