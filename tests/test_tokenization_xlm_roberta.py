@@ -38,14 +38,6 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
-    def get_tokenizer(self, **kwargs):
-        return XLMRobertaTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_input_output_texts(self):
-        input_text = "This is a test"
-        output_text = "This is a test"
-        return input_text, output_text
-
     def test_full_tokenizer(self):
         tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, keep_accents=True)
 

@@ -68,7 +68,6 @@ class TokenizerTesterMixin:
         shutil.rmtree(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
-        # TODO: delete identical implementations
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs):
@@ -85,7 +84,7 @@ class TokenizerTesterMixin:
     @staticmethod
     def convert_batch_encode_plus_format_to_encode_plus(batch_encode_plus_sequences):
         # Switch from batch_encode_plus format:   {'input_ids': [[...], [...]], ...}
-        # to the concatenated encode_plus format: [{'input_ids': [...], ...}, {'input_ids': [...], ...}]
+        # to the list of examples/ encode_plus format: [{'input_ids': [...], ...}, {'input_ids': [...], ...}]
         return [
             {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences.keys()}
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
@@ -134,6 +133,7 @@ class TokenizerTesterMixin:
         self.assertEqual(tokenizer.max_len, 43)
 
     def test_pickle_tokenizer(self):
+        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
         tokenizer = self.get_tokenizer()
         self.assertIsNotNone(tokenizer)
 
@@ -752,6 +752,7 @@ class TokenizerTesterMixin:
 
     @require_torch
     def test_torch_encode_plus_sent_to_model(self):
+        import torch
         from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
@@ -779,8 +780,10 @@ class TokenizerTesterMixin:
         encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="pt")
         batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="pt")
         # This should not fail
-        model(**encoded_sequence)
-        model(**batch_encoded_sequence)
+
+        with torch.no_grad():  # saves some time
+            model(**encoded_sequence)
+            model(**batch_encoded_sequence)
 
         if self.test_rust_tokenizer:
             fast_tokenizer = self.get_rust_tokenizer()
