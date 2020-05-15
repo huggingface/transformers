@@ -198,12 +198,11 @@ Follow these steps to start contributing:
    are useful to avoid duplicated work, and to differentiate it from PRs ready
    to be merged;
 4. Make sure existing tests pass;
-5. Add high-coverage tests. No quality testing = no merge. 
+5. Add high-coverage tests. No quality test, no merge. 
  - If you are adding a new model, make sure that you use `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)`, which triggers the common tests.
  - If you are adding new `@slow` tests, make sure they pass using `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`. 
- - If you are adding a new tokenizer, write tests, and make sure `RUN_SLOW=1 python -m pytest tests/test_tokenization_{your_model_name}.py` passes.
 CircleCI does not run them. 
-6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_ctrl.py` for an example.
+6. All public methods must have informative docstrings;
 
 ### Tests
 

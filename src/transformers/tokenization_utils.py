@@ -771,26 +771,26 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         raise NotImplementedError
 
     @property
-    def is_fast(self) -> bool:
+    def is_fast(self):
         return False
 
     @property
-    def max_len(self) -> int:
+    def max_len(self):
         """ Kept here for backward compatibility.
             Now renamed to `model_max_length` to avoid ambiguity.
         """
         return self.model_max_length
 
     @property
-    def max_len_single_sentence(self) -> int:
+    def max_len_single_sentence(self):
         return self.model_max_length - self.num_special_tokens_to_add(pair=False)
 
     @property
-    def max_len_sentences_pair(self) -> int:
+    def max_len_sentences_pair(self):
         return self.model_max_length - self.num_special_tokens_to_add(pair=True)
 
     @max_len_single_sentence.setter
-    def max_len_single_sentence(self, value) -> int:
+    def max_len_single_sentence(self, value):
         """ For backward compatibility, allow to try to setup 'max_len_single_sentence' """
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=False):
             logger.warning(
@@ -802,7 +802,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             )
 
     @max_len_sentences_pair.setter
-    def max_len_sentences_pair(self, value) -> int:
+    def max_len_sentences_pair(self, value):
         """ For backward compatibility, allow to try to setup 'max_len_sentences_pair' """
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=True):
             logger.warning(
@@ -1118,7 +1118,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         return vocab_files + (special_tokens_map_file, added_tokens_file)
 
-    def save_vocabulary(self, save_directory) -> Tuple[str]:
+    def save_vocabulary(self, save_directory):
         """ Save the tokenizer vocabulary to a directory. This method does *NOT* save added tokens
             and special token mappings.
 
@@ -1128,7 +1128,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         """
         raise NotImplementedError
 
-    def add_tokens(self, new_tokens: Union[str, List[str]]) -> int:
+    def add_tokens(self, new_tokens):
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
@@ -1156,7 +1156,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         if not isinstance(new_tokens, list):
             new_tokens = [new_tokens]
 
-        tokens_to_add = []
+        to_add_tokens = []
         for token in new_tokens:
             assert isinstance(token, str)
             if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
@@ -1164,18 +1164,18 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             if (
                 token != self.unk_token
                 and self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)
-                and token not in tokens_to_add
+                and token not in to_add_tokens
             ):
-                tokens_to_add.append(token)
+                to_add_tokens.append(token)
                 logger.info("Adding %s to the vocabulary", token)
 
-        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
+        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(to_add_tokens))
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.unique_added_tokens_encoder = set(self.added_tokens_encoder.keys()).union(set(self.all_special_tokens))
         self.added_tokens_decoder.update(added_tok_decoder)
 
-        return len(tokens_to_add)
+        return len(to_add_tokens)
 
     def num_special_tokens_to_add(self, pair=False):
         """
@@ -2080,7 +2080,10 @@ class PreTrainedTokenizer(SpecialTokensMixin):
     def build_inputs_with_special_tokens(self, token_ids_0: List, token_ids_1: Optional[List] = None) -> List:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens. This implementation does not add special tokens.
+        by concatenating and adding special tokens.
+        A RoBERTa sequence has the following format:
+            single sequence: <s> X </s>
+            pair of sequences: <s> A </s></s> B </s>
         """
         if token_ids_1 is None:
             return token_ids_0

@@ -199,7 +199,7 @@ class RobertaTokenizer(GPT2Tokenizer):
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
+                    "ids is already formated with special tokens for the model."
                 )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
