@@ -56,6 +56,12 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # overwrite max_len=512 default
         return MarianTokenizer.from_pretrained(self.tmpdirname, max_len=max_len, **kwargs)
 
+    def get_input_output_texts(self):
+        return (
+            "This is a test",
+            "This is a test",
+        )
+
     @slow
     def test_tokenizer_equivalence_en_de(self):
         en_de_tokenizer = MarianTokenizer.from_pretrained(f"{ORG_NAME}opus-mt-en-de")
