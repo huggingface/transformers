@@ -106,26 +106,26 @@ class LongformerSelfAttention(nn.Module):
 
     @lru_cache()
     def _get_invalid_locations_mask(self, w, device):
-        affected_seq_len = w
+        affected_seqlen = w
         diagonals_list = []
         for j in range(-w, 1, 1):
-            diagonal_mask = torch.zeros(affected_seq_len, device="cpu", dtype=torch.uint8)
+            diagonal_mask = torch.zeros(affected_seqlen, device="cpu", dtype=torch.uint8)
             diagonal_mask[:-j] = 1
             diagonals_list.append(diagonal_mask)
         mask = torch.stack(diagonals_list, dim=-1)
         mask = mask[None, :, None, :]
         ending_mask = mask.flip(dims=(1, 3)).bool().to(device)
-        return affected_seq_len, mask.bool().to(device), ending_mask
+        return affected_seqlen, mask.bool().to(device), ending_mask
 
     def _mask_invalid_locations(self, input_tensor, w) -> torch.Tensor:
         # TODO: replace this function and `_get_invalid_locations_mask` with a simpler one that doesn't require lru_cache
-        affected_seq_len, beginning_mask, ending_mask = self._get_invalid_locations_mask(w, input_tensor.device)
-        seq_len = input_tensor.size(1)
-        beginning_input = input_tensor[:, :affected_seq_len, :, : w + 1]
-        beginning_mask = beginning_mask[:, :seq_len].expand(beginning_input.size())
+        affected_seqlen, beginning_mask, ending_mask = self._get_invalid_locations_mask(w, input_tensor.device)
+        seqlen = input_tensor.size(1)
+        beginning_input = input_tensor[:, :affected_seqlen, :, : w + 1]
+        beginning_mask = beginning_mask[:, :seqlen].expand(beginning_input.size())
         beginning_input.masked_fill_(beginning_mask, -float("inf"))
-        ending_input = input_tensor[:, -affected_seq_len:, :, -(w + 1) :]
-        ending_mask = ending_mask[:, -seq_len:].expand(ending_input.size())
+        ending_input = input_tensor[:, -affected_seqlen:, :, -(w + 1) :]
+        ending_mask = ending_mask[:, -seqlen:].expand(ending_input.size())
         ending_input.masked_fill_(ending_mask, -float("inf"))
 
     def _sliding_chunks_matmul_qk(self, q: torch.Tensor, k: torch.Tensor, w: int):
@@ -257,21 +257,21 @@ class LongformerSelfAttention(nn.Module):
             key_padding_mask = None
 
         hidden_states = hidden_states.transpose(0, 1)
-        seq_len, batch_size, embed_dim = hidden_states.size()
+        seqlen, batch_size, embed_dim = hidden_states.size()
         assert embed_dim == self.embed_dim
         q = self.query(hidden_states)
         k = self.key(hidden_states)
         v = self.value(hidden_states)
         q /= math.sqrt(self.head_dim)
 
-        q = q.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
-        k = k.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
-        # attn_weights = (batch_size, seq_len, num_heads, window*2+1)
+        q = q.view(seqlen, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
+        k = k.view(seqlen, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
+        # attn_weights = (batch_size, seqlen, num_heads, window*2+1)
         attn_weights = self._sliding_chunks_matmul_qk(q, k, self.one_sided_attention_window_size)
         self._mask_invalid_locations(attn_weights, self.one_sided_attention_window_size)
         if remove_from_windowed_attention_mask is not None:
             # This implementation is fast and takes very little memory because num_heads x hidden_size = 1
-            # from (batch_size x seq_len) to (batch_size x seq_len x num_heads x hidden_size)
+            # from (batch_size x seqlen) to (batch_size x seqlen x num_heads x hidden_size)
             remove_from_windowed_attention_mask = remove_from_windowed_attention_mask.unsqueeze(dim=-1).unsqueeze(
                 dim=-1
             )
@@ -285,7 +285,7 @@ class LongformerSelfAttention(nn.Module):
             attn_weights += d_mask
         assert list(attn_weights.size()) == [
             batch_size,
-            seq_len,
+            seqlen,
             self.num_heads,
             self.one_sided_attention_window_size * 2 + 1,
         ]
@@ -294,11 +294,11 @@ class LongformerSelfAttention(nn.Module):
         if extra_attention_mask is not None:
             selected_k = k.new_zeros(batch_size, max_num_extra_indices_per_batch, self.num_heads, self.head_dim)
             selected_k[selection_padding_mask_nonzeros] = k[extra_attention_mask_nonzeros]
-            # (batch_size, seq_len, num_heads, max_num_extra_indices_per_batch)
+            # (batch_size, seqlen, num_heads, max_num_extra_indices_per_batch)
             selected_attn_weights = torch.einsum("blhd,bshd->blhs", (q, selected_k))
             selected_attn_weights[selection_padding_mask_zeros[0], :, :, selection_padding_mask_zeros[1]] = -10000
             # concat to attn_weights
-            # (batch_size, seq_len, num_heads, extra attention count + 2*window+1)
+            # (batch_size, seqlen, num_heads, extra attention count + 2*window+1)
             attn_weights = torch.cat((selected_attn_weights, attn_weights), dim=-1)
 
         attn_weights_fp32 = F.softmax(attn_weights, dim=-1, dtype=torch.float32)  # use fp32 for numerical stability
@@ -311,7 +311,7 @@ class LongformerSelfAttention(nn.Module):
             )
 
         attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
-        v = v.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
+        v = v.view(seqlen, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
         attn = None
         if extra_attention_mask is not None:
             selected_attn_probs = attn_probs.narrow(-1, 0, max_num_extra_indices_per_batch)
@@ -330,8 +330,8 @@ class LongformerSelfAttention(nn.Module):
         else:
             attn += self._sliding_chunks_matmul_pv(attn_probs, v, self.one_sided_attention_window_size)
 
-        assert attn.size() == (batch_size, seq_len, self.num_heads, self.head_dim), "Unexpected size"
-        attn = attn.transpose(0, 1).reshape(seq_len, batch_size, embed_dim).contiguous()
+        assert attn.size() == (batch_size, seqlen, self.num_heads, self.head_dim), "Unexpected size"
+        attn = attn.transpose(0, 1).reshape(seqlen, batch_size, embed_dim).contiguous()
 
         # For this case, we'll just recompute the attention for these indices
         # and overwrite the attn tensor.
@@ -354,18 +354,18 @@ class LongformerSelfAttention(nn.Module):
             )  # (batch_size * self.num_heads, max_num_extra_indices_per_batch, head_dim)
             k = (
                 k.contiguous().view(-1, batch_size * self.num_heads, self.head_dim).transpose(0, 1)
-            )  # batch_size * self.num_heads, seq_len, head_dim)
+            )  # batch_size * self.num_heads, seqlen, head_dim)
             v = (
                 v.contiguous().view(-1, batch_size * self.num_heads, self.head_dim).transpose(0, 1)
-            )  # batch_size * self.num_heads, seq_len, head_dim)
+            )  # batch_size * self.num_heads, seqlen, head_dim)
             attn_weights = torch.bmm(q, k.transpose(1, 2))
-            assert list(attn_weights.size()) == [batch_size * self.num_heads, max_num_extra_indices_per_batch, seq_len]
+            assert list(attn_weights.size()) == [batch_size * self.num_heads, max_num_extra_indices_per_batch, seqlen]
 
-            attn_weights = attn_weights.view(batch_size, self.num_heads, max_num_extra_indices_per_batch, seq_len)
+            attn_weights = attn_weights.view(batch_size, self.num_heads, max_num_extra_indices_per_batch, seqlen)
             attn_weights[selection_padding_mask_zeros[0], :, selection_padding_mask_zeros[1], :] = -10000.0
             if key_padding_mask is not None:
                 attn_weights = attn_weights.masked_fill(key_padding_mask.unsqueeze(1).unsqueeze(2), -10000.0,)
-            attn_weights = attn_weights.view(batch_size * self.num_heads, max_num_extra_indices_per_batch, seq_len)
+            attn_weights = attn_weights.view(batch_size * self.num_heads, max_num_extra_indices_per_batch, seqlen)
             attn_weights_float = F.softmax(
                 attn_weights, dim=-1, dtype=torch.float32
             )  # use fp32 for numerical stability
@@ -396,7 +396,7 @@ class LongformerSelfAttention(nn.Module):
                 # It doesn't not return local attention
                 # In case of variable number of global attantion in the rows of a batch,
                 # attn_weights are padded with -10000.0 attention scores
-                attn_weights = attn_weights.view(batch_size, self.num_heads, max_num_extra_indices_per_batch, seq_len)
+                attn_weights = attn_weights.view(batch_size, self.num_heads, max_num_extra_indices_per_batch, seqlen)
             else:
                 # without global attention, return local attention probabilities
                 # batch_size x num_heads x sequence_length x window_size
