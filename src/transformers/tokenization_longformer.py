@@ -26,7 +26,6 @@ vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-v
 merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
 _all_longformer_models = ["longformer-base-4096", "longformer-large-4096"]
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentence.bpe.model"}
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "longformer-base-4096": 4096,
