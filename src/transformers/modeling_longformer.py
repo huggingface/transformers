@@ -511,8 +511,8 @@ class LongformerModel(RobertaModel):
 
         self.init_weights()
 
-    @staticmethod
     def _pad_to_window_size(
+        self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         token_type_ids: torch.Tensor,
@@ -523,8 +523,10 @@ class LongformerModel(RobertaModel):
     ):
         """A helper function to pad tokens and mask to work with implementation of Longformer selfattention."""
 
-        assert attention_window % 2 == 0
-        seqlen = input_ids.size(1) if input_ids is not None else inputs_embeds.size(1)
+        assert attention_window % 2 == 0, f"`attention_window` should be an even value. Given {attention_window}"
+        input_shape = input_ids.shape if input_ids is not None else inputs_embeds.shape
+        batch_size, seqlen = input_shape[:2]
+
         padding_len = (attention_window - seqlen % attention_window) % attention_window
         if padding_len > 0:
             logger.info(
@@ -544,7 +546,13 @@ class LongformerModel(RobertaModel):
                 # pad with position_id = pad_token_id as in modeling_roberta.RobertaEmbeddings
                 position_ids = F.pad(position_ids, (0, padding_len), value=pad_token_id)
             if inputs_embeds is not None:
-                inputs_embeds = F.pad(inputs_embeds, (0, 0, 0, padding_len), value=0.0)  # pad with zero embeddings
+                input_ids_padding = inputs_embeds.new_full(
+                    (batch_size, padding_len),
+                    self.config.pad_token_id,
+                    dtype=torch.long,
+                )
+                inputs_embeds_padding = self.embeddings(input_ids_padding)
+                inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
 
         return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
