@@ -58,7 +58,7 @@ class LongformerConfig(RobertaConfig):
     pretrained_config_archive_map = LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "longformer"
 
-    def __init__(self, attention_window: Union[List[int], int] = 512, attention_mode: str = 'longformer', **kwargs):
+    def __init__(self, attention_window: Union[List[int], int] = 512, attention_mode: str = "longformer", **kwargs):
         """
         Args:
             attention_window (:obj:`int` or :obj:`List[int]`, optional, defaults to 512):
