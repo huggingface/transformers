@@ -14,9 +14,9 @@
 # limitations under the License.
 """ Longformer configuration """
 
-
 import logging
 from typing import List, Union
+
 from .configuration_roberta import RobertaConfig
 
 

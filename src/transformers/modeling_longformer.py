@@ -14,19 +14,19 @@
 # limitations under the License.
 """PyTorch Longformer model. """
 
-
 import logging
 import math
 from functools import lru_cache
+
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
 from torch.nn import CrossEntropyLoss
+from torch.nn import functional as F
 
 from .configuration_longformer import LongformerConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_roberta import RobertaModel, RobertaLMHead
 from .modeling_bert import BertPreTrainedModel
+from .modeling_roberta import RobertaLMHead, RobertaModel
 
 
 logger = logging.getLogger(__name__)
@@ -515,7 +515,7 @@ class LongformerModel(RobertaModel):
         """A helper function to pad tokens and mask to work with implementation of Longformer selfattention."""
 
         assert attention_window % 2 == 0
-        seqlen = input_ids.size(1)
+        seqlen = input_ids.size(1) if input_ids is not None else inputs_embeds.size(1)
         padding_len = (attention_window - seqlen % attention_window) % attention_window
         if padding_len > 0:
             logger.info(
