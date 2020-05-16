@@ -868,7 +868,7 @@ class NerPipeline(Pipeline):
         binary_output: bool = False,
         ignore_labels=["O"],
         task: str = "",
-        group: bool = False,
+        grouped_entities: bool = False,
     ):
         super().__init__(
             model=model,
@@ -883,7 +883,7 @@ class NerPipeline(Pipeline):
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
         self.ignore_labels = ignore_labels
-        self.group = group
+        self.grouped_entities = grouped_entities
 
     def __call__(self, *args, **kwargs):
         inputs = self._args_parser(*args, **kwargs)
@@ -932,7 +932,7 @@ class NerPipeline(Pipeline):
                     "index": idx,
                 }
                 last_idx, _ = filtered_labels_idx[-1]
-                if self.group:
+                if self.grouped_entities:
                     if not entity_group_disagg:
                         entity_group_disagg += [entity]
                         if idx == last_idx:
@@ -956,7 +956,7 @@ class NerPipeline(Pipeline):
                 entities += [entity]
 
             # Append
-            if self.group:
+            if self.grouped_entities:
                 answers += [entity_groups]
             else:
                 answers += [entities]
