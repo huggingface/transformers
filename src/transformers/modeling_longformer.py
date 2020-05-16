@@ -502,6 +502,8 @@ class LongformerModel(RobertaModel):
                 f'Expected values of `attention_mode` are "longformer" or "n2", given {config.attention_mode}'
             )
 
+        self.init_weights()
+
     def _pad_to_window_size(
         self,
         input_ids: torch.Tensor,
