@@ -40,7 +40,7 @@ LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {
 
 class LongformerSelfAttention(nn.Module):
     def __init__(self, config, layer_id):
-        super(LongformerSelfAttention, self).__init__()
+        super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
@@ -73,13 +73,15 @@ class LongformerSelfAttention(nn.Module):
 
         self.one_sided_attention_window_size = attention_window // 2
 
-    def _skew(self, x, direction):
+    @staticmethod
+    def _skew(x, direction):
         """Convert diagonals into columns (or columns into diagonals depending on `direction`"""
         x_padded = F.pad(x, direction)  # padding value is not important because it will be overwritten
         x_padded = x_padded.view(*x_padded.size()[:-2], x_padded.size(-1), x_padded.size(-2))
         return x_padded
 
-    def _skew2(self, x):
+    @staticmethod
+    def _skew2(x):
         """shift every row 1 step to right converting columns into diagonals"""
         # X = B x C x M x L
         B, C, M, L = x.size()
@@ -90,7 +92,8 @@ class LongformerSelfAttention(nn.Module):
         x = x[:, :, :, :-1]
         return x
 
-    def _chunk(self, x, w):
+    @staticmethod
+    def _chunk(x, w):
         """convert into overlapping chunkings. Chunk size = 2w, overlap size = w"""
 
         # non-overlapping chunks of size = 2w
@@ -510,8 +513,8 @@ class LongformerModel(RobertaModel):
 
         self.init_weights()
 
+    @staticmethod
     def _pad_to_window_size(
-        self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         token_type_ids: torch.Tensor,
