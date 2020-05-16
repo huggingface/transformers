@@ -1,7 +1,7 @@
 # ReviewBERT
 
-BERT (post-)trained from review corpus to understand sentiment, options and various e-commence aspects.
-
+BERT (post-)trained from review corpus to understand sentiment, options and various e-commence aspects.  
+Please visit https://github.com/howardhsu/BERT-for-RRC-ABSA for details.
 
 ## Model Description
 
