@@ -73,17 +73,17 @@ class LongformerSelfAttention(nn.Module):
 
         self.one_sided_attention_window_size = attention_window // 2
 
-    def _skew(self, x, direction, padding_value):
+    def _skew(self, x, direction):
         """Convert diagonals into columns (or columns into diagonals depending on `direction`"""
-        x_padded = F.pad(x, direction, value=padding_value)
+        x_padded = F.pad(x, direction)  # padding value is not important because it will be overwritten
         x_padded = x_padded.view(*x_padded.size()[:-2], x_padded.size(-1), x_padded.size(-2))
         return x_padded
 
-    def _skew2(self, x, padding_value):
+    def _skew2(self, x):
         """shift every row 1 step to right converting columns into diagonals"""
         # X = B x C x M x L
         B, C, M, L = x.size()
-        x = F.pad(x, (0, M + 1), value=padding_value)  # B x C x M x (L+M+1)
+        x = F.pad(x, (0, M + 1))  # B x C x M x (L+M+1). Padding value is not important because it'll be overwritten
         x = x.view(B, C, -1)  # B x C x ML+MM+M
         x = x[:, :, :-M]  # B x C x ML+MM
         x = x.view(B, C, M, M + L)  # B x C, M x L+M
@@ -128,7 +128,7 @@ class LongformerSelfAttention(nn.Module):
         ending_mask = ending_mask[:, -seq_len:].expand(ending_input.size())
         ending_input.masked_fill_(ending_mask, -float("inf"))
 
-    def _sliding_chunks_matmul_qk(self, q: torch.Tensor, k: torch.Tensor, w: int, padding_value: float):
+    def _sliding_chunks_matmul_qk(self, q: torch.Tensor, k: torch.Tensor, w: int):
         """Matrix multiplicatio of query x key tensors using with a sliding window attention pattern.
         This implementation splits the input into overlapping chunks of size 2w (e.g. 512 for pretrained Longformer)
         with an overlap of size w"""
@@ -152,7 +152,7 @@ class LongformerSelfAttention(nn.Module):
         chunk_attn = torch.einsum("bcxd,bcyd->bcxy", (chunk_q, chunk_k))  # multiply
 
         # convert diagonals into columns
-        diagonal_chunk_attn = self._skew(chunk_attn, direction=(0, 0, 0, 1), padding_value=padding_value)
+        diagonal_chunk_attn = self._skew(chunk_attn, direction=(0, 0, 0, 1))
 
         # allocate space for the overall attention matrix where the chunks are compined. The last dimension
         # has (w * 2 + 1) columns. The first (w) columns are the w lower triangles (attention from a word to
@@ -198,7 +198,7 @@ class LongformerSelfAttention(nn.Module):
         chunk_v_stride = chunk_v_stride[0], w * chunk_v_stride[1], chunk_v_stride[1], chunk_v_stride[2]
         chunk_v = padded_v.as_strided(size=chunk_v_size, stride=chunk_v_stride)
 
-        skewed_prob = self._skew2(chunk_prob, padding_value=0)
+        skewed_prob = self._skew2(chunk_prob)
 
         context = torch.einsum("bcwd,bcdh->bcwh", (skewed_prob, chunk_v))
         return context.view(bsz, num_heads, seqlen, head_dim).transpose(1, 2)
@@ -267,7 +267,7 @@ class LongformerSelfAttention(nn.Module):
         q = q.view(seq_len, bsz, self.num_heads, self.head_dim).transpose(0, 1)
         k = k.view(seq_len, bsz, self.num_heads, self.head_dim).transpose(0, 1)
         # attn_weights = (bsz, seq_len, num_heads, window*2+1)
-        attn_weights = self._sliding_chunks_matmul_qk(q, k, self.one_sided_attention_window_size, padding_value=0)
+        attn_weights = self._sliding_chunks_matmul_qk(q, k, self.one_sided_attention_window_size)
         self._mask_invalid_locations(attn_weights, self.one_sided_attention_window_size)
         if remove_from_windowed_attention_mask is not None:
             # This implementation is fast and takes very little memory because num_heads x hidden_size = 1
@@ -282,7 +282,7 @@ class LongformerSelfAttention(nn.Module):
             ones = float_mask.new_ones(size=float_mask.size())  # tensor of ones
             # diagonal mask with zeros everywhere and -inf inplace of padding
             d_mask = self._sliding_chunks_matmul_qk(
-                ones, float_mask, self.one_sided_attention_window_size, padding_value=0
+                ones, float_mask, self.one_sided_attention_window_size
             )
             attn_weights += d_mask
         assert list(attn_weights.size()) == [
