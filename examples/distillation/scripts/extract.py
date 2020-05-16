@@ -20,25 +20,21 @@ import argparse
 
 import torch
 
-from transformers import GPT2LMHeadModel, RobertaForMaskedLM
+from transformers import GPT2LMHeadModel, RobertaForMaskedLM, BartForConditionalGeneration
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Extraction some layers of the full RobertaForMaskedLM or GPT2LMHeadModel for Transfer Learned Distillation"
-    )
-    parser.add_argument("--model_type", default="roberta", choices=["roberta", "gpt2"])
-    parser.add_argument("--model_name", default="roberta-large", type=str)
-    parser.add_argument("--dump_checkpoint", default="serialization_dir/tf_roberta_048131723.pth", type=str)
-    parser.add_argument("--vocab_transform", action="store_true")
-    args = parser.parse_args()
-
+def extract(args):
     if args.model_type == "roberta":
         model = RobertaForMaskedLM.from_pretrained(args.model_name)
         prefix = "roberta"
     elif args.model_type == "gpt2":
         model = GPT2LMHeadModel.from_pretrained(args.model_name)
         prefix = "transformer"
+    elif args.model_type == 'bart':
+        model = BartForConditionalGeneration.from_pretrained(args.model_name)
+        prefix = 'model'
+    else:
+        raise NotImplementedError('')
 
     state_dict = model.state_dict()
     compressed_sd = {}
@@ -56,8 +52,7 @@ if __name__ == "__main__":
             compressed_sd[param_name] = state_dict[param_name]
 
     # Transformer Blocks #
-    std_idx = 0
-    for teacher_idx in [0, 2, 4, 7, 9, 11]:
+    for std_idx, teacher_idx in enumerate([0, 2, 4, 7, 9, 11]):
         if args.model_type == "gpt2":
             for layer in ["ln_1", "attn.c_attn", "attn.c_proj", "ln_2", "mlp.c_fc", "mlp.c_proj"]:
                 for w in ["weight", "bias"]:
@@ -80,7 +75,6 @@ if __name__ == "__main__":
                     compressed_sd[f"{prefix}.encoder.layer.{std_idx}.{layer}.{w}"] = state_dict[
                         f"{prefix}.encoder.layer.{teacher_idx}.{layer}.{w}"
                     ]
-        std_idx += 1
 
     # Language Modeling Head ###s
     if args.model_type == "roberta":
@@ -100,3 +94,23 @@ if __name__ == "__main__":
 
     print(f"Save transfered checkpoint to {args.dump_checkpoint}.")
     torch.save(compressed_sd, args.dump_checkpoint)
+
+
+test_args = argparse.Namespace(model_type='bart',
+                   # model_name='bart-large-cnn', '',
+                   model_name='sshleifer/bart-tiny-random',
+                   vocab_transform=True,
+                   dump_checkpoint='test_dir/bart_tiny.pth'
+                   )
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Extraction some layers of the full RobertaForMaskedLM or GPT2LMHeadModel for Transfer Learned "
+                    "Distillation"
+    )
+    parser.add_argument("--model_type", default="roberta", choices=["roberta", "gpt2", "bart"])
+    parser.add_argument("--model_name", default="roberta-large", type=str)
+    parser.add_argument("--dump_checkpoint", default="serialization_dir/tf_roberta_048131723.pth", type=str)
+    parser.add_argument("--vocab_transform", action="store_true")
+    args = parser.parse_args()
+    extract(args)
