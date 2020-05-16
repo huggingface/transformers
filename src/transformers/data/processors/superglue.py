@@ -16,8 +16,10 @@
 """ SuperGLUE processors and helpers """
 
 
-import logging
 import os
+import json
+import logging
+from collections import defaultdict
 
 from ...file_utils import is_tf_available
 from .utils import DataProcessor, InputExample, InputFeatures, SpanClassificationExample, SpanClassificationFeatures
@@ -92,6 +94,7 @@ def superglue_convert_examples_to_features(
         max_length: Maximum example length
         task: SuperGLUE task
         label_list: List of labels. Can be obtained from the processor using the ``processor.get_labels()`` method
+            NB(AW): Writing predictions assumes the labels are in the same order as when building features.
         output_mode: String indicating the output mode. Either ``regression`` or ``classification``
         pad_on_left: If set to ``True``, the examples will be padded on the left rather than on the right (default)
         pad_token: Padding token
@@ -174,7 +177,7 @@ def superglue_convert_examples_to_features(
         # Zero-pad up to the sequence length.
         padding_length = max_length - len(input_ids)
         if pad_on_left:
-            # TODO(AW): will fuck up span tracking
+            # TODO(AW): will mess up span tracking
             assert False, "Not implemented correctly wrt span tracking!"
             input_ids = ([pad_token] * padding_length) + input_ids
             attention_mask = ([0 if mask_padding_with_zero else 1] * padding_length) + attention_mask
@@ -276,6 +279,10 @@ class BoolqProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_jsonl(os.path.join(data_dir, "val.jsonl")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_jsonl(os.path.join(data_dir, "test.jsonl")), "test")
+
     def get_labels(self):
         """See base class."""
         return [True, False]
@@ -287,9 +294,19 @@ class BoolqProcessor(DataProcessor):
             guid = line["idx"]
             text_a = line["passage"]
             text_b = line["question"]
-            label = line["label"]
+            label = line["label"] if "label" in line else False
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
+
+    def write_preds(self, preds, ex_ids, out_dir):
+        """Write predictions in SuperGLUE format."""
+        preds = preds[ex_ids] # sort just in case we got scrambled
+        idx2label = {i: label for i, label in enumerate(self.get_labels())}
+        with open(os.path.join(out_dir, "BoolQ.jsonl"), "w") as pred_fh:
+            for idx, pred in enumerate(preds):
+                pred_label = idx2label[int(pred)]
+                pred_fh.write(f"{json.dumps({'idx': idx, 'label': pred_label})}\n")
+        logger.info(f"Wrote {len(preds)} predictions to {out_dir}.")
 
 
 class CbProcessor(DataProcessor):
@@ -312,6 +329,10 @@ class CbProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_jsonl(os.path.join(data_dir, "val.jsonl")), "dev_matched")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_jsonl(os.path.join(data_dir, "test.jsonl")), "test")
+
     def get_labels(self):
         """See base class."""
         return ["entailment", "contradiction", "neutral"]
@@ -324,9 +345,19 @@ class CbProcessor(DataProcessor):
             guid = line["idx"]
             text_a = line["premise"]
             text_b = line["hypothesis"]
-            label = line["label"]
+            label = line["label"] if "label" in line else "contradiction"
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
+
+    def write_preds(self, preds, ex_ids, out_dir):
+        """Write predictions in SuperGLUE format."""
+        preds = preds[ex_ids] # sort just in case we got scrambled
+        idx2label = {i: label for i, label in enumerate(self.get_labels())}
+        with open(os.path.join(out_dir, "CB.jsonl"), "w") as pred_fh:
+            for idx, pred in enumerate(preds):
+                pred_label = idx2label[int(pred)]
+                pred_fh.write(f"{json.dumps({'idx': idx, 'label': pred_label})}\n")
+        logger.info(f"Wrote {len(preds)} predictions to {out_dir}.")
 
 
 class CopaProcessor(DataProcessor):
@@ -350,6 +381,10 @@ class CopaProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_jsonl(os.path.join(data_dir, "val.jsonl")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_jsonl(os.path.join(data_dir, "test.jsonl")), "test")
+
     def get_labels(self):
         """See base class."""
         return [0, 1]
@@ -360,7 +395,7 @@ class CopaProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             #guid = "%s-%s" % (set_type, line["idx"])
             guid = line["idx"]
-            label = line["label"]
+            label = line["label"] if "label" in line else 0
             premise = line["premise"][:-1]
             choice1 = line["choice1"]
             choice2 = line["choice2"]
@@ -369,6 +404,16 @@ class CopaProcessor(DataProcessor):
             text_b = f"{premise} {joiner} {choice2}"
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
+
+    def write_preds(self, preds, ex_ids, out_dir):
+        """Write predictions in SuperGLUE format."""
+        preds = preds[ex_ids] # sort just in case we got scrambled
+        idx2label = {i: label for i, label in enumerate(self.get_labels())}
+        with open(os.path.join(out_dir, "COPA.jsonl"), "w") as pred_fh:
+            for idx, pred in enumerate(preds):
+                pred_label = idx2label[int(pred)]
+                pred_fh.write(f"{json.dumps({'idx': idx, 'label': pred_label})}\n")
+        logger.info(f"Wrote {len(preds)} predictions to {out_dir}.")
 
 
 class MultircProcessor(DataProcessor):
@@ -391,6 +436,10 @@ class MultircProcessor(DataProcessor):
     def get_dev_examples(self, data_dir):
         """See base class."""
         return self._create_examples(self._read_jsonl(os.path.join(data_dir, "val.jsonl")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_jsonl(os.path.join(data_dir, "test.jsonl")), "test")
 
     def get_labels(self):
         """See base class."""
@@ -416,7 +465,7 @@ class MultircProcessor(DataProcessor):
                     #guid = "%s-%s-%s-%s" % (set_type, passage_id, question_id, answer_id)
                     guid = [passage_id, question_id, answer_id]
                     answer = answer_dict["text"]
-                    label = answer_dict["label"]
+                    label = answer_dict["label"] if "label" in answer_dict else 0
                     assert passage_and_question, "Empty passage and question!"
                     if answer == "":
                         # training data has a few blank answers
@@ -424,10 +473,32 @@ class MultircProcessor(DataProcessor):
                     examples.append(InputExample(guid=guid, text_a=passage_and_question, text_b=answer, label=label))
         return examples
 
+    def write_preds(self, preds, ex_ids, out_dir):
+        """Write predictions in SuperGLUE format."""
+        # TODO(AW)
+
+        psg2qst2ans = defaultdict(lambda: defaultdict(dict))
+        for pred, ex_id in zip(preds, ex_ids):
+            psg_id, qst_id, ans_id = map(int, ex_id)
+            psg2qst2ans[psg_id][qst_id][ans_id] = pred
+
+        idx2label = {i: label for i, label in enumerate(self.get_labels())}
+        with open(os.path.join(out_dir, "MultiRC.jsonl"), "w") as pred_fh:
+            for psg_id, qst2ans in psg2qst2ans.items():
+                psgs = []
+                for qst_id, ans2pred in qst2ans.items():
+                    anss = []
+                    for ans_id, pred in ans2pred.items():
+                        pred_label = idx2label[pred]
+                        anss.append({'idx': ans_id, 'label': pred_label})
+                    psgs.append({'idx': qst_id, 'answers': anss})
+                pred_fh.write(f"{json.dumps({'idx': psg_id, 'passage': {'questions': psgs}})}\n")
+
+        logger.info(f"Wrote predictions to {out_dir}.")
+
 
 class RecordProcessor(DataProcessor):
     """Processor for the ReCoRD data set (SuperGLUE version)."""
-    # TODO(AW)
 
     def __init__(self):
         self._answers = None
@@ -449,6 +520,10 @@ class RecordProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_jsonl(os.path.join(data_dir, "val.jsonl")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_jsonl(os.path.join(data_dir, "test.jsonl")), "test")
+
     def get_labels(self):
         """See base class."""
         return [0, 1]
@@ -457,7 +532,7 @@ class RecordProcessor(DataProcessor):
         """ """
         if self._answers is None or set_type not in self._answers:
             self._answers = {set_type: {}}
-            data_file = "val.jsonl" if set_type == "dev" else "train.jsonl"
+            data_file = f"{set_type}.jsonl"
             data = self._read_jsonl(os.path.join(data_dir, data_file))
             for (i, line) in enumerate(data):
                 passage_id = line["idx"]
@@ -469,7 +544,7 @@ class RecordProcessor(DataProcessor):
                 for question_dict in line["qas"]:
                     question_id = question_dict["idx"]
                     # TODO(AW): no answer case
-                    answers = [a["text"] for a in question_dict["answers"]]
+                    answers = [a["text"] for a in question_dict["answers"]] if "answers" in question_dict else []
                     self._answers[set_type][(passage_id, question_id)] = (ents, answers)
 
         return self._answers[set_type]
@@ -490,7 +565,7 @@ class RecordProcessor(DataProcessor):
                 question_id = question_dict["idx"]
                 question_template = question_dict["query"]
                 # TODO(AW): no answer case
-                answers = [a["text"] for a in question_dict["answers"]]
+                answers = [a["text"] for a in question_dict["answers"]] if "answers" in question_dict else []
                 qst2ans[(passage_id, question_id)] = answers
 
                 for ent_id, ent in enumerate(ents):
@@ -500,6 +575,13 @@ class RecordProcessor(DataProcessor):
                     examples.append(InputExample(guid=guid, text_a=passage, text_b=candidate, label=label))
         return examples
 
+    # TODO(AW)
+    def write_preds(self, preds, ex_ids, out_dir):
+        """Write predictions in SuperGLUE format."""
+        with open(os.path.join(out_dir, "ReCoRD.jsonl"), "w") as pred_fh:
+            for pred in preds:
+                pred_fh.write(f"{pred}\n")
+        logger.info(f"Wrote predictions to {out_dir}.")
 
 class RteProcessor(DataProcessor):
     """Processor for the RTE data set (GLUE version)."""
@@ -521,6 +603,10 @@ class RteProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_jsonl(os.path.join(data_dir, "val.jsonl")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_jsonl(os.path.join(data_dir, "test.jsonl")), "test")
+
     def get_labels(self):
         """See base class."""
         return ["entailment", "not_entailment"]
@@ -533,9 +619,19 @@ class RteProcessor(DataProcessor):
             guid = line["idx"]
             text_a = line["premise"]
             text_b = line["hypothesis"]
-            label = line["label"]
+            label = line["label"] if "label" in line else "not_entailment"
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
+
+    def write_preds(self, preds, ex_ids, out_dir):
+        """Write predictions in SuperGLUE format."""
+        preds = preds[ex_ids] # sort just in case we got scrambled
+        idx2label = {i: label for i, label in enumerate(self.get_labels())}
+        with open(os.path.join(out_dir, "RTE.jsonl"), "w") as pred_fh:
+            for idx, pred in enumerate(preds):
+                pred_label = idx2label[int(pred)]
+                pred_fh.write(f"{json.dumps({'idx': idx, 'label': pred_label})}\n")
+        logger.info(f"Wrote {len(preds)} predictions to {out_dir}.")
 
 
 class WicProcessor(DataProcessor):
@@ -559,6 +655,10 @@ class WicProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_jsonl(os.path.join(data_dir, "val.jsonl")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_jsonl(os.path.join(data_dir, "test.jsonl")), "test")
+
     def get_labels(self):
         """See base class."""
         return [True, False]
@@ -573,10 +673,20 @@ class WicProcessor(DataProcessor):
             text_b = line["sentence2"]
             span_a = (line["start1"], line["end1"])
             span_b = (line["start2"], line["end2"])
-            label = line["label"]
+            label = line["label"] if "label" in line else False
             examples.append(SpanClassificationExample(guid=guid, text_a=text_a, spans_a=[span_a],
                                                       text_b=text_b, spans_b=[span_b], label=label))
         return examples
+
+    def write_preds(self, preds, ex_ids, out_dir):
+        """Write predictions in SuperGLUE format."""
+        preds = preds[ex_ids] # sort just in case we got scrambled
+        idx2label = {i: label for i, label in enumerate(self.get_labels())}
+        with open(os.path.join(out_dir, "WiC.jsonl"), "w") as pred_fh:
+            for idx, pred in enumerate(preds):
+                pred_label = idx2label[int(pred)]
+                pred_fh.write(f"{json.dumps({'idx': idx, 'label': pred_label})}\n")
+        logger.info(f"Wrote {len(preds)} predictions to {out_dir}.")
 
 
 class WscProcessor(DataProcessor):
@@ -599,6 +709,10 @@ class WscProcessor(DataProcessor):
         """See base class."""
         return self._create_examples(self._read_jsonl(os.path.join(data_dir, "val.jsonl")), "dev")
 
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_jsonl(os.path.join(data_dir, "test.jsonl")), "test")
+
     def get_labels(self):
         """See base class."""
         return [True, False]
@@ -616,9 +730,19 @@ class WscProcessor(DataProcessor):
             span_end2 = span_start2 + len(line["target"]["span2_text"])
             span1 = (span_start1, span_end1)
             span2 = (span_start2, span_end2)
-            label = line["label"]
+            label = line["label"] if "label" in line else False
             examples.append(SpanClassificationExample(guid=guid, text_a=text_a, spans_a=[span1, span2], label=label))
         return examples
+
+    def write_preds(self, preds, ex_ids, out_dir):
+        """Write predictions in SuperGLUE format."""
+        preds = preds[ex_ids] # sort just in case we got scrambled
+        idx2label = {i: label for i, label in enumerate(self.get_labels())}
+        with open(os.path.join(out_dir, "WSC.jsonl"), "w") as pred_fh:
+            for idx, pred in enumerate(preds):
+                pred_label = idx2label[int(pred)]
+                pred_fh.write(f"{json.dumps({'idx': idx, 'label': pred_label})}\n")
+        logger.info(f"Wrote {len(preds)} predictions to {out_dir}.")
 
 
 superglue_tasks_num_labels = {

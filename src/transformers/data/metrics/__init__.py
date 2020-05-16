@@ -161,6 +161,7 @@ if _has_sklearn:
         elif task_name == "record":
             assert len(guids) == len(preds), "Different number of predictions and IDs!"
             qst2ans = defaultdict(list)
+
             # iterate over examples and aggregate statistics
             for idx, pred, label in zip(guids, preds, labels):
                 qst_idx = (idx[0], idx[1])

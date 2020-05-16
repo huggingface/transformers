@@ -29,7 +29,6 @@ import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
-import ipdb
 
 from transformers import (
     WEIGHTS_NAME,
@@ -107,6 +106,17 @@ MODEL_CLASSES = {
 
     "bert": (BertConfig, BertTokenizer, {"classification": BertForSequenceClassification, "span_classification": BertForSpanClassification}),
     "roberta": (RobertaConfig, RobertaTokenizer, {"classification": RobertaForSequenceClassification, "span_classification": RobertaForSpanClassification}),
+}
+
+TASK2FILENAME = {
+                 "boolq": "BoolQ.jsonl",
+                 "cb": "CB.jsonl",
+                 "copa": "COPA.jsonl",
+                 "multirc": "MultiRC.jsonl",
+                 "record": "ReCoRD.jsonl",
+                 "rte": "RTE.jsonl",
+                 "wic": "WiC.jsonl",
+                 "wsc": "WSC.jsonl",
 }
 
 
@@ -267,7 +277,7 @@ def train(args, train_dataset, model, tokenizer):
                     if (
                         args.local_rank == -1 and args.log_evaluate_during_training and results is None
                     ):  # Only evaluate when single GPU otherwise metrics may not average well
-                        results = evaluate(args, model, tokenizer, use_tqdm=False)
+                        results, _, _ = evaluate(args, model, tokenizer, use_tqdm=False)
                         for key, value in results.items():
                             eval_key = "eval_{}".format(key)
                             logs[eval_key] = value
@@ -285,7 +295,7 @@ def train(args, train_dataset, model, tokenizer):
 
                 if args.local_rank in [-1, 0] and args.eval_and_save_steps > 0 and global_step % args.eval_and_save_steps == 0:
                     # evaluate
-                    results = evaluate(args, model, tokenizer, use_tqdm=False)
+                    results, _, _ = evaluate(args, model, tokenizer, use_tqdm=False)
                     for key, value in results.items():
                         logs[f"eval_{key}"] = value
                     logger.info(json.dumps({**logs, **{"step": global_step}}))
@@ -330,7 +340,7 @@ def train(args, train_dataset, model, tokenizer):
     return global_step, tr_loss / global_step
 
 
-def evaluate(args, model, tokenizer, prefix="", use_tqdm=True):
+def evaluate(args, model, tokenizer, split="dev", prefix="", use_tqdm=True):
     # Loop to handle MNLI double evaluation (matched, mis-matched)
     eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
     eval_outputs_dirs = (args.output_dir, args.output_dir + "-MM") if args.task_name == "mnli" else (args.output_dir,)
@@ -338,9 +348,9 @@ def evaluate(args, model, tokenizer, prefix="", use_tqdm=True):
     results = {}
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
         if eval_task == "record":
-            eval_dataset, eval_answers = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
+            eval_dataset, eval_answers = load_and_cache_examples(args, eval_task, tokenizer, split=split)
         else:
-            eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True)
+            eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, split=split)
             eval_answers = None
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
@@ -356,7 +366,7 @@ def evaluate(args, model, tokenizer, prefix="", use_tqdm=True):
             model = torch.nn.DataParallel(model)
 
         # Eval!
-        logger.info("***** Running evaluation {} *****".format(prefix))
+        logger.info(f"***** Running evaluation: {prefix} on {split} *****")
         logger.info("  Num examples = %d", len(eval_dataset))
         logger.info("  Batch size = %d", args.eval_batch_size)
         eval_loss = 0.0
@@ -365,6 +375,7 @@ def evaluate(args, model, tokenizer, prefix="", use_tqdm=True):
         out_label_ids = None
         ex_ids = None
         eval_dataloader = tqdm(eval_dataloader, desc="Evaluating") if use_tqdm else eval_dataloader
+        debug_idx = 0
         for batch in eval_dataloader:
             model.eval()
             batch = tuple(t.to(args.device) for t in batch)
@@ -391,6 +402,9 @@ def evaluate(args, model, tokenizer, prefix="", use_tqdm=True):
                 preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
                 out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
                 ex_ids.append(guids.detach().cpu().numpy())
+            debug_idx += 1
+            if debug_idx > 10:
+                break
 
         ex_ids = np.concatenate(ex_ids, axis=0)
         eval_loss = eval_loss / nb_eval_steps
@@ -404,16 +418,16 @@ def evaluate(args, model, tokenizer, prefix="", use_tqdm=True):
 
         output_eval_file = os.path.join(eval_output_dir, prefix, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results {} *****".format(prefix))
+            logger.info(f"***** {split} results: {prefix} *****")
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
 
-    return results
+    return results, preds, ex_ids
 
 
-def load_and_cache_examples(args, task, tokenizer, evaluate=False):
-    if args.local_rank not in [-1, 0] and not evaluate:
+def load_and_cache_examples(args, task, tokenizer, split="train"):
+    if args.local_rank not in [-1, 0] and split not in ["dev", "test"]:
         torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
     processor = processors[task]()
@@ -422,7 +436,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
     cached_tensors_file = os.path.join(
         args.data_dir,
         "tensors_{}_{}_{}_{}".format(
-            "dev" if evaluate else "train",
+            split,
             list(filter(None, args.model_name_or_path.split("/"))).pop(),
             str(args.max_seq_length),
             str(task),
@@ -435,19 +449,16 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
         logger.info("\tFinished loading tensors")
         logger.info(f"\tin {time.time() - start_time}s")
 
-        if args.task_name == "record" and evaluate:
-            answers = processor.get_answers(args.data_dir, "dev")
-            return dataset, answers
-        else:
-            return dataset
     else:
         # no cached tensors, process data from scratch
         logger.info("Creating features from dataset file at %s", args.data_dir)
         label_list = processor.get_labels()
-        if task in ["mnli", "mnli-mm"] and args.model_type in ["roberta", "xlmroberta"]:
-            # HACK(label indices are swapped in RoBERTa pretrained model)
-            label_list[1], label_list[2] = label_list[2], label_list[1]
-        get_examples = processor.get_dev_examples if evaluate else processor.get_train_examples
+        if split == "train":
+            get_examples = processor.get_train_examples
+        elif split == "dev":
+            get_examples = processor.get_dev_examples
+        elif split == "test":
+            get_examples = processor.get_test_examples
         examples = get_examples(args.data_dir)
         features = convert_examples_to_features(
             examples,
@@ -460,7 +471,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
         )
         logger.info("\tFinished creating features")
-        if args.local_rank == 0 and not evaluate:
+        if args.local_rank == 0 and not split in ["dev", "train"]:
             torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
         # Convert to Tensors and build dataset
@@ -487,8 +498,8 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False):
             torch.save(dataset, cached_tensors_file)
             logger.info("\tFinished saving tensors")
 
-    if args.task_name == "record" and evaluate:
-        answers = processor.get_answers(args.data_dir, "dev")
+    if args.task_name == "record" and split in ["dev", "test"]:
+        answers = processor.get_answers(args.data_dir, split)
         return dataset, answers
     else:
         return dataset
@@ -600,12 +611,14 @@ def main():
     parser.add_argument("--log_energy_consumption", action="store_true", help="Whether to track energy consumption")
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
     parser.add_argument("--eval_and_save_steps", type=int, default=500, help="Save checkpoint every X updates steps.")
-    parser.add_argument("--save_only_best", action="stroe_true", help="Save only when hit best validation score.")
+    parser.add_argument("--save_only_best", action="store_true", help="Save only when hit best validation score.")
     parser.add_argument(
         "--eval_all_checkpoints",
         action="store_true",
         help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number",
     )
+    parser.add_argument("--evaluate_test", action="store_true", help="Evaluate on the test splits.")
+    parser.add_argument("--skip_evaluate_dev", action="store_true", help="Skip final evaluation on the dev splits.")
     parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
     parser.add_argument(
         "--overwrite_output_dir", action="store_true", help="Overwrite the content of the output directory",
@@ -760,7 +773,6 @@ def main():
         model.to(args.device)
 
     # Evaluation
-    results = {}
     if args.do_eval and args.local_rank in [-1, 0]:
 
         # Launch impact tracker
@@ -778,17 +790,22 @@ def main():
             )
             logging.getLogger("transformers.modeling_utils").setLevel(logging.WARN)  # Reduce logging
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
+
         for checkpoint in checkpoints:
             global_step = checkpoint.split("-")[-1]# if len(checkpoints) > 1 else ""
             prefix = checkpoint.split("/")[-1] if checkpoint.find("checkpoint") != -1 else ""
-
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
-            result = evaluate(args, model, tokenizer, prefix=prefix)
-            result = dict((f"{k}_{global_step}", v) for k, v in result.items())
-            results.update(result)
 
-    return results
+            if not args.skip_evaluate_dev:
+                result, _, _ = evaluate(args, model, tokenizer, prefix=prefix)
+                result = dict((f"{k}_{global_step}", v) for k, v in result.items())
+
+            if args.evaluate_test:
+                result, preds, ex_ids = evaluate(args, model, tokenizer, split="test", prefix=prefix)
+                processor.write_preds(preds, ex_ids, args.output_dir)
+
+                # write predictions
 
 
 if __name__ == "__main__":
