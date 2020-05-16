@@ -16,6 +16,8 @@
 
 import unittest
 
+import torch
+
 from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
@@ -207,3 +209,31 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in list(LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
             model = LongformerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+class LongformerModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_no_head(self):
+        model = LongformerModel.from_pretrained("longformer-base-4096")
+        input_ids = torch.tensor([[0] + [20920, 232, 328, 1437,] * 1000 + [2]])  # long input
+        output = model(input_ids)[0]
+        expected_output_sum = torch.tensor(74518.2344)
+        expected_output_mean = torch.tensor(0.0242)
+
+        self.assertTrue(torch.allclose(output.sum(), expected_output_sum, atol=1e-4))
+        self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
+
+    @slow
+    def test_inference_masked_lm(self):
+        model = LongformerForMaskedLM.from_pretrained("longformer-base-4096")
+        input_ids = torch.tensor([[0] + [20920, 232, 328, 1437,] * 1000 + [2]])  # long input
+
+        loss, prediction_scores = model(input_ids, masked_lm_labels=input_ids)
+
+        expected_loss = torch.tensor(0.0620)
+        expected_prediction_scores_sum = torch.tensor(-6.1599e08)
+        expected_prediction_scores_mean = torch.tensor(-3.0622)
+
+        self.assertTrue(torch.allclose(loss, expected_loss, atol=1e-4))
+        self.assertTrue(torch.allclose(prediction_scores.sum(), expected_prediction_scores_sum, atol=1e-4))
+        self.assertTrue(torch.allclose(prediction_scores.mean(), expected_prediction_scores_mean, atol=1e-4))
