@@ -117,8 +117,8 @@ class LongformerSelfAttention(nn.Module):
             diagonals_list.append(diagonal_mask)
         mask = torch.stack(diagonals_list, dim=-1)
         mask = mask[None, :, None, :]
-        ending_mask = mask.flip(dims=(1, 3)).bool().to(device)
-        return affected_seqlen, mask.bool().to(device), ending_mask
+        ending_mask = mask.flip(dims=(1, 3)).to(torch.uint8).to(device)
+        return affected_seqlen, mask.to(torch.uint8).to(device), ending_mask
 
     def _mask_invalid_locations(self, input_tensor, w) -> torch.Tensor:
         # TODO: replace this function and `_get_invalid_locations_mask` with a simpler one that doesn't require lru_cache
@@ -309,9 +309,7 @@ class LongformerSelfAttention(nn.Module):
 
         if key_padding_mask is not None:
             # softmax sometimes inserts NaN if all positions are masked, replace them with 0
-            attn_weights = torch.masked_fill(
-                attn_weights, key_padding_mask.unsqueeze(-1).unsqueeze(-1), 0.0
-            )
+            attn_weights = torch.masked_fill(attn_weights, key_padding_mask.unsqueeze(-1).unsqueeze(-1), 0.0)
 
         attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
         v = v.view(seqlen, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
