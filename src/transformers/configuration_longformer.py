@@ -65,9 +65,9 @@ class LongformerConfig(RobertaConfig):
                 Size of an attention window around each token. If :obj:`int`, use the same size for all layers.
                 To specify a different window size for each layer, use a :obj:`List[int]` where
                 `len(attention_window) == num_hidden_layers`.
-            attention_mode (:obj:`str`, optional, possible values ['longformer', 'n2'], defaults to 'longformer'):
-                Type of selfattention. Use 'longformer' for :obj:`LongformerSelfAttention` or 'n2' for full
-                n^2 selfattention using standard :obj:`modeling_bert.BertSelfAttention`. Note that full n^2
+            attention_mode (:obj:`str`, optional, possible values ['longformer', 'bert'], defaults to 'longformer'):
+                Type of selfattention. Use 'longformer' for :obj:`LongformerSelfAttention` or 'bert' for
+                standard BERT full n^2 self attention using :obj:`modeling_bert.BertSelfAttention`. Note that full n^2
                 selfattention is supported just for comparison, but it will OOM for long sequences.
         """
         super().__init__(**kwargs)
