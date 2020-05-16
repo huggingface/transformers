@@ -150,7 +150,7 @@ class Attention(nn.Module):
 
         if attention_mask is not None:
             # Apply the attention mask
-            w = w + attention_mask.transpose(-1, 0)
+            w = w + attention_mask
 
         w = torch.softmax(w, dim=-1)
         w = self.attn_dropout(w)
@@ -159,10 +159,11 @@ class Attention(nn.Module):
         if head_mask is not None:
             w = w * head_mask
 
-        outputs = [torch.matmul(w, v)]
+        wv = torch.matmul(w, v)
         if self.output_attentions:
-            outputs.append(w)
-        return outputs
+            return wv, w
+        else:
+            return (wv, )
 
     def merge_heads(self, x):
         x = x.transpose(2, 1).contiguous()
@@ -199,8 +200,7 @@ class Attention(nn.Module):
         a = self.c_proj(a)
         a = self.resid_dropout(a)
 
-        outputs = [a, present] + attn_outputs[1:]
-        return outputs  # a, present, (attentions)
+        return a, present, attn_outputs[1:]
 
 
 class MLP(nn.Module):
@@ -241,8 +241,7 @@ class Block(nn.Module):
         m = self.mlp(self.ln_2(x))
         x = x + m
 
-        outputs = [x] + output_attn[1:]
-        return outputs  # x, present, (attentions)
+        return x, output_attn[1:]
 
 
 class GPT2PreTrainedModel(PreTrainedModel):
@@ -450,22 +449,24 @@ class GPT2Model(GPT2PreTrainedModel):
         # Attention mask.
         if attention_mask is not None:
             assert batch_size > 0, "batch_size has to be defined and > 0"
-            attention_mask = attention_mask.view(batch_size, -1)
-
-            # We create a 3D attention mask from a 2D tensor mask.
-            # Sizes are [batch_size, 1, 1, to_seq_length]
-            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
-            # this attention mask is more simple than the triangular masking of causal attention
-            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
             # positions we want to attend and -10000.0 for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
+
+            # Computation is done over contiguous tensor (no view / unsqueeze) so probably faster
+            # Do the shaping ops afterwards
             attention_mask = attention_mask.to(self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * -10000.0
+
+            # We create a 3D attention mask from a 2D tensor mask.
+            # Sizes are [batch_size, 1, 1, to_seq_length]
+            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+            # this attention mask is more simple than the triangular masking of causal attention
+            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+            attention_mask = attention_mask.view(batch_size, 1, 1, -1)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
