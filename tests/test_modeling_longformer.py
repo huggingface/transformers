@@ -47,7 +47,7 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
             self,
             parent,
             batch_size=13,
-            seq_length=8,
+            seq_length=7,
             is_training=True,
             use_input_mask=True,
             use_token_type_ids=True,
@@ -98,6 +98,13 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
             # returns attention of shape [num_attention_heads, encoder_seq_length, self.attention_window + 1]
             # because its local attention only attends to `self.attention_window + 1` locations
             self.key_length = self.attention_window + 1
+
+            # because of padding `encoder_seq_length`, is different from `seq_length`. Relevant for
+            # the `test_attention_outputs` and `test_hidden_states_output` tests
+            self.encoder_seq_length = (
+                self.seq_length
+                + (self.attention_window - self.seq_length % self.attention_window) % self.attention_window
+            )
 
         def prepare_config_and_inputs(self):
             input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
