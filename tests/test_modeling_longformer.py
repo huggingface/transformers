@@ -215,7 +215,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = LongformerModel.from_pretrained("longformer-base-4096")
-        input_ids = torch.tensor([[0] + [20920, 232, 328, 1437,] * 1000 + [2]])  # long input
+        input_ids = torch.tensor([[0] + [20920, 232, 328, 1437, ] * 1000 + [2]])  # long input
         output = model(input_ids)[0]
         expected_output_sum = torch.tensor(74518.2344)
         expected_output_mean = torch.tensor(0.0242)
@@ -226,7 +226,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = LongformerForMaskedLM.from_pretrained("longformer-base-4096")
-        input_ids = torch.tensor([[0] + [20920, 232, 328, 1437,] * 1000 + [2]])  # long input
+        input_ids = torch.tensor([[0] + [20920, 232, 328, 1437, ] * 1000 + [2]])  # long input
 
         loss, prediction_scores = model(input_ids, masked_lm_labels=input_ids)
 
