@@ -275,7 +275,7 @@ class LongformerSelfAttention(nn.Module):
             remove_from_windowed_attention_mask = remove_from_windowed_attention_mask.unsqueeze(dim=-1).unsqueeze(
                 dim=-1
             )
-            # cast to float/half then replace 1's with -inf
+            # cast to fp32/fp16 then replace 1's with -inf
             float_mask = remove_from_windowed_attention_mask.type_as(q).masked_fill(
                 remove_from_windowed_attention_mask, -10000.0
             )
@@ -301,17 +301,18 @@ class LongformerSelfAttention(nn.Module):
             # (batch_size, seq_len, num_heads, extra attention count + 2*window+1)
             attn_weights = torch.cat((selected_attn_weights, attn_weights), dim=-1)
 
-        attn_weights_float = F.softmax(attn_weights, dim=-1, dtype=torch.float32)  # use fp32 for numerical stability
+        attn_weights_fp32 = F.softmax(attn_weights, dim=-1, dtype=torch.float32)  # use fp32 for numerical stability
+        attn_weights = attn_weights_fp32.type_as(attn_weights)
+
         if key_padding_mask is not None:
             # softmax sometimes inserts NaN if all positions are masked, replace them with 0
-            attn_weights_float = torch.masked_fill(
-                attn_weights_float, key_padding_mask.unsqueeze(-1).unsqueeze(-1), 0.0
+            attn_weights = torch.masked_fill(
+                attn_weights, key_padding_mask.unsqueeze(-1).unsqueeze(-1), 0.0
             )
 
-        attn_weights = attn_weights_float.type_as(attn_weights)
-        attn_probs = F.dropout(attn_weights_float.type_as(attn_weights), p=self.dropout, training=self.training)
+        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
         v = v.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
-        attn = 0
+        attn = None
         if extra_attention_mask is not None:
             selected_attn_probs = attn_probs.narrow(-1, 0, max_num_extra_indices_per_batch)
             selected_v = v.new_zeros(batch_size, max_num_extra_indices_per_batch, self.num_heads, self.head_dim)
@@ -324,11 +325,12 @@ class LongformerSelfAttention(nn.Module):
             attn_probs = attn_probs.narrow(
                 -1, max_num_extra_indices_per_batch, attn_probs.size(-1) - max_num_extra_indices_per_batch
             ).contiguous()
+        if attn is None:
+            attn = self._sliding_chunks_matmul_pv(attn_probs, v, self.one_sided_attention_window_size)
+        else:
+            attn += self._sliding_chunks_matmul_pv(attn_probs, v, self.one_sided_attention_window_size)
 
-        attn += self._sliding_chunks_matmul_pv(attn_probs, v, self.one_sided_attention_window_size)
-
-        attn = attn.type_as(hidden_states)
-        assert list(attn.size()) == [batch_size, seq_len, self.num_heads, self.head_dim]
+        assert attn.size() == (batch_size, seq_len, self.num_heads, self.head_dim), "Unexpected size"
         attn = attn.transpose(0, 1).reshape(seq_len, batch_size, embed_dim).contiguous()
 
         # For this case, we'll just recompute the attention for these indices
