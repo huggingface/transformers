@@ -21,6 +21,9 @@ import json
 import logging
 from collections import defaultdict
 
+import numpy as np
+from scipy.special import softmax
+
 from ...file_utils import is_tf_available
 from .utils import DataProcessor, InputExample, InputFeatures, SpanClassificationExample, SpanClassificationFeatures
 
@@ -576,11 +579,27 @@ class RecordProcessor(DataProcessor):
         return examples
 
     # TODO(AW)
-    def write_preds(self, preds, ex_ids, out_dir):
+    def write_preds(self, preds, ex_ids, out_dir, answers):
         """Write predictions in SuperGLUE format."""
+        # iterate over examples and aggregate predictions
+        qst2ans = defaultdict(list)
+        for idx, pred in zip(ex_ids, preds):
+            qst_idx = (idx[0], idx[1])
+            qst2ans[qst_idx].append((idx[2], pred))
+
         with open(os.path.join(out_dir, "ReCoRD.jsonl"), "w") as pred_fh:
-            for pred in preds:
-                pred_fh.write(f"{pred}\n")
+            for qst, idxs_and_prds in qst2ans.items():
+                cands, golds = answers[qst]
+                psg_idx, qst_idx = map(int, qst)
+
+                idxs_and_prds.sort(key=lambda x: x[0])
+                logits = np.vstack([i[1] for i in idxs_and_prds])
+
+                # take the most probable choice as the prediction
+                pred_idx = softmax(logits, axis=1)[:, -1].argmax().item()
+                pred = cands[pred_idx]
+
+                pred_fh.write(f"{json.dumps({'idx': qst_idx, 'label': pred})}\n")
         logger.info(f"Wrote predictions to {out_dir}.")
 
 class RteProcessor(DataProcessor):

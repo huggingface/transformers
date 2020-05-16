@@ -402,9 +402,9 @@ def evaluate(args, model, tokenizer, split="dev", prefix="", use_tqdm=True):
                 preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
                 out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
                 ex_ids.append(guids.detach().cpu().numpy())
-            debug_idx += 1
-            if debug_idx > 10:
-                break
+            #debug_idx += 1
+            #if debug_idx > 10:
+            #    break
 
         ex_ids = np.concatenate(ex_ids, axis=0)
         eval_loss = eval_loss / nb_eval_steps
@@ -412,16 +412,18 @@ def evaluate(args, model, tokenizer, split="dev", prefix="", use_tqdm=True):
             preds = np.argmax(preds, axis=1)
         elif args.output_mode == "regression":
             preds = np.squeeze(preds)
-        logging.info(f"predictions: {preds}")
-        result = compute_metrics(eval_task, preds, out_label_ids, guids=ex_ids, answers=eval_answers)
-        results.update(result)
-
-        output_eval_file = os.path.join(eval_output_dir, prefix, "eval_results.txt")
-        with open(output_eval_file, "w") as writer:
-            logger.info(f"***** {split} results: {prefix} *****")
-            for key in sorted(result.keys()):
-                logger.info("  %s = %s", key, str(result[key]))
-                writer.write("%s = %s\n" % (key, str(result[key])))
+        #logging.info(f"predictions: {preds}")
+        if split != "test":
+            # don't have access to test labels, so skip evaluating on them
+            # NB(AW): forcing evaluation on ReCoRD on test (no labels) will error
+            result = compute_metrics(eval_task, preds, out_label_ids, guids=ex_ids, answers=eval_answers)
+            results.update(result)
+            output_eval_file = os.path.join(eval_output_dir, prefix, "eval_results.txt")
+            with open(output_eval_file, "w") as writer:
+                logger.info(f"***** {split} results: {prefix} *****")
+                for key in sorted(result.keys()):
+                    logger.info("  %s = %s", key, str(result[key]))
+                    writer.write("%s = %s\n" % (key, str(result[key])))
 
     return results, preds, ex_ids
 
@@ -803,7 +805,11 @@ def main():
 
             if args.evaluate_test:
                 result, preds, ex_ids = evaluate(args, model, tokenizer, split="test", prefix=prefix)
-                processor.write_preds(preds, ex_ids, args.output_dir)
+                if args.task_name == "record":
+                    answers = processor.get_answers(args.data_dir, "test")
+                    processor.write_preds(preds, ex_ids, args.output_dir, answers=answers)
+                else:
+                    processor.write_preds(preds, ex_ids, args.output_dir)
 
                 # write predictions
 
