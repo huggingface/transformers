@@ -182,7 +182,7 @@ class MonoColumnInputTestCase(unittest.TestCase):
         mandatory_keys = {"entity_group", "word", "score"}
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
         invalid_inputs = [None]
-        for tokenizer, model, config in TF_NER_FINETUNED_MODELS:
+        for tokenizer, model, config in NER_FINETUNED_MODELS:
             nlp = pipeline(
                 task="ner", model=model, config=config, tokenizer=tokenizer, framework="tf", grouped_entities=True
             )
