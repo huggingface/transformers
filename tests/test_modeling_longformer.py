@@ -30,7 +30,6 @@ if is_torch_available():
         LongformerModel,
         LongformerForMaskedLM,
     )
-    from transformers.modeling_longformer import LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 class LongformerModelTester(object):
@@ -210,12 +209,6 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_longformer_for_masked_lm(*config_and_inputs)
 
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in list(LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = LongformerModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
-
 
 class LongformerModelIntegrationTest(unittest.TestCase):
     @slow
@@ -234,6 +227,8 @@ class LongformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = LongformerForMaskedLM.from_pretrained("longformer-base-4096")
+
+        # 'Hello world! ' repeated 1000 times
         input_ids = torch.tensor([[0] + [20920, 232, 328, 1437] * 1000 + [2]])  # long input
 
         loss, prediction_scores = model(input_ids, masked_lm_labels=input_ids)
