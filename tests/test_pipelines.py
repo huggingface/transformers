@@ -36,6 +36,7 @@ expected_fill_mask_result = [
         {"sequence": "<s> The largest city in France is Lyon</s>", "score": 0.21112334728240967, "token": 12790},
     ],
 ]
+SUMMARIZATION_KWARGS = dict(num_beams=2, min_length=2, max_length=5)
 
 
 class DefaultArgumentHandlerTestCase(unittest.TestCase):
@@ -119,10 +120,11 @@ class MonoColumnInputTestCase(unittest.TestCase):
         invalid_inputs: List = [None],
         expected_multi_result: Optional[List] = None,
         expected_check_keys: Optional[List[str]] = None,
+        **kwargs,
     ):
         self.assertIsNotNone(nlp)
 
-        mono_result = nlp(valid_inputs[0])
+        mono_result = nlp(valid_inputs[0], **kwargs)
         self.assertIsInstance(mono_result, list)
         self.assertIsInstance(mono_result[0], (dict, list))
 
@@ -274,35 +276,42 @@ class MonoColumnInputTestCase(unittest.TestCase):
 
     @require_torch
     def test_torch_summarization(self):
-        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        valid_inputs = ["a string", ["a string", "another string "]]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
         for model in SUMMARIZATION_FINETUNED_MODELS:
             nlp = pipeline(task="summarization", model=model, tokenizer=model)
-            self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, invalid_inputs=invalid_inputs)
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, mandatory_keys, invalid_inputs=invalid_inputs, **SUMMARIZATION_KWARGS
+            )
 
+    @slow
     @require_tf
     def test_tf_summarization(self):
-        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        valid_inputs = ["A string", ["list of strings", "short"]]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["summary_text"]
         for model_name in TF_SUMMARIZATION_FINETUNED_MODELS:
             nlp = pipeline(task="summarization", model=model_name, tokenizer=model_name, framework="tf",)
-            self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, invalid_inputs=invalid_inputs)
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, mandatory_keys, invalid_inputs=invalid_inputs, **SUMMARIZATION_KWARGS
+            )
 
     @require_torch
     def test_torch_translation(self):
-        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        valid_inputs = ["A string", ["list of strings", "short"]]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["translation_text"]
         for model_name, task in TRANSLATION_FINETUNED_MODELS:
             nlp = pipeline(task=task, model=model_name, tokenizer=model_name)
-            self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys, invalid_inputs)
+            self._test_mono_column_pipeline(
+                nlp, valid_inputs, mandatory_keys, invalid_inputs,
+            )
 
     @require_tf
     @slow
     def test_tf_translation(self):
-        valid_inputs = ["A string like this", ["list of strings entry 1", "list of strings v2"]]
+        valid_inputs = ["A string", ["list of strings", "short"]]
         invalid_inputs = [4, "<mask>"]
         mandatory_keys = ["translation_text"]
         for model, task in TF_TRANSLATION_FINETUNED_MODELS:
