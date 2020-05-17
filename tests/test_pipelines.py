@@ -164,10 +164,9 @@ class MonoColumnInputTestCase(unittest.TestCase):
     def test_ner_grouped(self):
         mandatory_keys = {"entity_group", "word", "score"}
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
-        invalid_inputs = [None]
-        for tokenizer, model, config in NER_FINETUNED_MODELS:
-            nlp = pipeline(task="ner", model=model, config=config, tokenizer=tokenizer, grouped_entities=True)
-            self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, grouped_entities=True)
+            self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys)
 
     @require_tf
     def test_tf_ner(self):
@@ -181,12 +180,9 @@ class MonoColumnInputTestCase(unittest.TestCase):
     def test_tf_ner_grouped(self):
         mandatory_keys = {"entity_group", "word", "score"}
         valid_inputs = ["HuggingFace is solving NLP one commit at a time.", "HuggingFace is based in New-York & Paris"]
-        invalid_inputs = [None]
-        for tokenizer, model, config in NER_FINETUNED_MODELS:
-            nlp = pipeline(
-                task="ner", model=model, config=config, tokenizer=tokenizer, framework="tf", grouped_entities=True
-            )
-            self._test_mono_column_pipeline(nlp, valid_inputs, invalid_inputs, mandatory_keys)
+        for model_name in NER_FINETUNED_MODELS:
+            nlp = pipeline(task="ner", model=model_name, tokenizer=model_name, framework="tf", grouped_entities=True)
+            self._test_mono_column_pipeline(nlp, valid_inputs, mandatory_keys)
 
     @require_torch
     def test_torch_sentiment_analysis(self):
