@@ -18,11 +18,10 @@ from transformers import (
     AutoModelWithLMHead,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
+    PreTrainedTokenizer, PretrainedConfig, PreTrainedModel
 )
 
-
 logger = logging.getLogger(__name__)
-
 
 MODEL_MODES = {
     "base": AutoModel,
@@ -43,28 +42,38 @@ def set_seed(args: argparse.Namespace):
 
 
 class BaseTransformer(pl.LightningModule):
-    def __init__(self, hparams: argparse.Namespace, num_labels=None, mode="base", **config_kwargs):
+    def __init__(self, hparams: argparse.Namespace, num_labels=None, mode="base",
+                 config=None, tokenizer=None, model=None, **config_kwargs):
         "Initialize a model."
 
         super().__init__()
         self.hparams = hparams
         cache_dir = self.hparams.cache_dir if self.hparams.cache_dir else None
-        self.config = AutoConfig.from_pretrained(
-            self.hparams.config_name if self.hparams.config_name else self.hparams.model_name_or_path,
-            **({"num_labels": num_labels} if num_labels is not None else {}),
-            cache_dir=cache_dir,
-            **config_kwargs,
-        )
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.hparams.tokenizer_name if self.hparams.tokenizer_name else self.hparams.model_name_or_path,
-            cache_dir=cache_dir,
-        )
-        self.model = MODEL_MODES[mode].from_pretrained(
-            self.hparams.model_name_or_path,
-            from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
-            config=self.config,
-            cache_dir=cache_dir,
-        )
+        if config is None:
+            self.config = AutoConfig.from_pretrained(
+                self.hparams.config_name if self.hparams.config_name else self.hparams.model_name_or_path,
+                **({"num_labels": num_labels} if num_labels is not None else {}),
+                cache_dir=cache_dir,
+                **config_kwargs,
+            )
+        else:
+            self.config: PretrainedConfig = config
+        if tokenizer is None:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.hparams.tokenizer_name if self.hparams.tokenizer_name else self.hparams.model_name_or_path,
+                cache_dir=cache_dir,
+            )
+        else:
+            self.tokenizer: PreTrainedTokenizer = tokenizer
+        if model is None:
+            self.model: PretrainedModel = MODEL_MODES[mode].from_pretrained(
+                self.hparams.model_name_or_path,
+                from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
+                config=self.config,
+                cache_dir=cache_dir,
+            )
+        else:
+            self.model: PretrainedModel = model
 
     def is_logger(self):
         return self.trainer.proc_rank <= 0
@@ -112,9 +121,9 @@ class BaseTransformer(pl.LightningModule):
         dataloader = self.load_dataset("train", train_batch_size)
 
         t_total = (
-            (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.n_gpu)))
-            // self.hparams.gradient_accumulation_steps
-            * float(self.hparams.num_train_epochs)
+                (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.n_gpu)))
+                // self.hparams.gradient_accumulation_steps
+                * float(self.hparams.num_train_epochs)
         )
         scheduler = get_linear_schedule_with_warmup(
             self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
@@ -219,7 +228,7 @@ def add_generic_args(parser, root_dir):
         type=str,
         default="O1",
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-        "See details at https://nvidia.github.io/apex/amp.html",
+             "See details at https://nvidia.github.io/apex/amp.html",
     )
 
     parser.add_argument("--n_gpu", type=int, default=1)

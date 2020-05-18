@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 class SummarizationTrainer(BaseTransformer):
     mode = "language-modeling"
 
-    def __init__(self, hparams):
-        super().__init__(hparams, num_labels=None, mode=self.mode)
+    def __init__(self, hparams, **kwargs):
+        super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
@@ -160,10 +160,11 @@ class SummarizationTrainer(BaseTransformer):
 
 
 from .bart_distiller import copy_decoder_layers, init_student
-from transformers import BartForConditionalGeneration
+from transformers import BartForConditionalGeneration, BartConfig, BartTokenizer
 import torch.nn.functional as F
 
 from torch import nn
+from pathlib import Path
 
 
 def freeze_part(model: nn.Module):
@@ -174,20 +175,41 @@ def freeze_part(model: nn.Module):
 class SummarizationDistiller(SummarizationTrainer):
 
     def __init__(self, hparams):
-        super().__init__(hparams, num_labels=None, mode=self.mode)
-        teacher = BartForConditionalGeneration.from_pretrained(args.teacher).eval()
-        init_student(self.model, teacher)
-        copy_decoder_layers(self.model, teacher)
+
+        # Dump empty student model at a path, then call from_pretrained on it
+        teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher).eval()
+        student_updates = {'decoder_layers': teacher.config.decoder_layers//2}
+        if student_updates['decoder_layers'] == 6:
+            layers_to_copy = [0, 2, 4, 7, 9, 11]
+        else:
+            layers_to_copy = list(range(teacher.config.decoder_layers))[::2]
+        kw = teacher.config.to_diff_dict()
+        kw.update(student_updates)
+        student_cfg = BartConfig(**kw)
+        student_model = BartForConditionalGeneration(student_cfg)
+        student_model, info = init_student(student_model, teacher)
+        copy_decoder_layers(teacher, student_model, l2copy=layers_to_copy)
+        Path(hparams.model_name_or_path).mkdir(exist_ok=True)
+        student_model.save_pretrained(hparams.model_name_or_path)
+        tokenizer = BartTokenizer.from_pretrained('bart-large')
+        super().__init__(hparams, model=student_model, config=student_cfg, tokenizer=tokenizer)
+        self.dataset_kwargs: dict = dict(
+            data_dir=self.hparams.data_dir,
+            max_source_length=self.hparams.max_source_length,
+            max_target_length=self.hparams.max_target_length,
+        )
         self.model: BartForConditionalGeneration
         self.model.teacher = teacher
+        self.teacher = teacher
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.freeze_stuff()
+        self.temperature = 2.
 
     def freeze_stuff(self):
         # freeze stuff
         freeze_part(self.model.model.encoder)
         freeze_part(self.model.teacher)
-        freeze_part(self.model.shared)
+        freeze_part(self.model.model.shared)
         d = self.model.model.decoder
         freeze_part(d.embed_positions)
         freeze_part(d.embed_tokens)
@@ -198,7 +220,8 @@ class SummarizationDistiller(SummarizationTrainer):
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
-        sloss, slogits, *trash = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids,
+        sloss, slogits, *trash = self(source_ids, attention_mask=source_mask,
+                                      decoder_input_ids=y_ids,
                                       lm_labels=lm_labels, )
         with torch.no_grad():
             tloss, tlogits, *trash = self.teacher(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids,
@@ -207,9 +230,15 @@ class SummarizationDistiller(SummarizationTrainer):
         return loss_ce
 
     def calc_ce_loss(self, mask, s_logits, t_logits):
-        s_logits_slct = torch.masked_select(s_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
+        if mask is not None:
+            mask = invert_mask(mask)
+            s_logits_slct = torch.masked_select(s_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
+            t_logits_slct = torch.masked_select(t_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
+        else:
+            # mask has 1s at padding_idx
+            t_logits_slct = t_logits
+            s_logits_slct = s_logits  # (bs * seq_length * voc_size) modulo the 1s in mask
         s_logits_slct = s_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
-        t_logits_slct = torch.masked_select(t_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
         t_logits_slct = t_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
         assert t_logits_slct.size() == s_logits_slct.size()
         loss_ce = (
@@ -234,7 +263,7 @@ class SummarizationDistiller(SummarizationTrainer):
         target = s_hidden_states_slct.new(s_hidden_states_slct.size(0)).fill_(1)  # (bs * seq_length,)
         loss_cos = self.cosine_loss_fct(s_hidden_states_slct, t_hidden_states_slct, target)
         return loss_cos
-
+from transformers.modeling_bart import invert_mask
 
 def main(args):
     # If output_dir not provided, a folder will be generated in pwd

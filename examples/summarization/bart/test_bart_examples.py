@@ -108,10 +108,9 @@ class TestBartExamples(unittest.TestCase):
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
             data_dir=tmp_dir, model_type="bart", train_batch_size=2, eval_batch_size=2, n_gpu=0, output_dir=output_dir,
-            do_predict=True,
+            do_predict=True, model_name_or_path='student', teacher=DEFAULT_ARGS['model_name_or_path'],
         )
         run_distiller(argparse.Namespace(**args_d))
-        main(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
         expected_contents = {
             "checkpointepoch=0.ckpt",
