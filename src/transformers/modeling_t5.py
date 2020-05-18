@@ -151,8 +151,8 @@ class T5LayerNorm(nn.Module):
     def forward(self, x):
         # layer norm should always be calculated in float32
         variance = x.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        x = (x / torch.sqrt(variance + self.variance_epsilon))
-            
+        x = x / torch.sqrt(variance + self.variance_epsilon)
+
         if self.weight.dtype == torch.float16:
             x = x.to(torch.float16)
         return self.weight * x
@@ -695,7 +695,9 @@ class T5Stack(T5PreTrainedModel):
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
             encoder_seq_length = encoder_hidden_states.shape[1]
-            encoder_attention_mask = torch.ones(batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long)
+            encoder_attention_mask = torch.ones(
+                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
+            )
 
         # initialize past_key_value_states with `None` if past does not exist
         if past_key_value_states is None:
@@ -708,7 +710,6 @@ class T5Stack(T5PreTrainedModel):
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask, dtype=self.dtype)
         else:
             encoder_extended_attention_mask = None
-
 
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
