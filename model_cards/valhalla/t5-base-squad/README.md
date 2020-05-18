@@ -1,5 +1,5 @@
 # T5 for question-answering
-This is T5-base model finet-tuned on SQuAD1.1 for QA using text-to-text approach
+This is T5-base model fine-tuned on SQuAD1.1 for QA using text-to-text approach
 
 ## Model training
 This model was trained on colab TPU with 35GB RAM for 4 epochs
