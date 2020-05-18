@@ -707,7 +707,7 @@ class T5Stack(T5PreTrainedModel):
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, self.device)
 
         if self.is_decoder and encoder_attention_mask is not None:
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask, dtype=self.dtype)
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 
