@@ -135,7 +135,7 @@ class ModuleUtilsMixin:
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         else:
             raise ValueError(
-                "{} not recognized. `dtype` should be set to either `torch.float31` or `torch.float16`".format(
+                "{} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`".format(
                     self.dtype
                 )
             )
