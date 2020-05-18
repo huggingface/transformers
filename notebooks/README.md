@@ -4,7 +4,7 @@ You can find here a list of the official notebooks provided by Hugging Face.
 
 Also, we would like to list here interesting content created by the community. 
 If you wrote some notebook(s) leveraging transformers and would like be listed here, please open a 
-Pull Request and we'll review it so it can be included here. 
+Pull Request so it can be included under the Community notebooks. 
 
 
 ## Hugging Face's notebooks :hugs:
