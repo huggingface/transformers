@@ -461,9 +461,9 @@ class Trainer:
                             )
 
                             self.save_model(output_dir)
-                            self._rotate_checkpoints()
                             torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                            self._rotate_checkpoints()
                             logger.info("Saving optimizer and scheduler states to %s", output_dir)
 
                 if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
