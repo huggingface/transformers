@@ -16,7 +16,6 @@
 
 import logging
 import math
-from functools import lru_cache
 
 import torch
 import torch.nn as nn
@@ -106,29 +105,18 @@ class LongformerSelfAttention(nn.Module):
         chunk_stride[1] = chunk_stride[1] // 2
         return x.as_strided(size=chunk_size, stride=chunk_stride)
 
-    @lru_cache()
-    def _get_invalid_locations_mask(self, w, device):
-        affected_seqlen = w
-        diagonals_list = []
-        for j in range(-w, 1, 1):
-            diagonal_mask = torch.zeros(affected_seqlen, device="cpu", dtype=torch.uint8)
-            diagonal_mask[:-j] = 1
-            diagonals_list.append(diagonal_mask)
-        mask = torch.stack(diagonals_list, dim=-1)
-        mask = mask[None, :, None, :]
-        ending_mask = mask.flip(dims=(1, 3)).to(torch.uint8).to(device)
-        return affected_seqlen, mask.to(torch.uint8).to(device), ending_mask
-
     def _mask_invalid_locations(self, input_tensor, w) -> torch.Tensor:
-        # TODO: replace this function and `_get_invalid_locations_mask` with a simpler one that doesn't require lru_cache
-        affected_seqlen, beginning_mask, ending_mask = self._get_invalid_locations_mask(w, input_tensor.device)
+        affected_seqlen = w
+        beginning_mask_2d = input_tensor.new_ones(w, w + 1).tril().flip(dims=[0])
+        beginning_mask = beginning_mask_2d[None, :, None, :]
+        ending_mask = beginning_mask.flip(dims=(1, 3))
         seqlen = input_tensor.size(1)
         beginning_input = input_tensor[:, :affected_seqlen, :, : w + 1]
         beginning_mask = beginning_mask[:, :seqlen].expand(beginning_input.size())
-        beginning_input.masked_fill_(beginning_mask, -float("inf"))
+        beginning_input.masked_fill_(beginning_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
         ending_input = input_tensor[:, -affected_seqlen:, :, -(w + 1) :]
         ending_mask = ending_mask[:, -seqlen:].expand(ending_input.size())
-        ending_input.masked_fill_(ending_mask, -float("inf"))
+        ending_input.masked_fill_(ending_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
 
     def _sliding_chunks_matmul_qk(self, q: torch.Tensor, k: torch.Tensor, w: int):
         """Matrix multiplicatio of query x key tensors using with a sliding window attention pattern.
