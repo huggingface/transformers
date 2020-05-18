@@ -3,7 +3,7 @@ from os import sep
 from os.path import dirname, exists
 from shutil import rmtree
 
-from tests.utils import require_tf, require_torch
+from tests.utils import require_tf, require_torch, slow
 from transformers import BertConfig, BertTokenizerFast, FeatureExtractionPipeline
 from transformers.convert_graph_to_onnx import convert, ensure_valid_input, infer_shapes
 
@@ -22,11 +22,13 @@ class OnnxExportTestCase(unittest.TestCase):
     MODEL_TO_TEST = ["bert-base-cased", "gpt2", "roberta-base"]
 
     @require_tf
+    @slow
     def test_export_tensorflow(self):
         for model in OnnxExportTestCase.MODEL_TO_TEST:
             self._test_export(model, "tf", 11)
 
     @require_torch
+    @slow
     def test_export_pytorch(self):
         for model in OnnxExportTestCase.MODEL_TO_TEST:
             self._test_export(model, "pt", 11)
