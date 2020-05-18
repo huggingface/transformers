@@ -77,3 +77,10 @@ python examples/xla_spawn.py --num_cores 8 \
 ```
 
 Feedback and more use cases and benchmarks involving TPUs are welcome, please share with the community.
+
+## Tasks from and for the communtiy
+
+| Description | Example datasets | Trainer support | TFTrainer support | pytorch-lightning | Author | Colab
+|---|---|:---:|:---:|:---:|:---:|:---:|
+| [**Description**](./language-modeling)       |  | ✅ | -  | - | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](link)
+
