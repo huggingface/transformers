@@ -277,7 +277,7 @@ def train(args, train_dataset, model, tokenizer):
                     if (
                         args.local_rank == -1 and args.log_evaluate_during_training and results is None
                     ):  # Only evaluate when single GPU otherwise metrics may not average well
-                        results, _, _ = evaluate(args, model, tokenizer, use_tqdm=False)
+                        results, _, _ = evaluate(args, args.task_name, model, tokenizer, use_tqdm=False)
                         for key, value in results.items():
                             eval_key = "eval_{}".format(key)
                             logs[eval_key] = value
@@ -295,7 +295,7 @@ def train(args, train_dataset, model, tokenizer):
 
                 if args.local_rank in [-1, 0] and args.eval_and_save_steps > 0 and global_step % args.eval_and_save_steps == 0:
                     # evaluate
-                    results, _, _ = evaluate(args, model, tokenizer, use_tqdm=False)
+                    results, _, _ = evaluate(args, args.task_name, model, tokenizer, use_tqdm=False)
                     for key, value in results.items():
                         logs[f"eval_{key}"] = value
                     logger.info(json.dumps({**logs, **{"step": global_step}}))
@@ -340,90 +340,86 @@ def train(args, train_dataset, model, tokenizer):
     return global_step, tr_loss / global_step
 
 
-def evaluate(args, model, tokenizer, split="dev", prefix="", use_tqdm=True):
-    # Loop to handle MNLI double evaluation (matched, mis-matched)
-    eval_task_names = ("mnli", "mnli-mm") if args.task_name == "mnli" else (args.task_name,)
-    eval_outputs_dirs = (args.output_dir, args.output_dir + "-MM") if args.task_name == "mnli" else (args.output_dir,)
+def evaluate(args, task_name, model, tokenizer, split="dev", prefix="", use_tqdm=True):
 
     results = {}
-    for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        if eval_task == "record":
-            eval_dataset, eval_answers = load_and_cache_examples(args, eval_task, tokenizer, split=split)
+    if task_name == "record":
+        eval_dataset, eval_answers = load_and_cache_examples(args, task_name, tokenizer, split=split)
+    else:
+        eval_dataset = load_and_cache_examples(args, task_name, tokenizer, split=split)
+        eval_answers = None
+
+    if not os.path.exists(args.output_dir) and args.local_rank in [-1, 0]:
+        os.makedirs(args.output_dir)
+
+    args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
+    # Note that DistributedSampler samples randomly
+    eval_sampler = SequentialSampler(eval_dataset)
+    eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
+
+    # multi-gpu eval
+    if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
+        model = torch.nn.DataParallel(model)
+
+    # Eval!
+    logger.info(f"***** Running evaluation: {prefix} on {task_name} {split} *****")
+    logger.info("  Num examples = %d", len(eval_dataset))
+    logger.info("  Batch size = %d", args.eval_batch_size)
+    eval_loss = 0.0
+    nb_eval_steps = 0
+    preds = None
+    out_label_ids = None
+    ex_ids = None
+    eval_dataloader = tqdm(eval_dataloader, desc="Evaluating") if use_tqdm else eval_dataloader
+    debug_idx = 0
+    for batch in eval_dataloader:
+        model.eval()
+        batch = tuple(t.to(args.device) for t in batch)
+        guids = batch[-1]
+
+        with torch.no_grad():
+            inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
+            if args.output_mode == "span_classification":
+                inputs["spans"] = batch[4]
+            if args.model_type != "distilbert":
+                inputs["token_type_ids"] = (
+                    batch[2] if args.model_type in ["bert", "xlnet", "albert"] else None
+                )  # XLM, DistilBERT, RoBERTa, and XLM-RoBERTa don't use segment_ids
+            outputs = model(**inputs)
+            tmp_eval_loss, logits = outputs[:2]
+
+            eval_loss += tmp_eval_loss.mean().item()
+        nb_eval_steps += 1
+        if preds is None:
+            preds = logits.detach().cpu().numpy()
+            out_label_ids = inputs["labels"].detach().cpu().numpy()
+            ex_ids = [guids.detach().cpu().numpy()]
         else:
-            eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, split=split)
-            eval_answers = None
+            preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
+            out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
+            ex_ids.append(guids.detach().cpu().numpy())
+        #debug_idx += 1
+        #if debug_idx > 10:
+        #    break
 
-        if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
-            os.makedirs(eval_output_dir)
-
-        args.eval_batch_size = args.per_gpu_eval_batch_size * max(1, args.n_gpu)
-        # Note that DistributedSampler samples randomly
-        eval_sampler = SequentialSampler(eval_dataset)
-        eval_dataloader = DataLoader(eval_dataset, sampler=eval_sampler, batch_size=args.eval_batch_size)
-
-        # multi-gpu eval
-        if args.n_gpu > 1 and not isinstance(model, torch.nn.DataParallel):
-            model = torch.nn.DataParallel(model)
-
-        # Eval!
-        logger.info(f"***** Running evaluation: {prefix} on {split} *****")
-        logger.info("  Num examples = %d", len(eval_dataset))
-        logger.info("  Batch size = %d", args.eval_batch_size)
-        eval_loss = 0.0
-        nb_eval_steps = 0
-        preds = None
-        out_label_ids = None
-        ex_ids = None
-        eval_dataloader = tqdm(eval_dataloader, desc="Evaluating") if use_tqdm else eval_dataloader
-        debug_idx = 0
-        for batch in eval_dataloader:
-            model.eval()
-            batch = tuple(t.to(args.device) for t in batch)
-            guids = batch[-1]
-
-            with torch.no_grad():
-                inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
-                if args.output_mode == "span_classification":
-                    inputs["spans"] = batch[4]
-                if args.model_type != "distilbert":
-                    inputs["token_type_ids"] = (
-                        batch[2] if args.model_type in ["bert", "xlnet", "albert"] else None
-                    )  # XLM, DistilBERT, RoBERTa, and XLM-RoBERTa don't use segment_ids
-                outputs = model(**inputs)
-                tmp_eval_loss, logits = outputs[:2]
-
-                eval_loss += tmp_eval_loss.mean().item()
-            nb_eval_steps += 1
-            if preds is None:
-                preds = logits.detach().cpu().numpy()
-                out_label_ids = inputs["labels"].detach().cpu().numpy()
-                ex_ids = [guids.detach().cpu().numpy()]
-            else:
-                preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
-                ex_ids.append(guids.detach().cpu().numpy())
-            #debug_idx += 1
-            #if debug_idx > 10:
-            #    break
-
-        ex_ids = np.concatenate(ex_ids, axis=0)
-        eval_loss = eval_loss / nb_eval_steps
-        if args.output_mode in ["classification", "span_classification"] and args.task_name not in ["record"]:
-            preds = np.argmax(preds, axis=1)
-        elif args.output_mode == "regression":
-            preds = np.squeeze(preds)
-        #logging.info(f"predictions: {preds}")
-        if split != "test":
-            # don't have access to test labels, so skip evaluating on them
-            # NB(AW): forcing evaluation on ReCoRD on test (no labels) will error
-            result = compute_metrics(eval_task, preds, out_label_ids, guids=ex_ids, answers=eval_answers)
-            results.update(result)
-            output_eval_file = os.path.join(eval_output_dir, prefix, "eval_results.txt")
-            with open(output_eval_file, "w") as writer:
-                logger.info(f"***** {split} results: {prefix} *****")
-                for key in sorted(result.keys()):
-                    logger.info("  %s = %s", key, str(result[key]))
-                    writer.write("%s = %s\n" % (key, str(result[key])))
+    ex_ids = np.concatenate(ex_ids, axis=0)
+    eval_loss = eval_loss / nb_eval_steps
+    if args.output_mode in ["classification", "span_classification"] and args.task_name not in ["record"]:
+        preds = np.argmax(preds, axis=1)
+    elif args.output_mode == "regression":
+        preds = np.squeeze(preds)
+    #logging.info(f"predictions: {preds}")
+    if split != "test":
+        # don't have access to test labels, so skip evaluating on them
+        # NB(AW): forcing evaluation on ReCoRD on test (no labels) will error
+        result = compute_metrics(task_name, preds, out_label_ids, guids=ex_ids, answers=eval_answers)
+        results.update(result)
+        output_eval_file = os.path.join(args.output_dir, prefix, "eval_results.txt")
+        with open(output_eval_file, "w") as writer:
+            logger.info(f"***** {split} results: {prefix} *****")
+            for key in sorted(result.keys()):
+                logger.info("  %s = %s", key, str(result[key]))
+                writer.write("%s = %s\n" % (key, str(result[key])))
 
     return results, preds, ex_ids
 
@@ -800,18 +796,20 @@ def main():
             model.to(args.device)
 
             if not args.skip_evaluate_dev:
-                result, _, _ = evaluate(args, model, tokenizer, prefix=prefix)
+                result, _, _ = evaluate(args, args.task_name, model, tokenizer, prefix=prefix)
                 result = dict((f"{k}_{global_step}", v) for k, v in result.items())
 
             if args.evaluate_test:
-                result, preds, ex_ids = evaluate(args, model, tokenizer, split="test", prefix=prefix)
-                if args.task_name == "record":
-                    answers = processor.get_answers(args.data_dir, "test")
-                    processor.write_preds(preds, ex_ids, args.output_dir, answers=answers)
-                else:
-                    processor.write_preds(preds, ex_ids, args.output_dir)
-
-                # write predictions
+                # Hack to handle diagnostic datasets
+                eval_task_names = ("rte", "ax-b", "ax-g") if args.task_name == "rte" else (args.task_name,)
+                for eval_task_name in eval_task_names:
+                    result, preds, ex_ids = evaluate(args, eval_task_name, model, tokenizer, split="test", prefix=prefix)
+                    processor = processors[eval_task_name]()
+                    if args.task_name == "record":
+                        answers = processor.get_answers(args.data_dir, "test")
+                        processor.write_preds(preds, ex_ids, args.output_dir, answers=answers)
+                    else:
+                        processor.write_preds(preds, ex_ids, args.output_dir)
 
 
 if __name__ == "__main__":

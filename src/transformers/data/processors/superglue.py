@@ -602,6 +602,7 @@ class RecordProcessor(DataProcessor):
                 pred_fh.write(f"{json.dumps({'idx': qst_idx, 'label': pred})}\n")
         logger.info(f"Wrote predictions to {out_dir}.")
 
+
 class RteProcessor(DataProcessor):
     """Processor for the RTE data set (GLUE version)."""
 
@@ -764,7 +765,110 @@ class WscProcessor(DataProcessor):
         logger.info(f"Wrote {len(preds)} predictions to {out_dir}.")
 
 
+class DiagnosticBroadProcessor(DataProcessor):
+    """Processor for the braod coverage diagnostic data set."""
+
+    def get_example_from_tensor_dict(self, tensor_dict):
+        """See base class."""
+        return InputExample(
+            tensor_dict["idx"].numpy(),
+            tensor_dict["sentence1"].numpy().decode("utf-8"),
+            tensor_dict["sentence2"].numpy().decode("utf-8"),
+            str(tensor_dict["label"].numpy()),
+        )
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        raise AssertionError("Diagnostic tasks only have test data! Call get_test_examples instead")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        raise AssertionError("Diagnostic tasks only have test data! Call get_test_examples instead")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_jsonl(os.path.join(data_dir, "AX-b.jsonl")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["entailment", "not_entailment"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            #guid = "%s-%s" % (set_type, line["idx"])
+            guid = int(line["idx"])
+            text_a = line["sentence1"]
+            text_b = line["sentence2"]
+            label = line["label"] if "label" in line else "not_entailment"
+            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+        return examples
+
+    def write_preds(self, preds, ex_ids, out_dir):
+        """Write predictions in SuperGLUE format."""
+        preds = preds[ex_ids] # sort just in case we got scrambled
+        idx2label = {i: label for i, label in enumerate(self.get_labels())}
+        with open(os.path.join(out_dir, "AX-b.jsonl"), "w") as pred_fh:
+            for idx, pred in enumerate(preds):
+                pred_label = idx2label[int(pred)]
+                pred_fh.write(f"{json.dumps({'idx': idx, 'label': pred_label})}\n")
+        logger.info(f"Wrote {len(preds)} predictions to {out_dir}.")
+
+
+class DiagnosticGenderProcessor(DataProcessor):
+    """Processor for the gender bias diagnostic dataset."""
+
+    def get_example_from_tensor_dict(self, tensor_dict):
+        """See base class."""
+        return InputExample(
+            tensor_dict["idx"].numpy(),
+            tensor_dict["sentence1"].numpy().decode("utf-8"),
+            tensor_dict["sentence2"].numpy().decode("utf-8"),
+            str(tensor_dict["label"].numpy()),
+        )
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        raise AssertionError("Diagnostic tasks only have test data! Call get_test_examples instead")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        raise AssertionError("Diagnostic tasks only have test data! Call get_test_examples instead")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_jsonl(os.path.join(data_dir, "AX-g.jsonl")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["entailment", "not_entailment"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training and dev sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            #guid = "%s-%s" % (set_type, line["idx"])
+            guid = int(line["idx"])
+            text_a = line["premise"]
+            text_b = line["hypothesis"]
+            label = line["label"] if "label" in line else "not_entailment"
+            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
+        return examples
+
+    def write_preds(self, preds, ex_ids, out_dir):
+        """Write predictions in SuperGLUE format."""
+        preds = preds[ex_ids] # sort just in case we got scrambled
+        idx2label = {i: label for i, label in enumerate(self.get_labels())}
+        with open(os.path.join(out_dir, "AX-g.jsonl"), "w") as pred_fh:
+            for idx, pred in enumerate(preds):
+                pred_label = idx2label[int(pred)]
+                pred_fh.write(f"{json.dumps({'idx': idx, 'label': pred_label})}\n")
+        logger.info(f"Wrote {len(preds)} predictions to {out_dir}.")
+
 superglue_tasks_num_labels = {
+    "ax-b": 2,
+    "ax-g": 2,
     "boolq": 2,
     "cb": 3,
     "copa": 2,
@@ -779,6 +883,8 @@ superglue_tasks_num_spans = {
 }
 
 superglue_processors = {
+    "ax-b": DiagnosticBroadProcessor,
+    "ax-g": DiagnosticGenderProcessor,
     "boolq": BoolqProcessor,
     "cb": CbProcessor,
     "copa": CopaProcessor,
@@ -790,6 +896,8 @@ superglue_processors = {
 }
 
 superglue_output_modes = {
+    "ax-b": "classification",
+    "ax-g": "classification",
     "boolq": "classification",
     "cb": "classification",
     "copa": "classification",
