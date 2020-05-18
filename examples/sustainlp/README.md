@@ -1,15 +1,16 @@
 # SustaiNLP
 
-Authors: [Alex Wang](https://w4ngatang.github.io/)
+Author: [Alex Wang](https://w4ngatang.github.io/)
 
-This folder contains instructions for training and evaluating models on SuperGLUE benchmark using `examples/run_superglue.py`.
+This folder contains instructions for training and evaluating models on the SuperGLUE benchmark using `examples/run_superglue.py`.
 This code is also intended as a starting point for the [SustaiNLP 2020 Shared Task](https://sites.google.com/view/sustainlp2020/shared-task).
 
 ## Using the script
 
 ### Training models
 
-The following command will evaluate a model on the test set of a task and write the predictions to disk in the official SuperGLUE format.
+The following command will evaluate a model on the test set of a task and write the predictions to disk in the official SuperGLUE format. 
+Currently, only the BERT and RoBERTa model families are supported.
 
 ```bash
 python run_superglue.py --data_dir ${data_dir} --task_name ${task} \
@@ -38,6 +39,10 @@ python run_superglue.py --data_dir ${data_dir} --task_name ${task} \
                         --do_eval --evaluate_test --skip_evaluate_dev
                         --log_energy_consumption
 ```
+
+Using the ``--log_energy_consumption`` option will invoke the ``experiment_impact_tracker`` library to track energy usage throughout the running of the script.
+The library will produce a directory `${out_dir}/impacttracker/` to log the data.
+The script `examples/sustainlp/compute_efficiency_info.py` will extract 
 
 ## Extending this script
 
