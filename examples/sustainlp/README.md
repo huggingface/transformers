@@ -3,13 +3,13 @@
 Author: [Alex Wang](https://w4ngatang.github.io/)
 
 This folder contains instructions for training and evaluating models on the SuperGLUE benchmark using `examples/run_superglue.py`.
-This code is also intended as a starting point for the [SustaiNLP 2020 Shared Task](https://sites.google.com/view/sustainlp2020/shared-task).
+This code is also intended as a starting point for the [SustaiNLP 2020 shared task](https://sites.google.com/view/sustainlp2020/shared-task).
 
 ## Using the script
 
 ### Training models
 
-The following command will evaluate a model on the test set of a task and write the predictions to disk in the official SuperGLUE format. 
+The following command will train a model on the specified SuperGLUE task.
 Currently, only the BERT and RoBERTa model families are supported.
 
 ```bash
@@ -29,7 +29,7 @@ python run_superglue.py --data_dir ${data_dir} --task_name ${task} \
 
 ### Evaluating models
 
-The following command will evaluate a model on the test set of a task and write the predictions to disk in the official SuperGLUE format.
+The following command will evaluate a model on the test set of a single task and write the predictions to disk in the official SuperGLUE format.
 
 ```bash
 python run_superglue.py --data_dir ${data_dir} --task_name ${task} \
@@ -40,11 +40,9 @@ python run_superglue.py --data_dir ${data_dir} --task_name ${task} \
                         --log_energy_consumption
 ```
 
-Using the ``--log_energy_consumption`` option will invoke the ``experiment_impact_tracker`` library to track energy usage throughout the running of the script.
+This script also provides an example of how to use the ``experiment_impact_tracker`` library that will be used to measure energy consumption for the SustaiNLP 2020 shared task.
+Using the ``--log_energy_consumption`` option will call the library to track energy usage throughout the running of the script.
 The library will produce a directory `${out_dir}/impacttracker/` to log the data.
-The script `examples/sustainlp/compute_efficiency_info.py` will extract 
+The script `examples/sustainlp/compute_efficiency_info.py` will extract the relevant energy consumption metrics.
+The `total_power` metric will be used to compare submissions to the SustaiNLP 2020 shared task.
 
-## Extending this script
-
-- formatting tasks: WiC; COPA
-- span classification architecture for new models: WiC, WSC

@@ -644,6 +644,21 @@ def main():
     parser.add_argument("--server_port", type=str, default="", help="For distant debugging.")
     args = parser.parse_args()
 
+    # Setup logging
+    logging.basicConfig(
+        #format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s: %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN,
+    )
+
+    # Launch impact tracker
+    if args.log_energy_consumption:
+        from experiment_impact_tracker.compute_tracker import ImpactTracker
+        logger.info("Launching impact tracker...")
+        tracker = ImpactTracker(args.output_dir)
+        tracker.launch_impact_monitor()
+
     if (
         os.path.exists(args.output_dir)
         and os.listdir(args.output_dir)
@@ -655,14 +670,6 @@ def main():
                 args.output_dir
             )
         )
-
-    # Setup logging
-    logging.basicConfig(
-        #format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-        format="%(asctime)s: %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN,
-    )
 
     # Setup distant debugging if needed
     if args.server_ip and args.server_port:
@@ -772,13 +779,6 @@ def main():
 
     # Evaluation
     if args.do_eval and args.local_rank in [-1, 0]:
-
-        # Launch impact tracker
-        if args.log_energy_consumption:
-            from experiment_impact_tracker.compute_tracker import ImpactTracker
-            logging.info("Launching impact tracker...")
-            tracker = ImpactTracker(args.output_dir)
-            tracker.launch_impact_monitor()
 
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [os.path.join(args.output_dir, "checkpoint-best")]
