@@ -43,7 +43,7 @@ You can use this model by installing `torch` or `tensorflow` and Huggingface lib
 ```python
 from transformers import T5Tokenizer, T5Model
 
-model = T5.from_pretrained('huseinzol05/t5-base-bahasa-cased')
+model = T5Model.from_pretrained('huseinzol05/t5-base-bahasa-cased')
 tokenizer = T5Tokenizer.from_pretrained('huseinzol05/t5-base-bahasa-cased')
 ```
 
