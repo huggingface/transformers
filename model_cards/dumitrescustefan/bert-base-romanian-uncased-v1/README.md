@@ -9,7 +9,7 @@ from transformers import AutoTokenizer, AutoModel
 import torch
 
 # load tokenizer and model
-tokenizer = AutoTokenizer.from_pretrained("dumitrescustefan/bert-base-romanian-uncased-v1", do_lower_cased=True)
+tokenizer = AutoTokenizer.from_pretrained("dumitrescustefan/bert-base-romanian-uncased-v1", do_lower_case=True)
 model = AutoModel.from_pretrained("dumitrescustefan/bert-base-romanian-uncased-v1")
 
 # tokenize a sentence and run through the model
