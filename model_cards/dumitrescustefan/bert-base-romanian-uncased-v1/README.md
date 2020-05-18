@@ -1,3 +1,7 @@
+---
+language: romanian
+---
+
 # bert-base-romanian-uncased-v1
 
 The BERT **base**, **uncased** model for Romanian, trained on a 15GB corpus, version ![v1.0](https://img.shields.io/badge/v1.0-21%20Apr%202020-ff6666)
