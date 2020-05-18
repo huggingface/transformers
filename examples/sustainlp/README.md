@@ -2,7 +2,7 @@
 
 Author: [Alex Wang](https://w4ngatang.github.io/)
 
-This folder contains instructions for training and evaluating models on the SuperGLUE benchmark using `examples/run_superglue.py`.
+This folder contains instructions for training and evaluating models on the [SuperGLUE benchmark](super.gluebenchmark.com) using `examples/run_superglue.py`.
 This code is also intended as a starting point for the [SustaiNLP 2020 shared task](https://sites.google.com/view/sustainlp2020/shared-task).
 
 ## Using the script
@@ -10,7 +10,8 @@ This code is also intended as a starting point for the [SustaiNLP 2020 shared ta
 ### Training models
 
 The following command will train a model on the specified SuperGLUE task.
-Currently, only the BERT and RoBERTa model families are supported.
+The WiC and WSC tasks require specialized model architectures (see [BERTForSpanClassification](https://github.com/W4ngatang/transformers/blob/superglue/src/transformers/modeling_bert.py#L1457)).
+Currently, these architectures are only supported for the BERT and RoBERTa model families.
 
 ```bash
 python run_superglue.py --data_dir ${data_dir} --task_name ${task} \
