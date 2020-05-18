@@ -10,7 +10,7 @@ from unittest.mock import patch
 from torch.utils.data import DataLoader
 
 from .evaluate_cnn import run_generate
-from .finetune import main
+from .finetune import main, run_distiller
 from .utils import SummarizationDataset
 
 
@@ -93,6 +93,24 @@ class TestBartExamples(unittest.TestCase):
         main(argparse.Namespace(**args_d))
         args_d.update({"do_train": False, "do_predict": True})
 
+        main(argparse.Namespace(**args_d))
+        contents = os.listdir(output_dir)
+        expected_contents = {
+            "checkpointepoch=0.ckpt",
+            "test_results.txt",
+        }
+        created_files = {os.path.basename(p) for p in contents}
+        self.assertSetEqual(expected_contents, created_files)
+
+    def test_bart_distiller_cli(self):
+        args_d: dict = DEFAULT_ARGS.copy()
+        tmp_dir = make_test_data_dir()
+        output_dir = tempfile.mkdtemp(prefix="output_")
+        args_d.update(
+            data_dir=tmp_dir, model_type="bart", train_batch_size=2, eval_batch_size=2, n_gpu=0, output_dir=output_dir,
+            do_predict=True,
+        )
+        run_distiller(argparse.Namespace(**args_d))
         main(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
         expected_contents = {

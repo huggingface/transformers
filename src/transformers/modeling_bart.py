@@ -827,6 +827,7 @@ class BartModel(PretrainedBartModel):
                 decoder_padding_mask=decoder_attention_mask,
                 causal_mask_dtype=self.shared.weight.dtype,
             )
+            self.last_padding_mask = decoder_padding_mask
         else:
             decoder_padding_mask, causal_mask = None, None
 

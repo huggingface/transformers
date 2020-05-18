@@ -9,18 +9,15 @@ from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
 
-
 try:
     from .utils import SummarizationDataset
 except ImportError:
     from utils import SummarizationDataset
 
-
 logger = logging.getLogger(__name__)
 
 
 class SummarizationTrainer(BaseTransformer):
-
     mode = "language-modeling"
 
     def __init__(self, hparams):
@@ -42,7 +39,7 @@ class SummarizationTrainer(BaseTransformer):
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,)
+        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels, )
 
         loss = outputs[0]
 
@@ -110,9 +107,9 @@ class SummarizationTrainer(BaseTransformer):
     def train_dataloader(self) -> DataLoader:
         dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
         t_total = (
-            (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.n_gpu)))
-            // self.hparams.gradient_accumulation_steps
-            * float(self.hparams.num_train_epochs)
+                (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.n_gpu)))
+                // self.hparams.gradient_accumulation_steps
+                * float(self.hparams.num_train_epochs)
         )
         scheduler = get_linear_schedule_with_warmup(
             self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
@@ -135,14 +132,14 @@ class SummarizationTrainer(BaseTransformer):
             default=1024,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded.",
+                 "than this will be truncated, sequences shorter will be padded.",
         )
         parser.add_argument(
             "--max_target_length",
             default=56,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded.",
+                 "than this will be truncated, sequences shorter will be padded.",
         )
 
         parser.add_argument(
@@ -152,27 +149,114 @@ class SummarizationTrainer(BaseTransformer):
             required=True,
             help="The input data dir. Should contain the dataset files for the CNN/DM summarization task.",
         )
+        parser.add_argument(
+            "--teacher",
+            default=None,
+            type=str,
+            required=True,
+        )
+
         return parser
 
 
-def main(args):
+from .bart_distiller import copy_decoder_layers, init_student
+from transformers import BartForConditionalGeneration
+import torch.nn.functional as F
 
+from torch import nn
+
+
+def freeze_part(model: nn.Module):
+    for par in model.parameters():
+        par.requires_grad = False
+
+
+class SummarizationDistiller(SummarizationTrainer):
+
+    def __init__(self, hparams):
+        super().__init__(hparams, num_labels=None, mode=self.mode)
+        teacher = BartForConditionalGeneration.from_pretrained(args.teacher).eval()
+        init_student(self.model, teacher)
+        copy_decoder_layers(self.model, teacher)
+        self.model: BartForConditionalGeneration
+        self.model.teacher = teacher
+        self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
+        self.freeze_stuff()
+
+    def freeze_stuff(self):
+        # freeze stuff
+        freeze_part(self.model.model.encoder)
+        freeze_part(self.model.teacher)
+        freeze_part(self.model.shared)
+        d = self.model.model.decoder
+        freeze_part(d.embed_positions)
+        freeze_part(d.embed_tokens)
+
+    def _step(self, batch):
+        pad_token_id = self.tokenizer.pad_token_id
+        source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
+        y_ids = y[:, :-1].contiguous()
+        lm_labels = y[:, 1:].clone()
+        lm_labels[y[:, 1:] == pad_token_id] = -100
+        sloss, slogits, *trash = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids,
+                                      lm_labels=lm_labels, )
+        with torch.no_grad():
+            tloss, tlogits, *trash = self.teacher(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids,
+                                                  lm_labels=lm_labels, )
+        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(self.model.model.last_padding_mask, slogits, tlogits)
+        return loss_ce
+
+    def calc_ce_loss(self, mask, s_logits, t_logits):
+        s_logits_slct = torch.masked_select(s_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
+        s_logits_slct = s_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
+        t_logits_slct = torch.masked_select(t_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
+        t_logits_slct = t_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
+        assert t_logits_slct.size() == s_logits_slct.size()
+        loss_ce = (
+                self.ce_loss_fct(
+                    F.log_softmax(s_logits_slct / self.temperature, dim=-1),
+                    F.softmax(t_logits_slct / self.temperature, dim=-1),
+                )
+                * (self.temperature) ** 2
+        )
+        return loss_ce, s_logits_slct, t_logits_slct
+
+    def calc_cos_loss(self, attention_mask, s_hidden_states, t_hidden_states):
+        s_hidden_states = s_hidden_states[-1]  # (bs, seq_length, dim)
+        t_hidden_states = t_hidden_states[-1]  # (bs, seq_length, dim)
+        mask = attention_mask.unsqueeze(-1).expand_as(s_hidden_states)  # (bs, seq_length, dim)
+        assert s_hidden_states.size() == t_hidden_states.size()
+        dim = s_hidden_states.size(-1)
+        s_hidden_states_slct = torch.masked_select(s_hidden_states, mask)  # (bs * seq_length * dim)
+        s_hidden_states_slct = s_hidden_states_slct.view(-1, dim)  # (bs * seq_length, dim)
+        t_hidden_states_slct = torch.masked_select(t_hidden_states, mask)  # (bs * seq_length * dim)
+        t_hidden_states_slct = t_hidden_states_slct.view(-1, dim)  # (bs * seq_length, dim)
+        target = s_hidden_states_slct.new(s_hidden_states_slct.size(0)).fill_(1)  # (bs * seq_length,)
+        loss_cos = self.cosine_loss_fct(s_hidden_states_slct, t_hidden_states_slct, target)
+        return loss_cos
+
+
+def main(args):
     # If output_dir not provided, a folder will be generated in pwd
     if not args.output_dir:
-        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
+        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}", )
         os.makedirs(args.output_dir)
     model = SummarizationTrainer(args)
     trainer = generic_train(model, args)
+    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
+    model = model.load_from_checkpoint(checkpoints[-1])
+    trainer.test(model)
 
-    # Optionally, predict on dev set and write to output_dir
-    if args.do_predict:
-        # See https://github.com/huggingface/transformers/issues/3159
-        # pl use this format to create a checkpoint:
-        # https://github.com/PyTorchLightning/pytorch-lightning/blob/master\
-        # /pytorch_lightning/callbacks/model_checkpoint.py#L169
-        checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
-        model = model.load_from_checkpoint(checkpoints[-1])
-        trainer.test(model)
+
+def run_distiller(args):
+    if not args.output_dir:
+        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}", )
+        os.makedirs(args.output_dir)
+    model = SummarizationDistiller(args)
+    trainer = generic_train(model, args)
+    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
+    model = model.load_from_checkpoint(checkpoints[-1])
+    trainer.test(model)
 
 
 if __name__ == "__main__":

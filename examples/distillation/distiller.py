@@ -404,19 +404,7 @@ class Distiller:
             mask = (lm_labels > -1).unsqueeze(-1).expand_as(s_logits)  # (bs, seq_lenth, voc_size)
         else:
             mask = attention_mask.unsqueeze(-1).expand_as(s_logits)  # (bs, seq_lenth, voc_size)
-        s_logits_slct = torch.masked_select(s_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
-        s_logits_slct = s_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
-        t_logits_slct = torch.masked_select(t_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
-        t_logits_slct = t_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
-        assert t_logits_slct.size() == s_logits_slct.size()
-
-        loss_ce = (
-            self.ce_loss_fct(
-                F.log_softmax(s_logits_slct / self.temperature, dim=-1),
-                F.softmax(t_logits_slct / self.temperature, dim=-1),
-            )
-            * (self.temperature) ** 2
-        )
+        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(mask, s_logits, t_logits)
         loss = self.alpha_ce * loss_ce
 
         if self.alpha_mlm > 0.0:
@@ -434,19 +422,7 @@ class Distiller:
             )  # Reproducing batchmean reduction
             loss += self.alpha_mse * loss_mse
         if self.alpha_cos > 0.0:
-            s_hidden_states = s_hidden_states[-1]  # (bs, seq_length, dim)
-            t_hidden_states = t_hidden_states[-1]  # (bs, seq_length, dim)
-            mask = attention_mask.unsqueeze(-1).expand_as(s_hidden_states)  # (bs, seq_length, dim)
-            assert s_hidden_states.size() == t_hidden_states.size()
-            dim = s_hidden_states.size(-1)
-
-            s_hidden_states_slct = torch.masked_select(s_hidden_states, mask)  # (bs * seq_length * dim)
-            s_hidden_states_slct = s_hidden_states_slct.view(-1, dim)  # (bs * seq_length, dim)
-            t_hidden_states_slct = torch.masked_select(t_hidden_states, mask)  # (bs * seq_length * dim)
-            t_hidden_states_slct = t_hidden_states_slct.view(-1, dim)  # (bs * seq_length, dim)
-
-            target = s_hidden_states_slct.new(s_hidden_states_slct.size(0)).fill_(1)  # (bs * seq_length,)
-            loss_cos = self.cosine_loss_fct(s_hidden_states_slct, t_hidden_states_slct, target)
+            loss_cos = self.calc_cos_loss(attention_mask, s_hidden_states, t_hidden_states)
             loss += self.alpha_cos * loss_cos
 
         self.total_loss_epoch += loss.item()
@@ -464,6 +440,35 @@ class Distiller:
         self.optimize(loss)
 
         self.n_sequences_epoch += input_ids.size(0)
+
+    def calc_ce_loss(self, mask, s_logits, t_logits):
+        s_logits_slct = torch.masked_select(s_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
+        s_logits_slct = s_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
+        t_logits_slct = torch.masked_select(t_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
+        t_logits_slct = t_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
+        assert t_logits_slct.size() == s_logits_slct.size()
+        loss_ce = (
+                self.ce_loss_fct(
+                    F.log_softmax(s_logits_slct / self.temperature, dim=-1),
+                    F.softmax(t_logits_slct / self.temperature, dim=-1),
+                )
+                * (self.temperature) ** 2
+        )
+        return loss_ce, s_logits_slct, t_logits_slct
+
+    def calc_cos_loss(self, attention_mask, s_hidden_states, t_hidden_states):
+        s_hidden_states = s_hidden_states[-1]  # (bs, seq_length, dim)
+        t_hidden_states = t_hidden_states[-1]  # (bs, seq_length, dim)
+        mask = attention_mask.unsqueeze(-1).expand_as(s_hidden_states)  # (bs, seq_length, dim)
+        assert s_hidden_states.size() == t_hidden_states.size()
+        dim = s_hidden_states.size(-1)
+        s_hidden_states_slct = torch.masked_select(s_hidden_states, mask)  # (bs * seq_length * dim)
+        s_hidden_states_slct = s_hidden_states_slct.view(-1, dim)  # (bs * seq_length, dim)
+        t_hidden_states_slct = torch.masked_select(t_hidden_states, mask)  # (bs * seq_length * dim)
+        t_hidden_states_slct = t_hidden_states_slct.view(-1, dim)  # (bs * seq_length, dim)
+        target = s_hidden_states_slct.new(s_hidden_states_slct.size(0)).fill_(1)  # (bs * seq_length,)
+        loss_cos = self.cosine_loss_fct(s_hidden_states_slct, t_hidden_states_slct, target)
+        return loss_cos
 
     def optimize(self, loss):
         """
