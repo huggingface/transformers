@@ -4,7 +4,7 @@ You can find here a list of the official notebooks provided by Hugging Face.
 
 Also, we would like to list here interesting content created by the community. 
 If you wrote some notebook(s) leveraging transformers and would like be listed here, please open a 
-Pull Request and we'll review it so it can be included here. 
+Pull Request so it can be included under the Community notebooks. 
 
 
 ## Hugging Face's notebooks :hugs:
@@ -17,3 +17,10 @@ Pull Request and we'll review it so it can be included here.
 | [How to train a language model](https://github.com/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb)| Highlight all the steps to effectively train Transformer model on custom data | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb)|
 | [How to generate text](https://github.com/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)| How to use different decoding methods for language generation with transformers | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)|
 | [How to export model to ONNX](https://github.com/huggingface/transformers/blob/master/notebooks/04-onnx-export.ipynb) | Highlight how to export and run inference workloads through ONNX |
+
+
+## Community notebooks:
+
+| Notebook     |      Description      |      Author      |      |
+|:----------|:-------------|:-------------|------:|
+| [Train T5 on TPU](https://github.com/patil-suraj/exploring-T5/blob/master/T5_on_TPU.ipynb)  | How to train T5 on SQUAD with transformers and nlp | [Suraj Patil](https://github.com/patil-suraj) |[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/patil-suraj/exploring-T5/blob/master/T5_on_TPU.ipynb#scrollTo=QLGiFCDqvuil) |
