@@ -39,10 +39,10 @@ class T5Config(PretrainedConfig):
 
         Arguments:
             vocab_size_or_config_json_file: Vocabulary size of `inputs_ids` in `T5Model`.
-            hidden_size: Size of the encoder layers and the pooler layer.
-            num_hidden_layers: Number of hidden layers in the Transformer encoder.
-            num_attention_heads: Number of attention heads for each attention layer in
-                the Transformer encoder.
+            d_model: Size of the encoder layers and the pooler layer. `d_model` can also accesed via the property `hidden_size`.
+            num_layers: Number of hidden layers in the Transformer encoder. `num_layers` can also be accessed via the property `num_hidden_layers`.
+            num_heads: Number of attention heads for each attention layer in
+                the Transformer encoder. `num_heads` can also be accessed via the property `num_attention_heads`.
             intermediate_size: The size of the "intermediate" (i.e., feed-forward)
                 layer in the Transformer encoder.
             hidden_act: The non-linear activation function (function or string) in the
@@ -51,9 +51,9 @@ class T5Config(PretrainedConfig):
                 layers in the embeddings, encoder, and pooler.
             attention_probs_dropout_prob: The dropout ratio for the attention
                 probabilities.
-            max_position_embeddings: The maximum sequence length that this model might
+            n_positions: The maximum sequence length that this model might
                 ever be used with. Typically set this to something large just in case
-                (e.g., 512 or 1024 or 2048).
+                (e.g., 512 or 1024 or 2048). `n_positions` can also be accessed via the property `max_position_embeddings'.
             type_vocab_size: The vocabulary size of the `token_type_ids` passed into
                 `T5Model`.
             initializer_factor: A factor for initializing all weight matrices (should be kept to 1.0, used for initialization testing).
