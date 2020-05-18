@@ -6,6 +6,7 @@ from transformers.pipelines import SUPPORTED_TASKS, DefaultArgumentHandler, Pipe
 
 from .utils import require_tf, require_torch, slow
 
+
 VALID_INPUTS = ["A simple string", ["list of strings",]]
 
 NER_FINETUNED_MODELS = ["sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"]
