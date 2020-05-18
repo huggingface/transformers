@@ -116,7 +116,7 @@ class ModuleUtilsMixin:
     def dtype(self) -> dtype:
         return next(self.parameters()).dtype
 
-    def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
+    def invert_attention_mask(self, encoder_attention_mask: Tensor, dtype: dtype = torch.float32) -> Tensor:
         """type: torch.Tensor -> torch.Tensor"""
         if encoder_attention_mask.dim() == 3:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
@@ -128,7 +128,14 @@ class ModuleUtilsMixin:
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+
+        if dtype == torch.float16:
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
+        elif dtype == torch.float32:
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+        else:
+            raise ValueError("{} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`".format(dtype))
+
         return encoder_extended_attention_mask
 
     def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: tuple, device: device):
