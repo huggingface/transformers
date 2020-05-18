@@ -106,7 +106,7 @@ def load_graph_from_args(framework: str, model: str, tokenizer: Optional[str] = 
     return pipeline("feature-extraction", model=model, framework=framework)
 
 
-def convert_pytorch(nlp: Pipeline, opset: int, output: str):
+def convert_pytorch(nlp: Pipeline, opset: int, output: str, use_external_format: bool):
     if not is_torch_available():
         raise Exception("Cannot convert because PyTorch is not installed. Please install torch first.")
 
@@ -127,7 +127,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: str):
             output_names=output_names,
             dynamic_axes=dynamic_axes,
             do_constant_folding=True,
-            use_external_data_format=args.use_external_format,
+            use_external_data_format=use_external_format,
             enable_onnx_checker=True,
             opset_version=opset,
         )
@@ -161,7 +161,14 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: str):
         )
 
 
-def convert(framework: str, model: str, output: str, opset: int, tokenizer: Optional[str] = None):
+def convert(
+    framework: str,
+    model: str,
+    output: str,
+    opset: int,
+    tokenizer: Optional[str] = None,
+    use_external_format: bool = False,
+):
     print("ONNX opset version set to: {}".format(opset))
 
     # Load the pipeline
@@ -176,7 +183,7 @@ def convert(framework: str, model: str, output: str, opset: int, tokenizer: Opti
 
     # Export the graph
     if framework == "pt":
-        convert_pytorch(nlp, opset, output)
+        convert_pytorch(nlp, opset, output, use_external_format)
     else:
         convert_tensorflow(nlp, opset, output)
 
@@ -203,7 +210,7 @@ if __name__ == "__main__":
 
     try:
         # Convert
-        convert(args.framework, args.model, args.output, args.opset, args.tokenizer)
+        convert(args.framework, args.model, args.output, args.opset, args.tokenizer, args.use_external_format)
 
         # And verify
         if args.check_loading:
