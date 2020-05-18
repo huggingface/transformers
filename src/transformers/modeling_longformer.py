@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 
 # TODO: upload model and config files
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "longformer-base-4096": "https://ai2-s2-research.s3-us-west-2.amazonaws.com/longformer/longformer-base-4096/pytorch_model.bin",
-    "longformer-large-4096": "https://ai2-s2-research.s3-us-west-2.amazonaws.com/longformer/longformer-large-4096/pytorch_model.bin",
+    "longformer-base-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096/pytorch_model.bin",
+    "longformer-large-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096/pytorch_model.bin",
 }
 
 
@@ -600,6 +600,7 @@ class LongformerModel(RobertaModel):
         attention_mask[:, [1, 4, 21,]] = 2  # Set global attention based on the task. For example,
                                             # classification: the <s> token
                                             # QA: question tokens
+                                            # LM: potentially on the beginning of sentences and paragraphs
         sequence_output, pooled_output = model(input_ids, attention_mask=attention_mask)
         """
 
@@ -703,12 +704,8 @@ class LongformerForMaskedLM(BertPreTrainedModel):
         SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
         input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
 
-        # Attention mask values -- 0: no attention, 1: local attention, 2: global attention
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device) # initialize to local attention
-        attention_mask[:, [1, 4, 21,]] = 2  # Set global attention based on the task. For example,
-                                            # classification: the <s> token
-                                            # QA: question tokens
-                                            # LM: potentially on the beginning of sentences and paragraphs
+        attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
+                               # check ``LongformerModel.forward`` for more details how to set `attention_mask`
         loss, prediction_scores = model(input_ids, attention_mask=attention_mask, masked_lm_labels=input_ids)
         """
 
