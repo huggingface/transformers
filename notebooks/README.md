@@ -23,4 +23,4 @@ Pull Request so it can be included under the Community notebooks.
 
 | Notebook     |      Description      |      Author      |      |
 |:----------|:-------------|:-------------|------:|
-| [Title](link)  | How to ... | ...  |[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](link) |
+| [Train T5 on TPU](https://colab.research.google.com/github/patil-suraj/exploring-T5/blob/master/T5_on_TPU.ipynb)  | How to train T5 on SQUAD with transformers and nlp | [Suraj Patil](https://github.com/patil-suraj) |[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/patil-suraj/exploring-T5/blob/master/T5_on_TPU.ipynb#scrollTo=QLGiFCDqvuil) |
