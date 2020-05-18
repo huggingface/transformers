@@ -440,7 +440,8 @@ class Trainer:
                         ):
                             logs: Dict[str, float] = {}
                             logs["loss"] = (tr_loss - logging_loss) / self.args.logging_steps
-                            # maintaining backward compatibility. could use "scheduler.get_last_lr()[0]" instead for pytorch >= 1.4.0
+                            # maintaining backward compatibility. 
+                            # could use "scheduler.get_last_lr()[0]" instead for pytorch >= 1.4.0
                             logs["learning_rate"] = [group['lr'] for group in optimizer.param_groups][0]
                             logging_loss = tr_loss
 
