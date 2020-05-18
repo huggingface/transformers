@@ -7,10 +7,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from torch.utils.data import DataLoader
+
 from .evaluate_cnn import run_generate
 from .finetune import main
 from .utils import SummarizationDataset
-from torch.utils.data import DataLoader
+
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -142,7 +144,3 @@ class TestBartExamples(unittest.TestCase):
             # show that targets were truncated
             self.assertEqual(batch["target_ids"].shape[1], trunc_target)  # Truncated
             self.assertGreater(max_len_target, trunc_target)  # Truncated
-
-
-
-

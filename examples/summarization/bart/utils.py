@@ -53,7 +53,5 @@ class SummarizationDataset(Dataset):
         pad_token_id = self.tokenizer.pad_token_id
         y = trim_batch(target_ids, pad_token_id)
         source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
-        batch = {"input_ids": source_ids, "attention_mask": source_mask,
-                 "decoder_input_ids": y
-                 }
+        batch = {"input_ids": source_ids, "attention_mask": source_mask, "decoder_input_ids": y}
         return batch

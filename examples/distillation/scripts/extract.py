@@ -20,7 +20,7 @@ import argparse
 
 import torch
 
-from transformers import GPT2LMHeadModel, RobertaForMaskedLM, BartForConditionalGeneration
+from transformers import BartForConditionalGeneration, GPT2LMHeadModel, RobertaForMaskedLM
 
 
 def extract(args):
@@ -30,11 +30,11 @@ def extract(args):
     elif args.model_type == "gpt2":
         model = GPT2LMHeadModel.from_pretrained(args.model_name)
         prefix = "transformer"
-    elif args.model_type == 'bart':
+    elif args.model_type == "bart":
         model = BartForConditionalGeneration.from_pretrained(args.model_name)
-        prefix = 'model'
+        prefix = "model"
     else:
-        raise NotImplementedError('')
+        raise NotImplementedError("")
 
     state_dict = model.state_dict()
     compressed_sd = {}
@@ -96,17 +96,18 @@ def extract(args):
     torch.save(compressed_sd, args.dump_checkpoint)
 
 
-test_args = argparse.Namespace(model_type='bart',
-                   # model_name='bart-large-cnn', '',
-                   model_name='sshleifer/bart-tiny-random',
-                   vocab_transform=True,
-                   dump_checkpoint='test_dir/bart_tiny.pth'
-                   )
+test_args = argparse.Namespace(
+    model_type="bart",
+    # model_name='bart-large-cnn', '',
+    model_name="sshleifer/bart-tiny-random",
+    vocab_transform=True,
+    dump_checkpoint="test_dir/bart_tiny.pth",
+)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Extraction some layers of the full RobertaForMaskedLM or GPT2LMHeadModel for Transfer Learned "
-                    "Distillation"
+        "Distillation"
     )
     parser.add_argument("--model_type", default="roberta", choices=["roberta", "gpt2", "bart"])
     parser.add_argument("--model_name", default="roberta-large", type=str)

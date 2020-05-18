@@ -25,9 +25,10 @@ import shutil
 import numpy as np
 import torch
 
-from .distiller import Distiller
-from .lm_seqs_dataset import LmSeqsDataset
 from transformers import (
+    BartConfig,
+    BartForConditionalGeneration,
+    BartTokenizer,
     BertConfig,
     BertForMaskedLM,
     BertTokenizer,
@@ -40,8 +41,10 @@ from transformers import (
     RobertaConfig,
     RobertaForMaskedLM,
     RobertaTokenizer,
-    BartConfig, BartForConditionalGeneration, BartTokenizer
 )
+
+from .distiller import Distiller
+from .lm_seqs_dataset import LmSeqsDataset
 from .utils import git_log, init_gpu_params, logger, set_seed
 
 
@@ -219,6 +222,7 @@ def main():
     parser.add_argument("--checkpoint_interval", type=int, default=4000, help="Checkpoint interval.")
     args = parser.parse_args()
     train(args)
+
 
 def train(args):
     sanity_checks(args)

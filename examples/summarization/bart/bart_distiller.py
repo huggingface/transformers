@@ -1,10 +1,9 @@
-from transformers import BartForConditionalGeneration, BartConfig
+from transformers import BartConfig, BartForConditionalGeneration
 
 
 def simple_adaptor(batch, model_outputs):
     # The second and third elements of model outputs are the logits and hidden states
-    return {'logits': model_outputs[0],
-            'hidden': model_outputs[1]}
+    return {"logits": model_outputs[0], "hidden": model_outputs[1]}
 
 
 def make_teacher_and_student(teacher_cfg_kwargs, **student_updates):
