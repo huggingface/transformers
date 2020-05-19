@@ -22,7 +22,7 @@ import faiss
 
 import torch
 
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModel, AutoModelWithLMHead, AutoTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
 
 import nlp
@@ -539,12 +539,12 @@ def make_qa_retriever_model(model_name="google/bert_uncased_L-8_H-512_A-8", from
 def make_qa_retriever_batch(qa_list, tokenizer, max_len=64, device="cuda:0"):
     q_ls = [q for q, a in qa_list]
     a_ls = [a for q, a in qa_list]
-    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=64, pad_to_max_length=True)
+    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=max_len, pad_to_max_length=True)
     q_ids, q_mask = (
         torch.LongTensor(q_toks['input_ids']).to(device),
         torch.LongTensor(q_toks['attention_mask']).to(device),
     )
-    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=64, pad_to_max_length=True)
+    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=max_len, pad_to_max_length=True)
     a_ids, a_mask = (
         torch.LongTensor(a_toks['input_ids']).to(device),
         torch.LongTensor(a_toks['attention_mask']).to(device),
@@ -617,15 +617,20 @@ def evaluate_qa_retriever(model, dataset, tokenizer, args):
 ###############
 class ELI5DatasetS2S(Dataset):
 
-    def __init__(self, examples_array, make_doc_fun, extra_answer_threshold=3, document_cache=None):
+    def __init__(self, examples_array, make_doc_fun=None, extra_answer_threshold=3, document_cache=None, training=True):
+        self.training = training
         self.data = examples_array
         self.make_doc_function = make_doc_fun
         self.document_cache = {} if document_cache is None else document_cache
+        assert not (make_doc_fun is None and document_cache is None)
         # make index of specific question-answer pairs from multi-answers
-        self.qa_id_list = [(i, j)
-                           for i, qa in enumerate(self.data) 
-                           for j, (a, sc) in enumerate(zip(qa['answers']['text'], qa['answers']['score']))
-                           if j == 0 or sc >= extra_answer_threshold]
+        if self.training:
+            self.qa_id_list = [(i, j)
+                               for i, qa in enumerate(self.data) 
+                               for j, (a, sc) in enumerate(zip(qa['answers']['text'], qa['answers']['score']))
+                               if j == 0 or sc >= extra_answer_threshold]
+        else:
+            self.qa_id_list = [(i, 0) for i in range(self.data.num_rows)] 
 
     def __len__(self):
         return len(self.qa_id_list)
@@ -635,8 +640,10 @@ class ELI5DatasetS2S(Dataset):
         example = self.data[i]
         question = example['title'] + ' ' + example['selftext']
         answer = example['answers']['text'][j]
-        self.document_cache[i] = self.document_cache.get(i, self.make_doc_function(example['title']))
-        document = self.document_cache[i]
+        q_id = example['q_id']
+        if self.make_doc_function is not None:
+            self.document_cache[q_id] = self.document_cache.get(q_id, self.make_doc_function(example['title']))
+        document = self.document_cache[q_id]
         in_st = "question: {} context: {}".format(
             question.lower().replace(' --t--', '').strip(),
             document.lower().strip(),
@@ -646,6 +653,28 @@ class ELI5DatasetS2S(Dataset):
 
     def __getitem__(self, idx):
         return self.make_example(idx)
+
+def make_s2s_model(model_name="facebook/bart-large"):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelWithLMHead.from_pretrained(model_name)
+    return tokenizer, model
+
+def make_s2s_batch(qa_list, tokenizer, max_len=64, device="cuda:0"):
+    q_ls = [q for q, a in qa_list]
+    a_ls = [a for q, a in qa_list]
+    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=64, pad_to_max_length=True)
+    q_ids, q_mask = (
+        torch.LongTensor(q_toks['input_ids']).to(device),
+        torch.LongTensor(q_toks['attention_mask']).to(device),
+    )
+    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=64, pad_to_max_length=True)
+    a_ids, a_mask = (
+        torch.LongTensor(a_toks['input_ids']).to(device),
+        torch.LongTensor(a_toks['attention_mask']).to(device),
+    )
+    return (q_ids, q_mask, a_ids, a_mask)
+
+
 
 ###############
 ### ELI5-trained retrieval model usage
