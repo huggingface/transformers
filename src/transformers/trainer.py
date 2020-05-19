@@ -522,9 +522,7 @@ class Trainer:
                         else:
                             assert model is self.model
                         # Save model checkpoint
-                        output_dir = os.path.join(
-                            self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}"
-                        )
+                        output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}")
 
                         self.save_model(output_dir)
 
