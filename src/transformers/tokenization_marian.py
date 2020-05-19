@@ -183,6 +183,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         return len(self.encoder)
 
     def save_vocabulary(self, save_directory: str) -> Tuple[str]:
+        """save vocab file to json and copy spm files from their original path."""
         save_dir = Path(save_directory)
         assert save_dir.is_dir(), f"{save_directory} should be a directory"
         save_json(self.encoder, save_dir / self.vocab_files_names["vocab"])
@@ -221,7 +222,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     def get_special_tokens_mask(
         self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
-
+        """Get list where entries are [1] if a token is [eos] or [pad] else 0."""
         if already_has_special_tokens:
             return self._special_token_mask(token_ids_0)
         elif token_ids_1 is None:
