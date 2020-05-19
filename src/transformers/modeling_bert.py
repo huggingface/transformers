@@ -201,8 +201,8 @@ class BertSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.qkv_weight = nn.Parameter(torch.cat(
-            (self.query.weight, self.key.weight, self.value.weight), dim=0)
-        ).t().contiguous()
+            (self.query.weight, self.key.weight, self.value.weight), dim=0
+        ).t().contiguous())
 
         self.qkv_bias = nn.Parameter(
             torch.cat((self.query.bias, self.key.bias, self.value.bias), dim=0)
@@ -210,10 +210,10 @@ class BertSelfAttention(nn.Module):
 
         self.dropout = partial(nn.functional.dropout, p=config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
+    # def transpose_for_scores(self, x):
+    #     new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+    #     x = x.view(*new_x_shape)
+    #     return x.permute(0, 2, 1, 3)
 
     def forward(
         self,
