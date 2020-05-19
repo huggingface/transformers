@@ -14,13 +14,12 @@ from lightning_base import BaseTransformer, add_generic_args, generic_train, get
 from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.modeling_bart import invert_mask
 
-from .bart_distiller import copy_decoder_layers, init_student
-
-
 try:
     from .utils import SummarizationDataset
+    from .bart_distiller import copy_decoder_layers, init_student
 except ImportError:
     from utils import SummarizationDataset
+    from bart_distiller import copy_decoder_layers, init_student
 
 logger = logging.getLogger(__name__)
 
