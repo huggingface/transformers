@@ -623,7 +623,7 @@ class XLNetModel(XLNetPreTrainedModel):
             mask_lo = torch.tril(attn_mask, diagonal=-1)
             ret = torch.cat([ret[:, :qlen] + mask_lo, ret[:, qlen:]], dim=1)
 
-        ret = ret.to(next(self.parameters()))
+        ret = ret.to(self.device)
         return ret
 
     def cache_mem(self, curr_out, prev_mem):
@@ -685,7 +685,7 @@ class XLNetModel(XLNetPreTrainedModel):
                 fwd_pos_seq = fwd_pos_seq.clamp(-self.clamp_len, self.clamp_len)
             pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz)
 
-        pos_emb = pos_emb.to(next(self.parameters()))
+        pos_emb = pos_emb.to(self.device)
         return pos_emb
 
     @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
@@ -761,8 +761,8 @@ class XLNetModel(XLNetPreTrainedModel):
         mlen = mems[0].shape[0] if mems is not None and mems[0] is not None else 0
         klen = mlen + qlen
 
-        dtype_float = next(self.parameters()).dtype
-        device = next(self.parameters()).device
+        dtype_float = self.dtype
+        device = self.device
 
         # Attention mask
         # causal attention mask

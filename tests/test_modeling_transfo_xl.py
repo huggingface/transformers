@@ -21,7 +21,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import require_torch, slow, torch_device
+from .utils import require_multigpu, require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -43,7 +43,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
         def __init__(
             self,
             parent,
-            batch_size=13,
+            batch_size=14,
             seq_length=7,
             mem_len=30,
             clamp_len=15,
@@ -206,6 +206,11 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         output_result = self.model_tester.create_transfo_xl_lm_head(*config_and_inputs)
         self.model_tester.check_transfo_xl_lm_head_output(output_result)
+
+    @require_multigpu
+    def test_multigpu_data_parallel_forward(self):
+        # Opt-out of this test.
+        pass
 
     @slow
     def test_model_from_pretrained(self):

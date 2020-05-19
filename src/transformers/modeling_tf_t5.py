@@ -537,7 +537,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_ids,
+        inputs,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -548,19 +548,19 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         training=False,
     ):
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-            input_ids = tf.reshape(input_ids, (-1, input_shape[-1]))
+        if inputs is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both inputs and inputs_embeds at the same time")
+        elif inputs is not None:
+            input_shape = shape_list(inputs)
+            inputs = tf.reshape(inputs, (-1, input_shape[-1]))
         elif inputs_embeds is not None:
             input_shape = shape_list(inputs_embeds)[:-1]
         else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+            raise ValueError("You have to specify either inputs or inputs_embeds")
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = self.embed_tokens(inputs)
 
         batch_size, seq_length = input_shape
 
@@ -725,11 +725,11 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        input_ids = tf.constant(DUMMY_INPUTS)
+        inputs = tf.constant(DUMMY_INPUTS)
         input_mask = tf.constant(DUMMY_MASK)
         dummy_inputs = {
-            "inputs": input_ids,
-            "decoder_input_ids": input_ids,
+            "inputs": inputs,
+            "decoder_input_ids": inputs,
             "decoder_attention_mask": input_mask,
         }
         return dummy_inputs
@@ -759,11 +759,11 @@ T5_START_DOCSTRING = r"""    The T5 model was proposed in
 
         If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the first positional argument :
 
-        - a single Tensor with input_ids only and nothing else: `model(inputs_ids)
+        - a single Tensor with inputs only and nothing else: `model(inputs_ids)
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-            `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
+            `model([inputs, attention_mask])` or `model([inputs, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associaed to the input names given in the docstring:
-            `model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
+            `model({'inputs': inputs, 'token_type_ids': token_type_ids})`
 
     Parameters:
         config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
@@ -780,7 +780,7 @@ T5_INPUTS_DOCSTRING = r"""
             T5 is a model with relative position embeddings so you should be able to pad the inputs on
             the right or the left.
             Indices can be obtained using :class:`transformers.T5Tokenizer`.
-            To know more on how to prepare :obj:`input_ids` for pre-training take a look at
+            To know more on how to prepare :obj:`inputs` for pre-training take a look at
             `T5 Training <./t5.html#training>`_ .
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.convert_tokens_to_ids` for details.
@@ -805,8 +805,8 @@ T5_INPUTS_DOCSTRING = r"""
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If `use_cache` is True, `decoder_past_key_value_states` are returned and can be used to speed up decoding (see `decoder_past_key_value_states`).
         inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            Optionally, instead of passing :obj:`inputs` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `inputs` indices into associated vectors
             than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded representation.
@@ -885,8 +885,8 @@ class TFT5Model(TFT5PreTrainedModel):
 
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = TFT5Model.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        outputs = model(input_ids, decoder_input_ids=input_ids)
+        inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        outputs = model(inputs, decoder_input_ids=inputs)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
@@ -897,7 +897,7 @@ class TFT5Model(TFT5PreTrainedModel):
             kwargs["inputs"] = inputs
 
         # retrieve arguments
-        input_ids = kwargs.get("inputs", None)
+        inputs = kwargs.get("inputs", None)
         inputs_embeds = kwargs.get("inputs_embeds", None)
         attention_mask = kwargs.get("attention_mask", None)
         encoder_outputs = kwargs.get("encoder_outputs", None)
@@ -911,7 +911,7 @@ class TFT5Model(TFT5PreTrainedModel):
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask,
+                inputs, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask,
             )
 
         hidden_states = encoder_outputs[0]
@@ -1006,14 +1006,14 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
 
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        outputs = model(input_ids, decoder_input_ids=input_ids)
+        inputs = tokenizer.encode("Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        outputs = model(inputs, decoder_input_ids=inputs)
         prediction_scores = outputs[0]
 
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
-        input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="tf")  # Batch size 1
-        model.generate(input_ids)
+        inputs = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="tf")  # Batch size 1
+        model.generate(inputs)
 
         """
 
@@ -1023,7 +1023,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             kwargs["inputs"] = inputs
 
         # retrieve arguments
-        input_ids = kwargs.get("inputs", None)
+        inputs = kwargs.get("inputs", None)
         decoder_input_ids = kwargs.get("decoder_input_ids", None)
         attention_mask = kwargs.get("attention_mask", None)
         encoder_outputs = kwargs.get("encoder_outputs", None)
@@ -1038,7 +1038,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder(
-                input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask,
+                inputs, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask,
             )
 
         hidden_states = encoder_outputs[0]
@@ -1076,7 +1076,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
 
         return decoder_outputs + encoder_outputs
 
-    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
 
         # first step
@@ -1087,7 +1087,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
 
         return {
             "inputs": None,  # inputs don't have to be defined, but still need to be passed to make Keras.layer.__call__ happy
-            "decoder_input_ids": input_ids,  # input_ids are the decoder_input_ids
+            "decoder_input_ids": inputs,  # inputs are the decoder_input_ids
             "decoder_past_key_value_states": decoder_past_key_value_states,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,
