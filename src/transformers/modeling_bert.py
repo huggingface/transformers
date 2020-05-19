@@ -106,7 +106,7 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
             elif scope_names[0] == "output_weights":
                 pointer = getattr(pointer, "weight")
             elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
+                pointer = getattr(pointer, "qa_outputs")
             else:
                 try:
                     pointer = getattr(pointer, scope_names[0])
