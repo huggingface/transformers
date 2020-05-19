@@ -517,6 +517,7 @@ class XLNetModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlnet_base_cased(self):
         model = XLNetLMHeadModel.from_pretrained("xlnet-base-cased")
+        model.to(torch_device)
         input_ids = torch.tensor(
             [
                 [
