@@ -1,4 +1,5 @@
 export CURRENT_DIR=${PWD}
+CNN_DIR = /home/shleifer/transformers_fork/examples/summarization/bart/cnn_dm
 
 # Make output directory if it doesn't exist
 mkdir -p $OUTPUT_DIR
@@ -7,7 +8,7 @@ mkdir -p $OUTPUT_DIR
 export PYTHONPATH="../../":"${PYTHONPATH}"
 
 python finetune.py \
---data_dir=/home/shleifer/transformers_fork/cnn_dm/ \
+--data_dir=$CNN_DIR \
 --teacher=bart-large-cnn \
 --model_name_or_path=student \
 --learning_rate=3e-5 \
