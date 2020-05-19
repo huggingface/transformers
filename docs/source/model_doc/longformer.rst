@@ -21,9 +21,11 @@ A selecetd few tokens attend "globally" to all other tokens, as it is convention
 Note that "locally" and "globally" attending tokens are projected by different query, key and value matrices.
 Also note that every "locally" attending token not only attends to tokens within its window :math:`w`, but also to all "globally" attending tokens so that global attention is *symmetric*.
 
+The user can define which tokens are masked, which tokens attend "locally" and which tokens attend "globally" by setting the `config.attention_mask` `torch.Tensor` appropriately. In contrast to other models `Longformer` accepts the following values in `config.attention_mask`: `0` - the token is masked and not attended at all (as is done in other models), `1` - the token attends "locally", `2` - token attends "globally". For more information please also refer to :func:`~transformers.LongformerModel.forward` method.
+
 Using Longformer self attention, the memory and time complexity of the query-key matmul operation, which usually represents the memory and time bottleneck, can be reduced from :math:`\mathcal{O}(n_s \times n_s)` to :math:`\mathcal{O}(n_s \times w)`, with :math:`n_s` being the sequence length and :math:`w` being the average window size. It is assumed that the number of "globally" attending tokens is insignificant as compared to the number of "locally" attending tokens.
 
-For more information, please refer to the official `paper <https://arxiv.org/pdf/2004.05150.pdf>`_.
+For more information, please refer to the official `paper <https://arxiv.org/pdf/2004.05150.pdf>`_ .
 
 
 Training
