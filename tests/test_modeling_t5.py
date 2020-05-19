@@ -444,6 +444,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         )
 
         input_ids = tok.encode(model.config.prefix + original_input, return_tensors="pt")
+        input_ids = input_ids.to(torch_device)
 
         output = model.generate(
             input_ids=input_ids,
@@ -471,6 +472,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         expected_translation = "Cette section d'images provenant de l'enregistrement infrarouge effectué par le télescope Spitzer montre un « portrait familial » de générations innombrables de étoiles : les plus anciennes sont observées sous forme de pointes bleues, alors que les « nouveau-nés » de couleur rose dans la salle des accouchements doivent être plus difficiles "
 
         input_ids = tok.encode(model.config.prefix + original_input, return_tensors="pt")
+        input_ids = input_ids.to(torch_device)
 
         output = model.generate(
             input_ids=input_ids,
@@ -498,6 +500,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         expected_translation = "Taco Bell a declarat că intenţionează să adauge 2 000 de locaţii în SUA până în 2022."
 
         input_ids = tok.encode(model.config.prefix + original_input, return_tensors="pt")
+        input_ids = input_ids.to(torch_device)
 
         output = model.generate(
             input_ids=input_ids,
