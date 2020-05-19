@@ -13,6 +13,7 @@ def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return
     if not overwrite_cache and Path(cache_path).exists():
         return torch.load(open(cache_path))
 
+
     examples = []
     with open(data_path, "r") as f:
         for text in tqdm_nice(f.readlines(), desc=f'Tokenizing {data_path}'):

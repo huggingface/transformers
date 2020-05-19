@@ -207,7 +207,7 @@ class SummarizationDistiller(SummarizationTrainer):
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
             max_target_length=self.hparams.max_target_length,
-            overwrite_cache=not self.hparams.no_cache,
+            overwrite_cache=self.hparams.no_cache,
         )
         self.model: BartForConditionalGeneration
         self.model.teacher = teacher
