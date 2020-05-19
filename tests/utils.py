@@ -100,6 +100,8 @@ def require_multigpu(test_case):
 
     These tests are skipped on a machine without multiple GPUs.
 
+    To run *only* the multigpu tests, assuming all test names contain multigpu:
+    $ pytest -sv ./tests -k "multigpu"
     """
     if not _torch_available:
         return unittest.skip("test requires PyTorch")(test_case)
