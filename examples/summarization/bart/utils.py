@@ -15,7 +15,7 @@ def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return
 
     examples = []
     with open(data_path, "r") as f:
-        for text in tqdm_nice(f.readlines()):
+        for text in tqdm_nice(f.readlines(), desc=f'Tokenizing {data_path}'):
             tokenized = tokenizer.batch_encode_plus(
                 [text], max_length=max_length, pad_to_max_length=pad_to_max_length, return_tensors=return_tensors,
             )
