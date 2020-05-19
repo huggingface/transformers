@@ -210,6 +210,7 @@ class SummarizationDistiller(SummarizationTrainer):
             overwrite_cache=self.hparams.no_cache,
         )
         self.model: BartForConditionalGeneration
+        assert len(self.model.model.decoder.layers) == len(layers_to_copy)
         self.model.teacher = teacher
         self.teacher = teacher
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")

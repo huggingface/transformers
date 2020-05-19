@@ -12,8 +12,8 @@ python finetune.py \
 --teacher=bart-large-cnn \
 --model_name_or_path=student \
 --learning_rate=3e-5 \
---train_batch_size=8 \
---eval_batch_size=8 \
+--train_batch_size=16 \
+--eval_batch_size=24 \
 --output_dir=$OUTPUT_DIR \
 --do_train \
 --do_predict \
