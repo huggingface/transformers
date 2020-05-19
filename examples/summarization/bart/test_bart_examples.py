@@ -9,11 +9,13 @@ from unittest.mock import patch
 
 from torch.utils.data import DataLoader
 
+from durbango import DEFAULT_DEVICE
+from transformers import BartTokenizer
+
 from .evaluate_cnn import run_generate
 from .finetune import main, run_distiller
 from .utils import SummarizationDataset
-from durbango import DEFAULT_DEVICE
-from transformers import BartTokenizer
+
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -172,7 +174,7 @@ class TestBartExamples(unittest.TestCase):
             output_dir=output_dir,
             do_predict=True,
             model_name_or_path="student",
-            teacher='bart-large-cnn',
+            teacher="bart-large-cnn",
         )
         run_distiller(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
@@ -182,7 +184,6 @@ class TestBartExamples(unittest.TestCase):
         }
         created_files = {os.path.basename(p) for p in contents}
         self.assertSetEqual(expected_contents, created_files)
-
 
     def test_t5_run_sum_cli(self):
         args_d: dict = CHEAP_ARGS.copy()

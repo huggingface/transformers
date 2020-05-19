@@ -4,15 +4,19 @@ import logging
 import os
 import time
 from pathlib import Path
+from typing import Dict, List, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn.functional as F
+from rouge_score import rouge_scorer, scoring
 from torch import nn
 from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
 from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.modeling_bart import invert_mask
+
 
 try:
     from .utils import SummarizationDataset
@@ -22,6 +26,21 @@ except ImportError:
     from bart_distiller import copy_decoder_layers, init_student
 
 logger = logging.getLogger(__name__)
+
+ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
+
+
+def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
+    # score_file = Path(score_path).open("w")
+    scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=True)
+    aggregator = scoring.BootstrapAggregator()
+
+    for reference_ln, output_ln in zip(reference_lns, output_lns):
+        scores = scorer.score(reference_ln, output_ln)
+        aggregator.add_scores(scores)
+
+    result = aggregator.aggregate()
+    return {k: v.mid.fmeasure for k, v in result.items()}
 
 
 class SummarizationTrainer(BaseTransformer):
@@ -34,6 +53,7 @@ class SummarizationTrainer(BaseTransformer):
             max_source_length=self.hparams.max_source_length,
             max_target_length=self.hparams.max_target_length,
         )
+        self.model: BartForConditionalGeneration
 
     def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
         return self.model(
@@ -54,38 +74,35 @@ class SummarizationTrainer(BaseTransformer):
 
     def training_step(self, batch, batch_idx):
         loss = self._step(batch)
-
         tensorboard_logs = {"train_loss": loss}
         return {"loss": loss, "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
-        loss = self._step(batch)
-        return {"val_loss": loss}
+        return self._generative_step(batch)
 
     def validation_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        tensorboard_logs = {"val_loss": avg_loss}
-        return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
+        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS}
+        tensorboard_logs = {"val_loss": avg_loss, **rouges}
+        return {"avg_val_loss": avg_loss, "log": tensorboard_logs, **rouges}
 
-    def test_step(self, batch, batch_idx):
+    def _generative_step(self, batch):
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
         # NOTE: the following kwargs get more speed and lower quality summaries than those in evaluate_cnn.py
         generated_ids = self.model.generate(
-            input_ids=source_ids,
-            attention_mask=source_mask,
-            #num_beams=1,
-            max_length=56,
-            #repetition_penalty=2.5,
-            #length_penalty=1.0,
-            early_stopping=True,
-            use_cache=True,
+            input_ids=source_ids, attention_mask=source_mask, max_length=56, use_cache=True,
         )
         preds = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         target = self.tokenizer.batch_decode(y, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         loss = self._step(batch)
+        rouge: Dict = calculate_rouge(preds, target)
+        base_metrics = {"val_loss": loss, "preds": preds, "target": target}
+        base_metrics.update(rouge)
+        return base_metrics
 
-        return {"val_loss": loss, "preds": preds, "target": target}
+    def test_step(self, batch, batch_idx):
+        return self._generative_step(batch)
 
     def test_end(self, outputs):
         return self.validation_end(outputs)
@@ -105,8 +122,9 @@ class SummarizationTrainer(BaseTransformer):
 
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = SummarizationDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)
-        dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn, shuffle=shuffle,
-                                num_workers=4)
+        dataloader = DataLoader(
+            dataset, batch_size=batch_size, collate_fn=dataset.collate_fn, shuffle=shuffle, num_workers=4
+        )
         return dataloader
 
     def train_dataloader(self) -> DataLoader:
@@ -158,13 +176,10 @@ class SummarizationTrainer(BaseTransformer):
             "--teacher", default=None, type=str, required=True,
         )
         parser.add_argument(
-            "--no_cache", action='store_true',
+            "--no_cache", action="store_true",
         )
 
         return parser
-
-
-
 
 
 def freeze_part(model: nn.Module):
@@ -234,8 +249,12 @@ class SummarizationDistiller(SummarizationTrainer):
             # mask has True at padding_idx
             mask = invert_mask(mask)
             sel_mask = mask[:, :, None].expand_as(s_logits)
-            s_logits_slct = torch.masked_select(s_logits, sel_mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
-            t_logits_slct = torch.masked_select(t_logits, sel_mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
+            s_logits_slct = torch.masked_select(
+                s_logits, sel_mask
+            )  # (bs * seq_length * voc_size) modulo the 1s in mask
+            t_logits_slct = torch.masked_select(
+                t_logits, sel_mask
+            )  # (bs * seq_length * voc_size) modulo the 1s in mask
         else:
 
             t_logits_slct = t_logits
@@ -265,8 +284,6 @@ class SummarizationDistiller(SummarizationTrainer):
         target = s_hidden_states_slct.new(s_hidden_states_slct.size(0)).fill_(1)  # (bs * seq_length,)
         loss_cos = self.cosine_loss_fct(s_hidden_states_slct, t_hidden_states_slct, target)
         return loss_cos
-
-
 
 
 def main(args):
