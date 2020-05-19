@@ -20,6 +20,6 @@ python finetune.py \
 --n_gpu 1 \
 --fp16 \
 --output_dir $OUTPUT_DIR \
---val_check_interval 0.5 \
+--val_check_interval 0.25 \
 --num_epochs 4 \
 $@
