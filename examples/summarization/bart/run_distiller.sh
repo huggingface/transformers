@@ -21,5 +21,5 @@ python finetune.py \
 --fp16 \
 --output_dir $OUTPUT_DIR \
 --val_check_interval 0.25 \
---num_epochs 4 \
+--num_train_epochs 4 \
 $@
