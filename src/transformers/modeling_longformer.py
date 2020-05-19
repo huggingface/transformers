@@ -476,25 +476,18 @@ class LongformerModel(RobertaModel):
         super().__init__(config)
 
         if isinstance(config.attention_window, int):
-            assert config.attention_window % 2 == 0, "`attention_window` has to be an even value"
-            assert config.attention_window > 0, "`attention_window` has to be positive"
+            assert config.attention_window % 2 == 0, "`config.attention_window` has to be an even value"
+            assert config.attention_window > 0, "`config.attention_window` has to be positive"
             config.attention_window = [config.attention_window] * config.num_hidden_layers  # one value per layer
         else:
             assert len(config.attention_window) == config.num_hidden_layers, (
-                "`len(attention_window)` should equal `num_hidden_layers`. "
+                "`len(config.attention_window)` should equal `config.num_hidden_layers`. "
                 f"Expected {config.num_hidden_layers}, given {len(config.attention_window)}"
             )
 
-        if config.attention_mode == "bert":
-            pass  # do nothing, use the default `modeling_bert.BertSelfAttention` (will OOM for long sequences)
-        elif config.attention_mode == "longformer":
-            for i, layer in enumerate(self.encoder.layer):
-                # replace the `modeling_bert.BertSelfAttention` object with `LongformerSelfAttention`
-                layer.attention.self = LongformerSelfAttention(config, layer_id=i)
-        else:
-            raise ValueError(
-                f'Expected values of `attention_mode` are "longformer" or "bert", given {config.attention_mode}'
-            )
+        for i, layer in enumerate(self.encoder.layer):
+            # replace the `modeling_bert.BertSelfAttention` object with `LongformerSelfAttention`
+            layer.attention.self = LongformerSelfAttention(config, layer_id=i)
 
         self.init_weights()
 
