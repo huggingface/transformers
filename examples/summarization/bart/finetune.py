@@ -296,4 +296,4 @@ if __name__ == "__main__":
     parser = SummarizationDistiller.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
-    main(args)
+    run_distiller(args)
