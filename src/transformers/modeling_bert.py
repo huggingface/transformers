@@ -200,6 +200,14 @@ class BertSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
+        self.qkv_weight = nn.Parameter(torch.cat(
+            (self.query.weight, self.key.weight, self.value.weight), dim=0)
+        ).t().contiguous()
+
+        self.qkv_bias = nn.Parameter(
+            torch.cat((self.query.bias, self.key.bias, self.value.bias), dim=0)
+        )
+
         self.dropout = partial(nn.functional.dropout, p=config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
@@ -215,29 +223,25 @@ class BertSelfAttention(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
     ):
-        mixed_query_layer = self.query(hidden_states)
-
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
         if encoder_hidden_states is not None:
+            mixed_query_layer = self.query(hidden_states)
             mixed_key_layer = self.key(encoder_hidden_states)
             mixed_value_layer = self.value(encoder_hidden_states)
             attention_mask = encoder_attention_mask
         else:
-            mixed_key_layer = self.key(hidden_states)
-            mixed_value_layer = self.value(hidden_states)
+            # Compute qkv_bias + (hidden_states @ qkv_weight)
+            qkv = torch.matmul(hidden_states, self.qkv_weight) + self.qkv_bias
+            mixed_query_layer, mixed_key_layer, mixed_value_layer = qkv.chunk(3, dim=2)
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-        key_layer = self.transpose_for_scores(mixed_key_layer)
-        value_layer = self.transpose_for_scores(mixed_value_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = torch.bmm(mixed_query_layer, mixed_key_layer.transpose(2, 1))
         attention_scores = attention_scores * self.scale_factor
+
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            attention_scores = attention_scores + attention_mask
+            attention_scores = attention_scores + attention_mask.squeeze(2)
 
         # Normalize the attention scores to probabilities.
         attention_probs = torch.softmax(attention_scores, dim=-1)
@@ -248,16 +252,16 @@ class BertSelfAttention(nn.Module):
 
         # Mask heads if we want to
         if head_mask is not None:
+            bs = attention_probs.size(0)
+
+            # Split attention_probs
+            attention_probs = attention_probs.view(bs, -1, self.num_attention_heads, self.attention_head_size)
             attention_probs = attention_probs * head_mask
+            attention_probs = attention_probs.flatten(2)
 
-        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = torch.bmm(attention_probs, mixed_value_layer)
 
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if self.output_attentions else (context_layer,)
-        return outputs
+        return (context_layer, attention_probs) if self.output_attentions else (context_layer,)
 
 
 class BertSelfOutput(nn.Module):
@@ -316,8 +320,7 @@ class BertAttention(nn.Module):
             hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        return (attention_output,) + self_outputs[1:]  # add attentions if we output them
 
 
 class BertIntermediate(nn.Module):
@@ -429,15 +432,13 @@ class BertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
 
     def forward(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
         pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
+        return torch.tanh(pooled_output)
 
 
 class BertPredictionHeadTransform(nn.Module):
