@@ -654,25 +654,78 @@ class ELI5DatasetS2S(Dataset):
     def __getitem__(self, idx):
         return self.make_example(idx)
 
-def make_s2s_model(model_name="facebook/bart-large"):
+def make_qa_s2s_model(model_name="facebook/bart-large", from_file=None, device="cuda:0"):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelWithLMHead.from_pretrained(model_name)
+    model = AutoModelWithLMHead.from_pretrained(model_name).to(device)
+    if from_file is not None:
+        param_dict = torch.load(from_file) # has model weights, optimizer, and scheduler states
+        model.load_state_dict(param_dict['model'])
     return tokenizer, model
 
-def make_s2s_batch(qa_list, tokenizer, max_len=64, device="cuda:0"):
+def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, device="cuda:0"):
     q_ls = [q for q, a in qa_list]
     a_ls = [a for q, a in qa_list]
-    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=64, pad_to_max_length=True)
+    q_toks = tokenizer.batch_encode_plus(q_ls, max_length=max_len, pad_to_max_length=True)
     q_ids, q_mask = (
         torch.LongTensor(q_toks['input_ids']).to(device),
         torch.LongTensor(q_toks['attention_mask']).to(device),
     )
-    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=64, pad_to_max_length=True)
+    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=max_len, pad_to_max_length=True)
     a_ids, a_mask = (
         torch.LongTensor(a_toks['input_ids']).to(device),
         torch.LongTensor(a_toks['attention_mask']).to(device),
     )
-    return (q_ids, q_mask, a_ids, a_mask)
+    lm_labels = a_ids[:,1:].contiguous().clone()
+    lm_labels[a_mask[:,1:].contiguous() == 0] = -100
+    model_inputs = {
+        'input_ids': q_ids,
+        'attention_mask': q_mask,
+        'decoder_input_ids': a_ids[:,:-1].contiguous(),
+        'lm_labels': lm_labels,
+    }
+    return model_inputs
+
+def train_qa_s2s_epoch(model, dataset, tokenizer, optimizer, scheduler, args, e=0):
+    model.train()
+    # make iterator
+    train_sampler = RandomSampler(dataset)
+    model_collate_fn = functools.partial(
+        make_qa_s2s_batch,
+        tokenizer=tokenizer, max_len=args.max_length, device='cuda:0'
+    )
+    data_loader = DataLoader(
+        dataset, batch_size=args.batch_size,
+        sampler=train_sampler, collate_fn=model_collate_fn
+    )
+    epoch_iterator = tqdm(data_loader, desc="Iteration", disable=True)
+    # accumulate loss since last print
+    loc_steps = 0
+    loc_loss = 0.0
+    st_time = time()
+    for step, batch_inputs in enumerate(epoch_iterator):
+        loss = model(**batch_inputs)[0]
+        loss.backward()
+        # optimizer
+        if step % args.backward_freq == 0:
+            optimizer.step()
+            scheduler.step()
+            model.zero_grad()
+        # some printing within the epoch
+        loc_loss += loss.item()
+        loc_steps += 1
+        if step % args.print_freq == 0:
+            print(
+                "{:2d} {:5d} of {:5d} \t L: {:.3f} \t -- {:.3f}".format(
+                    e, step,
+                    len(dataset) // args.batch_size,
+                    loc_loss / loc_steps,
+                    time() - st_time,
+                )
+            )
+            loc_loss = 0
+            loc_steps = 0
+
+
 
 
 
