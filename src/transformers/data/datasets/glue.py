@@ -63,15 +63,26 @@ class GlueDataset(Dataset):
         tokenizer: PreTrainedTokenizer,
         limit_length: Optional[int] = None,
         evaluate=False,
+        test=False,
     ):
         self.args = args
         processor = glue_processors[args.task_name]()
+        self.processor = processor
         self.output_mode = glue_output_modes[args.task_name]
+        if evaluate and test:
+            logger.info(f"evaluate and test can't be true at the same time.")
+            return
+
+        mode_tag = "train"
+        if evaluate:
+            mode_tag = "dev"
+        if test:
+            mode_tag = "test"
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(
             args.data_dir,
             "cached_{}_{}_{}_{}".format(
-                "dev" if evaluate else "train", tokenizer.__class__.__name__, str(args.max_seq_length), args.task_name,
+                mode_tag, tokenizer.__class__.__name__, str(args.max_seq_length), args.task_name,
             ),
         )
 
@@ -96,11 +107,13 @@ class GlueDataset(Dataset):
                 ):
                     # HACK(label indices are swapped in RoBERTa pretrained model)
                     label_list[1], label_list[2] = label_list[2], label_list[1]
-                examples = (
-                    processor.get_dev_examples(args.data_dir)
-                    if evaluate
-                    else processor.get_train_examples(args.data_dir)
-                )
+                examples = None
+                if evaluate:
+                    examples = processor.get_dev_examples(args.data_dir)
+                if test:
+                    examples = processor.get_test_examples(args.data_dir)
+                if examples is None:
+                    examples = processor.get_train_examples(args.data_dir)
                 if limit_length is not None:
                     examples = examples[:limit_length]
                 self.features = glue_convert_examples_to_features(
@@ -122,3 +135,6 @@ class GlueDataset(Dataset):
 
     def __getitem__(self, i) -> InputFeatures:
         return self.features[i]
+
+    def get_labels(self):
+        return self.processor.get_labels()

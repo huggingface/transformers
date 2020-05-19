@@ -57,6 +57,7 @@ class TrainingArguments:
     evaluate_during_training: bool = field(
         default=False, metadata={"help": "Run evaluation during training at each logging step."},
     )
+    predict_real_class_name: bool = field(default=False, metadata={"help": "Whether to output the real class name when predicting."})
 
     per_gpu_train_batch_size: int = field(default=8, metadata={"help": "Batch size per GPU/CPU for training."})
     per_gpu_eval_batch_size: int = field(default=8, metadata={"help": "Batch size per GPU/CPU for evaluation."})
