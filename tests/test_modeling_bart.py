@@ -257,7 +257,7 @@ class BartTranslationTests(unittest.TestCase):
             )
         }
         translated_tokens = model.generate(input_ids=inputs["input_ids"].to(torch_device), num_beams=5,)
-        decoded = self.tokenizer.batch_decode(translated_tokens)
+        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         self.assertEqual(expected_translation_romanian, decoded[0])
 
     def test_mbart_enro_config(self):
@@ -589,7 +589,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             decoder_start_token_id=model.config.eos_token_id,
         )
 
-        decoded = tok.batch_decode(hypotheses_batch)
+        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True,)
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
