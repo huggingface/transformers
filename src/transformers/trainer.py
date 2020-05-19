@@ -331,7 +331,9 @@ class Trainer:
             and os.path.isfile(os.path.join(model_path, "scheduler.pt"))
         ):
             # Load in optimizer and scheduler states
-            optimizer.load_state_dict(torch.load(os.path.join(model_path, "optimizer.pt"), map_location=self.args.device))
+            optimizer.load_state_dict(
+                torch.load(os.path.join(model_path, "optimizer.pt"), map_location=self.args.device)
+            )
             scheduler.load_state_dict(torch.load(os.path.join(model_path, "scheduler.pt")))
 
         model = self.model
