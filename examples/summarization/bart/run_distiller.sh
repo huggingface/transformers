@@ -1,6 +1,4 @@
-export OUTPUT_DIR_NAME=bart_sum
 export CURRENT_DIR=${PWD}
-export OUTPUT_DIR=${CURRENT_DIR}/${OUTPUT_DIR_NAME}
 
 # Make output directory if it doesn't exist
 mkdir -p $OUTPUT_DIR
@@ -13,8 +11,8 @@ python finetune.py \
 --teacher=bart-large-cnn \
 --model_name_or_path=student \
 --learning_rate=3e-5 \
---train_batch_size=4 \
---eval_batch_size=4 \
+--train_batch_size=8 \
+--eval_batch_size=8 \
 --output_dir=$OUTPUT_DIR \
 --do_train \
 --do_predict \
