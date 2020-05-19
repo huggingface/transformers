@@ -81,11 +81,8 @@ class SummarizationTrainer(BaseTransformer):
             early_stopping=True,
             use_cache=True,
         )
-        preds = [
-            self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-            for g in generated_ids
-        ]
-        target = [self.tokenizer.decode(t, skip_special_tokens=True, clean_up_tokenization_spaces=True) for t in y]
+        preds = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        target = self.tokenizer.batch_decode(y, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         loss = self._step(batch)
 
         return {"val_loss": loss, "preds": preds, "target": target}
@@ -108,7 +105,8 @@ class SummarizationTrainer(BaseTransformer):
 
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = SummarizationDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)
-        dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn, shuffle=shuffle)
+        dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn, shuffle=shuffle,
+                                num_workers=4)
         return dataloader
 
     def train_dataloader(self) -> DataLoader:

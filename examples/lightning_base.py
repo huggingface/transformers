@@ -192,6 +192,7 @@ class BaseTransformer(pl.LightningModule):
 
         parser.add_argument("--train_batch_size", default=32, type=int)
         parser.add_argument("--eval_batch_size", default=32, type=int)
+        #parser.add_argument("--eval_batch_size", default=32, type=int)
 
 
 class LoggingCallback(pl.Callback):
@@ -241,7 +242,7 @@ def add_generic_args(parser, root_dir):
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
         "See details at https://nvidia.github.io/apex/amp.html",
     )
-
+    parser.add_argument("--fast_dev_run", type=bool, default=False)
     parser.add_argument("--n_gpu", type=int, default=1)
     parser.add_argument("--n_tpu_cores", type=int, default=0)
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
@@ -276,6 +277,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace):
         gradient_clip_val=args.max_grad_norm,
         checkpoint_callback=checkpoint_callback,
         callbacks=[LoggingCallback()],
+        fast_dev_run=args.fast_dev_run,
     )
 
     if args.fp16:

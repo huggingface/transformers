@@ -47,8 +47,10 @@ CHEAP_ARGS = {
     "eval_batch_size": 2,
     "max_source_length": 12,
     "max_target_length": 12,
+    "fast_dev_run": False,
 }
 DARGS = {
+    "fast_dev_run": True,
     "train_batch_size": 4,
     "eval_batch_size": 4,
     "warmup_steps": 100,
@@ -138,6 +140,7 @@ class TestBartExamples(unittest.TestCase):
             model_type="bart",
             train_batch_size=2,
             eval_batch_size=2,
+            fast_dev_run=True,
             n_gpu=0,
             output_dir=output_dir,
             do_predict=True,
