@@ -251,7 +251,7 @@ def main():
 
     # Evaluation
     results = {}
-    if training_args.do_eval and training_args.local_rank in [-1, 0]:
+    if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
         eval_output = trainer.evaluate()
@@ -260,11 +260,12 @@ def main():
         result = {"perplexity": perplexity}
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results_lm.txt")
-        with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results *****")
-            for key in sorted(result.keys()):
-                logger.info("  %s = %s", key, str(result[key]))
-                writer.write("%s = %s\n" % (key, str(result[key])))
+        if trainer.is_world_master():
+            with open(output_eval_file, "w") as writer:
+                logger.info("***** Eval results *****")
+                for key in sorted(result.keys()):
+                    logger.info("  %s = %s", key, str(result[key]))
+                    writer.write("%s = %s\n" % (key, str(result[key])))
 
         results.update(result)
 

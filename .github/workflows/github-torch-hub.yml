@@ -21,7 +21,7 @@ jobs:
     - name: Install dependencies
       run: |
         pip install torch
-        pip install numpy tokenizers filelock requests tqdm regex sentencepiece sacremoses
+        pip install numpy tokenizers filelock requests tqdm regex sentencepiece sacremoses packaging
 
     - name: Torch hub list
       run: |
