@@ -48,6 +48,7 @@ CHEAP_ARGS = {
     "max_source_length": 12,
     "max_target_length": 12,
     "fast_dev_run": False,
+    "no_cache": False,
 }
 DARGS = {
     "fast_dev_run": True,
@@ -75,6 +76,7 @@ DARGS = {
     "max_target_length": 56,
     "cache_dir": "",
     "num_train_epochs": 1,
+    "no_cache": False,
 }
 
 

@@ -157,6 +157,9 @@ class SummarizationTrainer(BaseTransformer):
         parser.add_argument(
             "--teacher", default=None, type=str, required=True,
         )
+        parser.add_argument(
+            "--no_cache", action='store_true',
+        )
 
         return parser
 
@@ -193,6 +196,7 @@ class SummarizationDistiller(SummarizationTrainer):
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
             max_target_length=self.hparams.max_target_length,
+            overwrite_cache=not self.hparams.no_cache,
         )
         self.model: BartForConditionalGeneration
         self.model.teacher = teacher

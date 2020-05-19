@@ -5,15 +5,23 @@ from torch.utils.data import Dataset
 
 from transformers.tokenization_utils import trim_batch
 
+from durbango import tqdm_nice, pickle_load, pickle_save, lmap
+from pathlib import Path
 
-def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return_tensors="pt"):
+
+def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return_tensors="pt", overwrite_cache=False):
+    cache_path = f'{data_path}_{max_length}.pkl'
+    if not overwrite_cache and Path(cache_path).exists():
+        return pickle_load(cache_path)
+
     examples = []
     with open(data_path, "r") as f:
-        for text in f.readlines():
+        for text in tqdm_nice(f.readlines()):
             tokenized = tokenizer.batch_encode_plus(
                 [text], max_length=max_length, pad_to_max_length=pad_to_max_length, return_tensors=return_tensors,
             )
             examples.append(tokenized)
+    pickle_save(lmap(dict, examples), cache_path)
     return examples
 
 
@@ -25,11 +33,12 @@ class SummarizationDataset(Dataset):
         type_path="train",
         max_source_length=1024,
         max_target_length=56,
+        overwrite_cache=True,
     ):
         super().__init__()
         self.tokenizer = tokenizer
-        self.source = encode_file(tokenizer, os.path.join(data_dir, type_path + ".source"), max_source_length)
-        self.target = encode_file(tokenizer, os.path.join(data_dir, type_path + ".target"), max_target_length)
+        self.source = encode_file(tokenizer, os.path.join(data_dir, type_path + ".source"), max_source_length, overwrite_cache=overwrite_cache)
+        self.target = encode_file(tokenizer, os.path.join(data_dir, type_path + ".target"), max_target_length, overwrite_cache=overwrite_cache)
 
     def __len__(self):
         return len(self.source)
