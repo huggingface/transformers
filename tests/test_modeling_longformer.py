@@ -214,7 +214,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = LongformerModel.from_pretrained("longformer-base-4096")
-        model = model.to(torch_device)
+        model.to(torch_device)
 
         # 'Hello world! ' repeated 1000 times
         input_ids = torch.tensor(
@@ -234,7 +234,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = LongformerForMaskedLM.from_pretrained("longformer-base-4096")
-        model = model.to(torch_device)
+        model.to(torch_device)
 
         # 'Hello world! ' repeated 1000 times
         input_ids = torch.tensor(

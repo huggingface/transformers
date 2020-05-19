@@ -770,7 +770,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             import torch_xla.core.xla_model as xm
 
             model = xm.send_cpu_data_to_device(model, xm.xla_device())
-            model = model.to(xm.xla_device())
+            model.to(xm.xla_device())
 
         return model
 
