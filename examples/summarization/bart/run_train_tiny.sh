@@ -24,7 +24,9 @@ python finetune.py \
 --output_dir=$OUTPUT_DIR \
 --num_train_epochs=1  \
 --n_gpu=0 \
---do_train $@
+--do_train \
+--do_predict \
+
 
 rm -rf cnn_tiny
 rm -rf $OUTPUT_DIR
