@@ -291,7 +291,7 @@ class SummarizationDistiller(SummarizationTrainer):
             "--teacher", default=None, type=str, required=True,
         )
         parser.add_argument(
-            "--alpha_cle", default=0.8, type=float,
+            "--alpha_ce", default=0.8, type=float,
         )
         parser.add_argument(
             "--alpha_mlm", default=0.2, type=float,
