@@ -22,6 +22,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 CHEAP_ARGS = {
+    "val_check_interval": 1.0,
     "output_dir": "",
     "fp16": False,
     "fp16_opt_level": "O1",

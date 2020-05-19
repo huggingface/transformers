@@ -7,19 +7,20 @@ from torch.utils.data import Dataset
 from durbango import lmap, pickle_load, pickle_save, tqdm_nice
 from transformers.tokenization_utils import trim_batch
 
+
 def load_pt(path):
-    with open(path, 'rb') as f:
+    with open(path, "rb") as f:
         return torch.load(f)
+
 
 def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return_tensors="pt", overwrite_cache=False):
     cache_path = f"{data_path}_{max_length}.pkl"
     if not overwrite_cache and Path(cache_path).exists():
         return load_pt(cache_path)
 
-
     examples = []
     with open(data_path, "r") as f:
-        for text in tqdm_nice(f.readlines(), desc=f'Tokenizing {data_path}'):
+        for text in tqdm_nice(f.readlines(), desc=f"Tokenizing {data_path}"):
             tokenized = tokenizer.batch_encode_plus(
                 [text], max_length=max_length, pad_to_max_length=pad_to_max_length, return_tensors=return_tensors,
             )
