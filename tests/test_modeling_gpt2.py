@@ -343,6 +343,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gpt2(self):
         model = GPT2LMHeadModel.from_pretrained("gpt2")
+        model = model.to(torch_device)
         input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
         expected_output_ids = [
             464,
@@ -372,6 +373,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_distilgpt2(self):
         model = GPT2LMHeadModel.from_pretrained("distilgpt2")
+        model = model.to(torch_device)
         input_ids = torch.tensor([[464, 1893]], dtype=torch.long, device=torch_device)  # The president
         expected_output_ids = [
             464,

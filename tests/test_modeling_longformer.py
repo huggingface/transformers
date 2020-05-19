@@ -214,32 +214,39 @@ class LongformerModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
         model = LongformerModel.from_pretrained("longformer-base-4096")
+        model = model.to(torch_device)
 
         # 'Hello world! ' repeated 1000 times
-        input_ids = torch.tensor([[0] + [20920, 232, 328, 1437] * 1000 + [2]])  # long input
+        input_ids = torch.tensor(
+            [[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=torch.long, device=torch_device
+        )  # long input
 
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device)
         attention_mask[:, [1, 4, 21]] = 2  # Set global attention on a few random positions
 
         output = model(input_ids, attention_mask=attention_mask)[0]
 
-        expected_output_sum = torch.tensor(74585.8594)
-        expected_output_mean = torch.tensor(0.0243)
+        expected_output_sum = torch.tensor(74585.8594, device=torch_device)
+        expected_output_mean = torch.tensor(0.0243, device=torch_device)
         self.assertTrue(torch.allclose(output.sum(), expected_output_sum, atol=1e-4))
         self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
 
     @slow
     def test_inference_masked_lm(self):
         model = LongformerForMaskedLM.from_pretrained("longformer-base-4096")
+        model = model.to(torch_device)
 
         # 'Hello world! ' repeated 1000 times
-        input_ids = torch.tensor([[0] + [20920, 232, 328, 1437] * 1000 + [2]])  # long input
+        input_ids = torch.tensor(
+            [[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=torch.long, device=torch_device
+        )  # long input
 
         loss, prediction_scores = model(input_ids, masked_lm_labels=input_ids)
 
-        expected_loss = torch.tensor(0.0620)
-        expected_prediction_scores_sum = torch.tensor(-6.1599e08)
-        expected_prediction_scores_mean = torch.tensor(-3.0622)
+        expected_loss = torch.tensor(0.0620, device=torch_device)
+        expected_prediction_scores_sum = torch.tensor(-6.1599e08, device=torch_device)
+        expected_prediction_scores_mean = torch.tensor(-3.0622, device=torch_device)
+        input_ids = input_ids.to(torch_device)
 
         self.assertTrue(torch.allclose(loss, expected_loss, atol=1e-4))
         self.assertTrue(torch.allclose(prediction_scores.sum(), expected_prediction_scores_sum, atol=1e-4))

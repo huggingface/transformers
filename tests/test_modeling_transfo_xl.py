@@ -223,6 +223,7 @@ class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_transfo_xl_wt103(self):
         model = TransfoXLLMHeadModel.from_pretrained("transfo-xl-wt103")
+        model = model.to(torch_device)
         input_ids = torch.tensor(
             [
                 [

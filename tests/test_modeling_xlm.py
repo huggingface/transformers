@@ -434,6 +434,7 @@ class XLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):
         model = XLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
+        model = model.to(torch_device)
         input_ids = torch.tensor([[14, 447]], dtype=torch.long, device=torch_device)  # the president
         expected_output_ids = [
             14,
@@ -459,4 +460,4 @@ class XLMModelLanguageGenerationTest(unittest.TestCase):
         ]  # the president the president the president the president the president the president the president the president the president the president
         # TODO(PVP): this and other input_ids I tried for generation give pretty bad results. Not sure why. Model might just not be made for auto-regressive inference
         output_ids = model.generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
+        self.assertListEqual(output_ids[0].cpu().numpy().tolist(), expected_output_ids)
