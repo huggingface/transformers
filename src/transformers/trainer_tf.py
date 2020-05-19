@@ -372,7 +372,9 @@ class TFTrainer:
         """Forwards a training example and accumulates the gradients."""
         per_example_loss, _ = self._run_model(features, labels, True)
         gradients = tf.gradients(per_example_loss, self.model.trainable_variables)
-        gradients = [g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)]
+        gradients = [
+            g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)
+        ]
 
         self.gradient_accumulator(gradients)
 
