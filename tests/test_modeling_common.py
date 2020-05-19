@@ -23,7 +23,7 @@ from typing import List
 
 from transformers import is_torch_available
 
-from .utils import multigpu, require_torch, slow, torch_device
+from .utils import require_multigpu, require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -758,7 +758,7 @@ class ModelTesterMixin:
                         return True
         return False
 
-    @multigpu
+    @require_multigpu
     def test_multigpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

@@ -21,7 +21,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import multigpu, require_torch, slow, torch_device
+from .utils import require_multigpu, require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -207,7 +207,7 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
         output_result = self.model_tester.create_transfo_xl_lm_head(*config_and_inputs)
         self.model_tester.check_transfo_xl_lm_head_output(output_result)
 
-    @multigpu
+    @require_multigpu
     def test_multigpu_data_parallel_forward(self):
         # Opt-out of this test.
         pass

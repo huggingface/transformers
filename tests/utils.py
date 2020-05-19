@@ -94,7 +94,7 @@ def require_tf(test_case):
     return test_case
 
 
-def multigpu(test_case):
+def require_multigpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch).
 
