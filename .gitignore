@@ -118,8 +118,33 @@ dmypy.json
 # vscode
 .vscode
 
+# Pycharm
+.idea
+
 # TF code
 tensorflow_code
 
 # Models
 models
+proc_data
+
+# examples
+runs
+/runs_old
+/wandb
+/examples/runs
+/examples/**/*.args
+
+# data
+/data
+serialization_dir
+
+# emacs
+*.*~
+debug.env
+
+# vim
+.*.swp
+
+#ctags
+tags

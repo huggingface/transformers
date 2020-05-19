@@ -1,0 +1,32 @@
+name: Torch hub integration
+
+on: 
+  push:
+    branches:
+      - "*"
+
+jobs:
+  torch_hub_integration:
+    runs-on: ubuntu-latest
+    steps:
+    # no checkout necessary here.
+    - name: Extract branch name
+      run: echo "::set-env name=BRANCH::${GITHUB_REF#refs/heads/}"
+    - name: Check branch name
+      run: echo $BRANCH
+    - name: Set up Python
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.7
+    - name: Install dependencies
+      run: |
+        pip install torch
+        pip install numpy tokenizers filelock requests tqdm regex sentencepiece sacremoses packaging
+
+    - name: Torch hub list
+      run: |
+        python -c "import torch; print(torch.hub.list('huggingface/transformers:$BRANCH'))"
+
+    - name: Torch hub help
+      run: |
+        python -c "import torch; print(torch.hub.help('huggingface/transformers:$BRANCH', 'modelForSequenceClassification'))"
