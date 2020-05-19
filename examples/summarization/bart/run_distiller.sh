@@ -21,4 +21,5 @@ python finetune.py \
 --fp16 \
 --output_dir $OUTPUT_DIR \
 --val_check_interval 0.5 \
+--num_epochs 4 \
 $@
