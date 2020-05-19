@@ -73,31 +73,30 @@ class SummarizationTrainer(BaseTransformer):
         return loss
 
     def training_step(self, batch, batch_idx):
-        loss = self._step(batch)
-        tensorboard_logs = {"train_loss": loss}
-        return {"loss": loss, "log": tensorboard_logs}
+        loss, ce_loss, mlm_loss = self._step(batch)
+        tensorboard_logs = dict(train_loss=loss, ce_loss=ce_loss, mlm_loss=mlm_loss)
+        return {"loss": loss, "log": tensorboard_logs, **tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
         return self._generative_step(batch)
 
-    def validation_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
+    def validation_end(self, outputs, prefix="val"):
+        losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in ["loss", "ce_loss", "mlm_loss"]}
         rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS}
-        tensorboard_logs = {"val_loss": avg_loss, **rouges}
-        return {"avg_val_loss": avg_loss, "log": tensorboard_logs, **rouges}
+        losses.update(rouges)
+        tensorboard_logs = {f"{prefix}_{k}": v for k, v in losses.items()}
+        return {"log": tensorboard_logs, **losses}
 
     def _generative_step(self, batch):
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
         # NOTE: the following kwargs get more speed and lower quality summaries than those in evaluate_cnn.py
-        generated_ids = self.model.generate(
-            input_ids=source_ids, attention_mask=source_mask, max_length=56, use_cache=True,
-        )
+        generated_ids = self.model.generate(input_ids=source_ids, attention_mask=source_mask, use_cache=True,)
         preds = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         target = self.tokenizer.batch_decode(y, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        loss = self._step(batch)
+        loss, ce_loss, mlm_loss = self._step(batch)
         rouge: Dict = calculate_rouge(preds, target)
-        base_metrics = {"val_loss": loss, "preds": preds, "target": target}
+        base_metrics = {"loss": loss, "ce_loss": ce_loss, "mlm_loss": mlm_loss, "preds": preds, "target": target}
         base_metrics.update(rouge)
         return base_metrics
 
@@ -105,7 +104,7 @@ class SummarizationTrainer(BaseTransformer):
         return self._generative_step(batch)
 
     def test_end(self, outputs):
-        return self.validation_end(outputs)
+        return self.validation_end(outputs, prefix="test")
 
     def test_epoch_end(self, outputs):
         output_test_predictions_file = os.path.join(self.hparams.output_dir, "test_predictions.txt")
@@ -173,9 +172,6 @@ class SummarizationTrainer(BaseTransformer):
             help="The input data dir. Should contain the dataset files for the CNN/DM summarization task.",
         )
         parser.add_argument(
-            "--teacher", default=None, type=str, required=True,
-        )
-        parser.add_argument(
             "--no_cache", action="store_true",
         )
 
@@ -219,6 +215,8 @@ class SummarizationDistiller(SummarizationTrainer):
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.freeze_stuff()
         self.temperature = 2.0
+        self.alpha_mlm = hparams.alpha_mlm
+        self.alpha_ce = hparams.alpha_ce
 
     def freeze_stuff(self):
         freeze_part(self.model.model.encoder)
@@ -242,7 +240,8 @@ class SummarizationDistiller(SummarizationTrainer):
                 source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
             )
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(self.model.model.last_padding_mask, slogits, tlogits)
-        return loss_ce
+        blended_loss = loss_ce * self.alpha_ce + self.alpha_mlm * sloss
+        return blended_loss, loss_ce, sloss
 
     def calc_ce_loss(self, mask, s_logits, t_logits):
         if mask is not None:
@@ -284,6 +283,21 @@ class SummarizationDistiller(SummarizationTrainer):
         target = s_hidden_states_slct.new(s_hidden_states_slct.size(0)).fill_(1)  # (bs * seq_length,)
         loss_cos = self.cosine_loss_fct(s_hidden_states_slct, t_hidden_states_slct, target)
         return loss_cos
+
+    @staticmethod
+    def add_model_specific_args(parser, root_dir):
+        SummarizationTrainer.add_model_specific_args(parser, root_dir)
+        parser.add_argument(
+            "--teacher", default=None, type=str, required=True,
+        )
+        parser.add_argument(
+            "--alpha_cle", default=0.8, type=float,
+        )
+        parser.add_argument(
+            "--alpha_mlm", default=0.2, type=float,
+        )
+
+        return parser
 
 
 def main(args):

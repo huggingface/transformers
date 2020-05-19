@@ -29,7 +29,7 @@ CHEAP_ARGS = {
     "n_tpu_cores": 0,
     "max_grad_norm": 1.0,
     "do_train": True,
-    "do_predict": False,
+    "do_predict": True,
     "gradient_accumulation_steps": 1,
     "server_ip": "",
     "server_port": "",
@@ -52,34 +52,33 @@ CHEAP_ARGS = {
     "fast_dev_run": False,
     "no_cache": False,
 }
-DARGS = {
-    "fast_dev_run": True,
-    "train_batch_size": 4,
-    "eval_batch_size": 4,
-    "warmup_steps": 100,
-    "do_lower_case": False,
-    "learning_rate": 3e-05,
-    "weight_decay": 0.0,
-    "adam_epsilon": 1e-08,
-    "output_dir": "",
-    "fp16": False,
-    "fp16_opt_level": "O1",
-    "n_gpu": 1,
-    "n_tpu_cores": 0,
-    "max_grad_norm": 1.0,
-    "do_train": True,
-    "do_predict": True,
-    "gradient_accumulation_steps": 1,
-    "server_ip": "",
-    "server_port": "",
-    "seed": 42,
-    "model_type": "bart",
-    "max_source_length": 1024,
-    "max_target_length": 56,
-    "cache_dir": "",
-    "num_train_epochs": 1,
-    "no_cache": False,
-}
+DARGS = CHEAP_ARGS.copy()
+# DARGS.update({
+#     "fast_dev_run": True,
+#     "train_batch_size": 4,
+#     "eval_batch_size": 4,
+#     "warmup_steps": 100,
+#     "do_lower_case": False,
+#     "learning_rate": 3e-05,
+#     "weight_decay": 0.0,
+#     "adam_epsilon": 1e-08,
+#     "output_dir": "",
+#     "fp16": False,
+#     "fp16_opt_level": "O1",
+#     "n_gpu": 1,
+#     "n_tpu_cores": 0,
+#     "max_grad_norm": 1.0,
+#     "do_train": True,
+#     "do_predict": True,
+#     "gradient_accumulation_steps": 1,
+#     "server_ip": "",
+#     "server_port": "",
+#     "seed": 42,
+#     "model_type": "bart",
+#     "cache_dir": "",
+#     "num_train_epochs": 1,
+#     "no_cache": False,
+# })
 
 
 def _dump_articles(path: Path, articles: list):
@@ -150,6 +149,8 @@ class TestBartExamples(unittest.TestCase):
             do_predict=True,
             model_name_or_path="student",
             teacher=CHEAP_ARGS["model_name_or_path"],
+            alpha_mlm=0.2,
+            alpha_ce=0.8,
         )
         run_distiller(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
@@ -162,7 +163,7 @@ class TestBartExamples(unittest.TestCase):
 
     @unittest.skip("Way too slow.")
     def test_real_bart_distiller_cli(self):
-        args_d: dict = DARGS
+        args_d: dict = DARGS.copy()
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
