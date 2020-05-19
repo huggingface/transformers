@@ -3,11 +3,19 @@ import glob
 import logging
 import os
 import time
+from pathlib import Path
 
 import torch
+import torch.nn.functional as F
+from torch import nn
 from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
+from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
+from transformers.modeling_bart import invert_mask
+
+from .bart_distiller import copy_decoder_layers, init_student
+
 
 try:
     from .utils import SummarizationDataset
@@ -39,7 +47,7 @@ class SummarizationTrainer(BaseTransformer):
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels, )
+        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,)
 
         loss = outputs[0]
 
@@ -67,10 +75,10 @@ class SummarizationTrainer(BaseTransformer):
         generated_ids = self.model.generate(
             input_ids=source_ids,
             attention_mask=source_mask,
-            num_beams=1,
-            max_length=80,
-            repetition_penalty=2.5,
-            length_penalty=1.0,
+            #num_beams=1,
+            max_length=56,
+            #repetition_penalty=2.5,
+            #length_penalty=1.0,
             early_stopping=True,
             use_cache=True,
         )
@@ -107,9 +115,9 @@ class SummarizationTrainer(BaseTransformer):
     def train_dataloader(self) -> DataLoader:
         dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
         t_total = (
-                (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.n_gpu)))
-                // self.hparams.gradient_accumulation_steps
-                * float(self.hparams.num_train_epochs)
+            (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.n_gpu)))
+            // self.hparams.gradient_accumulation_steps
+            * float(self.hparams.num_train_epochs)
         )
         scheduler = get_linear_schedule_with_warmup(
             self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
@@ -132,14 +140,14 @@ class SummarizationTrainer(BaseTransformer):
             default=1024,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
-                 "than this will be truncated, sequences shorter will be padded.",
+            "than this will be truncated, sequences shorter will be padded.",
         )
         parser.add_argument(
             "--max_target_length",
             default=56,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
-                 "than this will be truncated, sequences shorter will be padded.",
+            "than this will be truncated, sequences shorter will be padded.",
         )
 
         parser.add_argument(
@@ -150,21 +158,13 @@ class SummarizationTrainer(BaseTransformer):
             help="The input data dir. Should contain the dataset files for the CNN/DM summarization task.",
         )
         parser.add_argument(
-            "--teacher",
-            default=None,
-            type=str,
-            required=True,
+            "--teacher", default=None, type=str, required=True,
         )
 
         return parser
 
 
-from .bart_distiller import copy_decoder_layers, init_student
-from transformers import BartForConditionalGeneration, BartConfig, BartTokenizer
-import torch.nn.functional as F
 
-from torch import nn
-from pathlib import Path
 
 
 def freeze_part(model: nn.Module):
@@ -173,13 +173,12 @@ def freeze_part(model: nn.Module):
 
 
 class SummarizationDistiller(SummarizationTrainer):
-
     def __init__(self, hparams):
 
         # Dump empty student model at a path, then call from_pretrained on it
         teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher).eval()
-        student_updates = {'decoder_layers': teacher.config.decoder_layers//2}
-        if student_updates['decoder_layers'] == 6:
+        student_updates = {"decoder_layers": teacher.config.decoder_layers // 2}
+        if student_updates["decoder_layers"] == 6:
             layers_to_copy = [0, 2, 4, 7, 9, 11]
         else:
             layers_to_copy = list(range(teacher.config.decoder_layers))[::2]
@@ -191,7 +190,7 @@ class SummarizationDistiller(SummarizationTrainer):
         copy_decoder_layers(teacher, student_model, l2copy=layers_to_copy)
         Path(hparams.model_name_or_path).mkdir(exist_ok=True)
         student_model.save_pretrained(hparams.model_name_or_path)
-        tokenizer = BartTokenizer.from_pretrained('bart-large')
+        tokenizer = BartTokenizer.from_pretrained("bart-large")
         super().__init__(hparams, model=student_model, config=student_cfg, tokenizer=tokenizer)
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
@@ -203,10 +202,9 @@ class SummarizationDistiller(SummarizationTrainer):
         self.teacher = teacher
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.freeze_stuff()
-        self.temperature = 2.
+        self.temperature = 2.0
 
     def freeze_stuff(self):
-        # freeze stuff
         freeze_part(self.model.model.encoder)
         freeze_part(self.model.teacher)
         freeze_part(self.model.model.shared)
@@ -220,33 +218,36 @@ class SummarizationDistiller(SummarizationTrainer):
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
-        sloss, slogits, *trash = self(source_ids, attention_mask=source_mask,
-                                      decoder_input_ids=y_ids,
-                                      lm_labels=lm_labels, )
+        sloss, slogits, *trash = self(
+            source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
+        )
         with torch.no_grad():
-            tloss, tlogits, *trash = self.teacher(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids,
-                                                  lm_labels=lm_labels, )
+            tloss, tlogits, *trash = self.teacher(
+                source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
+            )
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(self.model.model.last_padding_mask, slogits, tlogits)
         return loss_ce
 
     def calc_ce_loss(self, mask, s_logits, t_logits):
         if mask is not None:
+            # mask has True at padding_idx
             mask = invert_mask(mask)
-            s_logits_slct = torch.masked_select(s_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
-            t_logits_slct = torch.masked_select(t_logits, mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
+            sel_mask = mask[:, :, None].expand_as(s_logits)
+            s_logits_slct = torch.masked_select(s_logits, sel_mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
+            t_logits_slct = torch.masked_select(t_logits, sel_mask)  # (bs * seq_length * voc_size) modulo the 1s in mask
         else:
-            # mask has 1s at padding_idx
+
             t_logits_slct = t_logits
             s_logits_slct = s_logits  # (bs * seq_length * voc_size) modulo the 1s in mask
         s_logits_slct = s_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
         t_logits_slct = t_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
         assert t_logits_slct.size() == s_logits_slct.size()
         loss_ce = (
-                self.ce_loss_fct(
-                    F.log_softmax(s_logits_slct / self.temperature, dim=-1),
-                    F.softmax(t_logits_slct / self.temperature, dim=-1),
-                )
-                * (self.temperature) ** 2
+            self.ce_loss_fct(
+                F.log_softmax(s_logits_slct / self.temperature, dim=-1),
+                F.softmax(t_logits_slct / self.temperature, dim=-1),
+            )
+            * (self.temperature) ** 2
         )
         return loss_ce, s_logits_slct, t_logits_slct
 
@@ -263,12 +264,14 @@ class SummarizationDistiller(SummarizationTrainer):
         target = s_hidden_states_slct.new(s_hidden_states_slct.size(0)).fill_(1)  # (bs * seq_length,)
         loss_cos = self.cosine_loss_fct(s_hidden_states_slct, t_hidden_states_slct, target)
         return loss_cos
-from transformers.modeling_bart import invert_mask
+
+
+
 
 def main(args):
     # If output_dir not provided, a folder will be generated in pwd
     if not args.output_dir:
-        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}", )
+        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
     model = SummarizationTrainer(args)
     trainer = generic_train(model, args)
@@ -279,7 +282,7 @@ def main(args):
 
 def run_distiller(args):
     if not args.output_dir:
-        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}", )
+        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
     model = SummarizationDistiller(args)
     trainer = generic_train(model, args)
@@ -291,7 +294,7 @@ def run_distiller(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
-    parser = SummarizationTrainer.add_model_specific_args(parser, os.getcwd())
+    parser = SummarizationDistiller.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
     main(args)

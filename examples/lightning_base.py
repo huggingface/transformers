@@ -17,9 +17,12 @@ from transformers import (
     AutoModelForTokenClassification,
     AutoModelWithLMHead,
     AutoTokenizer,
+    PretrainedConfig,
+    PreTrainedModel,
+    PreTrainedTokenizer,
     get_linear_schedule_with_warmup,
-    PreTrainedTokenizer, PretrainedConfig, PreTrainedModel
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +45,16 @@ def set_seed(args: argparse.Namespace):
 
 
 class BaseTransformer(pl.LightningModule):
-    def __init__(self, hparams: argparse.Namespace, num_labels=None, mode="base",
-                 config=None, tokenizer=None, model=None, **config_kwargs):
+    def __init__(
+        self,
+        hparams: argparse.Namespace,
+        num_labels=None,
+        mode="base",
+        config=None,
+        tokenizer=None,
+        model=None,
+        **config_kwargs
+    ):
         "Initialize a model."
 
         super().__init__()
@@ -121,9 +132,9 @@ class BaseTransformer(pl.LightningModule):
         dataloader = self.load_dataset("train", train_batch_size)
 
         t_total = (
-                (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.n_gpu)))
-                // self.hparams.gradient_accumulation_steps
-                * float(self.hparams.num_train_epochs)
+            (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.n_gpu)))
+            // self.hparams.gradient_accumulation_steps
+            * float(self.hparams.num_train_epochs)
         )
         scheduler = get_linear_schedule_with_warmup(
             self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
@@ -228,7 +239,7 @@ def add_generic_args(parser, root_dir):
         type=str,
         default="O1",
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-             "See details at https://nvidia.github.io/apex/amp.html",
+        "See details at https://nvidia.github.io/apex/amp.html",
     )
 
     parser.add_argument("--n_gpu", type=int, default=1)

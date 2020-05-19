@@ -448,11 +448,11 @@ class Distiller:
         t_logits_slct = t_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
         assert t_logits_slct.size() == s_logits_slct.size()
         loss_ce = (
-                self.ce_loss_fct(
-                    F.log_softmax(s_logits_slct / self.temperature, dim=-1),
-                    F.softmax(t_logits_slct / self.temperature, dim=-1),
-                )
-                * (self.temperature) ** 2
+            self.ce_loss_fct(
+                F.log_softmax(s_logits_slct / self.temperature, dim=-1),
+                F.softmax(t_logits_slct / self.temperature, dim=-1),
+            )
+            * (self.temperature) ** 2
         )
         return loss_ce, s_logits_slct, t_logits_slct
 

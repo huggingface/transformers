@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger()
 
-DEFAULT_ARGS = {
+CHEAP_ARGS = {
     "output_dir": "",
     "fp16": False,
     "fp16_opt_level": "O1",
@@ -46,6 +46,32 @@ DEFAULT_ARGS = {
     "eval_batch_size": 2,
     "max_source_length": 12,
     "max_target_length": 12,
+}
+DARGS = {
+    "train_batch_size": 4,
+    "eval_batch_size": 4,
+    "warmup_steps": 100,
+    "do_lower_case": False,
+    "learning_rate": 3e-05,
+    "weight_decay": 0.0,
+    "adam_epsilon": 1e-08,
+    "output_dir": "",
+    "fp16": False,
+    "fp16_opt_level": "O1",
+    "n_gpu": 1,
+    "n_tpu_cores": 0,
+    "max_grad_norm": 1.0,
+    "do_train": True,
+    "do_predict": True,
+    "gradient_accumulation_steps": 1,
+    "server_ip": "",
+    "server_port": "",
+    "seed": 42,
+    "model_type": "bart",
+    "max_source_length": 1024,
+    "max_target_length": 56,
+    "cache_dir": "",
+    "num_train_epochs": 1,
 }
 
 
@@ -84,7 +110,7 @@ class TestBartExamples(unittest.TestCase):
             os.remove(Path(output_file_name))
 
     def test_bart_run_sum_cli(self):
-        args_d: dict = DEFAULT_ARGS.copy()
+        args_d: dict = CHEAP_ARGS.copy()
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
@@ -103,12 +129,19 @@ class TestBartExamples(unittest.TestCase):
         self.assertSetEqual(expected_contents, created_files)
 
     def test_bart_distiller_cli(self):
-        args_d: dict = DEFAULT_ARGS.copy()
+        args_d: dict = CHEAP_ARGS.copy()
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
-            data_dir=tmp_dir, model_type="bart", train_batch_size=2, eval_batch_size=2, n_gpu=0, output_dir=output_dir,
-            do_predict=True, model_name_or_path='student', teacher=DEFAULT_ARGS['model_name_or_path'],
+            data_dir=tmp_dir,
+            model_type="bart",
+            train_batch_size=2,
+            eval_batch_size=2,
+            n_gpu=0,
+            output_dir=output_dir,
+            do_predict=True,
+            model_name_or_path="student",
+            teacher=CHEAP_ARGS["model_name_or_path"],
         )
         run_distiller(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
@@ -119,8 +152,34 @@ class TestBartExamples(unittest.TestCase):
         created_files = {os.path.basename(p) for p in contents}
         self.assertSetEqual(expected_contents, created_files)
 
+    @unittest.skip("Way too slow.")
+    def test_real_bart_distiller_cli(self):
+        args_d: dict = DARGS
+        tmp_dir = make_test_data_dir()
+        output_dir = tempfile.mkdtemp(prefix="output_")
+        args_d.update(
+            data_dir=tmp_dir,
+            model_type="bart",
+            train_batch_size=2,
+            eval_batch_size=2,
+            n_gpu=0,
+            output_dir=output_dir,
+            do_predict=True,
+            model_name_or_path="student",
+            teacher='bart-large-cnn',
+        )
+        run_distiller(argparse.Namespace(**args_d))
+        contents = os.listdir(output_dir)
+        expected_contents = {
+            "checkpointepoch=0.ckpt",
+            "test_results.txt",
+        }
+        created_files = {os.path.basename(p) for p in contents}
+        self.assertSetEqual(expected_contents, created_files)
+
+
     def test_t5_run_sum_cli(self):
-        args_d: dict = DEFAULT_ARGS.copy()
+        args_d: dict = CHEAP_ARGS.copy()
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(

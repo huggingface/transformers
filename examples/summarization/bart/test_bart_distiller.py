@@ -5,11 +5,12 @@ from torch.utils.data import DataLoader
 
 from durbango import DEFAULT_DEVICE
 from textbrewer import DistillationConfig, GeneralDistiller, TrainingConfig
-from transformers import AdamW, BartTokenizer, BartForConditionalGeneration, BartConfig
+from transformers import AdamW, BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.file_utils import cached_property
 
-from .bart_distiller import make_teacher_and_student, simple_adaptor, init_student, copy_decoder_layers
+from .bart_distiller import copy_decoder_layers, init_student, make_teacher_and_student, simple_adaptor
 from .utils import SummarizationDataset
+
 
 teacher_cfg_kwargs = dict(
     output_hidden_states=True,
@@ -35,17 +36,15 @@ class TestDistiller(unittest.TestCase):
         dataloader = DataLoader(dataset, batch_size=2, collate_fn=dataset.collate_fn, shuffle=False)
         return dataloader
 
-
     def test_init_student_num_layers(self):
         teacher_model = BartForConditionalGeneration(BartConfig(**teacher_cfg_kwargs)).eval()
-        student_updates = {'decoder_layers':2}
+        student_updates = {"decoder_layers": 2}
         kw = teacher_model.config.to_diff_dict()
         kw.update(student_updates)
         student_cfg = BartConfig(**kw)
         student_model = BartForConditionalGeneration(student_cfg)
         student_model, info = init_student(student_model, teacher_model)
-        copy_decoder_layers(teacher_model, student_model, l2copy=[0,2])
-
+        copy_decoder_layers(teacher_model, student_model, l2copy=[0, 2])
 
     def test_bdistiller_tiny(self):
         Path("distil_tiny_log_dir").mkdir(exist_ok=True)

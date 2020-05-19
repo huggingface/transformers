@@ -1,5 +1,7 @@
-from transformers import BartConfig, BartForConditionalGeneration
 from torch import nn
+
+from transformers import BartConfig, BartForConditionalGeneration
+
 
 def simple_adaptor(batch, model_outputs):
     # The second and third elements of model outputs are the logits and hidden states
@@ -14,7 +16,6 @@ def make_teacher_and_student(teacher_cfg_kwargs, **student_updates):
     return teacher_model, student_model
 
 
-
 def init_student(student, teacher):
     teacher_state_dict = teacher.state_dict()
     info = student.load_state_dict(teacher_state_dict, strict=False)
@@ -22,7 +23,7 @@ def init_student(student, teacher):
     return student, info
 
 
-def copy_decoder_layers(teacher, student, l2copy = [0, 2, 4, 7, 9, 11]):
+def copy_decoder_layers(teacher, student, l2copy=[0, 2, 4, 7, 9, 11]):
     layers_to_copy = nn.ModuleList([l for i, l in enumerate(teacher.model.decoder.layers) if i in l2copy])
     assert len(student.model.decoder.layers) == len(layers_to_copy)
     student.model.decoder.layers.load_state_dict(layers_to_copy.state_dict())
