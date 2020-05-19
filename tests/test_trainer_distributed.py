@@ -5,6 +5,12 @@
 #
 # Replace 2 with the number of GPUs you have.
 #
+# You can also run it as a standalone file to test identical behavior in nn.DataParallel:
+#   python ./tests/test_trainer_distributed.py
+# and in single-GPU mode:
+#   CUDA_VISIBLE_DEVICES=0 python ./tests/test_trainer_distributed.py
+#
+
 
 import logging
 import sys
@@ -45,7 +51,7 @@ if is_torch_available():
 
         def forward(self, input_ids, labels=None):
             if labels is not None:
-                return torch.tensor(0.0), input_ids
+                return torch.tensor(0.0, device=input_ids.device), input_ids
             else:
                 return input_ids
 
@@ -56,7 +62,11 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
     logger.warning(
-        "Process rank: %s, device: %s", training_args.local_rank, training_args.device,
+        "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s",
+        training_args.local_rank,
+        training_args.device,
+        training_args.n_gpu,
+        training_args.local_rank != -1,
     )
 
     # Essentially, what we want to verify in the distributed case is
