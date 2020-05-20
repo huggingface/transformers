@@ -273,6 +273,7 @@ class SummarizationDistiller(SummarizationTrainer):
         d = self.model.model.decoder
         freeze_part(d.embed_positions)
         freeze_part(d.embed_tokens)
+        self.model.teacher.encoder = None
 
     def _step(self, batch):
         # assert is_frozen(self.model.teacher)
@@ -282,13 +283,14 @@ class SummarizationDistiller(SummarizationTrainer):
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
         # noinspection PyCallingNonCallable
-        sloss, slogits, *trash = self(
+        sloss, slogits, enc_outputs = self(
             source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
         )
         # assert not self.model.teacher
         with torch.no_grad():
             tloss, tlogits, *trash = self.model.teacher(
-                source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
+                source_ids, attention_mask=source_mask, encoder_outputs=(enc_outputs,),
+                decoder_input_ids=y_ids, lm_labels=lm_labels,
             )
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(self.model.model.last_padding_mask, slogits, tlogits)
         blended_loss = loss_ce * self.alpha_ce + self.alpha_mlm * sloss
