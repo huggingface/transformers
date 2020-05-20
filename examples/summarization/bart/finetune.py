@@ -34,7 +34,6 @@ logger = logging.getLogger(__name__)
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
 
 
-
 def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
     # score_file = Path(score_path).open("w")
     scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=True)
@@ -69,6 +68,12 @@ class SummarizationTrainer(BaseTransformer):
             max_target_length=self.hparams.max_target_length,
             overwrite_cache=self.hparams.no_cache,
         )
+        base_nobs = {
+            "train": self.hparams.n_train,
+            "val": self.hparams.n_val,
+            "test": self.hparams.n_test,
+        }
+        self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
 
     @property
     def metrics_df(self):
@@ -100,13 +105,17 @@ class SummarizationTrainer(BaseTransformer):
         return self._generative_step(batch)
 
     def validation_end(self, outputs, prefix="val"):
-        losses = {k: torch.stack([x[k] for x in outputs]).mean().item() for k in self.loss_names}
+        losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
+        loss = losses["loss"]
         rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS + ["gen_time"]}
+        rouges.update({k: v.item() for k, v in losses.items()})
         losses.update(rouges)
-        metrics = {f"{prefix}_{k}": x for k, x in losses.items()}
+        metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         self.metrics[prefix].append(metrics)
         pickle_save(self.metrics, self.metrics_save_path)
-        return {"log": metrics, **losses}  # Where does this go!
+        ret_dict = {"log": metrics, **losses}
+        ret_dict[f"{prefix}_loss"] = loss
+        return ret_dict
 
     def _generative_step(self, batch):
         pad_token_id = self.tokenizer.pad_token_id
@@ -143,7 +152,8 @@ class SummarizationTrainer(BaseTransformer):
         return self.test_end(outputs)
 
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
-        dataset = SummarizationDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)
+        n_obs = self.n_obs[type_path]
+        dataset = SummarizationDataset(self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs)
         dataloader = DataLoader(
             dataset, batch_size=batch_size, collate_fn=dataset.collate_fn, shuffle=shuffle, num_workers=4
         )
@@ -197,6 +207,9 @@ class SummarizationTrainer(BaseTransformer):
         parser.add_argument(
             "--no_cache", action="store_true",
         )
+        parser.add_argument("--n_train", type=int, default=-1, required=False)
+        parser.add_argument("--n_val", type=int, default=-1, required=False)
+        parser.add_argument("--n_test", type=int, default=-1, required=False)
 
         return parser
 
@@ -329,8 +342,6 @@ def main(args):
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
     model = model.load_from_checkpoint(checkpoints[-1])
     trainer.test(model)
-
-
 
 
 def run_distiller(args):

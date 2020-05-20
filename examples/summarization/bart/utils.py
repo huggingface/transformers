@@ -37,6 +37,7 @@ class SummarizationDataset(Dataset):
         type_path="train",
         max_source_length=1024,
         max_target_length=56,
+        n_obs=None,
         overwrite_cache=False,
     ):
         super().__init__()
@@ -53,6 +54,9 @@ class SummarizationDataset(Dataset):
             max_target_length,
             overwrite_cache=overwrite_cache,
         )
+        if n_obs is not None:
+            self.source = self.source[:n_obs]
+            self.source = self.target[:n_obs]
 
     def __len__(self):
         return len(self.source)

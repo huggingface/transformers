@@ -53,6 +53,9 @@ CHEAP_ARGS = {
     "max_target_length": 12,
     "fast_dev_run": False,
     "no_cache": False,
+    "n_train": -1,
+    "n_val": -1,
+    "n_test": -1,
 }
 DARGS = CHEAP_ARGS.copy()
 # DARGS.update({
