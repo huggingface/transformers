@@ -268,12 +268,13 @@ class SummarizationDistiller(SummarizationTrainer):
 
     def freeze_stuff(self):
         freeze_part(self.model.model.encoder)
-        freeze_part(self.model.teacher)
+
         freeze_part(self.model.model.shared)
         d = self.model.model.decoder
         freeze_part(d.embed_positions)
         freeze_part(d.embed_tokens)
         self.model.teacher.encoder = None
+        freeze_part(self.model.teacher)
 
     def _step(self, batch):
         # assert is_frozen(self.model.teacher)
