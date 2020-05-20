@@ -103,7 +103,7 @@ def load_graph_from_args(framework: str, model: str, tokenizer: Optional[str] = 
     print("Loading pipeline (model: {}, tokenizer: {})".format(model, tokenizer))
 
     # Allocate tokenizer and model
-    return pipeline("feature-extraction", model=model, framework=framework)
+    return pipeline("feature-extraction", model=model, tokenizer=tokenizer, framework=framework)
 
 
 def convert_pytorch(nlp: Pipeline, opset: int, output: str, use_external_format: bool):
