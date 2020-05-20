@@ -8,6 +8,7 @@ from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import torch
+import time
 import torch.nn.functional as F
 from rouge_score import rouge_scorer, scoring
 from torch import nn
@@ -29,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
 
+from pytorch_lightning.loggers import WandbLogger
+from durbango import pickle_save
+import pandas as pd
 
 def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
     # score_file = Path(score_path).open("w")
@@ -45,7 +49,7 @@ def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
 
 class SummarizationTrainer(BaseTransformer):
     mode = "language-modeling"
-
+    loss_names = ["loss", "ce_loss", "mlm_loss"]
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         self.dataset_kwargs: dict = dict(
@@ -54,6 +58,19 @@ class SummarizationTrainer(BaseTransformer):
             max_target_length=self.hparams.max_target_length,
         )
         self.model: BartForConditionalGeneration
+        self.metrics = {'train': [], 'val': [], 'test': []}
+        self.output_dir = Path(self.hparams.output_dir)
+        self.metrics_save_path = Path(self.output_dir) /'metrics.pkl'
+        self.dataset_kwargs: dict = dict(
+            data_dir=self.hparams.data_dir,
+            max_source_length=self.hparams.max_source_length,
+            max_target_length=self.hparams.max_target_length,
+            overwrite_cache=self.hparams.no_cache,
+        )
+
+    @property
+    def metrics_df(self):
+        return pd.DataFrame(self.metrics)
 
     def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
         return self.model(
@@ -70,34 +87,38 @@ class SummarizationTrainer(BaseTransformer):
 
         loss = outputs[0]
 
-        return loss
+        return loss,
 
     def training_step(self, batch, batch_idx):
-        loss, ce_loss, mlm_loss = self._step(batch)
-        tensorboard_logs = dict(train_loss=loss, ce_loss=ce_loss, mlm_loss=mlm_loss)
-        return {"loss": loss, "log": tensorboard_logs, **tensorboard_logs}
+        loss_tensors = self._step(batch)
+        tensorboard_logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
+        return {"loss": loss_tensors[0], "log": tensorboard_logs}
 
     def validation_step(self, batch, batch_idx):
         return self._generative_step(batch)
 
     def validation_end(self, outputs, prefix="val"):
-        losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in ["loss", "ce_loss", "mlm_loss"]}
-        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS}
+        losses = {k: torch.stack([x[k] for x in outputs]).mean().item() for k in self.loss_names}
+        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS + ['gen_time']}
         losses.update(rouges)
-        tensorboard_logs = {f"{prefix}_{k}": v for k, v in losses.items()}
-        return {"log": tensorboard_logs, **losses}
+        metrics = {f"{prefix}_{k}": x for k, x in losses.items()}
+        self.metrics[prefix].append(metrics)
+        pickle_save(self.metrics, self.metrics_save_path)
+        return {"log": metrics, **losses}  # Where does this go!
 
     def _generative_step(self, batch):
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
         # NOTE: the following kwargs get more speed and lower quality summaries than those in evaluate_cnn.py
+        t0 = time.time()
         generated_ids = self.model.generate(input_ids=source_ids, attention_mask=source_mask, use_cache=True,)
+        gen_time = time.time() - t0
         preds = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         target = self.tokenizer.batch_decode(y, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        loss, ce_loss, mlm_loss = self._step(batch)
+        loss_tensors = self._step(batch)
+        base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         rouge: Dict = calculate_rouge(preds, target)
-        base_metrics = {"loss": loss, "ce_loss": ce_loss, "mlm_loss": mlm_loss, "preds": preds, "target": target}
-        base_metrics.update(rouge)
+        base_metrics.update(gen_time=gen_time, **rouge)
         return base_metrics
 
     def test_step(self, batch, batch_idx):
@@ -203,16 +224,10 @@ class SummarizationDistiller(SummarizationTrainer):
         student_model.save_pretrained(hparams.model_name_or_path)
         tokenizer = BartTokenizer.from_pretrained("bart-large")
         super().__init__(hparams, model=student_model, config=student_cfg, tokenizer=tokenizer)
-        self.dataset_kwargs: dict = dict(
-            data_dir=self.hparams.data_dir,
-            max_source_length=self.hparams.max_source_length,
-            max_target_length=self.hparams.max_target_length,
-            overwrite_cache=self.hparams.no_cache,
-        )
-        self.model: BartForConditionalGeneration
+
         assert len(self.model.model.decoder.layers) == len(layers_to_copy)
         self.model.teacher = teacher
-        self.teacher = teacher
+        # self.teacher = teacher
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.freeze_stuff()
         self.temperature = 2.0
@@ -233,11 +248,12 @@ class SummarizationDistiller(SummarizationTrainer):
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
+        # noinspection PyCallingNonCallable
         sloss, slogits, *trash = self(
             source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
         )
         with torch.no_grad():
-            tloss, tlogits, *trash = self.teacher(
+            tloss, tlogits, *trash = self.model.teacher(
                 source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
             )
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(self.model.model.last_padding_mask, slogits, tlogits)
@@ -306,22 +322,24 @@ def main(args):
     if not args.output_dir:
         args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
-    model = SummarizationTrainer(args)
-    trainer = generic_train(model, args)
+    model: pl.LightningModule = SummarizationTrainer(args)
+    trainer: pl.Trainer = generic_train(model, args)
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
     model = model.load_from_checkpoint(checkpoints[-1])
     trainer.test(model)
 
+import pytorch_lightning as pl
 
 def run_distiller(args):
     if not args.output_dir:
         args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
-    model = SummarizationDistiller(args)
-    trainer = generic_train(model, args)
+    model: pl.LightningModule = SummarizationDistiller(args)
+    trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
-    model = model.load_from_checkpoint(checkpoints[-1])
-    trainer.test(model)
+    # model = model.load_from_checkpoint(checkpoints[-1])
+    trainer.test()
+    #model.metrics_df.to_csv(Path(model.output_dir)/'metrics.csv')
 
 
 if __name__ == "__main__":

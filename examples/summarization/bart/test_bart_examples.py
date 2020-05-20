@@ -15,7 +15,8 @@ from transformers import BartTokenizer
 from .evaluate_cnn import run_generate
 from .finetune import main, run_distiller
 from .utils import SummarizationDataset
-
+from durbango import pickle_load
+import pandas as pd
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -153,15 +154,28 @@ class TestBartExamples(unittest.TestCase):
             teacher=CHEAP_ARGS["model_name_or_path"],
             alpha_mlm=0.2,
             alpha_ce=0.8,
+            val_check_interval=0.5,
         )
         run_distiller(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
         expected_contents = {
             "checkpointepoch=0.ckpt",
+            'checkpointepoch=1.ckpt',
             "test_results.txt",
+            "val_results.txt",
+            "metrics.pkl",
         }
         created_files = {os.path.basename(p) for p in contents}
         self.assertSetEqual(expected_contents, created_files)
+
+        metrics = pickle_load(Path(output_dir)/'metrics.pkl')
+        val_df = pd.DataFrame(metrics['val'])
+        train_df = pd.DataFrame(metrics['train'])
+        test_df = pd.DataFrame(metrics['test'])
+        desired_n_evals = args_d['num_train_epochs'] * 2 + 1
+        self.assertEqual(val_df.shape[0], desired_n_evals) #
+        self.assertEqual(test_df.shape[1], val_df.shape[1])
+        self.assertEqual(train_df.shape[0], 0)
 
     @unittest.skip("Way too slow.")
     def test_real_bart_distiller_cli(self):
