@@ -46,7 +46,7 @@ def summaries_for_file(
     ds = SummarizationDataset(tokenizer, type_path=type_path, data_dir=data_dir, **ds_kwargs)
     dataloader = DataLoader(ds, batch_size=bs, collate_fn=ds.collate_fn, shuffle=False, num_workers=num_workers)
     save_path = data_dir / f"{type_path}_pseudo_ids.pkl"
-    text_save_path = data_dir / f"{type_path}_pseudo_ids.pkl"
+    text_save_path = data_dir / f"{type_path}_pseudo_text.pkl"
     assert data_dir.exists()
     assert not save_path.exists()
     assert not text_save_path.exists()
@@ -70,12 +70,17 @@ def summaries_for_file(
     pickle_save(summary_ids, save_path)
     pickle_save(summary_text, text_save_path)
     # Try to flatten
-    flat_ids, flat_text = flatten_list(summary_ids), flatten_list(summary_text)
+    flat_ids, flat_text = flatten_ids(summary_ids), flatten_list(summary_text)
     assert len(flat_ids) == sum(lmap(len, summary_ids))
     pickle_save(flat_ids, save_path)
     pickle_save(flat_text, text_save_path)
     return flat_ids, flat_text
 
+def flatten_ids(ids):
+    batches = []
+    for id_batch in ids:
+        batches.extend([trim_batch(x[None, :], 1).squeeze().tolist() for x in id_batch[:, 1:]])
+    return batches
 
 def flatten_list(summary_ids: List[List]):
     return [x for x in funcy.flatten(summary_ids)]
