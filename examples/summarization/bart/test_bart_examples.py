@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 CHEAP_ARGS = {
+    "student_decoder_layers": 1,
     "val_check_interval": 1.0,
     "output_dir": "",
     "fp16": False,

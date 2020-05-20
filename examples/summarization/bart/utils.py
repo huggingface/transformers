@@ -76,11 +76,13 @@ def summaries_for_file(
     pickle_save(flat_text, text_save_path)
     return flat_ids, flat_text
 
+
 def flatten_ids(ids):
     batches = []
     for id_batch in ids:
         batches.extend([trim_batch(x[None, :], 1).squeeze().tolist() for x in id_batch[:, 1:]])
     return batches
+
 
 def flatten_list(summary_ids: List[List]):
     return [x for x in funcy.flatten(summary_ids)]

@@ -4,6 +4,7 @@ from transformers import BartConfig, BartForConditionalGeneration
 
 
 def simple_adaptor(batch, model_outputs):
+    # for textbrewer
     # The second and third elements of model outputs are the logits and hidden states
     return {"logits": model_outputs[0], "hidden": model_outputs[1]}
 
@@ -19,7 +20,7 @@ def make_teacher_and_student(teacher_cfg_kwargs, **student_updates):
 def init_student(student, teacher):
     teacher_state_dict = teacher.state_dict()
     info = student.load_state_dict(teacher_state_dict, strict=False)
-    assert info.missing_keys == []
+    assert info.missing_keys == [], info.missing_keys
     return student, info
 
 

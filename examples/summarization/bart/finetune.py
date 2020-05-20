@@ -225,16 +225,27 @@ def freeze_part(model: nn.Module):
         par.requires_grad = False
 
 
+def is_frozen(model):
+    return not any(p.requires_grad for p in model.parameters())
+
+
+def get_layers_to_copy(n_to_get, tot):
+    if tot == 12:
+        base = {6: [0, 2, 4, 7, 9, 11], 1: [0, 2, 4, 7, 9, 11], 3: [0, 6, 11]}
+        return n_to_get[base]
+    else:
+        return list(range(tot))[::2][:n_to_get]
+
+
 class SummarizationDistiller(SummarizationTrainer):
     def __init__(self, hparams):
 
         # Dump empty student model at a path, then call from_pretrained on it
         teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher).eval()
-        student_updates = {"decoder_layers": teacher.config.decoder_layers // 2}
-        if student_updates["decoder_layers"] == 6:
-            layers_to_copy = [0, 2, 4, 7, 9, 11]
-        else:
-            layers_to_copy = list(range(teacher.config.decoder_layers))[::2]
+
+        student_updates = {"decoder_layers": hparams.student_decoder_layers}
+        layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
+        hparams.layer_to_copy = layers_to_copy
         kw = teacher.config.to_diff_dict()
         kw.update(student_updates)
         student_cfg = BartConfig(**kw)
@@ -264,6 +275,7 @@ class SummarizationDistiller(SummarizationTrainer):
         freeze_part(d.embed_tokens)
 
     def _step(self, batch):
+        # assert is_frozen(self.model.teacher)
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
         y_ids = y[:, :-1].contiguous()
@@ -273,6 +285,7 @@ class SummarizationDistiller(SummarizationTrainer):
         sloss, slogits, *trash = self(
             source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
         )
+        # assert not self.model.teacher
         with torch.no_grad():
             tloss, tlogits, *trash = self.model.teacher(
                 source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
@@ -333,6 +346,9 @@ class SummarizationDistiller(SummarizationTrainer):
         )
         parser.add_argument(
             "--alpha_mlm", default=0.2, type=float,
+        )
+        parser.add_argument(
+            "--student_decoder_layers", default=6, type=int, required=False,
         )
 
         return parser
