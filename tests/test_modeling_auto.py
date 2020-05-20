@@ -82,7 +82,7 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertForPreTraining)
             for key, value in loading_info.items():
                 # Only one value should not be initialized and in the missing keys.
-                self.assertEqual(len(value), 1 if key == 'missing_keys' else 0)
+                self.assertEqual(len(value), 1 if key == "missing_keys" else 0)
 
     @slow
     def test_lmhead_model_from_pretrained(self):

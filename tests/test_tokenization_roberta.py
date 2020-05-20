@@ -101,9 +101,7 @@ class RobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
 
         encoded_text_from_decode = tokenizer.encode(
-            "sequence builders",
-            add_special_tokens=True,
-            add_prefix_space=False
+            "sequence builders", add_special_tokens=True, add_prefix_space=False
         )
         encoded_pair_from_decode = tokenizer.encode(
             "sequence builders", "multi-sequence build", add_special_tokens=True, add_prefix_space=False
