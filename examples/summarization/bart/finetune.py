@@ -7,13 +7,16 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
+import pandas as pd
+import pytorch_lightning as pl
 import torch
-import time
 import torch.nn.functional as F
+from pytorch_lightning.loggers import WandbLogger
 from rouge_score import rouge_scorer, scoring
 from torch import nn
 from torch.utils.data import DataLoader
 
+from durbango import pickle_save
 from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
 from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.modeling_bart import invert_mask
@@ -30,9 +33,7 @@ logger = logging.getLogger(__name__)
 
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
 
-from pytorch_lightning.loggers import WandbLogger
-from durbango import pickle_save
-import pandas as pd
+
 
 def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
     # score_file = Path(score_path).open("w")
@@ -50,6 +51,7 @@ def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
 class SummarizationTrainer(BaseTransformer):
     mode = "language-modeling"
     loss_names = ["loss", "ce_loss", "mlm_loss"]
+
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         self.dataset_kwargs: dict = dict(
@@ -58,9 +60,9 @@ class SummarizationTrainer(BaseTransformer):
             max_target_length=self.hparams.max_target_length,
         )
         self.model: BartForConditionalGeneration
-        self.metrics = {'train': [], 'val': [], 'test': []}
+        self.metrics = {"train": [], "val": [], "test": []}
         self.output_dir = Path(self.hparams.output_dir)
-        self.metrics_save_path = Path(self.output_dir) /'metrics.pkl'
+        self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
@@ -87,7 +89,7 @@ class SummarizationTrainer(BaseTransformer):
 
         loss = outputs[0]
 
-        return loss,
+        return (loss,)
 
     def training_step(self, batch, batch_idx):
         loss_tensors = self._step(batch)
@@ -99,7 +101,7 @@ class SummarizationTrainer(BaseTransformer):
 
     def validation_end(self, outputs, prefix="val"):
         losses = {k: torch.stack([x[k] for x in outputs]).mean().item() for k in self.loss_names}
-        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS + ['gen_time']}
+        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS + ["gen_time"]}
         losses.update(rouges)
         metrics = {f"{prefix}_{k}": x for k, x in losses.items()}
         self.metrics[prefix].append(metrics)
@@ -328,7 +330,8 @@ def main(args):
     model = model.load_from_checkpoint(checkpoints[-1])
     trainer.test(model)
 
-import pytorch_lightning as pl
+
+
 
 def run_distiller(args):
     if not args.output_dir:
@@ -339,7 +342,7 @@ def run_distiller(args):
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
     # model = model.load_from_checkpoint(checkpoints[-1])
     trainer.test()
-    #model.metrics_df.to_csv(Path(model.output_dir)/'metrics.csv')
+    # model.metrics_df.to_csv(Path(model.output_dir)/'metrics.csv')
 
 
 if __name__ == "__main__":

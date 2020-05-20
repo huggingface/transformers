@@ -7,16 +7,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pandas as pd
 from torch.utils.data import DataLoader
 
-from durbango import DEFAULT_DEVICE
+from durbango import DEFAULT_DEVICE, pickle_load
 from transformers import BartTokenizer
 
 from .evaluate_cnn import run_generate
 from .finetune import main, run_distiller
 from .utils import SummarizationDataset
-from durbango import pickle_load
-import pandas as pd
+
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -143,7 +143,7 @@ class TestBartExamples(unittest.TestCase):
         args_d.update(
             data_dir=tmp_dir,
             model_type="bart",
-            train_batch_size=2,
+            train_batch_size=1,
             eval_batch_size=2,
             num_train_epochs=2,
             fast_dev_run=False,
@@ -160,7 +160,7 @@ class TestBartExamples(unittest.TestCase):
         contents = os.listdir(output_dir)
         expected_contents = {
             "checkpointepoch=0.ckpt",
-            'checkpointepoch=1.ckpt',
+            "checkpointepoch=1.ckpt",
             "test_results.txt",
             "val_results.txt",
             "metrics.pkl",
@@ -168,12 +168,12 @@ class TestBartExamples(unittest.TestCase):
         created_files = {os.path.basename(p) for p in contents}
         self.assertSetEqual(expected_contents, created_files)
 
-        metrics = pickle_load(Path(output_dir)/'metrics.pkl')
-        val_df = pd.DataFrame(metrics['val'])
-        train_df = pd.DataFrame(metrics['train'])
-        test_df = pd.DataFrame(metrics['test'])
-        desired_n_evals = args_d['num_train_epochs'] * 2 + 1
-        self.assertEqual(val_df.shape[0], desired_n_evals) #
+        metrics = pickle_load(Path(output_dir) / "metrics.pkl")
+        val_df = pd.DataFrame(metrics["val"])
+        train_df = pd.DataFrame(metrics["train"])
+        test_df = pd.DataFrame(metrics["test"])
+        desired_n_evals = args_d["num_train_epochs"] * 2 + 1
+        self.assertEqual(val_df.shape[0], desired_n_evals)  #
         self.assertEqual(test_df.shape[1], val_df.shape[1])
         self.assertEqual(train_df.shape[0], 0)
 

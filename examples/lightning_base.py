@@ -204,7 +204,7 @@ class LoggingCallback(pl.Callback):
             metrics = trainer.callback_metrics
             # Log results
             output_val_results_file = os.path.join(pl_module.hparams.output_dir, "val_results.txt")
-            with open(output_val_results_file, 'w+') as writer:
+            with open(output_val_results_file, "w+") as writer:
                 for key in sorted(metrics):
                     if key not in ["log", "progress_bar"]:
                         logger.info("{} = {}\n".format(key, str(metrics[key])))
@@ -263,7 +263,7 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
 
 
-def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callbacks= [], **extra_train_kwargs):
+def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callbacks=[], **extra_train_kwargs):
     # init model
     set_seed(args)
 
@@ -278,7 +278,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
         accumulate_grad_batches=args.gradient_accumulation_steps,
         gpus=args.n_gpu,
         max_epochs=args.num_train_epochs,
-        early_stop_callback=extra_train_kwargs.get('early_stop_callback', False),
+        early_stop_callback=extra_train_kwargs.get("early_stop_callback", False),
         gradient_clip_val=args.max_grad_norm,
         checkpoint_callback=checkpoint_callback,
         callbacks=[LoggingCallback()] + extra_callbacks,
@@ -302,6 +302,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
 
     trainer = pl.Trainer(**train_params)
 
-    if args.do_train: trainer.fit(model)
+    if args.do_train:
+        trainer.fit(model)
 
     return trainer
