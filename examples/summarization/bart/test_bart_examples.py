@@ -167,6 +167,11 @@ class TestBartExamples(unittest.TestCase):
             "test_results.txt",
             "val_results.txt",
             "metrics.pkl",
+            'test_generations_1.txt',
+            'val_generations_0.txt',
+            'val_generations_1.txt',
+            'val_generations_.txt',
+            #"test"
         }
         created_files = {os.path.basename(p) for p in contents}
         self.assertSetEqual(expected_contents, created_files)
