@@ -463,10 +463,9 @@ class Trainer:
                 train_dataloader.sampler.set_epoch(epoch)
 
             if is_tpu_available():
-                parallel_loader = pl.ParallelLoader(
-                    train_dataloader,
-                    [self.args.device]
-                ).per_device_loader(self.args.device)
+                parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
+                    self.args.device
+                )
                 epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_master())
             else:
                 epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master())
