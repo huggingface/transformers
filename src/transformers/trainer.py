@@ -242,9 +242,6 @@ class Trainer:
             collate_fn=self.data_collator.collate_batch,
         )
 
-        if is_tpu_available():
-            data_loader = pl.ParallelLoader(data_loader, [self.args.device]).per_device_loader(self.args.device)
-
         return data_loader
 
     def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
@@ -355,8 +352,7 @@ class Trainer:
         """
         Helper to get num of examples from a DataLoader, by accessing its Dataset.
         """
-        if is_tpu_available():
-            assert isinstance(dataloader, pl.PerDeviceLoader)
+        if is_tpu_available() and isinstance(dataloader, pl.PerDeviceLoader):
             return len(dataloader._loader._loader.dataset)
         else:
             return len(dataloader.dataset)
@@ -466,7 +462,15 @@ class Trainer:
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
 
-            epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master())
+            if is_tpu_available():
+                parallel_loader = pl.ParallelLoader(
+                    train_dataloader,
+                    [self.args.device]
+                ).per_device_loader(self.args.device)
+                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_master())
+            else:
+                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master())
+
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
