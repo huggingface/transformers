@@ -303,6 +303,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
         fast_dev_run=args.fast_dev_run,
         val_check_interval=args.val_check_interval,
         logger=logger,
+        weights_summary=None,
     )
 
     if args.fp16:
