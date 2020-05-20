@@ -42,6 +42,7 @@ from transformers import (
     set_seed,
 )
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -326,7 +327,7 @@ def main():
         default=128,
         type=int,
         help="The maximum total input sequence length after WordPiece tokenization. \n"
-             "Sequences longer than this will be truncated, sequences shorter padded.",
+        "Sequences longer than this will be truncated, sequences shorter padded.",
     )
     parser.add_argument("--batch_size", default=1, type=int, help="Batch size.")
 
