@@ -9,6 +9,8 @@
 #   python ./tests/test_trainer_distributed.py
 # and in single-GPU mode:
 #   CUDA_VISIBLE_DEVICES=0 python ./tests/test_trainer_distributed.py
+# and in CPU mode:
+#   CUDA_VISIBLE_DEVICES=-1 python ./tests/test_trainer_distributed.py
 #
 
 
