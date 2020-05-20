@@ -26,7 +26,7 @@ try:
     from .utils import SummarizationDataset, flatten_list
     from .bart_distiller import copy_decoder_layers, init_student
 except ImportError:
-    from .utils import SummarizationDataset, flatten_list
+    from utils import SummarizationDataset, flatten_list
     from bart_distiller import copy_decoder_layers, init_student
 
 logger = logging.getLogger(__name__)
