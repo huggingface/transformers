@@ -478,7 +478,7 @@ def _compute_pytorch(
                             dictionary[model_name]["memory"][batch_size][slice_size] = "N/A"
 
                         if not no_speed:
-                            print_fn("Going through model with sequence of shape".format(sequence.shape))
+                            print_fn("Going through model with sequence of shape {}".format(sequence.shape))
                             runtimes = timeit.repeat(lambda: inference(sequence), repeat=average_over, number=3)
                             average_time = sum(runtimes) / float(len(runtimes)) / 3.0
                             dictionary[model_name]["time"][batch_size][slice_size] = average_time

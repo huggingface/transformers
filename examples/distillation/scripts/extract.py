@@ -93,7 +93,7 @@ if __name__ == "__main__":
     elif args.model_type == "gpt2":
         for w in ["weight", "bias"]:
             compressed_sd[f"{prefix}.ln_f.{w}"] = state_dict[f"{prefix}.ln_f.{w}"]
-        compressed_sd[f"lm_head.weight"] = state_dict[f"lm_head.weight"]
+        compressed_sd["lm_head.weight"] = state_dict["lm_head.weight"]
 
     print(f"N layers selected for distillation: {std_idx}")
     print(f"Number of params transfered for distillation: {len(compressed_sd.keys())}")

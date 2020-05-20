@@ -28,6 +28,7 @@ from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, Electr
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
+from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from .configuration_marian import MarianConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_reformer import ReformerConfig
@@ -62,6 +63,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -77,6 +79,7 @@ CONFIG_MAPPING = OrderedDict(
         ("marian", MarianConfig,),
         ("bart", BartConfig,),
         ("reformer", ReformerConfig,),
+        ("longformer", LongformerConfig,),
         ("roberta", RobertaConfig,),
         ("flaubert", FlaubertConfig,),
         ("bert", BertConfig,),
@@ -133,6 +136,7 @@ class AutoConfig:
             - contains `albert`: :class:`~transformers.AlbertConfig` (ALBERT model)
             - contains `camembert`: :class:`~transformers.CamembertConfig` (CamemBERT model)
             - contains `xlm-roberta`: :class:`~transformers.XLMRobertaConfig` (XLM-RoBERTa model)
+            - contains `longformer`: :class:`~transformers.LongformerConfig` (Longformer model)
             - contains `roberta`: :class:`~transformers.RobertaConfig` (RoBERTa model)
             - contains `reformer`: :class:`~transformers.ReformerConfig` (Reformer model)
             - contains `bert`: :class:`~transformers.BertConfig` (Bert model)
@@ -144,7 +148,6 @@ class AutoConfig:
             - contains `ctrl` : :class:`~transformers.CTRLConfig` (CTRL model)
             - contains `flaubert` : :class:`~transformers.FlaubertConfig` (Flaubert model)
             - contains `electra` : :class:`~transformers.ElectraConfig` (ELECTRA model)
-
 
         Args:
             pretrained_model_name_or_path (:obj:`string`):

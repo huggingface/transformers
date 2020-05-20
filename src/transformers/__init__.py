@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "2.9.0"
+__version__ = "2.9.1"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -44,6 +44,7 @@ from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, Electr
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
+from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from .configuration_marian import MarianConfig
 from .configuration_mmbt import MMBTConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
@@ -138,6 +139,7 @@ from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFas
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+from .tokenization_longformer import LongformerTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -331,6 +333,8 @@ if is_torch_available():
         ReformerModelWithLMHead,
         REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
+
+    from .modeling_longformer import LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP, LongformerModel, LongformerForMaskedLM
 
     # Optimization
     from .optimization import (

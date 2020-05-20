@@ -17,7 +17,7 @@
 import inspect
 import logging
 import os
-from typing import Callable, Tuple
+from typing import Callable, List, Tuple
 
 import torch
 from torch import Tensor, device, dtype, nn
@@ -110,11 +110,33 @@ class ModuleUtilsMixin:
 
     @property
     def device(self) -> device:
-        return next(self.parameters()).device
+        try:
+            return next(self.parameters()).device
+        except StopIteration:
+            # For nn.DataParallel compatibility in PyTorch 1.5
+
+            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+                return tuples
+
+            gen = self._named_members(get_members_fn=find_tensor_attributes)
+            first_tuple = next(gen)
+            return first_tuple[1].device
 
     @property
     def dtype(self) -> dtype:
-        return next(self.parameters()).dtype
+        try:
+            return next(self.parameters()).dtype
+        except StopIteration:
+            # For nn.DataParallel compatibility in PyTorch 1.5
+
+            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+                return tuples
+
+            gen = self._named_members(get_members_fn=find_tensor_attributes)
+            first_tuple = next(gen)
+            return first_tuple[1].dtype
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """type: torch.Tensor -> torch.Tensor"""
@@ -128,7 +150,18 @@ class ModuleUtilsMixin:
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+
+        if self.dtype == torch.float16:
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
+        elif self.dtype == torch.float32:
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+        else:
+            raise ValueError(
+                "{} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`".format(
+                    self.dtype
+                )
+            )
+
         return encoder_extended_attention_mask
 
     def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: tuple, device: device):
@@ -737,15 +770,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             import torch_xla.core.xla_model as xm
 
             model = xm.send_cpu_data_to_device(model, xm.xla_device())
-            model = model.to(xm.xla_device())
+            model.to(xm.xla_device())
 
         return model
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         return {"input_ids": input_ids}
 
-    def prepare_scores_for_generation(self, scores, **kwargs):
-        return scores
+    def prepare_logits_for_generation(self, logits, **kwargs):
+        return logits
 
     def _use_cache(self, outputs, use_cache):
         """During generation, decide whether to pass the `past` variable to the next forward pass."""
@@ -857,7 +890,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
                 Defaults to `None`.
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
+                `What are attention masks? <../glossary.html#attention-mask>`__
 
             decoder_start_token_id=None: (`optional`) int
                 If an encoder-decoder model starts decoding with a different token than BOS.
@@ -1236,13 +1269,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             else:
                 tokens_to_add = next_token
 
+            # add token and increase length by one
             input_ids = torch.cat([input_ids, tokens_to_add.unsqueeze(-1)], dim=-1)
+            cur_len = cur_len + 1
 
             if eos_token_id is not None:
                 eos_in_sents = tokens_to_add == eos_token_id
                 # if sentence is unfinished and the token to add is eos, sent_lengths is filled with current length
                 is_sents_unfinished_and_token_to_add_is_eos = unfinished_sents.mul(eos_in_sents.long()).bool()
-                sent_lengths.masked_fill_(is_sents_unfinished_and_token_to_add_is_eos, cur_len + 1)
+                sent_lengths.masked_fill_(is_sents_unfinished_and_token_to_add_is_eos, cur_len)
                 # unfinished_sents is set to zero if eos in sentence
                 unfinished_sents.mul_((~eos_in_sents).long())
 
@@ -1255,8 +1290,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 attention_mask = torch.cat(
                     [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
                 )
-
-            cur_len = cur_len + 1
 
         # if there are different sentences lengths in the batch, some batches have to be padded
         if sent_lengths.min().item() != sent_lengths.max().item():
@@ -1342,10 +1375,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             if temperature != 1.0:
                 next_token_logits = next_token_logits / temperature
 
-            scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
             if self.config.is_encoder_decoder and do_sample is False:
-                # TODO (PVP) still a bit hacky here - there might be a better solutino
-                scores = self.prepare_scores_for_generation(scores, cur_len=cur_len, max_length=max_length)
+                # TODO (PVP) still a bit hacky here - there might be a better solution
+                next_token_logits = self.prepare_logits_for_generation(
+                    next_token_logits, cur_len=cur_len, max_length=max_length
+                )
+
+            scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             # set eos token prob to zero if min_length is not reached
             if eos_token_id is not None and cur_len < min_length:
@@ -1470,9 +1506,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             beam_tokens = input_ids.new([x[1] for x in next_batch_beam])
             beam_idx = input_ids.new([x[2] for x in next_batch_beam])
 
-            # re-order batch
+            # re-order batch and update current length
             input_ids = input_ids[beam_idx, :]
             input_ids = torch.cat([input_ids, beam_tokens.unsqueeze(1)], dim=-1)
+            cur_len = cur_len + 1
+
             # re-order internal states
             if past is not None:
                 past = self._reorder_cache(past, beam_idx)
@@ -1482,9 +1520,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 attention_mask = torch.cat(
                     [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
                 )
-
-            # update current length
-            cur_len = cur_len + 1
 
         # finalize all open beam hypotheses and end to generated hypotheses
         for batch_idx in range(batch_size):
