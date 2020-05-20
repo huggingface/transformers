@@ -206,7 +206,7 @@ class LoggingCallback(pl.Callback):
         if not pl_module.is_logger():
             return
         metrics = trainer.callback_metrics
-        trainer.logger.log_metrics({'type_path':metrics})
+        trainer.logger.log_metrics({k: v for k, v in metrics.items() if k not in ["log", "progress_bar", "preds"]})
         # Log results
         od = Path(pl_module.hparams.output_dir)
         output_val_results_file = od / f"{type_path}_results.txt"
