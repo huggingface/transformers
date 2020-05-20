@@ -251,6 +251,7 @@ class TestBartExamples(unittest.TestCase):
     def test_summaries_for_file(self):
 
         tmp_dir = Path(tempfile.gettempdir())
+
         self.needs_remove = tmp_dir
         articles = [" Sam ate lunch today", "Sams lunch ingredients"]
         summaries = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
@@ -267,6 +268,8 @@ class TestBartExamples(unittest.TestCase):
     def tearDown(self) -> None:
         import shutil
 
+        if not hasattr(self, "needs_remove"):
+            return
         data_dir = self.needs_remove
         type_path = "train"
         to_rm = [data_dir / f"{type_path}_pseudo_ids.pkl", data_dir / f"{type_path}_pseudo_ids.pkl"]

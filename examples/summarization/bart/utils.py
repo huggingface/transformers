@@ -32,7 +32,6 @@ def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return
     return examples
 
 
-
 DATA_DIR = Path("/home/shleifer/transformers_fork/examples/summarization/bart/cnn_dm")
 
 
@@ -76,8 +75,6 @@ def summaries_for_file(
     pickle_save(flat_ids, save_path)
     pickle_save(flat_text, text_save_path)
     return flat_ids, flat_text
-
-
 
 
 def flatten_list(summary_ids: List[List]):

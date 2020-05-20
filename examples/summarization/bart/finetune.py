@@ -23,10 +23,10 @@ from transformers.modeling_bart import invert_mask
 
 
 try:
-    from .utils import SummarizationDataset
+    from .utils import SummarizationDataset, flatten_list
     from .bart_distiller import copy_decoder_layers, init_student
 except ImportError:
-    from utils import SummarizationDataset
+    from .utils import SummarizationDataset, flatten_list
     from bart_distiller import copy_decoder_layers, init_student
 
 logger = logging.getLogger(__name__)
@@ -96,15 +96,15 @@ class SummarizationTrainer(BaseTransformer):
 
         return (loss,)
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx) -> Dict:
         loss_tensors = self._step(batch)
         tensorboard_logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         return {"loss": loss_tensors[0], "log": tensorboard_logs}
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx) -> Dict:
         return self._generative_step(batch)
 
-    def validation_end(self, outputs, prefix="val"):
+    def validation_end(self, outputs, prefix="val") -> Dict:
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
         rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS + ["gen_time"]}
@@ -112,9 +112,12 @@ class SummarizationTrainer(BaseTransformer):
         losses.update(rouges)
         metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
         self.metrics[prefix].append(metrics)
+
         pickle_save(self.metrics, self.metrics_save_path)
-        ret_dict = {"log": metrics, **losses}
-        ret_dict[f"{prefix}_loss"] = loss
+        preds = flatten_list([x["preds"] for x in outputs])
+        ret_dict = {"log": metrics, "preds": preds}
+        # ret_dict[f"{prefix}_loss"] = loss
+        # ret_dict[f"{prefix}_preds"] =
         return ret_dict
 
     def _generative_step(self, batch):
@@ -129,7 +132,7 @@ class SummarizationTrainer(BaseTransformer):
         loss_tensors = self._step(batch)
         base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         rouge: Dict = calculate_rouge(preds, target)
-        base_metrics.update(gen_time=gen_time, **rouge)
+        base_metrics.update(gen_time=gen_time, preds=preds, target=target, **rouge)
         return base_metrics
 
     def test_step(self, batch, batch_idx):

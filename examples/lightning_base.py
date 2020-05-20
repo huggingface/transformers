@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import random
+from pathlib import Path
 
 import numpy as np
 import pytorch_lightning as pl
@@ -197,32 +198,42 @@ class BaseTransformer(pl.LightningModule):
         # parser.add_argument("--eval_batch_size", default=32, type=int)
 
 
+
+
 class LoggingCallback(pl.Callback):
+    def _do_work(self, trainer: pl.Trainer, pl_module: pl.LightningModule, type_path: str) -> None:
+        logger.info(f"***** {type_path} results *****")
+        if not pl_module.is_logger():
+            return
+        metrics = trainer.callback_metrics
+        # Log results
+        od = Path(pl_module.hparams.output_dir)
+        output_val_results_file = od / f"{type_path}_results.txt"
+
+        with open(output_val_results_file, "a+") as writer:
+            for key in sorted(metrics):
+                if key in ["log", "progress_bar"]:
+                    continue
+                val = metrics[key]
+                if isinstance(val, torch.Tensor):
+                    val = val.item()
+                if key not in ["preds", "real"]:
+                    msg = f"{key}: {val:.6f}\n"
+                    logger.info(msg)
+                    writer.write(msg)
+        epoch = metrics.get("epoch", "")
+
+        generations_file = od / f"{type_path}_generations_{epoch}.txt"
+        # sanity_path = od/ f"{type_path}_generations_sanity.txt"
+        if "preds" in metrics:
+            content = "\n".join(metrics["preds"])
+            generations_file.open("w+").write(content)
+
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        logger.info("***** Validation results *****")
-        if pl_module.is_logger():
-            metrics = trainer.callback_metrics
-            # Log results
-            output_val_results_file = os.path.join(pl_module.hparams.output_dir, "val_results.txt")
-            with open(output_val_results_file, "w+") as writer:
-                for key in sorted(metrics):
-                    if key not in ["log", "progress_bar"]:
-                        logger.info("{} = {}\n".format(key, str(metrics[key])))
-                        writer.write("{} = {}\n".format(key, str(metrics[key])))
+        return self._do_work(trainer, pl_module, "val")
 
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        logger.info("***** Test results *****")
-
-        if pl_module.is_logger():
-            metrics = trainer.callback_metrics
-
-            # Log and save results to file
-            output_test_results_file = os.path.join(pl_module.hparams.output_dir, "test_results.txt")
-            with open(output_test_results_file, "w") as writer:
-                for key in sorted(metrics):
-                    if key not in ["log", "progress_bar"]:
-                        logger.info("{} = {}\n".format(key, str(metrics[key])))
-                        writer.write("{} = {}\n".format(key, str(metrics[key])))
+        return self._do_work(trainer, pl_module, "test")
 
 
 def add_generic_args(parser, root_dir):
