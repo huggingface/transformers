@@ -12,14 +12,13 @@ python finetune.py \
 --teacher=bart-large-cnn \
 --model_name_or_path=student \
 --learning_rate=3e-5 \
---train_batch_size=32 \
+--train_batch_size=40 \
 --eval_batch_size=48 \
 --output_dir=$OUTPUT_DIR \
 --do_train \
 --do_predict \
 --n_gpu 1 \
 --fp16 \
---output_dir $OUTPUT_DIR \
 --val_check_interval 0.25 \
 --num_train_epochs 1 \
 $@
