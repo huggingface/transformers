@@ -78,9 +78,10 @@ def compute_heads_importance(
         head_mask = torch.ones(n_layers, n_heads).to(args.device)
 
     head_mask.requires_grad_(requires_grad=True)
-    # if actually pruned attention multi-head, set head mask to None for avoiding shape mistach
+    # If actually pruned attention multi-head, set head mask to None to avoid shape mismatch
     if actually_pruned:
         head_mask = None
+
     preds = None
     labels = None
     tot_tokens = 0.0
