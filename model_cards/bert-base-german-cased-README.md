@@ -18,13 +18,16 @@ tags:
 **Eval data:** Conll03 (NER), GermEval14 (NER), GermEval18 (Classification), GNAD (Classification)  
 **Infrastructure**: 1x TPU v2  
 **Published**: Jun 14th, 2019
+
+**Update April 3rd, 2020**: we updated the vocabulary file on deepset's s3 to conform with the default tokenization of punctuation tokens. 
+For details see the related [FARM issue](https://github.com/deepset-ai/FARM/issues/60). If you want to use the old vocab we have also uploaded a ["deepset/bert-base-german-cased-oldvocab"](https://huggingface.co/deepset/bert-base-german-cased-oldvocab) model.
  
 ## Details
 - We trained using Google's Tensorflow code on a single cloud TPU v2 with standard settings.
 - We trained 810k steps with a batch size of 1024 for sequence length 128 and 30k steps with sequence length 512. Training took about 9 days.
 - As training data we used the latest German Wikipedia dump (6GB of raw txt files), the OpenLegalData dump (2.4 GB) and news articles (3.6 GB).
 - We cleaned the data dumps with tailored scripts and segmented sentences with spacy v2.1. To create tensorflow records we used the recommended sentencepiece library for creating the word piece vocabulary and tensorflow scripts to convert the text to data usable by BERT.
-- Update April 3rd, 2020: updated the vocab file on deepset s3 to adjust tokenization of punctuation.
+
 
 See https://deepset.ai/german-bert for more details
 
