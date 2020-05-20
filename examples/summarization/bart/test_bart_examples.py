@@ -15,7 +15,7 @@ from transformers import BartTokenizer
 
 from .evaluate_cnn import run_generate
 from .finetune import main, run_distiller
-from .utils import SummarizationDataset
+from .utils import SummarizationDataset, summaries_for_file
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -247,3 +247,29 @@ class TestBartExamples(unittest.TestCase):
             # show that targets were truncated
             self.assertEqual(batch["target_ids"].shape[1], trunc_target)  # Truncated
             self.assertGreater(max_len_target, trunc_target)  # Truncated
+
+    def test_summaries_for_file(self):
+
+        tmp_dir = Path(tempfile.gettempdir())
+        self.needs_remove = tmp_dir
+        articles = [" Sam ate lunch today", "Sams lunch ingredients"]
+        summaries = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
+        _dump_articles((tmp_dir / "train.source"), articles)
+        _dump_articles((tmp_dir / "train.target"), summaries)
+
+        summary_ids, summary_text = summaries_for_file(
+            "sshleifer/bart-tiny-random", "train", data_dir=tmp_dir, bs=1, max_source_length=10, max_target_length=4,
+        )
+
+        self.assertEqual(len(summary_ids), len(articles))
+        # self.assertEqual(summary_ids.shape, len(articles))
+
+    def tearDown(self) -> None:
+        import shutil
+
+        data_dir = self.needs_remove
+        type_path = "train"
+        to_rm = [data_dir / f"{type_path}_pseudo_ids.pkl", data_dir / f"{type_path}_pseudo_ids.pkl"]
+        for p in to_rm:
+            if p.exists():
+                os.remove(p)
