@@ -175,6 +175,12 @@ def main():
     # prepare dataset to be in torch format
     dataset.set_format(type="torch", columns=["input_ids", "attention_mask"])
 
+    # the non_padded_sequence_length defines the max shift for our data collator
+    non_padded_sequence_length = sequence_length - sum(dataset["attention_mask"][0])
+
+    # get the data collator
+    data_collator = ReformerCollator(non_padded_sequence_length)
+
     def compute_metrics(pred):
         non_padded_indices = pred.label_ids != -100
 
@@ -194,6 +200,7 @@ def main():
         train_dataset=dataset,
         eval_dataset=dataset,
         compute_metrics=compute_metrics,
+        data_collator=data_collator
     )
 
     # Training

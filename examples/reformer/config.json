@@ -1,0 +1,55 @@
+{
+  "architectures": [
+    "ReformerModelWithLMHead"
+  ],
+  "attention_head_size": 64,
+  "attn_layers": [
+    "local",
+    "lsh",
+    "local",
+    "lsh",
+    "local",
+    "lsh"
+  ],
+  "axial_norm_std": 1.0,
+  "axial_pos_embds": true,
+  "axial_pos_embds_dim": [
+    64,
+    192
+  ],
+  "axial_pos_shape": [
+    64,
+    128
+  ],
+  "chunk_size_feed_forward": 0,
+  "chunk_size_lm_head": 0,
+  "eos_token_id": 2,
+  "feed_forward_size": 512,
+  "hash_seed": null,
+  "hidden_act": "relu",
+  "hidden_dropout_prob": 0.05,
+  "hidden_size": 256,
+  "initializer_range": 0.02,
+  "is_decoder": true,
+  "layer_norm_eps": 1e-12,
+  "local_attention_probs_dropout_prob": 0.05,
+  "local_attn_chunk_length": 64,
+  "local_num_chunks_after": 0,
+  "local_num_chunks_before": 1,
+  "lsh_attention_probs_dropout_prob": 0.0,
+  "lsh_attn_chunk_length": 64,
+  "lsh_num_chunks_after": 0,
+  "lsh_num_chunks_before": 1,
+  "max_position_embeddings": 8192,
+  "model_type": "reformer",
+  "num_attention_heads": 2,
+  "num_buckets": [
+    64,
+    128
+  ],
+  "num_hashes": 1,
+  "num_hidden_layers": 6,
+  "pad_token_id": 0,
+  "sinusoidal_pos_embds": false,
+  "vocab_size": 320
+}
