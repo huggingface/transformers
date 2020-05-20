@@ -57,9 +57,9 @@ class BaseTransformer(pl.LightningModule):
         **config_kwargs
     ):
         "Initialize a model."
-
         super().__init__()
         self.hparams = hparams
+        self.output_dir = Path(self.hparams.output_dir)
         cache_dir = self.hparams.cache_dir if self.hparams.cache_dir else None
         if config is None:
             self.config = AutoConfig.from_pretrained(
@@ -198,10 +198,10 @@ class BaseTransformer(pl.LightningModule):
         # parser.add_argument("--eval_batch_size", default=32, type=int)
 
 
-
-
 class LoggingCallback(pl.Callback):
-    def _do_work(self, trainer: pl.Trainer, pl_module: pl.LightningModule, type_path: str) -> None:
+    def _do_work(
+        self, trainer: pl.Trainer, pl_module: pl.LightningModule, type_path: str, save_generations=True
+    ) -> None:
         logger.info(f"***** {type_path} results *****")
         if not pl_module.is_logger():
             return
@@ -212,15 +212,17 @@ class LoggingCallback(pl.Callback):
 
         with open(output_val_results_file, "a+") as writer:
             for key in sorted(metrics):
-                if key in ["log", "progress_bar"]:
+                if key in ["log", "progress_bar", "preds"]:
                     continue
                 val = metrics[key]
                 if isinstance(val, torch.Tensor):
                     val = val.item()
-                if key not in ["preds", "real"]:
-                    msg = f"{key}: {val:.6f}\n"
-                    logger.info(msg)
-                    writer.write(msg)
+                msg = f"{key}: {val:.6f}\n"
+                # logger.info(msg)
+                writer.write(msg)
+
+        if not save_generations:
+            return
         epoch = metrics.get("epoch", "")
 
         generations_file = od / f"{type_path}_generations_{epoch}.txt"

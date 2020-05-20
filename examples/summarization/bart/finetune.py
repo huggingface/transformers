@@ -16,7 +16,7 @@ from rouge_score import rouge_scorer, scoring
 from torch import nn
 from torch.utils.data import DataLoader
 
-from durbango import pickle_save
+from durbango import pickle_load, pickle_save
 from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
 from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.modeling_bart import invert_mask
@@ -53,15 +53,19 @@ class SummarizationTrainer(BaseTransformer):
 
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
+
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
             max_target_length=self.hparams.max_target_length,
         )
         self.model: BartForConditionalGeneration
-        self.metrics = {"train": [], "val": [], "test": []}
-        self.output_dir = Path(self.hparams.output_dir)
         self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
+        if os.path.exists(self.metrics_save_path):
+            self.metrics = pickle_load(self.metrics_save_path)
+        else:
+            self.metrics = {"train": [], "val": [], "test": []}
+
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
@@ -116,8 +120,7 @@ class SummarizationTrainer(BaseTransformer):
         pickle_save(self.metrics, self.metrics_save_path)
         preds = flatten_list([x["preds"] for x in outputs])
         ret_dict = {"log": metrics, "preds": preds}
-        # ret_dict[f"{prefix}_loss"] = loss
-        # ret_dict[f"{prefix}_preds"] =
+        ret_dict[f"{prefix}_loss"] = loss
         return ret_dict
 
     def _generative_step(self, batch):
@@ -354,8 +357,8 @@ def run_distiller(args):
     model: pl.LightningModule = SummarizationDistiller(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
-    # model = model.load_from_checkpoint(checkpoints[-1])
-    trainer.test()
+    model = model.load_from_checkpoint(checkpoints[-1])
+    trainer.test(model)
     # model.metrics_df.to_csv(Path(model.output_dir)/'metrics.csv')
 
 
