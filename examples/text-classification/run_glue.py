@@ -135,8 +135,8 @@ def main():
 
     # Get datasets
     train_dataset = GlueDataset(data_args, tokenizer=tokenizer) if training_args.do_train else None
-    eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, evaluate=True) if training_args.do_eval else None
-    test_dataset = GlueDataset(data_args, tokenizer=tokenizer, test=True) if training_args.do_predict else None
+    eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev") if training_args.do_eval else None
+    test_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="test") if training_args.do_predict else None
 
     def compute_metrics(p: EvalPrediction) -> Dict:
         if output_mode == "classification":
@@ -174,7 +174,7 @@ def main():
         eval_datasets = [eval_dataset]
         if data_args.task_name == "mnli":
             mnli_mm_data_args = dataclasses.replace(data_args, task_name="mnli-mm")
-            eval_datasets.append(GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, evaluate=True))
+            eval_datasets.append(GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, mode="dev"))
 
         for eval_dataset in eval_datasets:
             eval_result = trainer.evaluate(eval_dataset=eval_dataset)
@@ -196,29 +196,26 @@ def main():
         test_datasets = [test_dataset]
         if data_args.task_name == "mnli":
             mnli_mm_data_args = dataclasses.replace(data_args, task_name="mnli-mm")
-            test_datasets.append(GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, test=True))
+            test_datasets.append(GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, mode="test"))
 
         for test_dataset in test_datasets:
-            test_result = trainer.predict(test_dataset=test_dataset)
+            predictions = trainer.predict(test_dataset=test_dataset).predictions
+            if output_mode == "classification":
+                predictions = np.argmax(predictions, axis=1)
+
             output_test_file = os.path.join(
                 training_args.output_dir, f"test_results_{test_dataset.args.task_name}.txt"
             )
             if trainer.is_world_master():
                 with open(output_test_file, "w") as writer:
                     logger.info("***** Test results {} *****".format(test_dataset.args.task_name))
-                    writer.write('index\tprediction\n')
-                    if output_mode == "regression":
-                        predictions = test_result.predictions
-                    else:
-                        predictions = np.argmax(test_result.predictions, axis = 1)
+                    writer.write("index\tprediction\n")
                     for index, item in enumerate(predictions):
                         if output_mode == "regression":
                             writer.write("%d\t%3.3f\n" % (index, item))
-                        elif training_args.predict_real_class_name:
+                        else:
                             item = test_dataset.get_labels()[item]
                             writer.write("%d\t%s\n" % (index, item))
-                        else:
-                            writer.write("%d\t%d\n" % (index, item))
     return eval_results
 
 

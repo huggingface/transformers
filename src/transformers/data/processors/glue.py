@@ -126,7 +126,7 @@ def _glue_convert_examples_to_features(
 
     label_map = {label: i for i, label in enumerate(label_list)}
 
-    def label_from_example(example: InputExample) -> Union[int, float]:
+    def label_from_example(example: InputExample) -> Union[int, float, None]:
         if example.label is None:
             return None
         if output_mode == "classification":
@@ -203,6 +203,7 @@ class MrpcProcessor(DataProcessor):
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=label))
         return examples
 
+
 class MnliProcessor(DataProcessor):
     """Processor for the MultiNLI data set (GLUE version)."""
 
@@ -256,6 +257,7 @@ class MnliMismatchedProcessor(MnliProcessor):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "test_mismatched.tsv")), "test_mismatched")
 
+
 class ColaProcessor(DataProcessor):
     """Processor for the CoLA data set (GLUE version)."""
 
@@ -297,6 +299,7 @@ class ColaProcessor(DataProcessor):
             label = None if test_mode else line[1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
+
 
 class Sst2Processor(DataProcessor):
     """Processor for the SST-2 data set (GLUE version)."""

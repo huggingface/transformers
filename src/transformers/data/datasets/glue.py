@@ -2,7 +2,8 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
+from enum import Enum
+from typing import List, Optional, Union
 
 import torch
 from filelock import FileLock
@@ -47,6 +48,12 @@ class GlueDataTrainingArguments:
         self.task_name = self.task_name.lower()
 
 
+class Split(Enum):
+    train = "train"
+    dev = "dev"
+    test = "test"
+
+
 class GlueDataset(Dataset):
     """
     This will be superseded by a framework-agnostic approach
@@ -62,27 +69,21 @@ class GlueDataset(Dataset):
         args: GlueDataTrainingArguments,
         tokenizer: PreTrainedTokenizer,
         limit_length: Optional[int] = None,
-        evaluate=False,
-        test=False,
+        mode: Union[str, Split] = Split.train,
     ):
         self.args = args
-        processor = glue_processors[args.task_name]()
-        self.processor = processor
+        self.processor = glue_processors[args.task_name]()
         self.output_mode = glue_output_modes[args.task_name]
-        if evaluate and test:
-            logger.info(f"evaluate and test can't be true at the same time.")
-            return
-
-        mode_tag = "train"
-        if evaluate:
-            mode_tag = "dev"
-        if test:
-            mode_tag = "test"
+        if isinstance(mode, str):
+            try:
+                mode = Split[mode]
+            except KeyError:
+                raise KeyError("mode is not a valid split name")
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(
             args.data_dir,
             "cached_{}_{}_{}_{}".format(
-                mode_tag, tokenizer.__class__.__name__, str(args.max_seq_length), args.task_name,
+                mode.value, tokenizer.__class__.__name__, str(args.max_seq_length), args.task_name,
             ),
         )
 
@@ -99,7 +100,7 @@ class GlueDataset(Dataset):
                 )
             else:
                 logger.info(f"Creating features from dataset file at {args.data_dir}")
-                label_list = processor.get_labels()
+                label_list = self.processor.get_labels()
                 if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__ in (
                     RobertaTokenizer,
                     RobertaTokenizerFast,
@@ -107,13 +108,12 @@ class GlueDataset(Dataset):
                 ):
                     # HACK(label indices are swapped in RoBERTa pretrained model)
                     label_list[1], label_list[2] = label_list[2], label_list[1]
-                examples = None
-                if evaluate:
-                    examples = processor.get_dev_examples(args.data_dir)
-                if test:
-                    examples = processor.get_test_examples(args.data_dir)
-                if examples is None:
-                    examples = processor.get_train_examples(args.data_dir)
+                if mode == Split.dev:
+                    examples = self.processor.get_dev_examples(args.data_dir)
+                elif mode == Split.test:
+                    examples = self.processor.get_test_examples(args.data_dir)
+                else:
+                    examples = self.processor.get_train_examples(args.data_dir)
                 if limit_length is not None:
                     examples = examples[:limit_length]
                 self.features = glue_convert_examples_to_features(
