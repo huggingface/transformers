@@ -30,10 +30,10 @@ def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return
         return load_pt(cache_path)
     data_path = Path(data_path)
     examples = []
-    lns = list(data_path.open().readlines())
+    lns = lmap(str.strip, list(data_path.open().readlines()))
     for text in tqdm_nice(lns, desc=f"Tokenizing {data_path.name}"):
         tokenized = tokenizer.batch_encode_plus(
-            [text.strip()],  # DONT ADD SPACES
+            [text],  # DONT ADD SPACES
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
             add_prefix_space=True,
