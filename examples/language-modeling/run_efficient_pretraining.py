@@ -298,6 +298,9 @@ class OpenWebTextDataset(IterableDataset):
         except RuntimeError:
             raise RuntimeError(f"Corrupted file {file_index}")
 
+    def __len__(self):
+        return len(self.feature_set_paths) * self.num_tensors_per_file
+
     def __iter__(self):
         return chain.from_iterable(map(self.parse_file, self.feature_set_paths))
 
