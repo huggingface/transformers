@@ -30,9 +30,14 @@ def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return
         return load_pt(cache_path)
     data_path = Path(data_path)
     examples = []
-    for text in tqdm_nice(data_path.open().readlines(), desc=f"Tokenizing {data_path.name}"):
+    lns = list(data_path.open().readlines())
+    for text in tqdm_nice(lns, desc=f"Tokenizing {data_path.name}"):
         tokenized = tokenizer.batch_encode_plus(
-            [text], max_length=max_length, pad_to_max_length=pad_to_max_length, return_tensors=return_tensors,
+            [text.strip()],  # DONT ADD SPACES
+            max_length=max_length,
+            pad_to_max_length=pad_to_max_length,
+            add_prefix_space=True,
+            return_tensors=return_tensors,
         )
         examples.append(tokenized)
     torch.save(lmap(dict, examples), cache_path)
