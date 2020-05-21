@@ -313,19 +313,30 @@ class SummarizationDistiller(SummarizationTrainer):
         # Path(hparams.model_name_or_path).mkdir(exist_ok=True)
         tokenizer = BartTokenizer.from_pretrained("bart-large")
         super().__init__(hparams, model=student, config=student_cfg, tokenizer=tokenizer)
-        if student.model.encoder.layers == 12:
-            freeze_part(self.model.model.encoder)
-            teacher.model.encoder = None
-        elif student.model.decoder.layers == 12:
-            freeze_part(self.model.model.decoder)
+        assert student.model.encoder.layers == 12
+        freeze_part(self.model.model.encoder)
+        teacher.model.encoder = None
+        # elif student.model.decoder.layers == 12:
+        #     freeze_part(self.model.model.decoder)
 
         assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
         self.model.teacher = teacher
         freeze_part(self.model.teacher)
+        self.refreeze()
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
         self.alpha_mlm = hparams.alpha_mlm
         self.alpha_ce = hparams.alpha_ce
+
+    def refreeze(self):
+        freeze_part(self.model.model.encoder)
+
+        freeze_part(self.model.model.shared)
+        d = self.model.model.decoder
+        freeze_part(d.embed_positions)
+        freeze_part(d.embed_tokens)
+        self.model.teacher.encoder = None
+        freeze_part(self.model.teacher)
 
     def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
