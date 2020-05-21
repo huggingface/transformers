@@ -23,7 +23,15 @@ import tensorflow as tf
 
 from .configuration_bert import BertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
+from .modeling_tf_utils import (
+    TFPreTrainedModel,
+    get_initializer,
+    keras_serializable,
+    shape_list,
+    TFQuestionAnsweringLoss,
+    TFSequenceClassificationAndMultipleChoiceLoss,
+    TFTokenClassificationLoss,
+)
 from .tokenization_utils import BatchEncoding
 
 
@@ -880,7 +888,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     BERT_START_DOCSTRING,
 )
-class TFBertForSequenceClassification(TFBertPreTrainedModel):
+class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -938,7 +946,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     BERT_START_DOCSTRING,
 )
-class TFBertForMultipleChoice(TFBertPreTrainedModel):
+class TFBertForMultipleChoice(TFBertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1061,7 +1069,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     BERT_START_DOCSTRING,
 )
-class TFBertForTokenClassification(TFBertPreTrainedModel):
+class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1119,7 +1127,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     BERT_START_DOCSTRING,
 )
-class TFBertForQuestionAnswering(TFBertPreTrainedModel):
+class TFBertForQuestionAnsweringSimple(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
