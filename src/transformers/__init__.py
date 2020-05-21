@@ -334,7 +334,11 @@ if is_torch_available():
         REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
-    from .modeling_longformer import LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP, LongformerModel, LongformerForMaskedLM
+    from .modeling_longformer import (
+        LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP, 
+        LongformerModel, 
+        LongformerForQuestionAnswering,
+    )
 
     # Optimization
     from .optimization import (
