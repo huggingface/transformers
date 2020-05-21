@@ -156,7 +156,7 @@ class EfficientTrainingArguments(TrainingArguments):
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
     )
     max_eval_steps: int = field(
-        default=-100,
+        default=100,
         metadata={"help": "If > 0: set total number of eval steps to perform."},
     )
     warmup_steps: int = field(default=10_000, metadata={"help": "Linear warmup over warmup_steps."})
@@ -191,9 +191,9 @@ class OpenWebTextDataset(IterableDataset):
         self.tokenizer_cache = model_args.cache_dir
         self.directory = Path(data_args.data_directory)
         self.archives = os.listdir(data_args.data_directory)
-        self.tokenizer_identifier = model_args.tokenizer_name.replace("/", "-")
+        self.tokenizer_identifier = model_args.tokenizer_name
         self.num_tensors_per_file = data_args.num_tensors_per_file
-        self.feature_directory = self.directory / f"features_{self.tokenizer_identifier}_{data_args.block_size if data_args.block_size is None else 'no-max-seq'}_{self.num_tensors_per_file}"
+        self.feature_directory = self.directory / f"features_{self.tokenizer_identifier.replace('/', '_')}_{data_args.block_size if data_args.block_size is not None else 'no-max-seq'}_{self.num_tensors_per_file}"
         self.block_size = data_args.block_size
 
         # The dataset was already processed
@@ -219,8 +219,8 @@ class OpenWebTextDataset(IterableDataset):
             self.feature_set_paths = self._extract_open_web_text()
         else:
             pool = multiprocessing.Pool(processes=data_args.num_dataset_building_processes)
-            self.feature_set_paths = [file_path for feature_set in self.feature_set_paths for file_path in feature_set]
             self.feature_set_paths = pool.map(self._extract_open_web_text, range(data_args.num_dataset_building_processes))
+            self.feature_set_paths = [file_path for feature_set in self.feature_set_paths for file_path in feature_set]
 
     def _extract_open_web_text(self, job_id=0):
         """
@@ -317,8 +317,8 @@ class CombinedModel(nn.Module):
 
         self.tokenizer = tokenizer
 
-    @staticmethod
     def mask_inputs(
+        self,
         input_ids: torch.Tensor,
         mask_token_id,
         mask_probability,
@@ -349,7 +349,7 @@ class CombinedModel(nn.Module):
         # Should be passed through a log function here
 
         # Weight of each position: 1 the position will be masked, 0 the position won't be masked
-        masked_lm_weights = torch.tensor([0] * max_predictions_per_seq, dtype=torch.bool)
+        masked_lm_weights = torch.tensor([0] * max_predictions_per_seq, dtype=torch.bool, device=input_ids.device)
         masked_lm_weights[:number_of_tokens_to_be_masked] = True
 
         # Sample from the probabilities
@@ -364,7 +364,7 @@ class CombinedModel(nn.Module):
         # Apply weights to the IDs
         masked_lm_ids *= masked_lm_weights.long()
 
-        replace_with_mask_positions = masked_lm_positions * (torch.rand(masked_lm_positions.shape) < 0.85)
+        replace_with_mask_positions = masked_lm_positions * (torch.rand(masked_lm_positions.shape, device=masked_lm_positions.device) < 0.85)
 
         # Replace the input IDs with masks on given positions
         masked_input_ids = input_ids.scatter(-1, replace_with_mask_positions, mask_token_id)
@@ -377,7 +377,7 @@ class CombinedModel(nn.Module):
     @staticmethod
     def gather_positions(sequence, positions):
         batch_size, sequence_length, dimension = sequence.shape
-        position_shift = (sequence_length * torch.arange(batch_size)).unsqueeze(-1)
+        position_shift = (sequence_length * torch.arange(batch_size, device=sequence.device)).unsqueeze(-1)
         flat_positions = torch.reshape(positions + position_shift, [-1]).long()
         flat_sequence = torch.reshape(sequence, [batch_size * sequence_length, dimension])
         gathered = flat_sequence.index_select(0, flat_positions)
@@ -429,9 +429,10 @@ class CombinedModel(nn.Module):
         # create a tensor containing the predicted tokens
         fake_tokens = input_ids.scatter(-1, masked_lm_positions, fake_argmaxes)
         fake_tokens[:, 0] = input_ids[:, 0]
+        discriminator_labels = torch.tensor(labels != fake_tokens, dtype=torch.uint8, device=input_ids.device)
 
         discriminator_loss, discriminator_output = self.discriminator(
-            fake_tokens, attention_mask, token_type_ids, position_ids, head_mask, position_ids, labels=labels
+            fake_tokens, attention_mask, token_type_ids, position_ids, head_mask, position_ids, labels=discriminator_labels
         )[:2]
 
         discriminator_predictions = torch.round((torch.sign(discriminator_output) + 1) / 2).int().tolist()
@@ -459,7 +460,7 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, EfficientTrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if not data_args.use_openwebtext and data_args.eval_data_file is None and training_args.do_eval:
@@ -545,7 +546,7 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        discriminator = ElectraForPreTraining.from_config(discriminator_config)
+        discriminator = ElectraForPreTraining(discriminator_config)
 
     if model_args.generator_name_or_path:
         generator = ElectraForMaskedLM.from_pretrained(
@@ -556,7 +557,7 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        generator = ElectraForMaskedLM.from_config(generator_config)
+        generator = ElectraForMaskedLM(generator_config)
 
     discriminator.resize_token_embeddings(len(tokenizer))
     generator.resize_token_embeddings(len(tokenizer))
@@ -569,7 +570,7 @@ def main():
 
     # Get datasets
     train_dataset = (
-        get_dataset(data_args, tokenizer=tokenizer, local_rank=training_args.local_rank)
+        get_dataset(data_args, training_args, model_args, tokenizer=tokenizer, local_rank=training_args.local_rank)
         if training_args.do_train
         else None
     )
@@ -610,8 +611,7 @@ def main():
 
         eval_output = trainer.evaluate()
 
-        perplexity = math.exp(eval_output["loss"])
-        result = {"perplexity": perplexity}
+        result = {"loss": eval_output["eval_loss"]}
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results_lm.txt")
         with open(output_eval_file, "w") as writer:

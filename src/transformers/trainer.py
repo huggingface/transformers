@@ -238,7 +238,7 @@ class Trainer:
         data_loader = DataLoader(
             self.train_dataset,
             batch_size=self.args.train_batch_size,
-            sampler=train_sampler,
+            sampler=train_sampler if not isinstance(self.train_dataset, IterableDataset) else None,
             collate_fn=self.data_collator.collate_batch,
         )
 
@@ -454,13 +454,18 @@ class Trainer:
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
 
+            if t_total - self.global_step < self.num_examples(train_dataloader):
+                total_epoch_steps = t_total - self.global_step
+            else:
+                total_epoch_steps = None
+
             if is_tpu_available():
                 parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
                     self.args.device
                 )
-                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_master())
+                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_master(), total=total_epoch_steps)
             else:
-                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master())
+                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master(), total=total_epoch_steps)
 
             for step, inputs in enumerate(epoch_iterator):
 
@@ -636,7 +641,7 @@ class Trainer:
         logger.info("Saving model checkpoint to %s", output_dir)
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
-        if not isinstance(self.model, PreTrainedModel):
+        if not isinstance(self.model, PreTrainedModel) and not isinstance(self.model, nn.Module):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
         self.model.save_pretrained(output_dir)
 
@@ -748,7 +753,7 @@ class Trainer:
             dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
 
         evaluation_total_steps = 0
-        evaluation_iterator = tqdm(dataloader, desc=description)
+        evaluation_iterator = tqdm(dataloader, desc=description, total=self.args.max_eval_steps if self.args.max_eval_steps > 0 else None)
 
         for inputs in evaluation_iterator:
             has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
