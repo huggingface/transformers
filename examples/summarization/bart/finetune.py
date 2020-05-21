@@ -52,7 +52,8 @@ class SummarizationTrainer(BaseTransformer):
     loss_names = ["loss"]
 
     def __init__(self, hparams, **kwargs):
-        super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
+        tokenizer = BartTokenizer.from_pretrained("bart-large")
+        super().__init__(hparams, num_labels=None, mode=self.mode, tokenizer=tokenizer, **kwargs)
         self.model: BartForConditionalGeneration
         self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
         if os.path.exists(self.metrics_save_path):
@@ -315,8 +316,8 @@ class SummarizationDistiller(SummarizationTrainer):
         if hparams.student_encoder_layers != teacher.config.encoder_layers:
             copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
         # Path(hparams.model_name_or_path).mkdir(exist_ok=True)
-        tokenizer = BartTokenizer.from_pretrained("bart-large")
-        super().__init__(hparams, model=student, config=student_cfg, tokenizer=tokenizer)
+
+        super().__init__(hparams, model=student, config=student_cfg)
         # assert len(student.model.encoder.layers) == 12
         freeze_part(self.model.model.encoder)
         teacher.model.encoder = None
