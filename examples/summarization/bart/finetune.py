@@ -310,15 +310,14 @@ class SummarizationDistiller(SummarizationTrainer):
             copy_layers(teacher.model.decoder.layers, student.model.decoder.layers, d_layers_to_copy)
         if hparams.student_encoder_layers != teacher.config.encoder_layers:
             copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
+        # Path(hparams.model_name_or_path).mkdir(exist_ok=True)
+        tokenizer = BartTokenizer.from_pretrained("bart-large")
+        super().__init__(hparams, model=student, config=student_cfg, tokenizer=tokenizer)
         if student.model.encoder.layers == 12:
             freeze_part(self.model.model.encoder)
             teacher.model.encoder = None
         elif student.model.decoder.layers == 12:
             freeze_part(self.model.model.decoder)
-
-        # Path(hparams.model_name_or_path).mkdir(exist_ok=True)
-        tokenizer = BartTokenizer.from_pretrained("bart-large")
-        super().__init__(hparams, model=student, config=student_cfg, tokenizer=tokenizer)
 
         assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
         self.model.teacher = teacher
