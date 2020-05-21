@@ -215,14 +215,23 @@ def prune_heads(args, model, eval_dataloader, head_mask):
     original_time = datetime.now() - before_time
 
     original_num_params = sum(p.numel() for p in model.parameters())
-    heads_to_prune = dict((layer, (1 - head_mask[layer].long()).nonzero().squeeze().tolist()) for layer in range(len(head_mask)))
+    heads_to_prune = dict(
+        (layer, (1 - head_mask[layer].long()).nonzero().squeeze().tolist()) for layer in range(len(head_mask))
+    )
+
     assert sum(len(h) for h in heads_to_prune.values()) == (1 - head_mask.long()).sum().item()
     model.prune_heads(heads_to_prune)
     pruned_num_params = sum(p.numel() for p in model.parameters())
 
     before_time = datetime.now()
     _, _, preds, labels = compute_heads_importance(
-        args, model, eval_dataloader, compute_entropy=False, compute_importance=False, head_mask=None, actually_pruned=True
+        args,
+        model,
+        eval_dataloader,
+        compute_entropy=False,
+        compute_importance=False,
+        head_mask=None,
+        actually_pruned=True,
     )
     preds = np.argmax(preds, axis=1) if args.output_mode == "classification" else np.squeeze(preds)
     score_pruning = glue_compute_metrics(args.task_name, preds, labels)[args.metric_name]
