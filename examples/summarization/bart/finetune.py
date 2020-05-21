@@ -53,12 +53,6 @@ class SummarizationTrainer(BaseTransformer):
 
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
-
-        self.dataset_kwargs: dict = dict(
-            data_dir=self.hparams.data_dir,
-            max_source_length=self.hparams.max_source_length,
-            max_target_length=self.hparams.max_target_length,
-        )
         self.model: BartForConditionalGeneration
         self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
         if os.path.exists(self.metrics_save_path):
@@ -69,7 +63,7 @@ class SummarizationTrainer(BaseTransformer):
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
-            max_target_length=self.hparams.max_target_length,
+            #max_target_length=self.hparams.max_target_length,
             overwrite_cache=self.hparams.no_cache,
             tgt_suffix=self.hparams.tgt_suffix,
         )
@@ -77,6 +71,11 @@ class SummarizationTrainer(BaseTransformer):
             "train": self.hparams.n_train,
             "val": self.hparams.n_val,
             "test": self.hparams.n_test,
+        }
+        self.target_lens = {
+            "train": self.hparams.max_target_length,
+            "val": self.hparams.val_mtl,
+            "test": self.hparams.test_mtl,
         }
         self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
         self.freeze_stuff()
@@ -167,8 +166,10 @@ class SummarizationTrainer(BaseTransformer):
 
     def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
+        max_target_length = self.target_lens[type_path]
         dataset = SummarizationDataset.from_raw_data(
-            self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs
+            self.tokenizer, type_path=type_path, n_obs=n_obs, max_target_length=max_target_length,
+            **self.dataset_kwargs
         )
         return dataset
 
@@ -221,6 +222,20 @@ class SummarizationTrainer(BaseTransformer):
         )
         parser.add_argument(
             "--max_target_length",
+            default=56,
+            type=int,
+            help="The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded.",
+        )
+        parser.add_argument(
+            "--val_mtl",
+            default=56,
+            type=int,
+            help="The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded.",
+        )
+        parser.add_argument(
+            "--test_mtl",
             default=56,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "

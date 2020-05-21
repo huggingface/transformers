@@ -56,6 +56,8 @@ CHEAP_ARGS = {
     "eval_batch_size": 2,
     "max_source_length": 12,
     "max_target_length": 12,
+    "val_mtl": 12,
+    "test_mtl": 12,
     "fast_dev_run": False,
     "no_cache": False,
     "n_train": -1,
