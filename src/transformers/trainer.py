@@ -266,9 +266,6 @@ class Trainer:
             collate_fn=self.data_collator.collate_batch,
         )
 
-        if is_tpu_available():
-            data_loader = pl.ParallelLoader(data_loader, [self.args.device]).per_device_loader(self.args.device)
-
         return data_loader
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
@@ -288,9 +285,6 @@ class Trainer:
             batch_size=self.args.eval_batch_size,
             collate_fn=self.data_collator.collate_batch,
         )
-
-        if is_tpu_available():
-            data_loader = pl.ParallelLoader(data_loader, [self.args.device]).per_device_loader(self.args.device)
 
         return data_loader
 
@@ -348,14 +342,11 @@ class Trainer:
                 self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
             )
 
-    def num_examples(self, dataloader: Union[DataLoader, "pl.PerDeviceLoader"]) -> int:
+    def num_examples(self, dataloader: DataLoader) -> int:
         """
         Helper to get num of examples from a DataLoader, by accessing its Dataset.
         """
-        if is_tpu_available() and isinstance(dataloader, pl.PerDeviceLoader):
-            return len(dataloader._loader._loader.dataset)
-        else:
-            return len(dataloader.dataset)
+        return len(dataloader.dataset)
 
     def train(self, model_path: Optional[str] = None):
         """
@@ -532,12 +523,13 @@ class Trainer:
                         if self.is_world_master():
                             self._rotate_checkpoints()
 
-                        if self.is_world_master() or is_tpu_available():
-                            saving_method = torch.save if not is_tpu_available() else xm.save
-                            if is_tpu_available():
-                                xm.rendezvous("saving_optimizer_states")
-                            saving_method(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
-                            saving_method(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                        if is_tpu_available():
+                            xm.rendezvous("saving_optimizer_states")
+                            xm.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+                            xm.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                        elif self.is_world_master():
+                            torch.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+                            torch.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
 
                 if self.args.max_steps > 0 and self.global_step > self.args.max_steps:
                     epoch_iterator.close()
@@ -719,6 +711,7 @@ class Trainer:
         In that case, this method will also return metrics, like in evaluate().
         """
         test_dataloader = self.get_test_dataloader(test_dataset)
+
         return self._prediction_loop(test_dataloader, description="Prediction")
 
     def _prediction_loop(
@@ -741,10 +734,7 @@ class Trainer:
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
 
-        if is_tpu_available():
-            batch_size = dataloader._loader._loader.batch_size
-        else:
-            batch_size = dataloader.batch_size
+        batch_size = dataloader.batch_size
         logger.info("***** Running %s *****", description)
         logger.info("  Num examples = %d", self.num_examples(dataloader))
         logger.info("  Batch size = %d", batch_size)
@@ -752,6 +742,9 @@ class Trainer:
         preds: torch.Tensor = None
         label_ids: torch.Tensor = None
         model.eval()
+
+        if is_tpu_available():
+            dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
 
         for inputs in tqdm(dataloader, desc=description):
             has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
