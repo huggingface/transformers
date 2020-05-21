@@ -72,11 +72,14 @@ class SummarizationTrainer(BaseTransformer):
             "val": self.hparams.n_val,
             "test": self.hparams.n_test,
         }
+
         self.target_lens = {
             "train": self.hparams.max_target_length,
             "val": self.hparams.val_mtl,
             "test": self.hparams.test_mtl,
         }
+        assert self.target_lens['train'] <= self.target_lens['val'], f'target_lens: {self.target_lens}'
+        assert self.target_lens['train'] <= self.target_lens['test'], f'target_lens: {self.target_lens}'
         self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
         self.freeze_stuff()
 
