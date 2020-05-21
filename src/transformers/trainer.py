@@ -14,7 +14,7 @@ import torch
 from packaging import version
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.data.dataset import Dataset
+from torch.utils.data.dataset import Dataset, IterableDataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
 from tqdm.auto import tqdm, trange
@@ -259,9 +259,10 @@ class Trainer:
         else:
             sampler = SequentialSampler(eval_dataset)
 
+        # torch.util.data.Dataset supports samplers, torch.util.data.IterableDataset does not.
         data_loader = DataLoader(
             eval_dataset,
-            sampler=sampler,
+            sampler=sampler if not isinstance(eval_dataset, IterableDataset) else None,
             batch_size=self.args.eval_batch_size,
             collate_fn=self.data_collator.collate_batch,
         )
@@ -746,7 +747,10 @@ class Trainer:
         if is_tpu_available():
             dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
 
-        for inputs in tqdm(dataloader, desc=description):
+        evaluation_total_steps = 0
+        evaluation_iterator = tqdm(dataloader, desc=description)
+
+        for inputs in evaluation_iterator:
             has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
 
             for k, v in inputs.items():
@@ -771,12 +775,20 @@ class Trainer:
                     else:
                         label_ids = torch.cat((label_ids, inputs["labels"].detach()), dim=0)
 
+            evaluation_total_steps += 1
+
+            if evaluation_total_steps > self.args.max_eval_steps:
+                evaluation_iterator.close()
+                break
+
+
         if self.args.local_rank != -1:
             # In distributed mode, concatenate all results from all nodes:
+            total_examples = self.args.max_eval_steps if self.args.max_eval_steps > 0 else self.num_examples(dataloader)
             if preds is not None:
-                preds = self.distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
+                preds = self.distributed_concat(preds, num_total_examples=total_examples)
             if label_ids is not None:
-                label_ids = self.distributed_concat(label_ids, num_total_examples=self.num_examples(dataloader))
+                label_ids = self.distributed_concat(label_ids, num_total_examples=total_examples)
         elif is_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
             if preds is not None:

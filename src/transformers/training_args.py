@@ -95,6 +95,10 @@ class TrainingArguments:
         default=-1,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
     )
+    max_eval_steps: int = field(
+        default=-1,
+        metadata={"help": "If > 0: set total number of eval steps to perform."},
+    )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
     logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
