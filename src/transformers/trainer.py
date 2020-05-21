@@ -237,7 +237,7 @@ class Trainer:
 
         data_loader = DataLoader(
             self.train_dataset,
-            batch_size=self.args.train_batch_size,
+            batch_size=self.args.per_gpu_train_batch_size,
             sampler=train_sampler,
             collate_fn=self.data_collator.collate_batch,
         )
@@ -419,10 +419,10 @@ class Trainer:
 
         # Train!
         if is_tpu_available():
-            total_train_batch_size = self.args.train_batch_size * xm.xrt_world_size()
+            total_train_batch_size = self.args.per_gpu_train_batch_size * xm.xrt_world_size()
         else:
             total_train_batch_size = (
-                self.args.train_batch_size
+                self.args.per_gpu_train_batch_size
                 * self.args.gradient_accumulation_steps
                 * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
             )
