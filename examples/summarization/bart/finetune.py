@@ -167,8 +167,17 @@ class SummarizationTrainer(BaseTransformer):
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         n_obs = self.n_obs[type_path]
         dataset = SummarizationDataset(self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs)
+        sampler = None
+        if self.hparams.grouped_sampler and type_path == "train":
+            sampler = dataset.make_sampler(self.hparams)
+            shuffle = False
         dataloader = DataLoader(
-            dataset, batch_size=batch_size, collate_fn=dataset.collate_fn, shuffle=shuffle, num_workers=4
+            dataset,
+            batch_size=batch_size,
+            collate_fn=dataset.collate_fn,
+            shuffle=shuffle,
+            num_workers=4,
+            sampler=sampler,
         )
         return dataloader
 
@@ -223,6 +232,7 @@ class SummarizationTrainer(BaseTransformer):
         parser.add_argument("--n_train", type=int, default=-1, required=False)
         parser.add_argument("--n_val", type=int, default=-1, required=False)
         parser.add_argument("--n_test", type=int, default=-1, required=False)
+        parser.add_argument("--grouped_sampler", action="store_true", default=False)
 
         return parser
 

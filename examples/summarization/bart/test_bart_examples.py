@@ -24,7 +24,7 @@ logger = logging.getLogger()
 
 CHEAP_ARGS = {
     "resume_from_checkpoint": None,
-    "grouped_sampler": True,
+    "grouped_sampler": False,
     "student_decoder_layers": 1,
     "val_check_interval": 1.0,
     "output_dir": "",

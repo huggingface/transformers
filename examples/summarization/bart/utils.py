@@ -3,12 +3,20 @@ from pathlib import Path
 from typing import List
 
 import funcy
+import numpy as np
 import torch
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import BatchSampler, DataLoader, Dataset, RandomSampler
+from torch.utils.data.distributed import DistributedSampler
 
 from durbango import DEFAULT_DEVICE, lmap, pickle_load, pickle_save, tqdm_nice
 from transformers import BartForConditionalGeneration, BartTokenizer
 from transformers.tokenization_utils import trim_batch
+
+
+try:
+    from .grouped_batch_sampler import create_lengths_groups, GroupedBatchSampler
+except ImportError:
+    from grouped_batch_sampler import create_lengths_groups, GroupedBatchSampler
 
 
 def load_pt(path):
@@ -88,6 +96,8 @@ def flatten_list(summary_ids: List[List]):
     return [x for x in funcy.flatten(summary_ids)]
 
 
+
+
 class SummarizationDataset(Dataset):
     def __init__(
         self,
@@ -117,6 +127,9 @@ class SummarizationDataset(Dataset):
             self.source = self.source[:n_obs]
             self.source = self.target[:n_obs]
 
+        self.max_source_length = max_source_length
+        self.max_target_length = max_target_length
+
     def __len__(self):
         return len(self.source)
 
@@ -141,3 +154,16 @@ class SummarizationDataset(Dataset):
         source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
         batch = {"input_ids": source_ids, "attention_mask": source_mask, "decoder_input_ids": y}
         return batch
+
+    @property
+    def lengths(self):
+        return lmap(len, self.source)
+
+    def make_sampler(self, params) -> GroupedBatchSampler:
+        if params.n_gpu <= 1:
+            sampler = RandomSampler(self)
+        else:
+            sampler = DistributedSampler(self)
+        groups = create_lengths_groups(lengths=self.lengths, k=self.max_target_length)
+        sampler = GroupedBatchSampler(sampler=sampler, group_ids=groups, batch_size=params.train_batch_size)
+        return sampler
