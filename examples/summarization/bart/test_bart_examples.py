@@ -14,7 +14,7 @@ from durbango import DEFAULT_DEVICE, pickle_load
 from transformers import BartTokenizer
 
 from .evaluate_cnn import run_generate
-from .finetune import main, run_distiller
+from .finetune import main
 from .utils import SummarizationDataset, summaries_for_file
 
 
@@ -29,6 +29,7 @@ CHEAP_ARGS = {
     "val_check_interval": 1.0,
     "output_dir": "",
     "fp16": False,
+    "distilled_ds": False,
     "fp16_opt_level": "O1",
     "n_gpu": 0,
     "n_tpu_cores": 0,
@@ -102,8 +103,12 @@ class TestBartExamples(unittest.TestCase):
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
-            data_dir=tmp_dir, model_type="bart", train_batch_size=2, eval_batch_size=2,
+            data_dir=tmp_dir,
+            model_type="bart",
+            train_batch_size=2,
+            eval_batch_size=2,
             num_train_epochs=2,
+            distilled_ds=True,
             output_dir=output_dir,
         )
         main(argparse.Namespace(**args_d))
@@ -120,7 +125,7 @@ class TestBartExamples(unittest.TestCase):
             "test_generations_.txt",
             "test_generations_1.txt",
             "val_generations_0.txt",
-            #"val_generations_1.txt",
+            # "val_generations_1.txt",
             "val_generations_.txt",
             # "test"
         }
@@ -137,7 +142,6 @@ class TestBartExamples(unittest.TestCase):
             train_batch_size=1,
             eval_batch_size=2,
             num_train_epochs=2,
-
             n_gpu=0,
             output_dir=output_dir,
             do_predict=True,
@@ -147,7 +151,7 @@ class TestBartExamples(unittest.TestCase):
             alpha_ce=0.8,
             val_check_interval=0.5,
         )
-        run_distiller(argparse.Namespace(**args_d))
+        main(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
         expected_contents = {
             "checkpointepoch=0.ckpt",
@@ -189,7 +193,7 @@ class TestBartExamples(unittest.TestCase):
             model_name_or_path="student",
             teacher="bart-large-cnn",
         )
-        run_distiller(argparse.Namespace(**args_d))
+        main(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
         expected_contents = {
             "checkpointepoch=0.ckpt",
