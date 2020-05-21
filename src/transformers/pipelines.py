@@ -1325,7 +1325,7 @@ class SummarizationPipeline(Pipeline):
 
         # use bart in pytorch
         summarizer = pipeline("summarization")
-        summarizer(["Sam Shleifer writes the best docstring examples in the whole world."], min_length=5, max_length=20)
+        summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
 
         # use t5 in tf
         summarizer = pipeline("summarization", model="t5-base", tokenizer="t5-base", framework="tf")
@@ -1628,11 +1628,7 @@ SUPPORTED_TASKS = {
         "impl": SummarizationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {
-            "model": {"pt": "bart-large-cnn", "tf": "t5-small"},
-            "config": None,
-            "tokenizer": None,
-        },
+        "default": {"model": {"pt": "bart-large-cnn", "tf": "t5-small"}, "config": None, "tokenizer": None,},
     },
     "translation_en_to_fr": {
         "impl": TranslationPipeline,
