@@ -231,6 +231,9 @@ class LoggingCallback(pl.Callback):
         if "preds" in metrics:
             content = "\n".join(metrics["preds"])
             generations_file.open("w+").write(content)
+    def on_train_start(self, trainer, pl_module):
+        npars = pl_module.model.model.num_parameters()
+        trainer.logger.log_metrics({'n_params': npars})
 
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         return self._do_work(trainer, pl_module, "val")

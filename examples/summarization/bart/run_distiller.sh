@@ -20,5 +20,4 @@ python finetune.py \
 --n_gpu 1 \
 --fp16 \
 --val_check_interval 0.25 \
---num_train_epochs 1 \
 $@
