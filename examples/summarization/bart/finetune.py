@@ -288,6 +288,7 @@ class SummarizationDistiller(SummarizationTrainer):
     loss_names = ["loss", "ce_loss", "mlm_loss"]
 
     def __init__(self, hparams):
+        assert Path(self.hparams.data_dir).exists()
 
         # Dump empty student model at a path, then call from_pretrained on it
         teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher).eval()
