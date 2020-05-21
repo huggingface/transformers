@@ -40,7 +40,7 @@ def summaries_for_file(
 ):
     model = BartForConditionalGeneration.from_pretrained(model_name)
     if torch.cuda.is_available():
-        model = model.half().to(device)
+        model = model.to(device).half()
 
     tokenizer = BartTokenizer.from_pretrained("bart-large")
     ds = SummarizationDataset(tokenizer, type_path=type_path, data_dir=data_dir, **ds_kwargs)

@@ -44,6 +44,7 @@ class TestDistiller(unittest.TestCase):
         student_cfg = BartConfig(**kw)
         student_model = BartForConditionalGeneration(student_cfg)
         student_model, info = init_student(student_model, teacher_model)
+
         copy_decoder_layers(teacher_model, student_model, l2copy=[0, 2])
 
     def test_bdistiller_tiny(self):

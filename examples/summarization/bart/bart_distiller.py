@@ -1,3 +1,5 @@
+from typing import List
+
 from torch import nn
 
 from transformers import BartConfig, BartForConditionalGeneration
@@ -25,6 +27,10 @@ def init_student(student, teacher):
 
 
 def copy_decoder_layers(teacher, student, l2copy=[0, 2, 4, 7, 9, 11]):
-    layers_to_copy = nn.ModuleList([l for i, l in enumerate(teacher.model.decoder.layers) if i in l2copy])
-    assert len(student.model.decoder.layers) == len(layers_to_copy)
-    student.model.decoder.layers.load_state_dict(layers_to_copy.state_dict())
+    copy_layers(teacher.model.decoder.layers, student.model.decoder.layers, l2copy)
+
+
+def copy_layers(teacher_layers, student_layers, l2copy: List):
+    layers_to_copy = nn.ModuleList([l for i, l in enumerate(teacher_layers) if i in l2copy])
+    assert len(student_layers) == len(l2copy), f"{len(student_layers)} != {len(l2copy)}"
+    student_layers.load_state_dict(layers_to_copy.state_dict())

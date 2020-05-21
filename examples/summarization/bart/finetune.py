@@ -24,10 +24,10 @@ from transformers.modeling_bart import invert_mask
 
 try:
     from .utils import SummarizationDataset, flatten_list
-    from .bart_distiller import copy_decoder_layers, init_student
+    from .bart_distiller import init_student, copy_layers
 except ImportError:
     from utils import SummarizationDataset, flatten_list
-    from bart_distiller import copy_decoder_layers, init_student
+    from bart_distiller import init_student, copy_layers
 
 logger = logging.getLogger(__name__)
 
@@ -230,11 +230,12 @@ def is_frozen(model):
 
 
 def get_layers_to_copy(n_to_get, tot):
-    if tot == 12:
-        base = {6: [0, 2, 4, 7, 9, 11], 1: [0], 3: [0, 6, 11]}
+    all_layers = list(range(tot))
+    if tot == 12:  # Alternating for special cases
+        base = {6: [0, 2, 4, 7, 9, 11], 1: [0], 3: [0, 6, 11], 2: [0, 11]}
         return base[n_to_get]
     else:
-        return list(range(tot))[::2][:n_to_get]
+        return all_layers[:n_to_get]
 
 
 class SummarizationDistiller(SummarizationTrainer):
@@ -243,21 +244,28 @@ class SummarizationDistiller(SummarizationTrainer):
         # Dump empty student model at a path, then call from_pretrained on it
         teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher).eval()
 
-        student_updates = {"decoder_layers": hparams.student_decoder_layers}
-        layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
-        hparams.layer_to_copy = layers_to_copy
+        student_updates = {
+            "decoder_layers": hparams.student_decoder_layers,
+            "encoder_layers": hparams.student_encoder_layers,
+        }
+        d_layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
+        e_layers_to_copy = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
+        hparams.layer_to_copy = d_layers_to_copy
+
         kw = teacher.config.to_diff_dict()
         kw.update(student_updates)
+        # Copy weights
         student_cfg = BartConfig(**kw)
-        student_model = BartForConditionalGeneration(student_cfg)
-        student_model, info = init_student(student_model, teacher)
-        copy_decoder_layers(teacher, student_model, l2copy=layers_to_copy)
-        Path(hparams.model_name_or_path).mkdir(exist_ok=True)
-        student_model.save_pretrained(hparams.model_name_or_path)
-        tokenizer = BartTokenizer.from_pretrained("bart-large")
-        super().__init__(hparams, model=student_model, config=student_cfg, tokenizer=tokenizer)
+        student = BartForConditionalGeneration(student_cfg)
+        student, _ = init_student(student, teacher)
 
-        assert len(self.model.model.decoder.layers) == len(layers_to_copy)
+        copy_layers(teacher.model.decoder.layers, student.model.decoder.layers, d_layers_to_copy)
+        copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
+        # Path(hparams.model_name_or_path).mkdir(exist_ok=True)
+        tokenizer = BartTokenizer.from_pretrained("bart-large")
+        super().__init__(hparams, model=student, config=student_cfg, tokenizer=tokenizer)
+
+        assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
         self.model.teacher = teacher
         # self.teacher = teacher
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
@@ -290,8 +298,11 @@ class SummarizationDistiller(SummarizationTrainer):
         # assert not self.model.teacher
         with torch.no_grad():
             tloss, tlogits, *trash = self.model.teacher(
-                source_ids, attention_mask=source_mask, encoder_outputs=(enc_outputs,),
-                decoder_input_ids=y_ids, lm_labels=lm_labels,
+                source_ids,
+                attention_mask=source_mask,
+                encoder_outputs=(enc_outputs,),
+                decoder_input_ids=y_ids,
+                lm_labels=lm_labels,
             )
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(self.model.model.last_padding_mask, slogits, tlogits)
         blended_loss = loss_ce * self.alpha_ce + self.alpha_mlm * sloss
@@ -352,6 +363,9 @@ class SummarizationDistiller(SummarizationTrainer):
         )
         parser.add_argument(
             "--student_decoder_layers", default=6, type=int, required=False,
+        )
+        parser.add_argument(
+            "--student_encoder_layers", default=12, type=int, required=False,
         )
 
         return parser

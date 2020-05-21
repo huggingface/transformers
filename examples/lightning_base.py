@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.loggers import WandbLogger
 
 from transformers import (
     AdamW,
@@ -231,9 +232,10 @@ class LoggingCallback(pl.Callback):
         if "preds" in metrics:
             content = "\n".join(metrics["preds"])
             generations_file.open("w+").write(content)
+
     def on_train_start(self, trainer, pl_module):
         npars = pl_module.model.model.num_parameters()
-        trainer.logger.log_metrics({'n_params': npars})
+        trainer.logger.log_metrics({"n_params": npars, "mp": npars / 1e6})
 
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         return self._do_work(trainer, pl_module, "val")
@@ -241,7 +243,7 @@ class LoggingCallback(pl.Callback):
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         return self._do_work(trainer, pl_module, "test")
 
-from pytorch_lightning.loggers import WandbLogger
+
 def add_generic_args(parser, root_dir):
     parser.add_argument(
         "--output_dir",
@@ -291,7 +293,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5
     )
-    if args.output_dir.startswith('/var/') or args.fast_dev_run:
+    if args.output_dir.startswith("/var/") or args.fast_dev_run:
         logger = True
     else:
         logger = WandbLogger(name=model.output_dir.name)
