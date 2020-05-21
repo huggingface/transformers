@@ -30,7 +30,7 @@ CHEAP_ARGS = {
     "output_dir": "",
     "fp16": False,
     "fp16_opt_level": "O1",
-    "n_gpu": 1,
+    "n_gpu": 0,
     "n_tpu_cores": 0,
     "max_grad_norm": 1.0,
     "do_train": True,
@@ -102,7 +102,9 @@ class TestBartExamples(unittest.TestCase):
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
         args_d.update(
-            data_dir=tmp_dir, model_type="bart", train_batch_size=2, eval_batch_size=2, n_gpu=0, output_dir=output_dir,
+            data_dir=tmp_dir, model_type="bart", train_batch_size=2, eval_batch_size=2,
+            num_train_epochs=2,
+            output_dir=output_dir,
         )
         main(argparse.Namespace(**args_d))
         args_d.update({"do_train": False, "do_predict": True})
@@ -111,7 +113,16 @@ class TestBartExamples(unittest.TestCase):
         contents = os.listdir(output_dir)
         expected_contents = {
             "checkpointepoch=0.ckpt",
+            "checkpointepoch=1.ckpt",
             "test_results.txt",
+            "val_results.txt",
+            "metrics.pkl",
+            "test_generations_.txt",
+            "test_generations_1.txt",
+            "val_generations_0.txt",
+            #"val_generations_1.txt",
+            "val_generations_.txt",
+            # "test"
         }
         created_files = {os.path.basename(p) for p in contents}
         self.assertSetEqual(expected_contents, created_files)
@@ -126,7 +137,7 @@ class TestBartExamples(unittest.TestCase):
             train_batch_size=1,
             eval_batch_size=2,
             num_train_epochs=2,
-            fast_dev_run=False,
+
             n_gpu=0,
             output_dir=output_dir,
             do_predict=True,

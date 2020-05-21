@@ -49,7 +49,7 @@ def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
 
 class SummarizationTrainer(BaseTransformer):
     mode = "language-modeling"
-    loss_names = ["loss", "ce_loss", "mlm_loss"]
+    loss_names = ["loss"]
 
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
@@ -88,9 +88,9 @@ class SummarizationTrainer(BaseTransformer):
             input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,
         )
 
-    def _step(self, batch):
+    def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, y = batch["source_ids"], batch["source_mask"], batch["target_ids"]
+        source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
@@ -239,6 +239,7 @@ def get_layers_to_copy(n_to_get, tot):
 
 
 class SummarizationDistiller(SummarizationTrainer):
+    loss_names = ["loss", "ce_loss", "mlm_loss"]
     def __init__(self, hparams):
 
         # Dump empty student model at a path, then call from_pretrained on it
