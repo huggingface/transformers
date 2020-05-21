@@ -278,7 +278,7 @@ def add_generic_args(parser, root_dir):
     )
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
-    parser.add_argument("--resume_from_checkpoint", type='str', default=None)
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None)
 
 
 def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callbacks=[], **extra_train_kwargs):
