@@ -103,6 +103,12 @@ class SummarizationDataset(Dataset):
     pad_token_id = 1
 
     @classmethod
+    def from_pickle_paths(self, src_path, tgt_path, **kwargs):
+        source = pickle_load(src_path)
+        target = pickle_load(tgt_path)
+        return self(source, target, **kwargs)
+
+    @classmethod
     def from_predictions(
         cls,
         tokenizer,
