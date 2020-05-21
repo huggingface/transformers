@@ -123,6 +123,8 @@ setup(
         "sentencepiece",
         # for XLM
         "sacremoses",
+        # for Trainer PyTorch version check
+        "packaging",
     ],
     extras_require=extras,
     scripts=["transformers-cli"],
