@@ -15,7 +15,6 @@ python finetune.py \
 --output_dir=$OUTPUT_DIR \
 --do_train \
 --do_predict \
---n_gpu 1 \
 --fp16 \
 --val_check_interval 0.25 \
 $@
