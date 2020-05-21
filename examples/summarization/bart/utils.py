@@ -96,11 +96,15 @@ def flatten_list(summary_ids: List[List]):
     return [x for x in funcy.flatten(summary_ids)]
 
 
+PSEUDO_ID_SUFFIX = "pseudo_target.pkl"
 
 
 class SummarizationDataset(Dataset):
-    def __init__(
-        self,
+    pad_token_id = 1
+
+    @classmethod
+    def from_predictions(
+        cls,
         tokenizer,
         data_dir="./cnn-dailymail/cnn_dm/",
         type_path="train",
@@ -109,24 +113,56 @@ class SummarizationDataset(Dataset):
         n_obs=None,
         overwrite_cache=False,
     ):
-        super().__init__()
-        self.tokenizer = tokenizer
-        self.source = encode_file(
+        source = encode_file(
             tokenizer,
             os.path.join(data_dir, type_path + ".source"),
             max_source_length,
             overwrite_cache=overwrite_cache,
         )
-        self.target = encode_file(
+        tgt_path = Path(data_dir) / f"{type_path}_{PSEUDO_ID_SUFFIX}"
+        assert tgt_path.exists()
+        target = pickle_load(tgt_path)
+        assert len(target) == len(source)
+
+        return cls(
+            source, target, n_obs=n_obs, max_target_length=max_target_length, max_source_length=max_source_length
+        )
+
+    @classmethod
+    def from_raw_data(
+        cls,
+        tokenizer,
+        data_dir="./cnn-dailymail/cnn_dm/",
+        type_path="train",
+        max_source_length=1024,
+        max_target_length=56,
+        n_obs=None,
+        overwrite_cache=False,
+    ):
+        source = encode_file(
+            tokenizer,
+            os.path.join(data_dir, type_path + ".source"),
+            max_source_length,
+            overwrite_cache=overwrite_cache,
+        )
+        target = encode_file(
             tokenizer,
             os.path.join(data_dir, type_path + ".target"),
             max_target_length,
             overwrite_cache=overwrite_cache,
         )
-        if n_obs is not None:
-            self.source = self.source[:n_obs]
-            self.source = self.target[:n_obs]
 
+        return cls(
+            source, target, n_obs=n_obs, max_target_length=max_target_length, max_source_length=max_source_length
+        )
+
+    def __init__(self, source, target, max_source_length=1024, max_target_length=56, n_obs=None):
+        if n_obs is not None:
+            source = source[:n_obs]
+            target = target[:n_obs]
+        super().__init__()
+        self.source = source
+        self.target = target
         self.max_source_length = max_source_length
         self.max_target_length = max_target_length
 
@@ -137,7 +173,7 @@ class SummarizationDataset(Dataset):
         source_ids = self.source[index]["input_ids"].squeeze()
         target_ids = self.target[index]["input_ids"].squeeze()
         src_mask = self.source[index]["attention_mask"].squeeze()
-        return {"source_ids": source_ids, "source_mask": src_mask, "target_ids": target_ids}
+        return {"input_ids": source_ids, "attention_mask": src_mask, "decoder_input_ids": target_ids}
 
     @staticmethod
     def trim_seq2seq_batch(batch, pad_token_id):
@@ -146,24 +182,28 @@ class SummarizationDataset(Dataset):
         return source_ids, source_mask, y
 
     def collate_fn(self, batch) -> dict:
-        input_ids = torch.stack([x["source_ids"] for x in batch])
-        masks = torch.stack([x["source_mask"] for x in batch])
-        target_ids = torch.stack([x["target_ids"] for x in batch])
-        pad_token_id = self.tokenizer.pad_token_id
+        input_ids = torch.stack([x["input_ids"] for x in batch])
+        masks = torch.stack([x["attention_mask"] for x in batch])
+        target_ids = torch.stack([x["decoder_input_ids"] for x in batch])
+        pad_token_id = self.pad_token_id
         y = trim_batch(target_ids, pad_token_id)
         source_ids, source_mask = trim_batch(input_ids, pad_token_id, attention_mask=masks)
         batch = {"input_ids": source_ids, "attention_mask": source_mask, "decoder_input_ids": y}
         return batch
 
     @property
-    def lengths(self):
+    def src_lens(self):
         return lmap(len, self.source)
+
+    @property
+    def tgt_lens(self):
+        return lmap(len, self.target)
 
     def make_sampler(self, params) -> GroupedBatchSampler:
         if params.n_gpu <= 1:
             sampler = RandomSampler(self)
         else:
             sampler = DistributedSampler(self)
-        groups = create_lengths_groups(lengths=self.lengths, k=self.max_target_length)
+        groups = create_lengths_groups(lengths=self.src_lens, k=self.max_source_length)
         sampler = GroupedBatchSampler(sampler=sampler, group_ids=groups, batch_size=params.train_batch_size)
         return sampler

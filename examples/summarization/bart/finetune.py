@@ -164,9 +164,19 @@ class SummarizationTrainer(BaseTransformer):
 
         return self.test_end(outputs)
 
-    def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
+    def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
-        dataset = SummarizationDataset(self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs)
+        if self.hparams.distilled_ds:
+            raise
+        else:
+            dataset = SummarizationDataset.from_raw_data(
+                self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs
+            )
+        return dataset
+
+    def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
+
+        dataset = self.get_dataset(type_path)
         sampler = None
         if self.hparams.grouped_sampler and type_path == "train":
             sampler = dataset.make_sampler(self.hparams)
@@ -294,6 +304,13 @@ class SummarizationDistiller(SummarizationTrainer):
         self.temperature = 2.0
         self.alpha_mlm = hparams.alpha_mlm
         self.alpha_ce = hparams.alpha_ce
+
+    def get_dataset(self, type_path) -> SummarizationDataset:
+        n_obs = self.n_obs[type_path]
+        dataset = SummarizationDataset.from_raw_data(
+            self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs
+        )
+        return dataset
 
     def _step(self, batch):
         # assert is_frozen(self.model.teacher)
