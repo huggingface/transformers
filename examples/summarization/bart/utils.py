@@ -103,38 +103,6 @@ class SummarizationDataset(Dataset):
     pad_token_id = 1
 
     @classmethod
-    def from_pickle_paths(self, src_path, tgt_path, **kwargs):
-        source = pickle_load(src_path)
-        target = pickle_load(tgt_path)
-        return self(source, target, **kwargs)
-
-    @classmethod
-    def from_predictions(
-        cls,
-        tokenizer,
-        data_dir="./cnn-dailymail/cnn_dm/",
-        type_path="train",
-        max_source_length=1024,
-        max_target_length=56,
-        n_obs=None,
-        overwrite_cache=False,
-    ):
-        source = encode_file(
-            tokenizer,
-            os.path.join(data_dir, type_path + ".source"),
-            max_source_length,
-            overwrite_cache=overwrite_cache,
-        )
-        tgt_path = Path(data_dir) / f"{type_path}_{PSEUDO_ID_SUFFIX}"
-        assert tgt_path.exists()
-        target = pickle_load(tgt_path)
-        assert len(target) == len(source)
-
-        return cls(
-            source, target, n_obs=n_obs, max_target_length=max_target_length, max_source_length=max_source_length
-        )
-
-    @classmethod
     def from_raw_data(
         cls,
         tokenizer,
@@ -144,6 +112,7 @@ class SummarizationDataset(Dataset):
         max_target_length=56,
         n_obs=None,
         overwrite_cache=False,
+        tgt_suffix="",
     ):
         source = encode_file(
             tokenizer,
@@ -153,7 +122,7 @@ class SummarizationDataset(Dataset):
         )
         target = encode_file(
             tokenizer,
-            os.path.join(data_dir, type_path + ".target"),
+            os.path.join(data_dir, type_path + ".target" + tgt_suffix),
             max_target_length,
             overwrite_cache=overwrite_cache,
         )
@@ -174,6 +143,9 @@ class SummarizationDataset(Dataset):
 
     def __len__(self):
         return len(self.source)
+
+    def _get_target(self, index):
+        val = self.target[index]["input_ids"]
 
     def __getitem__(self, index):
         source_ids = self.source[index]["input_ids"].squeeze()
@@ -213,3 +185,36 @@ class SummarizationDataset(Dataset):
         groups = create_lengths_groups(lengths=self.src_lens, k=self.max_source_length)
         sampler = GroupedBatchSampler(sampler=sampler, group_ids=groups, batch_size=params.train_batch_size)
         return sampler
+
+    # TODO(SS): Unused Classmethods, can likely be deleted.
+    @classmethod
+    def from_pickle_paths(self, src_path, tgt_path, **kwargs):
+        source = pickle_load(src_path)
+        target = pickle_load(tgt_path)
+        return self(source, target, **kwargs)
+
+    @classmethod
+    def from_predictions(
+        cls,
+        tokenizer,
+        data_dir="./cnn-dailymail/cnn_dm/",
+        type_path="train",
+        max_source_length=1024,
+        max_target_length=56,
+        n_obs=None,
+        overwrite_cache=False,
+    ):
+        source = encode_file(
+            tokenizer,
+            os.path.join(data_dir, type_path + ".source"),
+            max_source_length,
+            overwrite_cache=overwrite_cache,
+        )
+        tgt_path = Path(data_dir) / f"{type_path}_{PSEUDO_ID_SUFFIX}"
+        assert tgt_path.exists()
+        target = pickle_load(tgt_path)
+        assert len(target) == len(source)
+
+        return cls(
+            source, target, n_obs=n_obs, max_target_length=max_target_length, max_source_length=max_source_length
+        )

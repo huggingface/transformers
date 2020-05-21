@@ -10,12 +10,12 @@ from unittest.mock import patch
 import pandas as pd
 from torch.utils.data import DataLoader
 
-from durbango import DEFAULT_DEVICE, pickle_load
+from durbango import DEFAULT_DEVICE, pickle_load, pickle_save
 from transformers import BartTokenizer
 
 from .evaluate_cnn import run_generate
 from .finetune import main
-from .utils import SummarizationDataset, summaries_for_file
+from .utils import PSEUDO_ID_SUFFIX, SummarizationDataset, summaries_for_file
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 CHEAP_ARGS = {
+    "tgt_suffix": "",
     "resume_from_checkpoint": None,
     "grouped_sampler": False,
     "student_decoder_layers": 1,
@@ -69,6 +70,15 @@ def _dump_articles(path: Path, articles: list):
         f.write("\n".join(articles))
 
 
+BDIR = Path("~/transformers_fork/examples/summarization/bart/").absolute()
+
+pseudo_targets_path = BDIR / "pseudo_target_ids.pkl"
+PSEUDO_IDS = [
+    [0, 39762, 12, 23822, 1329, 11777, 4831, 305, 5867, 16],
+    [0, 37038, 815, 10433, 16, 6146, 63, 291, 212, 191],
+]
+
+
 def make_test_data_dir():
     tmp_dir = Path(tempfile.gettempdir())
     articles = [" Sam ate lunch today", "Sams lunch ingredients"]
@@ -76,6 +86,8 @@ def make_test_data_dir():
     for split in ["train", "val", "test"]:
         _dump_articles((tmp_dir / f"{split}.source"), articles)
         _dump_articles((tmp_dir / f"{split}.target"), summaries)
+        _dump_articles((tmp_dir / f"{split}.target.pseudo"), summaries)
+        pickle_save(PSEUDO_IDS, (tmp_dir / f"{split}_{PSEUDO_ID_SUFFIX}"))
     return tmp_dir
 
 
@@ -98,7 +110,7 @@ class TestBartExamples(unittest.TestCase):
             self.assertTrue(Path(output_file_name).exists())
             os.remove(Path(output_file_name))
 
-    def test_bart_run_sum_cli(self):
+    def test_bart_run_sum_cli_sasha_ds(self):
         args_d: dict = CHEAP_ARGS.copy()
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
@@ -109,6 +121,7 @@ class TestBartExamples(unittest.TestCase):
             eval_batch_size=2,
             num_train_epochs=2,
             distilled_ds=True,
+            tgt_suffix=".pseudo",
             output_dir=output_dir,
         )
         main(argparse.Namespace(**args_d))
@@ -176,31 +189,6 @@ class TestBartExamples(unittest.TestCase):
         self.assertEqual(val_df.shape[0], desired_n_evals)  #
         self.assertEqual(test_df.shape[1], val_df.shape[1])
         self.assertEqual(train_df.shape[0], 0)
-
-    @unittest.skip("Way too slow.")
-    def test_real_bart_distiller_cli(self):
-        args_d: dict = CHEAP_ARGS.copy()
-        tmp_dir = make_test_data_dir()
-        output_dir = tempfile.mkdtemp(prefix="output_")
-        args_d.update(
-            data_dir=tmp_dir,
-            model_type="bart",
-            train_batch_size=2,
-            eval_batch_size=2,
-            n_gpu=0,
-            output_dir=output_dir,
-            do_predict=True,
-            model_name_or_path="student",
-            teacher="bart-large-cnn",
-        )
-        main(argparse.Namespace(**args_d))
-        contents = os.listdir(output_dir)
-        expected_contents = {
-            "checkpointepoch=0.ckpt",
-            "test_results.txt",
-        }
-        created_files = {os.path.basename(p) for p in contents}
-        self.assertSetEqual(expected_contents, created_files)
 
     def test_t5_run_sum_cli(self):
         args_d: dict = CHEAP_ARGS.copy()
@@ -273,3 +261,8 @@ class TestBartExamples(unittest.TestCase):
         for p in to_rm:
             if p.exists():
                 os.remove(p)
+
+
+def list_to_text_file(lst, path):
+    dest = Path(path)
+    dest.open("w+").writelines(lst)

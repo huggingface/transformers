@@ -71,6 +71,7 @@ class SummarizationTrainer(BaseTransformer):
             max_source_length=self.hparams.max_source_length,
             max_target_length=self.hparams.max_target_length,
             overwrite_cache=self.hparams.no_cache,
+            tgt_suffix=self.hparams.tgt_suffix,
         )
         base_nobs = {
             "train": self.hparams.n_train,
@@ -166,12 +167,9 @@ class SummarizationTrainer(BaseTransformer):
 
     def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
-        if self.hparams.distilled_ds:
-            raise
-        else:
-            dataset = SummarizationDataset.from_raw_data(
-                self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs
-            )
+        dataset = SummarizationDataset.from_raw_data(
+            self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs
+        )
         return dataset
 
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
@@ -228,7 +226,6 @@ class SummarizationTrainer(BaseTransformer):
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
         )
-
         parser.add_argument(
             "--data_dir",
             default=None,
@@ -239,6 +236,7 @@ class SummarizationTrainer(BaseTransformer):
         parser.add_argument(
             "--no_cache", action="store_true",
         )
+        parser.add_argument("--tgt_suffix", type=str, default="", required=False)
         parser.add_argument("--n_train", type=int, default=-1, required=False)
         parser.add_argument("--n_val", type=int, default=-1, required=False)
         parser.add_argument("--n_test", type=int, default=-1, required=False)
@@ -259,7 +257,7 @@ def is_frozen(model):
 def get_layers_to_copy(n_to_get, tot):
     all_layers = list(range(tot))
     if tot == 12:  # Alternating for special cases
-        base = {6: [0, 2, 4, 7, 9, 11], 1: [0], 3: [0, 6, 11], 2: [0, 11]}
+        base = {6: [0, 2, 4, 7, 9, 11], 1: [11], 3: [0, 6, 11], 2: [0, 11]}
         return base[n_to_get]
     else:
         return all_layers[:n_to_get]
