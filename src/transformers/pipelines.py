@@ -1628,7 +1628,7 @@ SUPPORTED_TASKS = {
         "impl": SummarizationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {"model": {"pt": "bart-large-cnn", "tf": "t5-small"}, "config": None, "tokenizer": None,},
+        "default": {"model": {"pt": "bart-large-cnn", "tf": "t5-small"}, "config": None, "tokenizer": None},
     },
     "translation_en_to_fr": {
         "impl": TranslationPipeline,
