@@ -46,6 +46,12 @@ def set_seed(args: argparse.Namespace):
         torch.cuda.manual_seed_all(args.seed)
 
 
+def count_trainable_parameters(model):
+    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    params = sum([np.prod(p.size()) for p in model_parameters])
+    return params
+
+
 class BaseTransformer(pl.LightningModule):
     def __init__(
         self,
@@ -235,7 +241,8 @@ class LoggingCallback(pl.Callback):
 
     def on_train_start(self, trainer, pl_module):
         npars = pl_module.model.model.num_parameters()
-        trainer.logger.log_metrics({"n_params": npars, "mp": npars / 1e6})
+        n_trainable_pars = count_trainable_parameters(pl_module)
+        trainer.logger.log_metrics({"n_params": npars, "mp": npars / 1e6, "grad_mp": n_trainable_pars / 1e6})
 
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         return self._do_work(trainer, pl_module, "val")

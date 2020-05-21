@@ -144,9 +144,6 @@ class SummarizationDataset(Dataset):
     def __len__(self):
         return len(self.source)
 
-    def _get_target(self, index):
-        val = self.target[index]["input_ids"]
-
     def __getitem__(self, index):
         source_ids = self.source[index]["input_ids"].squeeze()
         target_ids = self.target[index]["input_ids"].squeeze()

@@ -63,7 +63,7 @@ class SummarizationTrainer(BaseTransformer):
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
-            #max_target_length=self.hparams.max_target_length,
+            # max_target_length=self.hparams.max_target_length,
             overwrite_cache=self.hparams.no_cache,
             tgt_suffix=self.hparams.tgt_suffix,
         )
@@ -78,8 +78,8 @@ class SummarizationTrainer(BaseTransformer):
             "val": self.hparams.val_mtl,
             "test": self.hparams.test_mtl,
         }
-        assert self.target_lens['train'] <= self.target_lens['val'], f'target_lens: {self.target_lens}'
-        assert self.target_lens['train'] <= self.target_lens['test'], f'target_lens: {self.target_lens}'
+        assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
+        assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
         self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
         self.freeze_stuff()
 
@@ -171,8 +171,11 @@ class SummarizationTrainer(BaseTransformer):
         n_obs = self.n_obs[type_path]
         max_target_length = self.target_lens[type_path]
         dataset = SummarizationDataset.from_raw_data(
-            self.tokenizer, type_path=type_path, n_obs=n_obs, max_target_length=max_target_length,
-            **self.dataset_kwargs
+            self.tokenizer,
+            type_path=type_path,
+            n_obs=n_obs,
+            max_target_length=max_target_length,
+            **self.dataset_kwargs,
         )
         return dataset
 
@@ -303,12 +306,16 @@ class SummarizationDistiller(SummarizationTrainer):
         student_cfg = BartConfig(**kw)
         student = BartForConditionalGeneration(student_cfg)
         student, _ = init_student(student, teacher)
-
-        copy_layers(teacher.model.decoder.layers, student.model.decoder.layers, d_layers_to_copy)
-        copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
-        if e_layers_to_copy == 12:
+        if hparams.student_decoder_layers != teacher.config.encoder_layers:
+            copy_layers(teacher.model.decoder.layers, student.model.decoder.layers, d_layers_to_copy)
+        if hparams.student_encoder_layers != teacher.config.encoder_layers:
+            copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
+        if student.model.encoder.layers == 12:
             freeze_part(self.model.model.encoder)
             teacher.model.encoder = None
+        elif student.model.decoder.layers == 12:
+            freeze_part(self.model.model.decoder)
+
         # Path(hparams.model_name_or_path).mkdir(exist_ok=True)
         tokenizer = BartTokenizer.from_pretrained("bart-large")
         super().__init__(hparams, model=student, config=student_cfg, tokenizer=tokenizer)
