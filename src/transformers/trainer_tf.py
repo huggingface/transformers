@@ -388,23 +388,8 @@ class TFTrainer:
           labels: the batched labels.
           training: run the model in training mode or not
         """
-        if self.args.mode == "text-classification" or self.args.mode == "token-classification":
-            logits = self.model(features, training=training)[0]
-        else:
-            logits = self.model(features, training=training)
-
-        if self.args.mode == "token-classification":
-            active_loss = tf.reshape(labels, (-1,)) != -1
-            reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-            labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
-            loss = self.loss(labels, reduced_logits)
-        elif self.args.mode == "question-answering":
-            start_loss = self.loss(labels["start_position"], logits[0])
-            end_loss = self.loss(labels["end_position"], logits[1])
-            loss = (start_loss + end_loss) / 2.0
-        else:
-            loss = self.loss(labels, logits)
-
+        logits = self.model(features, training=training)
+        loss = self.model.compute_loss(labels, logits)
         loss += sum(self.model.losses) * (1.0 / self.args.n_gpu)
 
         return loss, logits
