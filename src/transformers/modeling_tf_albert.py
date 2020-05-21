@@ -23,7 +23,15 @@ import tensorflow as tf
 from .configuration_albert import AlbertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
+from .modeling_tf_utils import (
+    TFPreTrainedModel,
+    get_initializer,
+    keras_serializable,
+    shape_list,
+    TFQuestionAnsweringLoss,
+    TFSequenceClassificationAndMultipleChoiceLoss,
+    TFTokenClassificationLoss,
+)
 from .tokenization_utils import BatchEncoding
 
 
@@ -841,7 +849,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     ALBERT_START_DOCSTRING,
 )
-class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
+class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -895,10 +903,68 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
 
 
 @add_start_docstrings(
+    """Albert Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    ALBERT_START_DOCSTRING,
+)
+class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificationLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.albert = TFAlbertMainLayer(config, name="albert")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+        )
+
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    def call(self, inputs, **kwargs):
+        r"""
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
+            Classification scores (before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import AlbertTokenizer, TFAlbertForTokenClassification
+
+        tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        model = TFAlbertForTokenClassification.from_pretrained('albert-base-v2')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        scores = outputs[0]
+
+        """
+        outputs = self.albert(inputs, **kwargs)
+
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output, training=kwargs.get("training", False))
+        logits = self.classifier(sequence_output)
+
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        return outputs  # scores, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
     """Albert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
     ALBERT_START_DOCSTRING,
 )
-class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
+class TFAlbertForQuestionAnsweringSimple(TFAlbertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -964,7 +1030,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     ALBERT_START_DOCSTRING,
 )
-class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
+class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
