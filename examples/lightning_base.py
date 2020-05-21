@@ -275,6 +275,7 @@ def add_generic_args(parser, root_dir):
     )
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
+    parser.add_argument("--resume_from_checkpoint", type='str', default=None)
 
 
 def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callbacks=[], **extra_train_kwargs):
@@ -304,6 +305,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
         val_check_interval=args.val_check_interval,
         logger=logger,
         weights_summary=None,
+        resume_from_checkpoint=args.resume_from_checkpoint,
     )
 
     if args.fp16:
