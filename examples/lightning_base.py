@@ -294,7 +294,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
     if args.output_dir.startswith('/var/') or args.fast_dev_run:
         logger = True
     else:
-        logger = WandbLogger()
+        logger = WandbLogger(name=model.output_dir.name)
         logger.log_hyperparams(args)
     train_params = dict(
         accumulate_grad_batches=args.gradient_accumulation_steps,
