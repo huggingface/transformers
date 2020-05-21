@@ -4,6 +4,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+dbart
 
 # C extensions
 *.so
