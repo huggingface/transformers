@@ -61,7 +61,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         def __init__(
             self,
             parent,
-            batch_size=13,
+            batch_size=14,
             seq_length=7,
             mem_len=10,
             clamp_len=-1,
@@ -517,6 +517,7 @@ class XLNetModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlnet_base_cased(self):
         model = XLNetLMHeadModel.from_pretrained("xlnet-base-cased")
+        model.to(torch_device)
         input_ids = torch.tensor(
             [
                 [

@@ -80,7 +80,7 @@ def main():
 
     # Load a pre-trained model
     model = TransfoXLLMHeadModel.from_pretrained(args.model_name)
-    model = model.to(device)
+    model.to(device)
 
     logger.info(
         "Evaluating with bsz {} tgt_len {} ext_len {} mem_len {} clamp_len {}".format(

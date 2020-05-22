@@ -80,8 +80,9 @@ class AutoModelTest(unittest.TestCase):
             model, loading_info = AutoModelForPreTraining.from_pretrained(model_name, output_loading_info=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForPreTraining)
-            for value in loading_info.values():
-                self.assertEqual(len(value), 0)
+            for key, value in loading_info.items():
+                # Only one value should not be initialized and in the missing keys.
+                self.assertEqual(len(value), 1 if key == "missing_keys" else 0)
 
     @slow
     def test_lmhead_model_from_pretrained(self):
