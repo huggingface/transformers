@@ -24,6 +24,8 @@ from .modeling_tf_roberta import (
     TFRobertaForMaskedLM,
     TFRobertaForSequenceClassification,
     TFRobertaForTokenClassification,
+    TFRobertaForMultipleChoice,
+    TFRobertaForQuestionAnsweringSimple,
     TFRobertaModel,
 )
 
@@ -110,6 +112,33 @@ class TFXLMRobertaForSequenceClassification(TFRobertaForSequenceClassification):
 class TFXLMRobertaForTokenClassification(TFRobertaForTokenClassification):
     """
     This class overrides :class:`~transformers.TFRobertaForTokenClassification`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = XLMRobertaConfig
+
+
+@add_start_docstrings(
+    """XLM-RoBERTa Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    XLM_ROBERTA_START_DOCSTRING,
+)
+class TFXLMRobertaForQuestionAnsweringSimple(TFRobertaForQuestionAnsweringSimple):
+    """
+    This class overrides :class:`~transformers.TFRobertaForQuestionAnsweringSimple`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = XLMRobertaConfig
+
+
+@add_start_docstrings(
+    """Roberta Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    XLM_ROBERTA_START_DOCSTRING,
+)
+class TFXLMRobertaForMultipleChoice(TFRobertaForMultipleChoice):
+    """
+    This class overrides :class:`~transformers.TFRobertaForMultipleChoice`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
 
