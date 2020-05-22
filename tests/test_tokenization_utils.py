@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import PreTrainedTokenizer
+from transformers import PreTrainedTokenizer, BertTokenizer, BertTokenizerFast
 from transformers.tokenization_gpt2 import GPT2Tokenizer
 
 from .utils import slow
@@ -39,3 +39,34 @@ class TokenizerUtilsTest(unittest.TestCase):
     @slow
     def test_pretrained_tokenizers(self):
         self.check_tokenizer_from_pretrained(GPT2Tokenizer)
+
+    def test_batch_encoding_pickle(self):
+        from pickle import loads, dumps
+
+        # Get a slow & a fast tokenizer
+        tok_slow = BertTokenizer.from_pretrained("bert-base-cased")
+        tok_fast = BertTokenizerFast.from_pretrained("bert-base-cased")
+
+        # Encode a sentence
+        be_slow = tok_slow.encode_plus("This is a dummy input sentence")
+        be_fast = tok_fast.encode_plus("This is a dummy input sentence")
+
+        # Make sure both are pickable
+        be_slow_data = dumps(be_slow)
+        be_fast_data = dumps(be_fast)
+
+        # Try to restore
+        be_slow_pickled = loads(be_slow_data)
+        be_fast_pickled = loads(be_fast_data)
+
+        # Ensure pickled objects keeps the is_fast attribute
+        self.assertFalse(be_slow_pickled.is_fast)
+        self.assertTrue(be_fast_pickled.is_fast)
+
+        # Ensure .data match
+        self.assertDictEqual(be_slow_pickled.data, be_slow.data)
+        self.assertDictEqual(be_fast_pickled.data, be_fast.data)
+
+        # Ensure .encodings match
+        self.assertIsNone(be_slow_pickled.encodings)
+        self.assertEqual(len(be_fast_pickled.encodings), len(be_fast.encodings))
