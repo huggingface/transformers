@@ -184,7 +184,6 @@ class BatchEncoding(UserDict):
             encoding = [encoding]
 
         self._encodings = encoding
-        self._fast = encoding is not None
 
     @property
     def is_fast(self):
