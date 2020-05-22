@@ -22,8 +22,11 @@ from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
     BertConfig,
+    CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
+    ElectraConfig,
+    FlaubertConfig,
     GPT2Config,
     OpenAIGPTConfig,
     RobertaConfig,
@@ -37,49 +40,93 @@ from .modeling_tf_albert import (
     TFAlbertForMaskedLM,
     TFAlbertForMultipleChoice,
     TFAlbertForPreTraining,
-    TFAlbertForQuestionAnswering,
+    TFAlbertForQuestionAnsweringSimple,
     TFAlbertForSequenceClassification,
+    TFAlbertForTokenClassification,
     TFAlbertModel,
 )
 from .modeling_tf_bert import (
     TFBertForMaskedLM,
     TFBertForMultipleChoice,
     TFBertForPreTraining,
-    TFBertForQuestionAnswering,
+    TFBertForQuestionAnsweringSimple,
     TFBertForSequenceClassification,
     TFBertForTokenClassification,
     TFBertModel,
 )
-from .modeling_tf_ctrl import TFCTRLLMHeadModel, TFCTRLModel
+from .modeling_tf_camembert import (
+    TFCamembertForMaskedLM,
+    TFCamembertForMultipleChoice,
+    TFCamembertForQuestionAnsweringSimple,
+    TFCamembertForSequenceClassification,
+    TFCamembertForTokenClassification,
+    TFCamembertModel,
+)
+from .modeling_tf_ctrl import (
+    TFCTRLWithLMHeadModel,
+    TFCTRLModel
+)
 from .modeling_tf_distilbert import (
     TFDistilBertForMaskedLM,
-    TFDistilBertForQuestionAnswering,
+    TFDistilBertForMultipleChoice,
+    TFDistilBertForQuestionAnsweringSimple,
     TFDistilBertForSequenceClassification,
     TFDistilBertForTokenClassification,
     TFDistilBertModel,
 )
-from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
-from .modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
+from .modeling_tf_electra import (
+    TFElectraForMaskedLM,
+    TFElectraForPreTraining,
+    TFElectraForQuestionAnsweringSimple,
+    TFElectraForTokenClassification,
+    TFElectraModel,
+)
+from .modeling_tf_flaubert import (
+    TFFlaubertForMultipleChoice,
+    TFFlaubertForQuestionAnsweringSimple,
+    TFFlaubertForSequenceClassification,
+    TFFlaubertForTokenClassification,
+    TFFlaubertWithLMHeadModel,
+    TFFlaubertModel,
+)
+from .modeling_tf_gpt2 import (
+    TFGPT2WithLMHeadModel,
+    TFGPT2Model
+)
+from .modeling_tf_openai import (
+    TFOpenAIGPTWithLMHeadModel,
+    TFOpenAIGPTModel
+)
 from .modeling_tf_roberta import (
     TFRobertaForMaskedLM,
-    TFRobertaForQuestionAnswering,
+    TFRobertaForMultipleChoice,
+    TFRobertaForQuestionAnsweringSimple,
     TFRobertaForSequenceClassification,
     TFRobertaForTokenClassification,
     TFRobertaModel,
 )
-from .modeling_tf_t5 import TFT5ForConditionalGeneration, TFT5Model
-from .modeling_tf_transfo_xl import TFTransfoXLLMHeadModel, TFTransfoXLModel
+from .modeling_tf_t5 import (
+    TFT5ForConditionalGeneration,
+    TFT5Model
+)
+from .modeling_tf_transfo_xl import (
+    TFTransfoXLWithLMHeadModel,
+    TFTransfoXLModel,
+)
 from .modeling_tf_xlm import (
+    TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
     TFXLMForSequenceClassification,
-    TFXLMModel,
+    TFXLMForTokenClassification,
     TFXLMWithLMHeadModel,
+    TFXLMModel,
 )
 from .modeling_tf_xlnet import (
+    TFXLNetForMultipleChoice,
     TFXLNetForQuestionAnsweringSimple,
     TFXLNetForSequenceClassification,
     TFXLNetForTokenClassification,
-    TFXLNetLMHeadModel,
+    TFXLNetWithLMHeadModel,
     TFXLNetModel,
 )
 
@@ -89,83 +136,111 @@ logger = logging.getLogger(__name__)
 
 TF_MODEL_MAPPING = OrderedDict(
     [
-        (T5Config, TFT5Model),
-        (DistilBertConfig, TFDistilBertModel),
         (AlbertConfig, TFAlbertModel),
-        (RobertaConfig, TFRobertaModel),
         (BertConfig, TFBertModel),
-        (OpenAIGPTConfig, TFOpenAIGPTModel),
-        (GPT2Config, TFGPT2Model),
-        (TransfoXLConfig, TFTransfoXLModel),
-        (XLNetConfig, TFXLNetModel),
-        (XLMConfig, TFXLMModel),
+        (CamembertConfig, TFCamembertModel),
         (CTRLConfig, TFCTRLModel),
+        (DistilBertConfig, TFDistilBertModel),
+        (ElectraConfig, TFElectraModel),
+        (FlaubertConfig, TFFlaubertModel),
+        (GPT2Config, TFGPT2Model),
+        (OpenAIGPTConfig, TFOpenAIGPTModel),
+        (RobertaConfig, TFRobertaModel),
+        (T5Config, TFT5Model),
+        (TransfoXLConfig, TFTransfoXLModel),
+        (XLMConfig, TFXLMModel),
+        (XLNetConfig, TFXLNetModel),
     ]
 )
 
 TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
-        (T5Config, TFT5ForConditionalGeneration),
-        (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForPreTraining),
-        (RobertaConfig, TFRobertaForMaskedLM),
         (BertConfig, TFBertForPreTraining),
-        (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
-        (GPT2Config, TFGPT2LMHeadModel),
-        (TransfoXLConfig, TFTransfoXLLMHeadModel),
-        (XLNetConfig, TFXLNetLMHeadModel),
+        (CamembertConfig, TFCamembertForMaskedLM),
+        (CTRLConfig, TFCTRLWithLMHeadModel),
+        (DistilBertConfig, TFDistilBertForMaskedLM),
+        (ElectraConfig, TFElectraForPreTraining),
+        (FlaubertConfig, TFFlaubertWithLMHeadModel),
+        (GPT2Config, TFGPT2WithLMHeadModel),
+        (OpenAIGPTConfig, TFOpenAIGPTWithLMHeadModel),
+        (RobertaConfig, TFRobertaForMaskedLM),
+        (T5Config, TFT5ForConditionalGeneration),
+        (TransfoXLConfig, TFTransfoXLWithLMHeadModel),
         (XLMConfig, TFXLMWithLMHeadModel),
-        (CTRLConfig, TFCTRLLMHeadModel),
+        (XLNetConfig, TFXLNetWithLMHeadModel),
     ]
 )
 
 TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
-        (T5Config, TFT5ForConditionalGeneration),
-        (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
-        (RobertaConfig, TFRobertaForMaskedLM),
         (BertConfig, TFBertForMaskedLM),
-        (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
-        (GPT2Config, TFGPT2LMHeadModel),
-        (TransfoXLConfig, TFTransfoXLLMHeadModel),
-        (XLNetConfig, TFXLNetLMHeadModel),
+        (CamembertConfig, TFCamembertForMaskedLM),
+        (CTRLConfig, TFCTRLWithLMHeadModel),
+        (DistilBertConfig, TFDistilBertForMaskedLM),
+        (ElectraConfig, TFElectraForMaskedLM),
+        (FlaubertConfig, TFFlaubertWithLMHeadModel),
+        (GPT2Config, TFGPT2WithLMHeadModel),
+        (OpenAIGPTConfig, TFOpenAIGPTWithLMHeadModel),
+        (RobertaConfig, TFRobertaForMaskedLM),
+        (T5Config, TFT5ForConditionalGeneration),
+        (TransfoXLConfig, TFTransfoXLWithLMHeadModel),
         (XLMConfig, TFXLMWithLMHeadModel),
-        (CTRLConfig, TFCTRLLMHeadModel),
+        (XLNetConfig, TFXLNetWithLMHeadModel),
+    ]
+)
+
+TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
+    [
+        (AlbertConfig, TFAlbertForMultipleChoice),
+        (BertConfig, TFBertForMultipleChoice),
+        (CamembertConfig, TFCamembertForMultipleChoice),
+        (DistilBertConfig, TFDistilBertForMultipleChoice),
+        (FlaubertConfig, TFFlaubertForMultipleChoice),
+        (RobertaConfig, TFRobertaForMultipleChoice),
+        (XLMConfig, TFXLMForMultipleChoice),
+        (XLNetConfig, TFXLNetForMultipleChoice),
+    ]
+)
+
+TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
+    [
+        (AlbertConfig, TFAlbertForQuestionAnsweringSimple),
+        (BertConfig, TFBertForQuestionAnsweringSimple),
+        (CamembertConfig, TFCamembertForQuestionAnsweringSimple),
+        (DistilBertConfig, TFDistilBertForQuestionAnsweringSimple),
+        (ElectraConfig, TFElectraForQuestionAnsweringSimple),
+        (FlaubertConfig, TFFlaubertForQuestionAnsweringSimple),
+        (RobertaConfig, TFRobertaForQuestionAnsweringSimple),
+        (XLMConfig, TFXLMForQuestionAnsweringSimple),
+        (XLNetConfig, TFXLNetForQuestionAnsweringSimple),
     ]
 )
 
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
-        (DistilBertConfig, TFDistilBertForSequenceClassification),
         (AlbertConfig, TFAlbertForSequenceClassification),
-        (RobertaConfig, TFRobertaForSequenceClassification),
         (BertConfig, TFBertForSequenceClassification),
-        (XLNetConfig, TFXLNetForSequenceClassification),
+        (CamembertConfig, TFCamembertForSequenceClassification),
+        (DistilBertConfig, TFDistilBertForSequenceClassification),
+        (FlaubertConfig, TFFlaubertForSequenceClassification),
+        (RobertaConfig, TFRobertaForSequenceClassification),
         (XLMConfig, TFXLMForSequenceClassification),
-    ]
-)
-
-TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
-    [(BertConfig, TFBertForMultipleChoice), (AlbertConfig, TFAlbertForMultipleChoice)]
-)
-
-TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
-    [
-        (DistilBertConfig, TFDistilBertForQuestionAnswering),
-        (AlbertConfig, TFAlbertForQuestionAnswering),
-        (RobertaConfig, TFRobertaForQuestionAnswering),
-        (BertConfig, TFBertForQuestionAnswering),
-        (XLNetConfig, TFXLNetForQuestionAnsweringSimple),
-        (XLMConfig, TFXLMForQuestionAnsweringSimple),
+        (XLNetConfig, TFXLNetForSequenceClassification),
     ]
 )
 
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
-        (DistilBertConfig, TFDistilBertForTokenClassification),
-        (RobertaConfig, TFRobertaForTokenClassification),
+        (AlbertConfig, TFAlbertForTokenClassification),
         (BertConfig, TFBertForTokenClassification),
+        (CamembertConfig, TFCamembertForTokenClassification),
+        (DistilBertConfig, TFDistilBertForTokenClassification),
+        (ElectraConfig, TFElectraForTokenClassification),
+        (FlaubertConfig, TFFlaubertForTokenClassification),
+        (RobertaConfig, TFRobertaForTokenClassification),
+        (XLMConfig, TFXLMForTokenClassification),
         (XLNetConfig, TFXLNetForTokenClassification),
     ]
 )
