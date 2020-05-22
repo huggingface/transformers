@@ -494,9 +494,7 @@ class Trainer:
                     ):
                         logs: Dict[str, float] = {}
                         logs["loss"] = (tr_loss - logging_loss) / self.args.logging_steps
-                        logs["learning_rate"] = (
-                            scheduler.get_last_lr()[0]
-                        )
+                        logs["learning_rate"] = scheduler.get_last_lr()[0]
                         logging_loss = tr_loss
 
                         self._log(logs)
