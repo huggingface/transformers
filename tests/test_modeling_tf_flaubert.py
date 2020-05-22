@@ -17,7 +17,7 @@ import unittest
 
 from transformers import is_tf_available
 
-from .utils import require_tf
+from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -28,6 +28,7 @@ if is_tf_available():
 
 @require_tf
 class TFFlaubertModelIntegrationTest(unittest.TestCase):
+    @slow
     def test_output_embeds_base_model(self):
         model = TFFlaubertModel.from_pretrained("jplu/tf-flaubert-small-cased")
 
