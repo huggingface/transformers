@@ -25,7 +25,7 @@ import tensorflow as tf
 
 from .configuration_t5 import T5Config
 from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list, keras_serializable
 
 
 logger = logging.getLogger(__name__)
@@ -502,7 +502,10 @@ class _NoLayerEmbedTokens(object):
 # The full model without a specific pretrained or finetuning head is
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
+@keras_serializable
 class TFT5MainLayer(tf.keras.layers.Layer):
+    config_class = T5Config
+
     def __init__(self, config, embed_tokens=None, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
