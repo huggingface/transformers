@@ -1102,10 +1102,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFSequenceClassificatio
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             assert len(inputs) <= 6, "Too many inputs."
         elif isinstance(inputs, dict):
-            print("isdict(1)")
             input_ids = inputs.get("input_ids")
-            print(input_ids)
-
             attention_mask = inputs.get("attention_mask", attention_mask)
             token_type_ids = inputs.get("token_type_ids", token_type_ids)
             position_ids = inputs.get("position_ids", position_ids)
