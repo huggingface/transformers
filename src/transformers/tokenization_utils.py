@@ -22,6 +22,7 @@ import logging
 import operator
 import os
 import re
+import warnings
 from collections import UserDict, defaultdict
 from contextlib import contextmanager
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
@@ -821,14 +822,18 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         super().__init__(**kwargs)
 
+        # For backward compatibility we fallback to set model_max_length from max_len if provided
         if "max_len" in kwargs:
-            logger.warning(
+            warnings.warn(
                 "Parameter max_len is deprecated and will be removed in a future release. "
-                "Use model_max_length instead."
+                "Use model_max_length instead.",
+                category=FutureWarning
             )
 
-        # For backward compatibility we fallback to set model_max_length from max_len if provided
-        model_max_length = model_max_length if model_max_length is not None else kwargs.pop("max_len", None)
+            self.model_max_length = kwargs.pop("max_len")
+        else:
+            self.model_max_length = model_max_length
+
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
 
         # Padding side is right by default and overridden in subclasses. If specified in the kwargs, it is changed.
