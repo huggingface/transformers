@@ -94,7 +94,7 @@ class TFTrainer:
 
         if self.eval_dataset is not None:
             self.eval_dataset = (
-                self.eval_dataset.batch(self.args.eval_batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
+                self.eval_dataset.cache().batch(self.args.eval_batch_size).prefetch(tf.data.experimental.AUTOTUNE)
             )
             self.eval_dataset = self.args.strategy.experimental_distribute_dataset(self.eval_dataset)
 
@@ -176,11 +176,17 @@ class TFTrainer:
 
             if not prediction_loss_only:
                 if self.args.n_gpu > 1:
+                    if isinstance(logits, tuple):
+                        logits = logits[0]
+
                     for val in logits.values:
                         if preds is None:
                             preds = val.numpy()
                         else:
                             preds = np.append(preds, val.numpy(), axis=0)
+
+                    if isinstance(labels, tuple):
+                        labels = labels[0]
 
                     for val in labels.values:
                         if label_ids is None:
