@@ -23,8 +23,11 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_xlnet import XLNetConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
+    TFQuestionAnsweringLoss,
+    TFSequenceClassificationAndMultipleChoiceLoss,
+    TFTokenClassificationLoss,
     TFPreTrainedModel,
     TFSequenceSummary,
     TFSharedEmbeddings,
@@ -333,7 +336,7 @@ class TFXLNetLayer(tf.keras.layers.Layer):
         return outputs
 
 
-class TFXLNetLMHead(tf.keras.layers.Layer):
+class TFXLNetWithLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
@@ -841,11 +844,11 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     (linear layer with weights tied to the input embeddings). """,
     XLNET_START_DOCSTRING,
 )
-class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
+class TFXLNetWithLMHeadModel(TFXLNetPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
-        self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name="lm_loss")
+        self.lm_loss = TFXLNetWithLMHead(config, self.transformer.word_embedding, name="lm_loss")
 
     def get_output_embeddings(self):
         return self.lm_loss.input_embeddings
@@ -938,7 +941,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     XLNET_START_DOCSTRING,
 )
-class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
+class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -998,11 +1001,128 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel):
 
 
 @add_start_docstrings(
+    """XLNET Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    XLNET_START_DOCSTRING,
+)
+class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.transformer = TFXLNetMainLayer(config, name="transformer")
+        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.initializer_range, name="sequence_summary")
+        self.logits_proj = tf.keras.layers.Dense(
+            1, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
+        )
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to build the network.
+
+        Returns:
+            tf.Tensor with dummy inputs
+        """
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+
+    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    def call(
+        self,
+        inputs,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        training=False,
+    ):
+        r"""
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        classification_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`:
+            `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
+
+            Classification scores (before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import XLNetTokenizer, TFXLNetForMultipleChoice
+
+        tokenizer = XLNetTokenizer.from_pretrained('xlnet-base-cased')
+        model = TFXLNetForMultipleChoice.from_pretrained('xlnet-base-cased')
+        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
+        input_ids = tf.constant([tokenizer.encode(s) for s in choices])[None, :]  # Batch size 1, 2 choices
+        outputs = model(input_ids)
+        classification_scores = outputs[0]
+
+        """
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            position_ids = inputs[3] if len(inputs) > 3 else position_ids
+            head_mask = inputs[4] if len(inputs) > 4 else head_mask
+            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
+            assert len(inputs) <= 6, "Too many inputs."
+        elif isinstance(inputs, dict):
+            input_ids = inputs.get("input_ids")
+            attention_mask = inputs.get("attention_mask", attention_mask)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
+            position_ids = inputs.get("position_ids", position_ids)
+            head_mask = inputs.get("head_mask", head_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            assert len(inputs) <= 6, "Too many inputs."
+        else:
+            input_ids = inputs
+
+        if input_ids is not None:
+            num_choices = shape_list(input_ids)[1]
+            seq_length = shape_list(input_ids)[2]
+        else:
+            num_choices = shape_list(inputs_embeds)[1]
+            seq_length = shape_list(inputs_embeds)[2]
+
+        flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
+        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
+        flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
+        flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
+
+        flat_inputs = [
+            flat_input_ids,
+            flat_attention_mask,
+            flat_token_type_ids,
+            flat_position_ids,
+            head_mask,
+            inputs_embeds,
+        ]
+
+        transformer_outputs = self.transformer(flat_inputs, training=training)
+        output = transformer_outputs[0]
+        logits = self.sequence_summary(output)
+        logits = self.logits_proj(logits)
+        reshaped_logits = tf.reshape(logits, (-1, num_choices))
+
+        outputs = (reshaped_logits,) + transformer_outputs[1:]  # add hidden states and attention if they are here
+
+        return outputs  # reshaped_logits, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
     """XLNet Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     XLNET_START_DOCSTRING,
 )
-class TFXLNetForTokenClassification(TFXLNetPreTrainedModel):
+class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1061,7 +1181,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel):
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     XLNET_START_DOCSTRING,
 )
-class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel):
+class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
