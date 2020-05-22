@@ -38,7 +38,7 @@ python run_superglue.py --data_dir ${data_dir} --task_name ${task} --output_dir 
                         --log_energy_consumption
 ```
 
-This script also provides an example of how to use the ``[experiment_impact_tracker](https://github.com/Breakend/experiment-impact-tracker)`` library that will be used to measure energy consumption for the SustaiNLP 2020 shared task.
+This script also provides an example of how to use the [experiment_impact_tracker](https://github.com/Breakend/experiment-impact-tracker) library that will be used to measure energy consumption for the SustaiNLP 2020 shared task.
 Using the ``--log_energy_consumption`` option will call the library to track energy usage throughout the running of the script.
 The library will produce a directory `${out_dir}/impacttracker/` to log the data.
 The script `examples/sustainlp/compute_efficiency_info.py` will extract the relevant energy consumption metrics.
