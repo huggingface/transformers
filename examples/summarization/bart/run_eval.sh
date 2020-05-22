@@ -1,5 +1,3 @@
-export CURRENT_DIR=${PWD}
-
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../../":"${PYTHONPATH}"
 
