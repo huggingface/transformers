@@ -30,6 +30,7 @@ from .modeling_tf_utils import (
     TFSharedEmbeddings,
     get_initializer,
     shape_list,
+    keras_serializable,
 )
 from .tokenization_utils import BatchEncoding
 
@@ -199,7 +200,10 @@ class TFBlock(tf.keras.layers.Layer):
         return outputs  # x, (attentions)
 
 
+@keras_serializable
 class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
+    config_class = OpenAIGPTConfig
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         self.output_hidden_states = config.output_hidden_states
@@ -472,7 +476,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     (linear layer with weights tied to the input embeddings). """,
     OPENAI_GPT_START_DOCSTRING,
 )
-class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
+class TFOpenAIGPTWithLMHeadModel(TFOpenAIGPTPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
