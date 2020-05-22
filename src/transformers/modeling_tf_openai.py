@@ -476,7 +476,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     (linear layer with weights tied to the input embeddings). """,
     OPENAI_GPT_START_DOCSTRING,
 )
-class TFOpenAIGPTWithLMHeadModel(TFOpenAIGPTPreTrainedModel):
+class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")

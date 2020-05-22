@@ -540,14 +540,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
 
-    def get_config(self):
-        config = {
-            'embed_tokens': self.embed_tokens
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
     def call(
         self,
         inputs,

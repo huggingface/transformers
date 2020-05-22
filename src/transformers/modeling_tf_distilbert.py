@@ -920,7 +920,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFSequenceClass
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForQuestionAnsweringSimple(TFDistilBertPreTrainedModel, TFQuestionAnsweringLoss):
+class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

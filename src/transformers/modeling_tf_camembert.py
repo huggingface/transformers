@@ -25,7 +25,7 @@ from .modeling_tf_roberta import (
     TFRobertaForSequenceClassification,
     TFRobertaForTokenClassification,
     TFRobertaForMultipleChoice,
-    TFRobertaForQuestionAnsweringSimple,
+    TFRobertaForQuestionAnswering,
     TFRobertaModel,
 )
 
@@ -136,7 +136,7 @@ class TFCamembertForMultipleChoice(TFRobertaForMultipleChoice):
     """CamemBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
     CAMEMBERT_START_DOCSTRING,
 )
-class TFCamembertForQuestionAnsweringSimple(TFRobertaForQuestionAnsweringSimple):
+class TFCamembertForQuestionAnswering(TFRobertaForQuestionAnswering):
     """
     This class overrides :class:`~transformers.TFRobertaForQuestionAnswering`. Please check the
     superclass for the appropriate documentation alongside usage examples.

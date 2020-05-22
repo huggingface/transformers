@@ -124,16 +124,24 @@ class TFModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
-                model = tf.keras.models.load_model(
-                    filepath, custom_objects={main_layer_class.__name__: main_layer_class}
-                )
+                if "T5" in main_layer_class.__name__:
+                    model = tf.keras.models.load_model(
+                        filepath, custom_objects={main_layer_class.__name__: main_layer_class, "TFSharedEmbeddings": TFSharedEmbeddings}
+                    )
+                else:
+                    model = tf.keras.models.load_model(
+                        filepath, custom_objects={main_layer_class.__name__: main_layer_class}
+                    )
                 assert isinstance(model, tf.keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
     def assert_outputs_same(self, after_outputs, outputs):
         # Make sure we don't have nans
-        out_1 = after_outputs[0].numpy()
+        if isinstance(after_outputs, tf.Tensor):
+            out_1 = after_outputs.numpy()
+        else:
+            out_1 = after_outputs[0].numpy()
         out_2 = outputs[0].numpy()
         self.assertEqual(out_1.shape, out_2.shape)
         out_1 = out_1[~np.isnan(out_1)]

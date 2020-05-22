@@ -336,7 +336,7 @@ class TFXLNetLayer(tf.keras.layers.Layer):
         return outputs
 
 
-class TFXLNetWithLMHead(tf.keras.layers.Layer):
+class TFXLNetLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
@@ -844,11 +844,11 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     (linear layer with weights tied to the input embeddings). """,
     XLNET_START_DOCSTRING,
 )
-class TFXLNetWithLMHeadModel(TFXLNetPreTrainedModel):
+class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
-        self.lm_loss = TFXLNetWithLMHead(config, self.transformer.word_embedding, name="lm_loss")
+        self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name="lm_loss")
 
     def get_output_embeddings(self):
         return self.lm_loss.input_embeddings

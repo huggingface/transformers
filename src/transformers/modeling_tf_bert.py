@@ -1127,7 +1127,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     BERT_START_DOCSTRING,
 )
-class TFBertForQuestionAnsweringSimple(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
+class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels

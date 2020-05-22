@@ -25,7 +25,7 @@ from .modeling_tf_roberta import (
     TFRobertaForSequenceClassification,
     TFRobertaForTokenClassification,
     TFRobertaForMultipleChoice,
-    TFRobertaForQuestionAnsweringSimple,
+    TFRobertaForQuestionAnswering,
     TFRobertaModel,
 )
 
@@ -122,7 +122,7 @@ class TFXLMRobertaForTokenClassification(TFRobertaForTokenClassification):
     """XLM-RoBERTa Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
     XLM_ROBERTA_START_DOCSTRING,
 )
-class TFXLMRobertaForQuestionAnsweringSimple(TFRobertaForQuestionAnsweringSimple):
+class TFXLMRobertaForQuestionAnswering(TFRobertaForQuestionAnswering):
     """
     This class overrides :class:`~transformers.TFRobertaForQuestionAnsweringSimple`. Please check the
     superclass for the appropriate documentation alongside usage examples.

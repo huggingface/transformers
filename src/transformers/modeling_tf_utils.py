@@ -84,6 +84,7 @@ def keras_serializable(cls):
         else:
             raise ValueError("Must pass either `config` (PretrainedConfig) or `transformers_config` (dict)")
         self._transformers_config = config
+        self._kwargs = kwargs
 
     cls.__init__ = wrapped_init
 
@@ -94,6 +95,7 @@ def keras_serializable(cls):
         def get_config(self):
             cfg = super(cls, self).get_config()
             cfg["transformers_config"] = self._transformers_config.to_dict()
+            cfg.update(self._kwargs)
             return cfg
 
         cls.get_config = get_config
@@ -1559,6 +1561,16 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
             "weight", shape=[self.vocab_size, self.hidden_size], initializer=get_initializer(self.initializer_range)
         )
         super().build(input_shape)
+
+    def get_config(self):
+        config = {
+            'vocab_size': self.vocab_size,
+            'hidden_size': self.hidden_size,
+            'initializer_range': self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
 
     def call(self, inputs, mode="embedding"):
         """Get token embeddings of inputs.

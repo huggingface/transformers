@@ -628,7 +628,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     ELECTRA_START_DOCSTRING,
 )
-class TFElectraForQuestionAnsweringSimple(TFElectraPreTrainedModel, TFQuestionAnsweringLoss):
+class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels

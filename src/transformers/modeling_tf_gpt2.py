@@ -521,7 +521,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
     (linear layer with weights tied to the input embeddings). """,
     GPT2_START_DOCSTRING,
 )
-class TFGPT2WithLMHeadModel(TFGPT2PreTrainedModel):
+class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFGPT2MainLayer(config, name="transformer")
