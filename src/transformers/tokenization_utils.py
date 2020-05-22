@@ -830,10 +830,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 category=FutureWarning
             )
 
-            self.model_max_length = kwargs.pop("max_len")
-        else:
-            self.model_max_length = model_max_length
-
+            model_max_length = kwargs.pop("max_len")
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
 
         # Padding side is right by default and overridden in subclasses. If specified in the kwargs, it is changed.
