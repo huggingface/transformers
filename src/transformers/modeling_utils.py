@@ -131,7 +131,7 @@ class ModuleUtilsMixin:
         encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         return encoder_extended_attention_mask
 
-    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: tuple, device: device) -> Tensor:
+    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: Tuple, device: device) -> Tensor:
         """Makes broadcastable attention mask and causal mask so that future and maked tokens are ignored.
 
         Arguments:
