@@ -29,6 +29,7 @@ from .configuration_auto import (
     ElectraConfig,
     FlaubertConfig,
     GPT2Config,
+    LongformerConfig,
     OpenAIGPTConfig,
     ReformerConfig,
     RobertaConfig,
@@ -38,6 +39,7 @@ from .configuration_auto import (
     XLMRobertaConfig,
     XLNetConfig,
 )
+from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .tokenization_albert import AlbertTokenizer
 from .tokenization_bart import BartTokenizer
@@ -49,6 +51,8 @@ from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFas
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+from .tokenization_longformer import LongformerTokenizer
+from .tokenization_marian import MarianTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -69,7 +73,9 @@ TOKENIZER_MAPPING = OrderedDict(
         (AlbertConfig, (AlbertTokenizer, None)),
         (CamembertConfig, (CamembertTokenizer, None)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, None)),
+        (MarianConfig, (MarianTokenizer, None)),
         (BartConfig, (BartTokenizer, None)),
+        (LongformerConfig, (LongformerTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, None)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
@@ -102,6 +108,7 @@ class AutoTokenizer:
             - contains `albert`: AlbertTokenizer (ALBERT model)
             - contains `camembert`: CamembertTokenizer (CamemBERT model)
             - contains `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
+            - contains `longformer`: LongformerTokenizer (AllenAI Longformer model)
             - contains `roberta`: RobertaTokenizer (RoBERTa model)
             - contains `bert`: BertTokenizer (Bert model)
             - contains `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
@@ -133,6 +140,7 @@ class AutoTokenizer:
             - contains `albert`: AlbertTokenizer (ALBERT model)
             - contains `camembert`: CamembertTokenizer (CamemBERT model)
             - contains `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
+            - contains `longformer`: LongformerTokenizer (AllenAI Longformer model)
             - contains `roberta`: RobertaTokenizer (RoBERTa model)
             - contains `bert-base-japanese`: BertJapaneseTokenizer (Bert model)
             - contains `bert`: BertTokenizer (Bert model)

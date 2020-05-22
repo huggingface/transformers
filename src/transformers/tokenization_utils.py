@@ -22,6 +22,7 @@ import logging
 import operator
 import os
 import re
+import warnings
 from collections import UserDict, defaultdict
 from contextlib import contextmanager
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
@@ -173,7 +174,11 @@ class BatchEncoding(UserDict):
 
     """
 
-    def __init__(self, data: Dict[str, Any], encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None):
+    def __init__(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None,
+    ):
         super().__init__(data)
 
         if isinstance(encoding, EncodingFast):
@@ -767,26 +772,26 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         raise NotImplementedError
 
     @property
-    def is_fast(self):
+    def is_fast(self) -> bool:
         return False
 
     @property
-    def max_len(self):
+    def max_len(self) -> int:
         """ Kept here for backward compatibility.
             Now renamed to `model_max_length` to avoid ambiguity.
         """
         return self.model_max_length
 
     @property
-    def max_len_single_sentence(self):
+    def max_len_single_sentence(self) -> int:
         return self.model_max_length - self.num_special_tokens_to_add(pair=False)
 
     @property
-    def max_len_sentences_pair(self):
+    def max_len_sentences_pair(self) -> int:
         return self.model_max_length - self.num_special_tokens_to_add(pair=True)
 
     @max_len_single_sentence.setter
-    def max_len_single_sentence(self, value):
+    def max_len_single_sentence(self, value) -> int:
         """ For backward compatibility, allow to try to setup 'max_len_single_sentence' """
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=False):
             logger.warning(
@@ -798,7 +803,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             )
 
     @max_len_sentences_pair.setter
-    def max_len_sentences_pair(self, value):
+    def max_len_sentences_pair(self, value) -> int:
         """ For backward compatibility, allow to try to setup 'max_len_sentences_pair' """
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=True):
             logger.warning(
@@ -818,7 +823,14 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         super().__init__(**kwargs)
 
         # For backward compatibility we fallback to set model_max_length from max_len if provided
-        model_max_length = model_max_length if model_max_length is not None else kwargs.pop("max_len", None)
+        if "max_len" in kwargs:
+            warnings.warn(
+                "Parameter max_len is deprecated and will be removed in a future release. "
+                "Use model_max_length instead.",
+                category=FutureWarning,
+            )
+
+            model_max_length = kwargs.pop("max_len")
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
 
         # Padding side is right by default and overridden in subclasses. If specified in the kwargs, it is changed.
@@ -1114,7 +1126,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         return vocab_files + (special_tokens_map_file, added_tokens_file)
 
-    def save_vocabulary(self, save_directory):
+    def save_vocabulary(self, save_directory) -> Tuple[str]:
         """ Save the tokenizer vocabulary to a directory. This method does *NOT* save added tokens
             and special token mappings.
 
@@ -1124,7 +1136,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         """
         raise NotImplementedError
 
-    def add_tokens(self, new_tokens):
+    def add_tokens(self, new_tokens: Union[str, List[str]]) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
@@ -1152,7 +1164,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         if not isinstance(new_tokens, list):
             new_tokens = [new_tokens]
 
-        to_add_tokens = []
+        tokens_to_add = []
         for token in new_tokens:
             assert isinstance(token, str)
             if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
@@ -1160,18 +1172,18 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             if (
                 token != self.unk_token
                 and self.convert_tokens_to_ids(token) == self.convert_tokens_to_ids(self.unk_token)
-                and token not in to_add_tokens
+                and token not in tokens_to_add
             ):
-                to_add_tokens.append(token)
+                tokens_to_add.append(token)
                 logger.info("Adding %s to the vocabulary", token)
 
-        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(to_add_tokens))
+        added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
         self.added_tokens_encoder.update(added_tok_encoder)
         self.unique_added_tokens_encoder = set(self.added_tokens_encoder.keys()).union(set(self.all_special_tokens))
         self.added_tokens_decoder.update(added_tok_decoder)
 
-        return len(to_add_tokens)
+        return len(tokens_to_add)
 
     def num_special_tokens_to_add(self, pair=False):
         """
@@ -2076,10 +2088,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
     def build_inputs_with_special_tokens(self, token_ids_0: List, token_ids_1: Optional[List] = None) -> List:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        A RoBERTa sequence has the following format:
-            single sequence: <s> X </s>
-            pair of sequences: <s> A </s></s> B </s>
+        by concatenating and adding special tokens. This implementation does not add special tokens.
         """
         if token_ids_1 is None:
             return token_ids_0
@@ -2179,6 +2188,9 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         else:
             return text
 
+    def batch_decode(self, sequences: List[List[int]], **kwargs) -> List[str]:
+        return [self.decode(seq, **kwargs) for seq in sequences]
+
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
         """ Clean up a list of simple English tokenization artifacts like spaces before punctuations and abreviated forms.
@@ -2191,7 +2203,6 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             .replace(" ' ", "'")
             .replace(" n't", "n't")
             .replace(" 'm", "'m")
-            .replace(" do not", " don't")
             .replace(" 's", "'s")
             .replace(" 've", "'ve")
             .replace(" 're", "'re")

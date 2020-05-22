@@ -11,7 +11,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from transformers import MarianConfig, MarianMTModel, MarianSentencePieceTokenizer
+from transformers import MarianConfig, MarianMTModel, MarianTokenizer
+from transformers.hf_api import HfApi
 
 
 def remove_prefix(text: str, prefix: str):
@@ -36,6 +37,19 @@ def load_layers_(layer_lst: torch.nn.ModuleList, opus_state: dict, converter, is
         layer_tag = f"decoder_l{i + 1}_" if is_decoder else f"encoder_l{i + 1}_"
         sd = convert_encoder_layer(opus_state, layer_tag, converter)
         layer.load_state_dict(sd, strict=True)
+
+
+def find_pretrained_model(src_lang: str, tgt_lang: str) -> List[str]:
+    """Find models that can accept src_lang as input and return tgt_lang as output."""
+    prefix = "Helsinki-NLP/opus-mt-"
+    api = HfApi()
+    model_list = api.model_list()
+    model_ids = [x.modelId for x in model_list if x.modelId.startswith("Helsinki-NLP")]
+    src_and_targ = [
+        remove_prefix(m, prefix).lower().split("-") for m in model_ids if "+" not in m
+    ]  # + cant be loaded.
+    matching = [f"{prefix}{a}-{b}" for (a, b) in src_and_targ if src_lang in a and tgt_lang in b]
+    return matching
 
 
 def add_emb_entries(wemb, final_bias, n_special_tokens=1):
@@ -81,7 +95,103 @@ def find_model_file(dest_dir):  # this one better
     return model_file
 
 
-def parse_readmes(repo_path):
+# Group Names Logic: change long opus model names to something shorter, like opus-mt-en-ROMANCE
+ROM_GROUP = "fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la"
+GROUPS = [
+    ("cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh", "ZH"),
+    (ROM_GROUP, "ROMANCE"),
+    ("de+nl+fy+af+da+fo+is+no+nb+nn+sv", "NORTH_EU"),
+    ("da+fo+is+no+nb+nn+sv", "SCANDINAVIA"),
+    ("se+sma+smj+smn+sms", "SAMI"),
+    ("nb_NO+nb+nn_NO+nn+nog+no_nb+no", "NORWAY"),
+    ("ga+cy+br+gd+kw+gv", "CELTIC"),  # https://en.wikipedia.org/wiki/Insular_Celtic_languages
+]
+GROUP_TO_OPUS_NAME = {
+    "opus-mt-ZH-de": "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-de",
+    "opus-mt-ZH-fi": "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-fi",
+    "opus-mt-ZH-sv": "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-sv",
+    "opus-mt-SCANDINAVIA-SCANDINAVIA": "da+fo+is+no+nb+nn+sv-da+fo+is+no+nb+nn+sv",
+    "opus-mt-NORTH_EU-NORTH_EU": "de+nl+fy+af+da+fo+is+no+nb+nn+sv-de+nl+fy+af+da+fo+is+no+nb+nn+sv",
+    "opus-mt-de-ZH": "de-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh",
+    "opus-mt-en_el_es_fi-en_el_es_fi": "en+el+es+fi-en+el+es+fi",
+    "opus-mt-en-ROMANCE": "en-fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO"
+    "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
+    "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la",
+    "opus-mt-en-CELTIC": "en-ga+cy+br+gd+kw+gv",
+    "opus-mt-es-NORWAY": "es-nb_NO+nb+nn_NO+nn+nog+no_nb+no",
+    "opus-mt-fi_nb_no_nn_ru_sv_en-SAMI": "fi+nb+no+nn+ru+sv+en-se+sma+smj+smn+sms",
+    "opus-mt-fi-ZH": "fi-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh",
+    "opus-mt-fi-NORWAY": "fi-nb_NO+nb+nn_NO+nn+nog+no_nb+no",
+    "opus-mt-ROMANCE-en": "fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO"
+    "+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR"
+    "+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la-en",
+    "opus-mt-CELTIC-en": "ga+cy+br+gd+kw+gv-en",
+    "opus-mt-sv-ZH": "sv-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh",
+    "opus-mt-sv-NORWAY": "sv-nb_NO+nb+nn_NO+nn+nog+no_nb+no",
+}
+OPUS_GITHUB_URL = "https://github.com/Helsinki-NLP/OPUS-MT-train/blob/master/models/"
+ORG_NAME = "Helsinki-NLP/"
+
+
+def convert_opus_name_to_hf_name(x):
+    for substr, grp_name in GROUPS:
+        x = x.replace(substr, grp_name)
+    return x.replace("+", "_")
+
+
+def convert_hf_name_to_opus_name(hf_model_name):
+    """Relies on the assumption that there are no language codes like pt_br in models that are not in GROUP_TO_OPUS_NAME."""
+    hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
+    if hf_model_name in GROUP_TO_OPUS_NAME:
+        opus_w_prefix = GROUP_TO_OPUS_NAME[hf_model_name]
+    else:
+        opus_w_prefix = hf_model_name.replace("_", "+")
+    return remove_prefix(opus_w_prefix, "opus-mt-")
+
+
+def write_model_card(
+    hf_model_name: str,
+    repo_path="OPUS-MT-train/models/",
+    dry_run=False,
+    model_card_dir=Path("marian_converted/model_cards/Helsinki-NLP/"),
+) -> str:
+    """Copy the most recent model's readme section from opus, and add metadata.
+    upload command: s3cmd sync --recursive model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/
+    """
+    hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
+    opus_name: str = convert_hf_name_to_opus_name(hf_model_name)
+    opus_src, opus_tgt = [x.split("+") for x in opus_name.split("-")]
+    readme_url = OPUS_GITHUB_URL + f"{opus_name}/README.md"
+    s, t = ",".join(opus_src), ",".join(opus_tgt)
+    extra_markdown = f"### {hf_model_name}\n\n* source languages: {s}\n* target languages: {t}\n*  OPUS readme: [{opus_name}]({readme_url})\n"
+    # combine with opus markdown
+    opus_readme_path = Path(f"{repo_path}{opus_name}/README.md")
+    assert opus_readme_path.exists(), opus_readme_path
+    content = opus_readme_path.open().read()
+    content = content.split("\n# ")[-1]  # Get the lowest level 1 header in the README -- the most recent model.
+    content = "*".join(content.split("*")[1:])
+    content = extra_markdown + "\n* " + content.replace("download", "download original weights")
+    if dry_run:
+        return content
+    # Save string to model_cards/hf_model_name/readme.md
+    model_card_dir.mkdir(exist_ok=True)
+    sub_dir = model_card_dir / hf_model_name
+    sub_dir.mkdir(exist_ok=True)
+    dest = sub_dir / "README.md"
+    dest.open("w").write(content)
+    return content
+
+
+def get_clean_model_id_mapping(multiling_model_ids):
+    return {x: convert_opus_name_to_hf_name(x) for x in multiling_model_ids}
+
+
+def make_registry(repo_path="Opus-MT-train/models"):
+    if not (Path(repo_path) / "fr-en" / "README.md").exists():
+        raise ValueError(
+            f"repo_path:{repo_path} does not exist: "
+            "You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git before calling."
+        )
     results = {}
     for p in Path(repo_path).ls():
         n_dash = p.name.count("-")
@@ -90,22 +200,48 @@ def parse_readmes(repo_path):
         else:
             lns = list(open(p / "README.md").readlines())
             results[p.name] = _parse_readme(lns)
-    return results
+    return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
 
 
-def download_all_sentencepiece_models(repo_path="Opus-MT-train/models"):
+def convert_all_sentencepiece_models(model_list=None, repo_path=None):
     """Requires 300GB"""
     save_dir = Path("marian_ckpt")
-    if not Path(repo_path).exists():
-        raise ValueError("You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git")
-    results: dict = parse_readmes(repo_path)
-    for k, v in tqdm(list(results.items())):
-        if os.path.exists(save_dir / k):
-            print(f"already have path {k}")
+    dest_dir = Path("marian_converted")
+    dest_dir.mkdir(exist_ok=True)
+    if model_list is None:
+        model_list: list = make_registry(repo_path=repo_path)
+    for k, prepro, download, test_set_url in tqdm(model_list):
+        if "SentencePiece" not in prepro:  # dont convert BPE models.
             continue
-        if "SentencePiece" not in v["pre-processing"]:
+        if not os.path.exists(save_dir / k / "pytorch_model.bin"):
+            download_and_unzip(download, save_dir / k)
+        pair_name = convert_opus_name_to_hf_name(k)
+        convert(save_dir / k, dest_dir / f"opus-mt-{pair_name}")
+
+
+def lmap(f, x) -> List:
+    return list(map(f, x))
+
+
+def fetch_test_set(test_set_url):
+    import wget
+
+    fname = wget.download(test_set_url, "opus_test.txt")
+    lns = Path(fname).open().readlines()
+    src = lmap(str.strip, lns[::4])
+    gold = lmap(str.strip, lns[1::4])
+    mar_model = lmap(str.strip, lns[2::4])
+    assert len(gold) == len(mar_model) == len(src)
+    os.remove(fname)
+    return src, mar_model, gold
+
+
+def convert_whole_dir(path=Path("marian_ckpt/")):
+    for subdir in tqdm(list(path.ls())):
+        dest_dir = f"marian_converted/{subdir.name}"
+        if (dest_dir / "pytorch_model.bin").exists():
             continue
-        download_and_unzip(v["download"], save_dir / k)
+        convert(source_dir, dest_dir)
 
 
 def _parse_readme(lns):
@@ -131,7 +267,7 @@ def _parse_readme(lns):
     return subres
 
 
-def write_metadata(dest_dir: Path):
+def save_tokenizer_config(dest_dir: Path):
     dname = dest_dir.name.split("-")
     dct = dict(target_lang=dname[-1], source_lang="-".join(dname[:-1]))
     save_json(dct, dest_dir / "tokenizer_config.json")
@@ -148,13 +284,17 @@ def add_to_vocab_(vocab: Dict[str, int], special_tokens: List[str]):
     return added
 
 
+def find_vocab_file(model_dir):
+    return list(model_dir.glob("*vocab.yml"))[0]
+
+
 def add_special_tokens_to_vocab(model_dir: Path) -> None:
-    vocab = load_yaml(model_dir / "opus.spm32k-spm32k.vocab.yml")
+    vocab = load_yaml(find_vocab_file(model_dir))
     vocab = {k: int(v) for k, v in vocab.items()}
     num_added = add_to_vocab_(vocab, ["<pad>"])
     print(f"added {num_added} tokens to vocab")
     save_json(vocab, model_dir / "vocab.json")
-    write_metadata(model_dir)
+    save_tokenizer_config(model_dir)
 
 
 def save_tokenizer(self, save_directory):
@@ -251,7 +391,6 @@ class OpusState:
 
         # Process decoder.yml
         decoder_yml = cast_marian_config(load_yaml(source_dir / "decoder.yml"))
-        # TODO: what are normalize and word-penalty?
         check_marian_cfg_assumptions(cfg)
         self.hf_config = MarianConfig(
             vocab_size=cfg["vocab_size"],
@@ -273,6 +412,9 @@ class OpusState:
             dropout=0.1,  # see opus-mt-train repo/transformer-dropout param.
             # default: add_final_layer_norm=False,
             num_beams=decoder_yml["beam-size"],
+            decoder_start_token_id=self.pad_token_id,
+            bad_words_ids=[[self.pad_token_id]],
+            max_length=512,
         )
 
     def _check_layer_entries(self):
@@ -349,12 +491,12 @@ def download_and_unzip(url, dest_dir):
     os.remove(filename)
 
 
-def main(source_dir, dest_dir):
+def convert(source_dir: Path, dest_dir):
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(exist_ok=True)
 
     add_special_tokens_to_vocab(source_dir)
-    tokenizer = MarianSentencePieceTokenizer.from_pretrained(str(source_dir))
+    tokenizer = MarianTokenizer.from_pretrained(str(source_dir))
     save_tokenizer(tokenizer, dest_dir)
 
     opus_state = OpusState(source_dir)
@@ -377,7 +519,7 @@ if __name__ == "__main__":
     source_dir = Path(args.src)
     assert source_dir.exists()
     dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
-    main(source_dir, dest_dir)
+    convert(source_dir, dest_dir)
 
 
 def load_yaml(path):

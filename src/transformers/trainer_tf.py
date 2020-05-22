@@ -125,7 +125,9 @@ class TFTrainer:
         in the Tensorflow documentation and those contained in the transformers library.
         """
         if self.args.optimizer_name == "adamw":
-            self.optimizer = create_optimizer(self.args.learning_rate, self.train_steps, self.args.warmup_steps)
+            self.optimizer = create_optimizer(
+                self.args.learning_rate, self.train_steps, self.args.warmup_steps, self.args.end_lr
+            )
         else:
             try:
                 self.optimizer = tf.keras.optimizers.get(
@@ -139,6 +141,7 @@ class TFTrainer:
                 self.optimizer = tf.keras.optimizers.get(
                     {"class_name": self.args.optimizer_name, "config": {"learning_rate": self.args.learning_rate}}
                 )
+        logger.info("Created an/a {} optimizer".format(self.args.optimizer_name))
 
     def _create_checkpoint_manager(self, max_to_keep: int = 5, load_model: bool = True) -> None:
         """
@@ -149,6 +152,7 @@ class TFTrainer:
           load_model: if we want to start the training from the latest checkpoint.
         """
         ckpt = tf.train.Checkpoint(optimizer=self.optimizer, model=self.model)
+
         self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, PREFIX_CHECKPOINT_DIR, max_to_keep=max_to_keep)
 
         if load_model:
@@ -222,7 +226,11 @@ class TFTrainer:
         else:
             metrics = {}
 
-        metrics["loss"] = loss.numpy()
+        metrics["eval_loss"] = loss.numpy()
+
+        for key in list(metrics.keys()):
+            if not key.startswith("eval_"):
+                metrics[f"eval_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
@@ -327,12 +335,8 @@ class TFTrainer:
             gradient / tf.cast(gradient_scale, gradient.dtype) for gradient in self.gradient_accumulator.gradients
         ]
         gradients = [(tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients]
-        vars = self.model.trainable_variables
 
-        if self.args.mode == "token-classification":
-            vars = [var for var in self.model.trainable_variables if "pooler" not in var.name]
-
-        self.optimizer.apply_gradients(list(zip(gradients, vars)))
+        self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
         self.gradient_accumulator.reset()
 
     def _accumulate_next_gradients(self):
@@ -367,12 +371,10 @@ class TFTrainer:
     def _forward(self, features, labels):
         """Forwards a training example and accumulates the gradients."""
         per_example_loss, _ = self._run_model(features, labels, True)
-        vars = self.model.trainable_variables
-
-        if self.args.mode == "token-classification":
-            vars = [var for var in self.model.trainable_variables if "pooler" not in var.name]
-
-        gradients = self.optimizer.get_gradients(per_example_loss, vars)
+        gradients = tf.gradients(per_example_loss, self.model.trainable_variables)
+        gradients = [
+            g if g is not None else tf.zeros_like(v) for g, v in zip(gradients, self.model.trainable_variables)
+        ]
 
         self.gradient_accumulator(gradients)
 
@@ -386,7 +388,7 @@ class TFTrainer:
           labels: the batched labels.
           training: run the model in training mode or not
         """
-        if self.args.mode == "sequence-classification" or self.args.mode == "token-classification":
+        if self.args.mode == "text-classification" or self.args.mode == "token-classification":
             logits = self.model(features, training=training)[0]
         else:
             logits = self.model(features, training=training)
@@ -396,6 +398,10 @@ class TFTrainer:
             reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
             labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
             loss = self.loss(labels, reduced_logits)
+        elif self.args.mode == "question-answering":
+            start_loss = self.loss(labels["start_position"], logits[0])
+            end_loss = self.loss(labels["end_position"], logits[1])
+            loss = (start_loss + end_loss) / 2.0
         else:
             loss = self.loss(labels, logits)
 
@@ -425,5 +431,6 @@ class TFTrainer:
 
         path = os.path.join(self.args.output_dir, "saved_model")
 
+        logger.info("Saving model in {}".format(path))
         os.makedirs(path, exist_ok=True)
         self.model.save_pretrained(self.args.output_dir)

@@ -27,8 +27,6 @@ vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-v
 merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
 _all_bart_models = ["bart-large", "bart-large-mnli", "bart-large-cnn", "bart-large-xsum"]
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentence.bpe.model"}
-
 
 class BartTokenizer(RobertaTokenizer):
     # merges and vocab same as Roberta
@@ -44,6 +42,6 @@ SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-la
 
 
 class MBartTokenizer(XLMRobertaTokenizer):
-    vocab_files_names = VOCAB_FILES_NAMES
+    vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}

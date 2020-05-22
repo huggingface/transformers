@@ -193,13 +193,13 @@ class RobertaTokenizer(GPT2Tokenizer):
                 Set to True if the token list is already formatted with special tokens for the model
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
+                    "ids is already formatted with special tokens for the model."
                 )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
@@ -343,3 +343,27 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             return output
 
         return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        RoBERTa does not make use of token type ids, therefore a list of zeros is returned.
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of ids.
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of zeros.
+
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]

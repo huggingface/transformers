@@ -41,7 +41,7 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
         def __init__(
             self,
             parent,
-            batch_size=13,
+            batch_size=14,
             seq_length=7,
             is_training=True,
             use_token_type_ids=True,
@@ -219,6 +219,7 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_ctrl(self):
         model = CTRLLMHeadModel.from_pretrained("ctrl")
+        model.to(torch_device)
         input_ids = torch.tensor(
             [[11859, 0, 1611, 8]], dtype=torch.long, device=torch_device
         )  # Legal the president is
