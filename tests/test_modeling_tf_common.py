@@ -30,7 +30,7 @@ if is_tf_available():
     import tensorflow as tf
     import numpy as np
 
-    from transformers import tf_top_k_top_p_filtering, TFAdaptiveEmbedding
+    from transformers import tf_top_k_top_p_filtering, TFAdaptiveEmbedding, TFSharedEmbeddings
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
@@ -111,7 +111,13 @@ class TFModelTesterMixin:
             symbolic_inputs = {
                 name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
             }
-            model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
+            # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
+            if "t5" in main_layer.name:
+                # Take the same values than in TFT5ModelTester for this shared layer
+                shared = TFSharedEmbeddings(99, 37, name="shared")
+                model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs, embed_tokens=shared))
+            else:
+                model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
             outputs = model(inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
