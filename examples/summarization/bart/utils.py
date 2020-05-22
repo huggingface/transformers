@@ -124,17 +124,12 @@ class SummarizationDataset(Dataset):
             max_source_length,
             overwrite_cache=overwrite_cache,
         )
-        if type_path =='train':
+        if type_path == "train":
             tgt_path = os.path.join(data_dir, type_path + ".target" + tgt_suffix)
         else:
             tgt_path = os.path.join(data_dir, type_path + ".target")
 
-        target = encode_file(
-            tokenizer,
-            tgt_path,
-            max_target_length,
-            overwrite_cache=overwrite_cache,
-        )
+        target = encode_file(tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache,)
 
         return cls(
             source, target, n_obs=n_obs, max_target_length=max_target_length, max_source_length=max_source_length

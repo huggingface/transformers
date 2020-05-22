@@ -16,7 +16,7 @@ from rouge_score import rouge_scorer, scoring
 from torch import nn
 from torch.utils.data import DataLoader
 
-from durbango import pickle_load, pickle_save
+from durbango import lmap, pickle_load, pickle_save
 from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
 from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.modeling_bart import invert_mask
@@ -56,6 +56,7 @@ class SummarizationTrainer(BaseTransformer):
         super().__init__(hparams, num_labels=None, mode=self.mode, tokenizer=tokenizer, **kwargs)
         self.model: BartForConditionalGeneration
         self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
+        assert Path(self.output_dir).exists()
         if os.path.exists(self.metrics_save_path):
             self.metrics = pickle_load(self.metrics_save_path)
         else:
@@ -64,7 +65,6 @@ class SummarizationTrainer(BaseTransformer):
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
-            # max_target_length=self.hparams.max_target_length,
             overwrite_cache=self.hparams.no_cache,
             tgt_suffix=self.hparams.tgt_suffix,
         )
@@ -84,7 +84,6 @@ class SummarizationTrainer(BaseTransformer):
         self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
         self.freeze_stuff()
         freeze_part(self.model.model.encoder)
-
 
     def freeze_stuff(self):
 
@@ -137,19 +136,28 @@ class SummarizationTrainer(BaseTransformer):
         ret_dict[f"{prefix}_loss"] = loss
         return ret_dict
 
+    def ids_to_clean_text(self, generated_ids: List[int]):
+        gen_text = self.tokenizer.batch_decode(
+            generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
+        )
+        return lmap(str.strip, gen_text)
+
     def _generative_step(self, batch):
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
-        # NOTE: the following kwargs get more speed and lower quality summaries than those in evaluate_cnn.py
+        cfg = self.config
+        # {'max_length': cfg.max_length, 'min_length': cfg.min_length, 'num_beams': cfg.num_beams}
+
         t0 = time.time()
         generated_ids = self.model.generate(input_ids=source_ids, attention_mask=source_mask, use_cache=True,)
         gen_time = time.time() - t0
-        preds = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-        target = self.tokenizer.batch_decode(y, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        preds = self.ids_to_clean_text(generated_ids)
+        target = self.ids_to_clean_text(y)
         loss_tensors = self._step(batch)
         base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         rouge: Dict = calculate_rouge(preds, target)
-        base_metrics.update(gen_time=gen_time, preds=preds, target=target, **rouge)
+        summ_len = np.mean(lmap(len, generated_ids))
+        base_metrics.update(gen_time=gen_time, summ_len=summ_len, preds=preds, target=target, **rouge)
         return base_metrics
 
     def test_step(self, batch, batch_idx):
@@ -239,14 +247,14 @@ class SummarizationTrainer(BaseTransformer):
         )
         parser.add_argument(
             "--val_mtl",
-            default=56,
+            default=142,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
         )
         parser.add_argument(
             "--test_mtl",
-            default=56,
+            default=142,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
@@ -441,17 +449,18 @@ class SummarizationDistiller(SummarizationTrainer):
 
 
 def main(args):
+    if os.path.exists(args.output_dir) and os.listdir(args.output_dir):
+        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if not args.output_dir:
-        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
+        args.output_dir = os.path.join("./results", f"dbart_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
     module_cls = SummarizationTrainer if args.no_teacher else SummarizationDistiller
     model: SummarizationTrainer = module_cls(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
-    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"),
-                                        recursive=True)))
+    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
     if checkpoints:
         model = model.load_from_checkpoint(checkpoints[-1])
-    #if not args.do_train:
+    # if not args.do_train:
 
     trainer.test(model)
     # model.metrics_df.to_csv(Path(model.output_dir)/'metrics.csv')

@@ -127,9 +127,6 @@ class TestBartExamples(unittest.TestCase):
             output_dir=output_dir,
         )
         main(argparse.Namespace(**args_d))
-        args_d.update({"do_train": False, "do_predict": True})
-
-        main(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
         expected_contents = {
             "checkpointepoch=0.ckpt",
@@ -137,7 +134,6 @@ class TestBartExamples(unittest.TestCase):
             "test_results.txt",
             "val_results.txt",
             "metrics.pkl",
-            "test_generations_.txt",
             "test_generations_1.txt",
             "val_generations_0.txt",
             # "val_generations_1.txt",

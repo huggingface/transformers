@@ -12,4 +12,5 @@ python finetune.py \
 --no_teacher \
 --do_predict \
 --fp16 \
+--OUTPUT_DIR=$OUTPUT_DIR
 $@

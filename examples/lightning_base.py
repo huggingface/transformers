@@ -293,12 +293,10 @@ def add_generic_args(parser, root_dir):
 def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callbacks=[], **extra_train_kwargs):
     # init model
     set_seed(args)
-
-    if os.path.exists(args.output_dir) and os.listdir(args.output_dir) and args.do_train:
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
-
+    odir = Path(model.hparams.output_dir)
+    odir.mkdir(exist_ok=True)
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5
+        filepath=model.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5
     )
     if args.output_dir.startswith("/var/") or args.fast_dev_run:
         logger = True
