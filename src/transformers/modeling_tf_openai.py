@@ -29,8 +29,8 @@ from .modeling_tf_utils import (
     TFSequenceSummary,
     TFSharedEmbeddings,
     get_initializer,
-    shape_list,
     keras_serializable,
+    shape_list,
 )
 from .tokenization_utils import BatchEncoding
 

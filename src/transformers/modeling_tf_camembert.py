@@ -22,10 +22,10 @@ from .configuration_camembert import CamembertConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_roberta import (
     TFRobertaForMaskedLM,
-    TFRobertaForSequenceClassification,
-    TFRobertaForTokenClassification,
     TFRobertaForMultipleChoice,
     TFRobertaForQuestionAnswering,
+    TFRobertaForSequenceClassification,
+    TFRobertaForTokenClassification,
     TFRobertaModel,
 )
 

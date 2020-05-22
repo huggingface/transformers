@@ -34,7 +34,7 @@ class TFFlaubertModelIntegrationTest(unittest.TestCase):
 
         features = {
             "input_ids": tf.convert_to_tensor([[0, 2646, 10269, 83, 99942, 2]], dtype=tf.int32),  # "My dog is cute"
-            "attention_mask": tf.convert_to_tensor([[1, 1, 1, 1, 1, 1]], dtype=tf.int32)
+            "attention_mask": tf.convert_to_tensor([[1, 1, 1, 1, 1, 1]], dtype=tf.int32),
         }
 
         output = model(features)[0]
@@ -42,7 +42,14 @@ class TFFlaubertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
         expected_slice = tf.convert_to_tensor(
-            [[[0.0681762 , 0.10894451, 0.06772504], [-0.06423668, 0.02366615, 0.04329344], [-0.06057295, 0.09974135, -0.00070584]]], dtype=tf.float32,
+            [
+                [
+                    [0.0681762, 0.10894451, 0.06772504],
+                    [-0.06423668, 0.02366615, 0.04329344],
+                    [-0.06057295, 0.09974135, -0.00070584],
+                ]
+            ],
+            dtype=tf.float32,
         )
 
         self.assertTrue(np.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))

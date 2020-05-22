@@ -27,14 +27,14 @@ from .configuration_xlm import XLMConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
     TFPreTrainedModel,
+    TFQuestionAnsweringLoss,
+    TFSequenceClassificationAndMultipleChoiceLoss,
     TFSequenceSummary,
     TFSharedEmbeddings,
-    get_initializer,
-    shape_list,
-    keras_serializable,
-    TFSequenceClassificationAndMultipleChoiceLoss,
-    TFQuestionAnsweringLoss,
     TFTokenClassificationLoss,
+    get_initializer,
+    keras_serializable,
+    shape_list,
 )
 from .tokenization_utils import BatchEncoding
 

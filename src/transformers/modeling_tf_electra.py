@@ -7,11 +7,11 @@ from transformers import ElectraConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
 from .modeling_tf_utils import (
-    keras_serializable,
-    get_initializer,
-    shape_list,
-    TFTokenClassificationLoss,
     TFQuestionAnsweringLoss,
+    TFTokenClassificationLoss,
+    get_initializer,
+    keras_serializable,
+    shape_list,
 )
 from .tokenization_utils import BatchEncoding
 

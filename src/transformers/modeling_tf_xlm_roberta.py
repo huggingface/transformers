@@ -22,10 +22,10 @@ from .configuration_xlm_roberta import XLMRobertaConfig
 from .file_utils import add_start_docstrings
 from .modeling_tf_roberta import (
     TFRobertaForMaskedLM,
-    TFRobertaForSequenceClassification,
-    TFRobertaForTokenClassification,
     TFRobertaForMultipleChoice,
     TFRobertaForQuestionAnswering,
+    TFRobertaForSequenceClassification,
+    TFRobertaForTokenClassification,
     TFRobertaModel,
 )
 

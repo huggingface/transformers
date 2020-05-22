@@ -25,12 +25,12 @@ from .configuration_bert import BertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
     TFPreTrainedModel,
-    get_initializer,
-    keras_serializable,
-    shape_list,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationAndMultipleChoiceLoss,
     TFTokenClassificationLoss,
+    get_initializer,
+    keras_serializable,
+    shape_list,
 )
 from .tokenization_utils import BatchEncoding
 

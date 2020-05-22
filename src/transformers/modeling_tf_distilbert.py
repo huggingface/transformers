@@ -26,13 +26,13 @@ from .configuration_distilbert import DistilBertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
     TFPreTrainedModel,
-    TFSharedEmbeddings,
-    get_initializer,
-    shape_list,
-    keras_serializable,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationAndMultipleChoiceLoss,
+    TFSharedEmbeddings,
     TFTokenClassificationLoss,
+    get_initializer,
+    keras_serializable,
+    shape_list,
 )
 from .tokenization_utils import BatchEncoding
 
@@ -674,7 +674,9 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
+class TFDistilBertForSequenceClassification(
+    TFDistilBertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss
+):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels

@@ -22,14 +22,11 @@ import tensorflow as tf
 
 from .configuration_flaubert import FlaubertConfig
 from .file_utils import add_start_docstrings
-from .modeling_tf_utils import (
-    shape_list,
-    keras_serializable,
-)
+from .modeling_tf_utils import keras_serializable, shape_list
 from .modeling_tf_xlm import (
-    TFXLMForSequenceClassification,
     TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
+    TFXLMForSequenceClassification,
     TFXLMForTokenClassification,
     TFXLMMainLayer,
     TFXLMModel,

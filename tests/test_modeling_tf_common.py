@@ -126,7 +126,11 @@ class TFModelTesterMixin:
                 model.save(filepath)
                 if "T5" in main_layer_class.__name__:
                     model = tf.keras.models.load_model(
-                        filepath, custom_objects={main_layer_class.__name__: main_layer_class, "TFSharedEmbeddings": TFSharedEmbeddings}
+                        filepath,
+                        custom_objects={
+                            main_layer_class.__name__: main_layer_class,
+                            "TFSharedEmbeddings": TFSharedEmbeddings,
+                        },
                     )
                 else:
                     model = tf.keras.models.load_model(

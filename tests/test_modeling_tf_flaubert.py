@@ -41,7 +41,14 @@ class TFFlaubertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
         expected_slice = tf.convert_to_tensor(
-            [[[-1.8768773 , -1.566555  , 0.27072418], [-1.6920038 , -0.5873505 , 1.9329599], [-2.9563985 , -1.6993835 , 1.7972052]]], dtype=tf.float32,
+            [
+                [
+                    [-1.8768773, -1.566555, 0.27072418],
+                    [-1.6920038, -0.5873505, 1.9329599],
+                    [-2.9563985, -1.6993835, 1.7972052],
+                ]
+            ],
+            dtype=tf.float32,
         )
 
         self.assertTrue(np.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))

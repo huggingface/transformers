@@ -25,12 +25,12 @@ import tensorflow as tf
 from .configuration_xlnet import XLNetConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
+    TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationAndMultipleChoiceLoss,
-    TFTokenClassificationLoss,
-    TFPreTrainedModel,
     TFSequenceSummary,
     TFSharedEmbeddings,
+    TFTokenClassificationLoss,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -1010,7 +1010,9 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFSequenceClassificationA
         super().__init__(config, *inputs, **kwargs)
 
         self.transformer = TFXLNetMainLayer(config, name="transformer")
-        self.sequence_summary = TFSequenceSummary(config, initializer_range=config.initializer_range, name="sequence_summary")
+        self.sequence_summary = TFSequenceSummary(
+            config, initializer_range=config.initializer_range, name="sequence_summary"
+        )
         self.logits_proj = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
         )
