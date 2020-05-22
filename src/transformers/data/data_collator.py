@@ -20,7 +20,7 @@ class DataCollator(ABC):
     - "cpu": Tensors are allocated on the CPU
     - "cuda:X": Tensors are allocated on the GPU "X"
     """
-    device: Union[torch.device, str] = "cpu"
+    device: Union[torch.device, str]
 
     @abstractmethod
     def collate_batch(self) -> Dict[str, torch.Tensor]:
