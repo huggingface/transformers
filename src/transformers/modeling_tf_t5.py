@@ -26,6 +26,7 @@ import tensorflow as tf
 from .configuration_t5 import T5Config
 from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list, keras_serializable
+from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
@@ -551,12 +552,32 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         use_cache=False,
         training=False,
     ):
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            encoder_hidden_states = inputs[2] if len(inputs) > 2 else encoder_hidden_states
+            encoder_attention_mask = inputs[3] if len(inputs) > 3 else encoder_attention_mask
+            inputs_embeds = inputs[4] if len(inputs) > 4 else inputs_embeds
+            head_mask = inputs[5] if len(inputs) > 5 else head_mask
+            past_key_value_states = inputs[6] if len(inputs) > 6 else past_key_value_states
+            assert len(inputs) <= 7, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            input_ids = inputs.get("decoder_input_ids")
+            attention_mask = inputs.get("decoder_attention_mask", attention_mask)
+            encoder_hidden_states = inputs.get("encoder_hidden_states", encoder_hidden_states)
+            encoder_attention_mask = inputs.get("encoder_attention_mask", encoder_attention_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            head_mask = inputs.get("head_mask", head_mask)
+            past_key_value_states = inputs.get("past_key_value_states", past_key_value_states)
+            assert len(inputs) <= 7, "Too many inputs."
+        else:
+            input_ids = inputs
 
-        if inputs is not None and inputs_embeds is not None:
+        if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both inputs and inputs_embeds at the same time")
-        elif inputs is not None:
-            input_shape = shape_list(inputs)
-            inputs = tf.reshape(inputs, (-1, input_shape[-1]))
+        elif input_ids is not None:
+            input_shape = shape_list(input_ids)
+            input_ids = tf.reshape(input_ids, (-1, input_shape[-1]))
         elif inputs_embeds is not None:
             input_shape = shape_list(inputs_embeds)[:-1]
         else:
