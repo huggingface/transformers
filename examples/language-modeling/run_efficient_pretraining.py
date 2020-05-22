@@ -37,7 +37,6 @@ from torch.utils.data import IterableDataset
 from tqdm import tqdm
 
 from transformers import (
-    MODEL_WITH_LM_HEAD_MAPPING,
     AutoConfig,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
@@ -47,21 +46,14 @@ from transformers import (
     PreTrainedTokenizer,
     TextDataset,
     Trainer,
-    TrainingArguments,
     set_seed,
 )
 
 from transformers.modeling_utils import PreTrainedModel
-from transformers.trainer import is_apex_available
 from transformers.training_args import TrainingArguments
 
 
 logger = logging.getLogger(__name__)
-
-
-MODEL_CONFIG_CLASSES = list(MODEL_WITH_LM_HEAD_MAPPING.keys())
-MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
-
 
 @dataclass
 class ModelArguments:
@@ -317,6 +309,10 @@ class CombinedModel(nn.Module):
 
         self.tokenizer = tokenizer
 
+        class Config:
+            xla_device: False
+        self.config = Config()
+
     def mask_inputs(
         self,
         input_ids: torch.Tensor,
@@ -442,6 +438,13 @@ class CombinedModel(nn.Module):
         return (total_loss, (generator_output, discriminator_output), (fake_tokens, discriminator_predictions))
 
     def save_pretrained(self, directory):
+        if self.config.xla_device:
+            self.discriminator.config.xla_device = True
+            self.generator.config.xla_device = True
+        else:
+            self.discriminator.config.xla_device = False
+            self.generator.config.xla_device = False
+
         generator_path = os.path.join(directory, "generator")
         discriminator_path = os.path.join(directory, "discriminator")
 
@@ -568,6 +571,12 @@ def main():
     else:
         data_args.block_size = min(data_args.block_size, tokenizer.max_len)
 
+    import torch_xla.core.xla_model as xm
+    if xm.is_master_ordinal(local=True):
+        get_dataset(data_args, training_args, model_args, tokenizer=tokenizer, local_rank=training_args.local_rank)
+
+    xm.rendezvous("dataset building")
+
     # Get datasets
     train_dataset = (
         get_dataset(data_args, training_args, model_args, tokenizer=tokenizer, local_rank=training_args.local_rank)
@@ -623,6 +632,11 @@ def main():
         results.update(result)
 
     return results
+
+
+def _mp_fn(index):
+    # For xla_spawn (TPUs)
+    main()
 
 
 if __name__ == "__main__":
