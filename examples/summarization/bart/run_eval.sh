@@ -7,6 +7,5 @@ python finetune.py \
 --data_dir=$CNN_DIR \
 --no_teacher \
 --do_predict \
---fp16
---teacher=''
+--fp16 \
 $@
