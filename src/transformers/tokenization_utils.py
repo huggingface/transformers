@@ -827,7 +827,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             warnings.warn(
                 "Parameter max_len is deprecated and will be removed in a future release. "
                 "Use model_max_length instead.",
-                category=FutureWarning
+                category=FutureWarning,
             )
 
             model_max_length = kwargs.pop("max_len")
