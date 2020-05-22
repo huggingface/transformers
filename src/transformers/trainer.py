@@ -193,7 +193,7 @@ class Trainer:
         if data_collator is not None:
             self.data_collator = data_collator
         else:
-            self.data_collator = DefaultDataCollator()
+            self.data_collator = DefaultDataCollator(args.device)
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
@@ -565,9 +565,6 @@ class Trainer:
         self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer
     ) -> float:
         model.train()
-        for k, v in inputs.items():
-            inputs[k] = v.to(self.args.device)
-
         outputs = model(**inputs)
         loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
@@ -748,9 +745,6 @@ class Trainer:
 
         for inputs in tqdm(dataloader, desc=description):
             has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
-
-            for k, v in inputs.items():
-                inputs[k] = v.to(self.args.device)
 
             with torch.no_grad():
                 outputs = model(**inputs)

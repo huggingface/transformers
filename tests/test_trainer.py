@@ -31,7 +31,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
             task_name="mrpc", data_dir="./tests/fixtures/tests_samples/MRPC", overwrite_cache=True
         )
         dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
-        data_collator = DefaultDataCollator()
+        data_collator = DefaultDataCollator(device="cpu")
         batch = data_collator.collate_batch(dataset.features)
         self.assertEqual(batch["labels"].dtype, torch.long)
 
@@ -42,13 +42,13 @@ class DataCollatorIntegrationTest(unittest.TestCase):
             task_name="sts-b", data_dir="./tests/fixtures/tests_samples/STS-B", overwrite_cache=True
         )
         dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
-        data_collator = DefaultDataCollator()
+        data_collator = DefaultDataCollator(device="cpu")
         batch = data_collator.collate_batch(dataset.features)
         self.assertEqual(batch["labels"].dtype, torch.float)
 
     def test_lm_tokenizer_without_padding(self):
         tokenizer = AutoTokenizer.from_pretrained("gpt2")
-        data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
+        data_collator = DataCollatorForLanguageModeling(device="cpu", tokenizer=tokenizer, mlm=False)
         # ^ causal lm
 
         dataset = LineByLineTextDataset(tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=512)
@@ -66,7 +66,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
 
     def test_lm_tokenizer_with_padding(self):
         tokenizer = AutoTokenizer.from_pretrained("distilroberta-base")
-        data_collator = DataCollatorForLanguageModeling(tokenizer)
+        data_collator = DataCollatorForLanguageModeling(device="cpu", tokenizer=tokenizer)
         # ^ masked lm
 
         dataset = LineByLineTextDataset(tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=512)

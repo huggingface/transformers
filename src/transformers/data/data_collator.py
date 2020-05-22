@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, NewType, Tuple
+from typing import Any, Dict, List, NewType, Tuple, Union
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
@@ -8,11 +8,19 @@ from torch.nn.utils.rnn import pad_sequence
 from ..tokenization_utils import PreTrainedTokenizer
 
 
+@dataclass
 class DataCollator(ABC):
     """
     A `DataCollator` is responsible for batching
     and pre-processing samples of data as requested by the training loop.
     """
+
+    """
+    PyTorch device (torch.device) or str referring to where the generate tensors are placed
+    - "cpu": Tensors are allocated on the CPU
+    - "cuda:X": Tensors are allocated on the GPU "X"
+    """
+    device: Union[torch.device, str] = "cpu"
 
     @abstractmethod
     def collate_batch(self) -> Dict[str, torch.Tensor]:
@@ -49,20 +57,23 @@ class DefaultDataCollator(DataCollator):
         # on the whole batch.
         first = features[0]
 
+        # Cache to avoid class lookup
+        device = self.device
+
         # Special handling for labels.
         # Ensure that tensor is created with the correct type
         # (it should be automatically the case, but let's make sure of it.)
         if hasattr(first, "label") and first.label is not None:
             if type(first.label) is int:
-                labels = torch.tensor([f.label for f in features], dtype=torch.long)
+                labels = torch.tensor([f.label for f in features], device=device, dtype=torch.long)
             else:
-                labels = torch.tensor([f.label for f in features], dtype=torch.float)
+                labels = torch.tensor([f.label for f in features], device=device, dtype=torch.float)
             batch = {"labels": labels}
         elif hasattr(first, "label_ids") and first.label_ids is not None:
             if type(first.label_ids[0]) is int:
-                labels = torch.tensor([f.label_ids for f in features], dtype=torch.long)
+                labels = torch.tensor([f.label_ids for f in features], device=device, dtype=torch.long)
             else:
-                labels = torch.tensor([f.label_ids for f in features], dtype=torch.float)
+                labels = torch.tensor([f.label_ids for f in features], device=device, dtype=torch.float)
             batch = {"labels": labels}
         else:
             batch = {}
@@ -71,7 +82,7 @@ class DefaultDataCollator(DataCollator):
         # Again, we will use the first element to figure out which key/values are not None for this model.
         for k, v in vars(first).items():
             if k not in ("label", "label_ids") and v is not None and not isinstance(v, str):
-                batch[k] = torch.tensor([getattr(f, k) for f in features], dtype=torch.long)
+                batch[k] = torch.tensor([getattr(f, k) for f in features], device=device, dtype=torch.long)
         return batch
 
 
@@ -99,7 +110,7 @@ class DataCollatorForLanguageModeling(DataCollator):
         length_of_first = examples[0].size(0)
         are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
         if are_tensors_same_length:
-            return torch.stack(examples, dim=0)
+            return torch.stack(examples, dim=0).to(self.device)
         else:
             if self.tokenizer._pad_token is None:
                 raise ValueError(

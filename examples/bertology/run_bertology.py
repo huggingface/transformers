@@ -424,7 +424,10 @@ def main():
         eval_dataset = Subset(eval_dataset, list(range(min(args.data_subset, len(eval_dataset)))))
     eval_sampler = SequentialSampler(eval_dataset) if args.local_rank == -1 else DistributedSampler(eval_dataset)
     eval_dataloader = DataLoader(
-        eval_dataset, sampler=eval_sampler, batch_size=args.batch_size, collate_fn=DefaultDataCollator().collate_batch
+        eval_dataset,
+        sampler=eval_sampler,
+        batch_size=args.batch_size,
+        collate_fn=DefaultDataCollator(args.device).collate_batch,
     )
 
     # Compute head entropy and importance score

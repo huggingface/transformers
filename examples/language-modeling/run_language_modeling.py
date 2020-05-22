@@ -222,7 +222,7 @@ def main():
     train_dataset = get_dataset(data_args, tokenizer=tokenizer) if training_args.do_train else None
     eval_dataset = get_dataset(data_args, tokenizer=tokenizer, evaluate=True) if training_args.do_eval else None
     data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer, mlm=data_args.mlm, mlm_probability=data_args.mlm_probability
+        tokenizer=tokenizer, mlm=data_args.mlm, mlm_probability=data_args.mlm_probability, device=training_args.device
     )
 
     # Initialize our Trainer
