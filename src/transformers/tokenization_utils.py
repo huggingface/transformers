@@ -234,7 +234,7 @@ class BatchEncoding(UserDict):
         """
         return self._encodings
 
-    def tokens(self, batch_index: int = 0) -> List[int]:
+    def tokens(self, batch_index: int = 0) -> List[str]:
         if not self._encodings:
             raise ValueError("tokens() is not available when using Python based tokenizers")
         return self._encodings[batch_index].tokens
