@@ -335,9 +335,10 @@ if is_torch_available():
     )
 
     from .modeling_longformer import (
-        LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP, 
-        LongformerModel, 
+        LongformerModel,
+        LongformerForMaskedLM,
         LongformerForQuestionAnswering,
+        LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
     # Optimization
