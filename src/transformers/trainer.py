@@ -11,7 +11,6 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
-from packaging import version
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
@@ -495,11 +494,8 @@ class Trainer:
                     ):
                         logs: Dict[str, float] = {}
                         logs["loss"] = (tr_loss - logging_loss) / self.args.logging_steps
-                        # backward compatibility for pytorch schedulers
                         logs["learning_rate"] = (
                             scheduler.get_last_lr()[0]
-                            if version.parse(torch.__version__) >= version.parse("1.4")
-                            else scheduler.get_lr()[0]
                         )
                         logging_loss = tr_loss
 
