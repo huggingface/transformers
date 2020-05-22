@@ -30,7 +30,7 @@ if is_torch_available():
         ElectraForMaskedLM,
         ElectraForTokenClassification,
         ElectraForPreTraining,
-        ElectraForSequenceClassification
+        ElectraForSequenceClassification,
     )
     from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -244,15 +244,15 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             self.check_loss_output(result)
 
         def create_and_check_electra_for_sequence_classification(
-                self,
-                config,
-                input_ids,
-                token_type_ids,
-                input_mask,
-                sequence_labels,
-                token_labels,
-                choice_labels,
-                fake_token_labels,
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_token_labels,
         ):
             config.num_labels = self.num_labels
             model = ElectraForSequenceClassification(config)
