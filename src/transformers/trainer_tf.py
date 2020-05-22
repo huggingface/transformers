@@ -60,26 +60,8 @@ class TFTrainer:
         with self.args.strategy.scope():
             self._create_optimizer()
             _ = self.optimizer.iterations
-            self._set_loss_and_metric()
             self._create_checkpoint_manager()
             self._create_summary_writer()
-
-    def _set_loss_and_metric(self) -> None:
-        """
-        Create the training loss and metric with their name. Allowed names are those listed
-        in the Tensorflow documentation and those contained in the transformers library.
-        """
-        try:
-            self.loss = tf.keras.losses.get(
-                {
-                    "class_name": self.args.loss_name,
-                    "config": {"from_logits": True, "reduction": tf.keras.losses.Reduction.NONE},
-                }
-            )
-        except TypeError:
-            self.loss = tf.keras.losses.get(
-                {"class_name": self.args.loss_name, "config": {"reduction": tf.keras.losses.Reduction.NONE}}
-            )
 
     def _create_summary_writer(self) -> None:
         """
