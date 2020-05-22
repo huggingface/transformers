@@ -212,10 +212,7 @@ class BatchEncoding(UserDict):
         return self.data[item]
 
     def __getstate__(self):
-        return {
-            "data": self.data,
-            "encodings": self._encodings
-        }
+        return {"data": self.data, "encodings": self._encodings}
 
     def __setstate__(self, state):
         if "data" in state:
