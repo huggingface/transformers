@@ -6,7 +6,13 @@ from transformers import ElectraConfig
 
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertEncoder, TFBertPreTrainedModel
-from .modeling_tf_utils import get_initializer, shape_list
+from .modeling_tf_utils import (
+    keras_serializable,
+    get_initializer,
+    shape_list,
+    TFTokenClassificationLoss,
+    TFQuestionAnsweringLoss,
+)
 from .tokenization_utils import BatchEncoding
 
 
@@ -194,6 +200,7 @@ class TFElectraPreTrainedModel(TFBertPreTrainedModel):
         return head_mask
 
 
+@keras_serializable
 class TFElectraMainLayer(TFElectraPreTrainedModel):
 
     config_class = ElectraConfig
@@ -557,7 +564,7 @@ Electra model with a token classification head on top.
 Both the discriminator and generator may be loaded into this model.""",
     ELECTRA_START_DOCSTRING,
 )
-class TFElectraForTokenClassification(TFElectraPreTrainedModel):
+class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
@@ -614,3 +621,80 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel):
         output += discriminator_hidden_states[1:]
 
         return output  # (loss), scores, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
+    """Electra Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    ELECTRA_START_DOCSTRING,
+)
+class TFElectraForQuestionAnsweringSimple(TFElectraPreTrainedModel, TFQuestionAnsweringLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.electra = TFElectraMainLayer(config, name="electra")
+        self.qa_outputs = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
+        )
+
+    @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        training=False,
+    ):
+        r"""
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        start_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-start scores (before SoftMax).
+        end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-end scores (before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import ElectraTokenizer, TFElectraForQuestionAnswering
+
+        tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-generator')
+        model = TFElectraForQuestionAnswering.from_pretrained('google/electra-small-generator')
+
+        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        encoding = tokenizer.encode_plus(question, text)
+        input_ids, token_type_ids = encoding["input_ids"], encoding["token_type_ids"]
+        start_scores, end_scores = model(tf.constant(input_ids)[None, :], token_type_ids=tf.constant(token_type_ids)[None, :])
+
+        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+        answer = ' '.join(all_tokens[tf.math.argmax(tf.squeeze(start_scores)) : tf.math.argmax(tf.squeeze(end_scores))+1])
+        assert answer == "a nice puppet"
+
+        """
+        discriminator_hidden_states = self.electra(
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, training=training
+        )
+        discriminator_sequence_output = discriminator_hidden_states[0]
+
+        logits = self.qa_outputs(discriminator_sequence_output)
+        start_logits, end_logits = tf.split(logits, 2, axis=-1)
+        start_logits = tf.squeeze(start_logits, axis=-1)
+        end_logits = tf.squeeze(end_logits, axis=-1)
+
+        outputs = (start_logits, end_logits,) + discriminator_hidden_states[1:]
+
+        return outputs  # start_logits, end_logits, (hidden_states), (attentions)
