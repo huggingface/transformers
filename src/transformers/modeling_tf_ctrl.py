@@ -536,7 +536,7 @@ class TFCTRLLMHead(tf.keras.layers.Layer):
     (linear layer with weights tied to the input embeddings). """,
     CTRL_START_DOCSTRING,
 )
-class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
+class TFCTRLWithLMHeadModel(TFCTRLPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFCTRLMainLayer(config, name="transformer")
