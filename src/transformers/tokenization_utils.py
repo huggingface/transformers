@@ -821,6 +821,12 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         super().__init__(**kwargs)
 
+        if "max_len" in kwargs:
+            logger.warning(
+                "Parameter max_len is deprecated and will be removed in a future release. "
+                "Use model_max_length instead."
+            )
+
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = model_max_length if model_max_length is not None else kwargs.pop("max_len", None)
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
