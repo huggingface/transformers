@@ -540,6 +540,14 @@ class TFT5MainLayer(tf.keras.layers.Layer):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
 
+    def get_config(self):
+        config = {
+            'embed_tokens': self.embed_tokens
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
     def call(
         self,
         inputs,
@@ -585,7 +593,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
-            inputs_embeds = self.embed_tokens(inputs)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
 

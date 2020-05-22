@@ -108,9 +108,9 @@ class TFModelTesterMixin:
         )
         for main_layer_class in tf_main_layer_classes:
             # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
-            if "t5" in main_layer_class.name:
+            if "T5" in main_layer_class.__name__:
                 # Take the same values than in TFT5ModelTester for this shared layer
-                shared = TFSharedEmbeddings(99, 37, name="shared")
+                shared = TFSharedEmbeddings(99, 32, name="shared")
                 main_layer = main_layer_class(config, embed_tokens=shared)
             else:
                 main_layer = main_layer_class(config)
