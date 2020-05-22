@@ -406,6 +406,7 @@ if is_tf_available():
     from .modeling_tf_camembert import (
         TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFCamembertForMaskedLM,
+        TFCamembertModel,
         TFCamembertForMultipleChoice,
         TFCamembertForQuestionAnswering,
         TFCamembertForSequenceClassification,

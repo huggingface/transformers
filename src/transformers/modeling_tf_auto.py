@@ -744,11 +744,13 @@ class TFAutoModelWithLMHead(object):
 
         """
         config = kwargs.pop("config", None)
+
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         for config_class, model_class in TF_MODEL_WITH_LM_HEAD_MAPPING.items():
-            if isinstance(config, config_class):
+            # Not using isinstance() here to do not take into account inheritance
+            if config_class == type(config):
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
