@@ -175,9 +175,7 @@ class ModuleUtilsMixin:
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    def get_head_mask(
-        self, head_mask: Tensor, num_hidden_layers: int, is_attention_chunked: Optional[bool] = False
-    ) -> Tensor:
+    def get_head_mask(self, head_mask: Tensor, num_hidden_layers: int, is_attention_chunked: bool = False) -> Tensor:
         """
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
