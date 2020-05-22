@@ -184,7 +184,7 @@ class BatchEncoding(UserDict):
             encoding = [encoding]
 
         self._encodings = encoding
-        self._is_fast = self._encodings is not None
+        self._fast = encoding is not None
 
     @property
     def is_fast(self):
@@ -193,7 +193,7 @@ class BatchEncoding(UserDict):
         Returns: True if generated from subclasses of PreTrainedTokenizerFast, else otherwise
 
         """
-        return self._is_fast
+        return self._encodings is not None
 
     def __getitem__(self, item: Union[int, str]) -> EncodingFast:
         """ If the key is a string, get the value of the dict associated to `key` ('input_ids', 'attention_mask'...)
