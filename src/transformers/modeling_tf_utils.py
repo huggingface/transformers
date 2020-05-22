@@ -107,7 +107,7 @@ def keras_serializable(cls):
 
 
 class TFQuestionAnsweringLoss:
-    def compute_loss(labels, logits):
+    def compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
         start_loss = loss_fn(labels["start_position"], logits[0])
         end_loss = loss_fn(labels["end_position"], logits[1])
@@ -116,7 +116,7 @@ class TFQuestionAnsweringLoss:
 
 
 class TFTokenClassificationLoss:
-    def compute_loss(labels, logits):
+    def compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
         active_loss = tf.reshape(labels, (-1,)) != -1
         reduced_logits = tf.boolean_mask(tf.reshape(logits[0], (-1, shape_list(logits[0])[2])), active_loss)
@@ -126,7 +126,7 @@ class TFTokenClassificationLoss:
 
 
 class TFSequenceClassificationAndMultipleChoiceLoss:
-    def compute_loss(labels, logits):
+    def compute_loss(self, labels, logits):
         if shape_list(logits[0])[2] == 1:
             loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         else:

@@ -8,7 +8,7 @@ from typing import Callable, Dict, Optional
 import numpy as np
 import tensorflow as tf
 
-from .modeling_tf_utils import TFPreTrainedModel, shape_list
+from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput
 from .training_args_tf import TFTrainingArguments
@@ -20,9 +20,6 @@ logger = logging.getLogger(__name__)
 class TFTrainer:
     model: TFPreTrainedModel
     args: TFTrainingArguments
-    # something similar to a PT Dataset.
-    # This is just temporary before to have
-    # a framework-agnostic approach for datasets.
     train_dataset: Optional[tf.data.Dataset]
     eval_dataset: Optional[tf.data.Dataset]
     compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None
