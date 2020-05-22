@@ -434,7 +434,7 @@ class SummarizationDistiller(SummarizationTrainer):
             "--student_encoder_layers", default=12, type=int, required=False,
         )
         parser.add_argument(
-            "--distilled_ds", action="store_true", default=False,
+            "--no_teacher", action="store_true", default=False,
         )
 
         return parser
@@ -444,11 +444,15 @@ def main(args):
     if not args.output_dir:
         args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
         os.makedirs(args.output_dir)
-    module_cls = SummarizationTrainer if args.distilled_ds else SummarizationDistiller
+    module_cls = SummarizationTrainer if args.no_teacher else SummarizationDistiller
     model: SummarizationTrainer = module_cls(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
-    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
-    model = model.load_from_checkpoint(checkpoints[-1])
+    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"),
+                                        recursive=True)))
+    if checkpoints:
+        model = model.load_from_checkpoint(checkpoints[-1])
+    #if not args.do_train:
+
     trainer.test(model)
     # model.metrics_df.to_csv(Path(model.output_dir)/'metrics.csv')
 

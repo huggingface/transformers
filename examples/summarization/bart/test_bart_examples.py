@@ -30,7 +30,7 @@ CHEAP_ARGS = {
     "val_check_interval": 1.0,
     "output_dir": "",
     "fp16": False,
-    "distilled_ds": False,
+    "no_teacher": False,
     "fp16_opt_level": "O1",
     "n_gpu": 0,
     "n_tpu_cores": 0,
@@ -122,7 +122,7 @@ class TestBartExamples(unittest.TestCase):
             train_batch_size=2,
             eval_batch_size=2,
             num_train_epochs=2,
-            distilled_ds=True,
+            no_teacher=True,
             tgt_suffix=".pseudo",
             output_dir=output_dir,
         )
