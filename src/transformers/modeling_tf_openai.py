@@ -66,7 +66,6 @@ ACT_FNS = {
 class TFAttention(tf.keras.layers.Layer):
     def __init__(self, nx, n_ctx, config, scale=False, **kwargs):
         super().__init__(**kwargs)
-        self.output_attentions = config.output_attentions
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
@@ -95,7 +94,7 @@ class TFAttention(tf.keras.layers.Layer):
         m = i >= j - ns + nd
         return tf.cast(m, dtype)
 
-    def _attn(self, inputs, training=False):
+    def _attn(self, inputs, training=False, output_attentions=False):
         q, k, v, attention_mask, head_mask = inputs
         # q, k, v have shape [batch, heads, sequence, features]
         w = tf.matmul(q, k, transpose_b=True)
@@ -121,7 +120,7 @@ class TFAttention(tf.keras.layers.Layer):
             w = w * head_mask
 
         outputs = [tf.matmul(w, v)]
-        if self.output_attentions:
+        if output_attentions:
             outputs.append(w)
         return outputs
 
@@ -137,7 +136,7 @@ class TFAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, new_x_shape)
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         x, attention_mask, head_mask = inputs
 
         x = self.c_attn(x)
@@ -146,7 +145,7 @@ class TFAttention(tf.keras.layers.Layer):
         key = self.split_heads(key)
         value = self.split_heads(value)
 
-        attn_outputs = self._attn([query, key, value, attention_mask, head_mask], training=training)
+        attn_outputs = self._attn([query, key, value, attention_mask, head_mask], training=training, output_attentions=output_attentions)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -200,7 +199,6 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         self.output_hidden_states = config.output_hidden_states
-        self.output_attentions = config.output_attentions
         self.num_hidden_layers = config.n_layer
         self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
@@ -238,6 +236,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         inputs_embeds=None,
         training=False,
+        output_attentions=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -324,7 +323,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
 
             outputs = block([hidden_states, attention_mask, head_mask[i]], training=training)
             hidden_states = outputs[0]
-            if self.output_attentions:
+            if output_attentions:
                 all_attentions.append(outputs[1])
 
         hidden_states = tf.reshape(hidden_states, output_shape)
@@ -335,7 +334,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         outputs = (hidden_states,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
@@ -442,7 +441,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -490,7 +489,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -571,7 +570,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 

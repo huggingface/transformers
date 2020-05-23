@@ -103,7 +103,6 @@ class TFT5Attention(tf.keras.layers.Layer):
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
 
-        self.output_attentions = config.output_attentions
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.d_model = config.d_model
         self.d_kv = config.d_kv
@@ -196,6 +195,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         query_length=None,
         use_cache=False,
         training=False,
+        output_attentions=False,
     ):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
@@ -291,7 +291,7 @@ class TFT5Attention(tf.keras.layers.Layer):
 
         outputs = (context,) + present_key_value_state
 
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (weights,)
         if self.has_relative_attention_bias:
             outputs = outputs + (position_bias,)
@@ -504,7 +504,6 @@ class _NoLayerEmbedTokens(object):
 class TFT5MainLayer(tf.keras.layers.Layer):
     def __init__(self, config, embed_tokens=None, **kwargs):
         super().__init__(**kwargs)
-        self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
         self.embed_tokens = embed_tokens
@@ -546,6 +545,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         past_key_value_states=None,
         use_cache=False,
         training=False,
+        output_attentions=False,
     ):
 
         if inputs is not None and inputs_embeds is not None:
@@ -680,13 +680,13 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             if i == 0:
                 # We share the position biases between the layers - the first layer store them
                 # layer_outputs = hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-                position_bias = layer_outputs[3 if self.output_attentions else 2]
+                position_bias = layer_outputs[3 if output_attentions else 2]
                 if self.is_decoder and encoder_hidden_states is not None:
-                    encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 3]
+                    encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
             # append next layer key value states
             present_key_value_states = present_key_value_states + (present_key_value_state,)
 
-            if self.output_attentions:
+            if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)
 
         hidden_states = self.final_layer_norm(hidden_states)
@@ -702,7 +702,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             outputs = outputs + (present_key_value_states,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
@@ -872,7 +872,7 @@ class TFT5Model(TFT5PreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` (one for each layer) of shape
                 :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -994,7 +994,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 

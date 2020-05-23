@@ -1528,8 +1528,7 @@ class ReformerModel(ReformerPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
 
-        # TODO(PVP): delete when PR to change output_attentions is made
-        do_output_attentions = self.config.output_attentions
+
         do_output_hidden_states = self.config.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:

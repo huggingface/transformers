@@ -277,7 +277,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
         return x
 
-    def forward(self, w, r, attn_mask=None, mems=None, head_mask=None):
+    def forward(self, w, r, attn_mask=None, mems=None, head_mask=None, output_attentions=False):
         qlen, rlen, bsz = w.size(0), r.size(0), w.size(1)
 
         if mems is not None:
@@ -360,7 +360,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
             # residual connection + layer normalization
             outputs = [self.layer_norm(w + attn_out)]
 
-        if self.output_attentions:
+        if output_attentions:
             outputs.append(attn_prob)
 
         return outputs
@@ -552,7 +552,7 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
 class TransfoXLModel(TransfoXLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.output_attentions = config.output_attentions
+        self.output_attentions = False
         self.output_hidden_states = config.output_hidden_states
 
         self.n_token = config.vocab_size
@@ -670,7 +670,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         return new_mems
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None):
+    def forward(self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None, output_attentions=False):
         r"""
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
@@ -685,7 +685,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -775,7 +775,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                     core_out, pos_emb, dec_attn_mask=dec_attn_mask, mems=mems_i, head_mask=head_mask[i]
                 )
                 core_out = layer_outputs[0]
-                if self.output_attentions:
+                if output_attentions:
                     attentions.append(layer_outputs[1])
         else:  # learnable embeddings and absolute embeddings
             raise NotImplementedError  # Removed these to avoid maintaining dead code - They are not used in our pretrained checkpoint
@@ -791,7 +791,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             hids.append(core_out)
             hids = list(t.transpose(0, 1).contiguous() for t in hids)
             outputs.append(hids)
-        if self.output_attentions:
+        if output_attentions:
             # Transpose to library standard shape [bsz, n_heads, query_seq_len, key_seq_len]
             attentions = list(t.permute(2, 3, 0, 1).contiguous() for t in attentions)
             outputs.append(attentions)
@@ -872,7 +872,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 

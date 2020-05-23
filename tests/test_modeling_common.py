@@ -130,7 +130,6 @@ class ModelTesterMixin:
             encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
-            config.output_attentions = True
             config.output_hidden_states = False
             model = model_class(config)
             model.to(torch_device)
@@ -138,7 +137,6 @@ class ModelTesterMixin:
             with torch.no_grad():
                 outputs = model(**inputs_dict)
             attentions = outputs[-1]
-            self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
@@ -172,7 +170,6 @@ class ModelTesterMixin:
                 )
 
             # Check attention is always last and order is fine
-            config.output_attentions = True
             config.output_hidden_states = True
             model = model_class(config)
             model.to(torch_device)
@@ -180,7 +177,6 @@ class ModelTesterMixin:
             with torch.no_grad():
                 outputs = model(**inputs_dict)
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
-            self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, True)
 
             self_attentions = outputs[-1]
@@ -199,12 +195,6 @@ class ModelTesterMixin:
     def test_torchscript(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        self._create_and_check_torchscript(config, inputs_dict)
-
-    def test_torchscript_output_attentions(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        config.output_attentions = True
         self._create_and_check_torchscript(config, inputs_dict)
 
     def test_torchscript_output_hidden_state(self):
@@ -270,7 +260,6 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         global_rng.seed()
 
-        config.output_attentions = True
         config.output_hidden_states = True
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         for model_class in self.all_model_classes:
@@ -326,7 +315,6 @@ class ModelTesterMixin:
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
 
-            config.output_attentions = True
             config.output_hidden_states = False
             model = model_class(config=config)
             model.to(torch_device)
@@ -355,7 +343,6 @@ class ModelTesterMixin:
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
 
-            config.output_attentions = True
             config.output_hidden_states = False
             model = model_class(config=config)
             model.to(torch_device)
@@ -388,7 +375,6 @@ class ModelTesterMixin:
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
 
-            config.output_attentions = True
             config.output_hidden_states = False
 
             heads_to_prune = {
@@ -419,7 +405,6 @@ class ModelTesterMixin:
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
 
-            config.output_attentions = True
             config.output_hidden_states = False
 
             heads_to_prune = {0: [0], 1: [1, 2]}
@@ -471,14 +456,12 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
-            config.output_attentions = False
             model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**inputs_dict)
             hidden_states = outputs[-1]
-            self.assertEqual(model.config.output_attentions, False)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
 
@@ -838,7 +821,6 @@ class ModelUtilsTest(unittest.TestCase):
 
             config = BertConfig.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
             model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
-            self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(model.config, config)
 

@@ -148,7 +148,6 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads)
             )
-        self.output_attentions = config.output_attentions
 
         self.num_attention_heads = config.num_attention_heads
         assert config.hidden_size % config.num_attention_heads == 0
@@ -171,7 +170,7 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         hidden_states, attention_mask, head_mask = inputs
 
         batch_size = shape_list(hidden_states)[0]
@@ -212,7 +211,7 @@ class TFAlbertSelfAttention(tf.keras.layers.Layer):
             context_layer, (batch_size, -1, self.all_head_size)
         )  # (batch_size, seq_len_q, all_head_size)
 
-        outputs = (context_layer, attention_probs) if self.output_attentions else (context_layer,)
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
 
 
@@ -289,7 +288,7 @@ class TFAlbertAttention(TFBertSelfAttention):
             context_layer, (batch_size, -1, self.all_head_size)
         )  # (batch_size, seq_len_q, all_head_size)
 
-        self_outputs = (context_layer, attention_probs) if self.output_attentions else (context_layer,)
+        self_outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         hidden_states = self_outputs[0]
 
@@ -344,13 +343,12 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.albert_layers = [
             TFAlbertLayer(config, name="albert_layers_._{}".format(i)) for i in range(config.inner_group_num)
         ]
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         hidden_states, attention_mask, head_mask = inputs
 
         layer_hidden_states = ()
@@ -360,7 +358,7 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
             layer_output = albert_layer([hidden_states, attention_mask, head_mask[layer_index]], training=training)
             hidden_states = layer_output[0]
 
-            if self.output_attentions:
+            if output_attentions:
                 layer_attentions = layer_attentions + (layer_output[1],)
 
             if self.output_hidden_states:
@@ -369,7 +367,7 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
         outputs = (hidden_states,)
         if self.output_hidden_states:
             outputs = outputs + (layer_hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (layer_attentions,)
         # last-layer hidden state, (layer hidden states), (layer attentions)
         return outputs
@@ -380,7 +378,6 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.config = config
-        self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.embedding_hidden_mapping_in = tf.keras.layers.Dense(
             config.hidden_size,
@@ -392,7 +389,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
             for i in range(config.num_hidden_groups)
         ]
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         hidden_states, attention_mask, head_mask = inputs
 
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
@@ -418,7 +415,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
             )
             hidden_states = layer_group_output[0]
 
-            if self.output_attentions:
+            if output_attentions:
                 all_attentions = all_attentions + layer_group_output[-1]
 
             if self.output_hidden_states:
@@ -427,7 +424,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
         outputs = (hidden_states,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (all_attentions,)
 
         # last-layer hidden state, (all hidden states), (all attentions)
@@ -695,7 +692,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
                 of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
                 tuple of :obj:`tf.Tensor` (one for each layer) of shape
                 :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
@@ -747,7 +744,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
@@ -807,7 +804,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
@@ -864,7 +861,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
@@ -922,7 +919,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
@@ -1006,7 +1003,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 

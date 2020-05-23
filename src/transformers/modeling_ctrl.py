@@ -98,7 +98,7 @@ class MultiHeadAttention(torch.nn.Module):
         x = x.reshape(batch_size, -1, self.num_heads, self.depth)
         return x.permute([0, 2, 1, 3])
 
-    def forward(self, v, k, q, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
+    def forward(self, v, k, q, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False):
         batch_size = q.shape[0]
 
         q = self.Wq(q)
@@ -125,7 +125,7 @@ class MultiHeadAttention(torch.nn.Module):
         output = self.dense(original_size_attention)
 
         outputs = (output, present)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (attn,)
         return outputs
 
@@ -264,7 +264,7 @@ class CTRLModel(CTRLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.output_hidden_states = config.output_hidden_states
-        self.output_attentions = config.output_attentions
+        self.output_attentions = False
 
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
@@ -276,7 +276,7 @@ class CTRLModel(CTRLPreTrainedModel):
         self.dropout = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList(
             [
-                EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop, config.output_attentions)
+                EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop, self.output_attentions)
                 for _ in range(config.n_layer)
             ]
         )
@@ -308,6 +308,7 @@ class CTRLModel(CTRLPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
+        output_attentions=False,
     ):
         r"""
     Return:
@@ -322,7 +323,7 @@ class CTRLModel(CTRLPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -439,7 +440,7 @@ class CTRLModel(CTRLPreTrainedModel):
             if use_cache is True:
                 presents = presents + (present,)
 
-            if self.output_attentions:
+            if output_attentions:
                 all_attentions.append(outputs[2])
 
         hidden_states = self.layernorm(hidden_states)
@@ -452,7 +453,7 @@ class CTRLModel(CTRLPreTrainedModel):
             outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + (-1,) + all_attentions[0].shape[-2:]
             all_attentions = tuple(t.view(*attention_output_shape) for t in all_attentions)
@@ -518,7 +519,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 

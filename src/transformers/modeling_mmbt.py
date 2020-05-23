@@ -165,7 +165,7 @@ class MMBTModel(ModuleUtilsMixin):
                 list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
                 of shape ``(batch_size, sequence_length, hidden_size)``:
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            **attentions**: (`optional`, returned when ``output_attentions=True``)
                 list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
                 Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
@@ -295,7 +295,7 @@ class MMBTForClassification(nn.Module):
                 list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
                 of shape ``(batch_size, sequence_length, hidden_size)``:
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            **attentions**: (`optional`, returned when ``output_attentions=True``)
                 list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
                 Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 

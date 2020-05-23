@@ -175,7 +175,6 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         self.n_heads = config.n_heads
         self.dim = config.dim
         self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
-        self.output_attentions = config.output_attentions
 
         assert self.dim % self.n_heads == 0
 
@@ -197,7 +196,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         """
         Parameters
         ----------
@@ -252,7 +251,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         context = unshape(context)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
 
-        if self.output_attentions:
+        if output_attentions:
             return (context, weights)
         else:
             return (context,)
@@ -292,7 +291,6 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         self.hidden_dim = config.hidden_dim
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.activation = config.activation
-        self.output_attentions = config.output_attentions
 
         assert config.dim % config.n_heads == 0
 
@@ -320,7 +318,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
 
         # Self-Attention
         sa_output = self.attention([x, x, x, attn_mask, head_mask], training=training)
-        if self.output_attentions:
+        if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attention` or `output_hidden_states` cases returning tuples
             # assert type(sa_output) == tuple
@@ -332,7 +330,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         ffn_output = self.output_layer_norm(ffn_output + sa_output)  # (bs, seq_length, dim)
 
         output = (ffn_output,)
-        if self.output_attentions:
+        if output_attentions:
             output = (sa_weights,) + output
         return output
 
@@ -341,7 +339,6 @@ class TFTransformer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.n_layers = config.n_layers
-        self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
         self.layer = [TFTransformerBlock(config, name="layer_._{}".format(i)) for i in range(config.n_layers)]
@@ -379,7 +376,7 @@ class TFTransformer(tf.keras.layers.Layer):
             layer_outputs = layer_module([hidden_state, attn_mask, head_mask[i]], training=training)
             hidden_state = layer_outputs[-1]
 
-            if self.output_attentions:
+            if output_attentions:
                 assert len(layer_outputs) == 2
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
@@ -393,7 +390,7 @@ class TFTransformer(tf.keras.layers.Layer):
         outputs = (hidden_state,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
@@ -553,7 +550,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
@@ -599,7 +596,6 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.vocab_size = config.vocab_size
 
@@ -627,7 +623,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
@@ -691,7 +687,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
@@ -749,7 +745,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
@@ -808,7 +804,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
