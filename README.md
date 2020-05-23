@@ -254,6 +254,7 @@ for model_class in BERT_MODEL_CLASSES:
 Let's do a quick example of how a TensorFlow 2.0 model can be trained in 12 lines of code with 🤗 Transformers and then loaded in PyTorch for fast inspection/tests.
 
 ```python
+import torch
 import tensorflow as tf
 import tensorflow_datasets
 from transformers import *
