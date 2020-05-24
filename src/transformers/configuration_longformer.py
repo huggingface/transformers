@@ -67,3 +67,4 @@ class LongformerConfig(RobertaConfig):
     def __init__(self, attention_window: Union[List[int], int] = 512, **kwargs):
         super().__init__(**kwargs)
         self.attention_window = attention_window
+        self.sep_token_id = 2
