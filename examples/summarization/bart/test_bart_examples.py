@@ -63,7 +63,7 @@ CHEAP_ARGS = {
     "n_train": -1,
     "n_val": -1,
     "n_test": -1,
-    "student_encoder_layers": 2,
+    "student_encoder_layers": 1,
 }
 
 
