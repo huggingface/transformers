@@ -785,11 +785,18 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
     Examples::
         from transformers import LongformerTokenizer, LongformerForQuestionAnswering
         import torch
+        
         tokenizer = LongformerTokenizer.from_pretrained(longformer-base-4096')
         model = LongformerForQuestionAnswering.from_pretrained(longformer-base-4096')
+        
         question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         encoding = tokenizer.encode_plus(question, text)
-        input_ids, attention_mask = encoding["input_ids"], encoding["attention_mask"]
+        input_ids = encoding["input_ids"]
+        
+        # default is local attention everywhere
+        # the forward method will automatically set global attention on question tokens 
+        attention_mask = encoding["attention_mask"]
+
         start_scores, end_scores = model(torch.tensor([input_ids]), attention_mask=attention_mask)
         all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
         answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
