@@ -283,6 +283,8 @@ class EfficientAttentionMixin:
 class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
     def __init__(self, config):
         super().__init__()
+        self.config = config
+
         self.chunk_length = config.lsh_attn_chunk_length
         self.num_hashes = config.num_hashes
         self.num_buckets = config.num_buckets
@@ -545,6 +547,9 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             num_buckets = [2 ** (num_buckets_pow_2 // 2), 2 ** (num_buckets_pow_2 - num_buckets_pow_2 // 2)]
 
         logger.warning("config.num_buckets is not set. Setting config.num_buckets to {}...".format(num_buckets))
+
+        # set num buckets in config to be properly saved
+        self.config.num_buckets = num_buckets
         self.num_buckets = num_buckets
 
     def _attend(
