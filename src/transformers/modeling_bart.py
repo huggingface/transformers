@@ -266,9 +266,7 @@ class BartEncoder(nn.Module):
         # mbart has one extra layer_norm
         self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
-    def forward(
-        self, input_ids, attention_mask=None, output_attentions=False
-    ):
+    def forward(self, input_ids, attention_mask=None, output_attentions=False):
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
@@ -454,7 +452,7 @@ class BartDecoder(nn.Module):
         decoder_cached_states=None,
         use_cache=False,
         output_attentions=False,
-        **unused
+        **unused,
     ):
         """
         Includes several features from "Jointly Learning to Align and
@@ -901,7 +899,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         decoder_cached_states=None,
         labels=None,
         use_cache=False,
-        **unused
+        **unused,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):

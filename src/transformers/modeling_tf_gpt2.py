@@ -160,7 +160,9 @@ class TFAttention(tf.keras.layers.Layer):
         else:
             present = (None,)
 
-        attn_outputs = self._attn([query, key, value, attention_mask, head_mask], training=training, output_attentions=output_attentions)
+        attn_outputs = self._attn(
+            [query, key, value, attention_mask, head_mask], training=training, output_attentions=output_attentions
+        )
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -259,6 +261,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         use_cache=True,
         training=False,
+        output_attentions=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
