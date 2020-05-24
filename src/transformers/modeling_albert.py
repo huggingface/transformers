@@ -288,10 +288,9 @@ class AlbertLayerGroup(nn.Module):
         super().__init__()
 
         self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.albert_layers = nn.ModuleList([AlbertLayer(config) for _ in range(config.inner_group_num)])
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_hidden_states=False):
         layer_hidden_states = ()
         layer_attentions = ()
 
@@ -302,11 +301,11 @@ class AlbertLayerGroup(nn.Module):
             if self.output_attentions:
                 layer_attentions = layer_attentions + (layer_output[1],)
 
-            if self.output_hidden_states:
+            if output_hidden_states:
                 layer_hidden_states = layer_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (layer_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (layer_attentions,)
@@ -319,16 +318,15 @@ class AlbertTransformer(nn.Module):
 
         self.config = config
         self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.embedding_hidden_mapping_in = nn.Linear(config.embedding_size, config.hidden_size)
         self.albert_layer_groups = nn.ModuleList([AlbertLayerGroup(config) for _ in range(config.num_hidden_groups)])
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_hidden_states=False):
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
 
         all_attentions = ()
 
-        if self.output_hidden_states:
+        if output_hidden_states:
             all_hidden_states = (hidden_states,)
 
         for i in range(self.config.num_hidden_layers):
@@ -348,11 +346,11 @@ class AlbertTransformer(nn.Module):
             if self.output_attentions:
                 all_attentions = all_attentions + layer_group_output[-1]
 
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
@@ -493,6 +491,7 @@ class AlbertModel(AlbertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        output_hidden_states=False,
     ):
         r"""
     Return:
@@ -508,7 +507,7 @@ class AlbertModel(AlbertPreTrainedModel):
             This output is usually *not* a good summary
             of the semantic content of the input, you're often better with averaging or pooling
             the sequence of hidden-states for the whole input sequence.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -557,7 +556,9 @@ class AlbertModel(AlbertPreTrainedModel):
         embedding_output = self.embeddings(
             input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
-        encoder_outputs = self.encoder(embedding_output, extended_attention_mask, head_mask=head_mask)
+        encoder_outputs = self.encoder(
+            embedding_output, extended_attention_mask, head_mask=head_mask, output_hidden_states=output_hidden_states
+        )
 
         sequence_output = encoder_outputs[0]
 
@@ -602,6 +603,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         inputs_embeds=None,
         masked_lm_labels=None,
         sentence_order_label=None,
+        output_hidden_states=False,
     ):
         r"""
         masked_lm_labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
@@ -624,7 +626,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         sop_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, 2)`):
             Prediction scores of the next sequence prediction (classification) head (scores of True/False
             continuation before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -659,6 +661,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output, pooled_output = outputs[:2]
@@ -744,6 +747,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         masked_lm_labels=None,
+        output_hidden_states=False,
     ):
         r"""
         masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -758,7 +762,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -789,6 +793,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_hidden_states=output_hidden_states,
         )
         sequence_outputs = outputs[0]
 
@@ -829,6 +834,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_hidden_states=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -843,7 +849,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             Classification (or regression if config.num_labels==1) loss.
         logits ``torch.FloatTensor`` of shape ``(batch_size, config.num_labels)``
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -876,6 +882,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_hidden_states=output_hidden_states,
         )
 
         pooled_output = outputs[1]
@@ -924,6 +931,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_hidden_states=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -936,7 +944,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
             Classification loss.
         scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`)
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -971,6 +979,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = outputs[0]
@@ -1021,6 +1030,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        output_hidden_states=False,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1040,7 +1050,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
             Span-start scores (before SoftMax).
         end_scores: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length,)``
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1075,6 +1085,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = outputs[0]

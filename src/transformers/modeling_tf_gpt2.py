@@ -218,7 +218,6 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
-        self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.num_hidden_layers = config.n_layer
         self.vocab_size = config.vocab_size
@@ -260,6 +259,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         use_cache=True,
         training=False,
+        output_hidden_states=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -361,7 +361,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         all_attentions = []
         all_hidden_states = ()
         for i, (block, layer_past) in enumerate(zip(self.h, past)):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
             outputs = block([hidden_states, layer_past, attention_mask, head_mask[i], use_cache], training=training)
@@ -376,14 +376,14 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
         hidden_states = tf.reshape(hidden_states, output_shape)
         # Add last hidden state
-        if self.output_hidden_states:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
 
         if use_cache is True:
             outputs = outputs + (presents,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
@@ -487,7 +487,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         self.transformer = TFGPT2MainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.GPT2Config`) and inputs:
@@ -497,7 +497,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)` `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)` `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -521,7 +521,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
     """
-        outputs = self.transformer(inputs, **kwargs)
+        outputs = self.transformer(inputs, output_hidden_states=output_hidden_states, **kwargs)
         return outputs
 
 
@@ -546,7 +546,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
         return {"inputs": inputs, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(GPT2_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.GPT2Config`) and inputs:
@@ -556,7 +556,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -581,7 +581,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel):
         logits = outputs[0]
 
         """
-        transformer_outputs = self.transformer(inputs, **kwargs)
+        transformer_outputs = self.transformer(inputs, output_hidden_states=output_hidden_states, **kwargs)
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.transformer.wte(hidden_states, mode="linear")
@@ -624,6 +624,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         mc_token_ids=None,
         use_cache=True,
         training=False,
+        output_hidden_states=False,
     ):
         r"""
         mc_token_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
@@ -640,7 +641,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -728,7 +729,9 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             use_cache,
         ]
 
-        transformer_outputs = self.transformer(flat_inputs, training=training)
+        transformer_outputs = self.transformer(
+            flat_inputs, training=training, output_hidden_states=output_hidden_states
+        )
         hidden_states = transformer_outputs[0]
 
         hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])

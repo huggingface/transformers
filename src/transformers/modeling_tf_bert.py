@@ -362,16 +362,15 @@ class TFBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.layer = [TFBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, output_hidden_states=False, training=False):
         hidden_states, attention_mask, head_mask = inputs
 
         all_hidden_states = ()
         all_attentions = ()
         for i, layer_module in enumerate(self.layer):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module([hidden_states, attention_mask, head_mask[i]], training=training)
@@ -381,11 +380,11 @@ class TFBertEncoder(tf.keras.layers.Layer):
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         # Add last layer
-        if self.output_hidden_states:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
@@ -670,7 +669,7 @@ class TFBertModel(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name="bert")
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
@@ -683,7 +682,7 @@ class TFBertModel(TFBertPreTrainedModel):
             objective during Bert pretraining. This output is usually *not* a good summary
             of the semantic content of the input, you're often better with averaging or pooling
             the sequence of hidden-states for the whole input sequence.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -706,7 +705,7 @@ class TFBertModel(TFBertPreTrainedModel):
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
-        outputs = self.bert(inputs, **kwargs)
+        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
         return outputs
 
 
@@ -727,7 +726,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         return self.bert.embeddings
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
@@ -735,7 +734,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         seq_relationship_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, 2)`):
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -758,7 +757,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         prediction_scores, seq_relationship_scores = outputs[:2]
 
         """
-        outputs = self.bert(inputs, **kwargs)
+        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output, pooled_output = outputs[:2]
         prediction_scores = self.mlm(sequence_output, training=kwargs.get("training", False))
@@ -783,13 +782,13 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         return self.bert.embeddings
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -812,7 +811,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         prediction_scores = outputs[0]
 
         """
-        outputs = self.bert(inputs, **kwargs)
+        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output, training=kwargs.get("training", False))
@@ -833,13 +832,13 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         seq_relationship_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, 2)`)
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -862,7 +861,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         seq_relationship_scores = outputs[0]
 
         """
-        outputs = self.bert(inputs, **kwargs)
+        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         pooled_output = outputs[1]
         seq_relationship_score = self.nsp(pooled_output)
@@ -889,13 +888,13 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -918,7 +917,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
         logits = outputs[0]
 
         """
-        outputs = self.bert(inputs, **kwargs)
+        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         pooled_output = outputs[1]
 
@@ -964,6 +963,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         training=False,
+        output_hidden_states=False,
     ):
         r"""
     Return:
@@ -972,7 +972,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
             `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
 
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1036,7 +1036,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
             inputs_embeds,
         ]
 
-        outputs = self.bert(flat_inputs, training=training)
+        outputs = self.bert(flat_inputs, output_hidden_states=output_hidden_states, training=training)
 
         pooled_output = outputs[1]
 
@@ -1066,13 +1066,13 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1095,7 +1095,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
         scores = outputs[0]
 
         """
-        outputs = self.bert(inputs, **kwargs)
+        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output = outputs[0]
 
@@ -1123,7 +1123,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
@@ -1131,7 +1131,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1160,7 +1160,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
         assert answer == "a nice puppet"
 
         """
-        outputs = self.bert(inputs, **kwargs)
+        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output = outputs[0]
 

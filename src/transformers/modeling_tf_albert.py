@@ -345,12 +345,11 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.albert_layers = [
             TFAlbertLayer(config, name="albert_layers_._{}".format(i)) for i in range(config.inner_group_num)
         ]
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_hidden_states=False):
         hidden_states, attention_mask, head_mask = inputs
 
         layer_hidden_states = ()
@@ -363,11 +362,11 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
             if self.output_attentions:
                 layer_attentions = layer_attentions + (layer_output[1],)
 
-            if self.output_hidden_states:
+            if output_hidden_states:
                 layer_hidden_states = layer_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (layer_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (layer_attentions,)
@@ -381,7 +380,6 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
 
         self.config = config
         self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.embedding_hidden_mapping_in = tf.keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -392,13 +390,13 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
             for i in range(config.num_hidden_groups)
         ]
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_hidden_states=False):
         hidden_states, attention_mask, head_mask = inputs
 
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
         all_attentions = ()
 
-        if self.output_hidden_states:
+        if output_hidden_states:
             all_hidden_states = (hidden_states,)
 
         for i in range(self.config.num_hidden_layers):
@@ -421,11 +419,11 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
             if self.output_attentions:
                 all_attentions = all_attentions + layer_group_output[-1]
 
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
@@ -677,7 +675,8 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         self.albert = TFAlbertMainLayer(config, name="albert")
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
+
         r"""
         Returns:
             :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
@@ -690,7 +689,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
                 objective during Albert pretraining. This output is usually *not* a good summary
                 of the semantic content of the input, you're often better with averaging or pooling
                 the sequence of hidden-states for the whole input sequence.
-            hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+            hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
                 tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
                 of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -713,7 +712,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
             last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
-        outputs = self.albert(inputs, **kwargs)
+        outputs = self.albert(inputs, output_hidden_states=output_hidden_states, **kwargs)
         return outputs
 
 
@@ -735,7 +734,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         return self.albert.embeddings
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
@@ -743,7 +742,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         sop_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, 2)`):
             Prediction scores of the sentence order prediction (classification) head (scores of True/False continuation before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
@@ -761,7 +760,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         prediction_scores, sop_scores = outputs[:2]
         """
 
-        outputs = self.albert(inputs, **kwargs)
+        outputs = self.albert(inputs, output_hidden_states=output_hidden_states, **kwargs)
         sequence_output, pooled_output = outputs[:2]
         prediction_scores = self.predictions(sequence_output)
         sop_scores = self.sop_classifier(pooled_output, training=kwargs.get("training", False))
@@ -796,13 +795,13 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
         return self.albert.embeddings
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -825,7 +824,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
         prediction_scores = outputs[0]
 
         """
-        outputs = self.albert(inputs, **kwargs)
+        outputs = self.albert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output = outputs[0]
         prediction_scores = self.predictions(sequence_output, training=kwargs.get("training", False))
@@ -853,13 +852,13 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`)
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -882,7 +881,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
         logits = outputs[0]
 
         """
-        outputs = self.albert(inputs, **kwargs)
+        outputs = self.albert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         pooled_output = outputs[1]
 
@@ -909,7 +908,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
@@ -917,7 +916,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -945,7 +944,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
         answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
 
         """
-        outputs = self.albert(inputs, **kwargs)
+        outputs = self.albert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output = outputs[0]
 
@@ -993,6 +992,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         training=False,
+        output_hidden_states=False,
     ):
         r"""
     Return:
@@ -1001,7 +1001,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
             `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
 
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1070,7 +1070,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
             inputs_embeds,
         ]
 
-        outputs = self.albert(flat_inputs, training=training)
+        outputs = self.albert(flat_inputs, output_hidden_states=output_hidden_states, training=training)
 
         pooled_output = outputs[1]
 

@@ -302,7 +302,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         self.ffn = TFFFN(config, name="ffn")
         self.output_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="output_layer_norm")
 
-    def call(self, inputs, training=False):  # removed: src_enc=None, src_len=None
+    def call(self, inputs, training=False, output_hidden_states=False):  # removed: src_enc=None, src_len=None
         """
         Parameters
         ----------
@@ -342,11 +342,10 @@ class TFTransformer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.n_layers = config.n_layers
         self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
 
         self.layer = [TFTransformerBlock(config, name="layer_._{}".format(i)) for i in range(config.n_layers)]
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_hidden_states=False):
         """
         Parameters
         ----------
@@ -373,7 +372,7 @@ class TFTransformer(tf.keras.layers.Layer):
 
         hidden_state = x
         for i, layer_module in enumerate(self.layer):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
             layer_outputs = layer_module([hidden_state, attn_mask, head_mask[i]], training=training)
@@ -387,11 +386,11 @@ class TFTransformer(tf.keras.layers.Layer):
                 assert len(layer_outputs) == 1
 
         # Add last layer
-        if self.output_hidden_states:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_state,)
 
         outputs = (hidden_state,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
@@ -542,13 +541,13 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")  # Embeddings
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -570,7 +569,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
-        outputs = self.distilbert(inputs, **kwargs)
+        outputs = self.distilbert(inputs, output_hidden_states=output_hidden_states, **kwargs)
         return outputs
 
 
@@ -600,7 +599,6 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.vocab_size = config.vocab_size
 
         self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
@@ -615,14 +613,14 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         return self.vocab_projector.input_embeddings
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
 
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -645,7 +643,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         prediction_scores = outputs[0]
 
         """
-        distilbert_output = self.distilbert(inputs, **kwargs)
+        distilbert_output = self.distilbert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         hidden_states = distilbert_output[0]  # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
@@ -680,13 +678,13 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
         self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -709,7 +707,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
         logits = outputs[0]
 
         """
-        distilbert_output = self.distilbert(inputs, **kwargs)
+        distilbert_output = self.distilbert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         hidden_state = distilbert_output[0]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
@@ -738,13 +736,13 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -766,7 +764,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
         outputs = model(input_ids)
         scores = outputs[0]
         """
-        outputs = self.distilbert(inputs, **kwargs)
+        outputs = self.distilbert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output = outputs[0]
 
@@ -795,7 +793,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
@@ -803,7 +801,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -826,7 +824,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
         start_scores, end_scores = outputs[:2]
 
         """
-        distilbert_output = self.distilbert(inputs, **kwargs)
+        distilbert_output = self.distilbert(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         hidden_states = distilbert_output[0]  # (bs, max_query_len, dim)
         hidden_states = self.dropout(hidden_states, training=kwargs.get("training", False))  # (bs, max_query_len, dim)

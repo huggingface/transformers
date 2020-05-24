@@ -543,6 +543,7 @@ class LongformerModel(RobertaModel):
         position_ids=None,
         inputs_embeds=None,
         masked_lm_labels=None,
+        output_hidden_states=False,
     ):
         r"""
 
@@ -552,7 +553,7 @@ class LongformerModel(RobertaModel):
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -610,6 +611,7 @@ class LongformerModel(RobertaModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
+            output_hidden_states=output_hidden_states,
         )
 
         # undo padding
@@ -647,6 +649,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
         position_ids=None,
         inputs_embeds=None,
         masked_lm_labels=None,
+        output_hidden_states=False,
     ):
         r"""
         masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -661,7 +664,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -695,6 +698,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_hidden_states=output_hidden_states,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)

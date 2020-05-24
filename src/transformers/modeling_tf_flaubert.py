@@ -129,6 +129,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         head_mask=None,
         inputs_embeds=None,
         training=False,
+        output_hidden_states=False,
     ):
         # removed: src_enc=None, src_len=None
         if isinstance(inputs, (tuple, list)):
@@ -243,7 +244,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             if training and (dropout_probability < self.layerdrop):
                 continue
 
-            if self.output_hidden_states:
+            if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
@@ -284,7 +285,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             tensor = tensor * mask[..., tf.newaxis]
 
         # Add last hidden state
-        if self.output_hidden_states:
+        if output_hidden_states:
             hidden_states = hidden_states + (tensor,)
 
         # update cache length
@@ -295,7 +296,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         # tensor = tensor.transpose(0, 1)
 
         outputs = (tensor,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (hidden_states,)
         if self.output_attentions:
             outputs = outputs + (attentions,)

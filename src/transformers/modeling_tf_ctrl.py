@@ -185,7 +185,6 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
 
         self.d_model_size = config.n_embd
@@ -235,6 +234,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         use_cache=True,
         training=False,
+        output_hidden_states=False,
     ):
 
         if isinstance(inputs, (tuple, list)):
@@ -344,7 +344,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         all_hidden_states = ()
         all_attentions = []
         for i, (h, layer_past) in enumerate(zip(self.h, past)):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
             outputs = h([hidden_states, mask, layer_past, attention_mask, head_mask[i], use_cache], training=training)
             hidden_states, present = outputs[:2]
@@ -357,13 +357,13 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
         hidden_states = self.layernorm(hidden_states)
         hidden_states = tf.reshape(hidden_states, output_shape)
-        if self.output_hidden_states:
+        if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         if use_cache is True:
             outputs = outputs + (presents,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             # let the number of heads free (-1) so we can extract attention even after head pruning
@@ -472,7 +472,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         self.transformer = TFCTRLMainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.CTRLConfig`) and inputs:
@@ -482,7 +482,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)` `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)` `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -506,7 +506,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
-        outputs = self.transformer(inputs, **kwargs)
+        outputs = self.transformer(inputs, output_hidden_states=output_hidden_states, **kwargs)
         return outputs
 
 
@@ -552,7 +552,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
         return {"inputs": inputs, "past": past, "use_cache": kwargs["use_cache"]}
 
     @add_start_docstrings_to_callable(CTRL_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.CTRLConfig`) and inputs:
@@ -562,7 +562,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -587,7 +587,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel):
         loss, logits = outputs[:2]
 
         """
-        transformer_outputs = self.transformer(inputs, **kwargs)
+        transformer_outputs = self.transformer(inputs, output_hidden_states=output_hidden_states, **kwargs)
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)

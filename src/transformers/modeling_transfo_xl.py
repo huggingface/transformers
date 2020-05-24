@@ -553,7 +553,6 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
 
         self.n_token = config.vocab_size
 
@@ -670,7 +669,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         return new_mems
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None):
+    def forward(self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None, output_hidden_states=False):
         r"""
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
@@ -680,7 +679,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -786,7 +785,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
 
         # We transpose back here to shape [bsz, len, hidden_dim]
         outputs = [core_out.transpose(0, 1).contiguous(), new_mems]
-        if self.output_hidden_states:
+        if output_hidden_states:
             # Add last layer and transpose to library standard shape [bsz, len, hidden_dim]
             hids.append(core_out)
             hids = list(t.transpose(0, 1).contiguous() for t in hids)
@@ -848,7 +847,9 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         return self.transformer.init_mems(bsz)
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None, labels=None):
+    def forward(
+        self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None, labels=None, output_hidden_states=False
+    ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for language modeling.
@@ -867,7 +868,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -898,7 +899,9 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        transformer_outputs = self.transformer(input_ids, mems=mems, head_mask=head_mask, inputs_embeds=inputs_embeds)
+        transformer_outputs = self.transformer(
+            input_ids, mems=mems, head_mask=head_mask, inputs_embeds=inputs_embeds, output_hidden_states=False
+        )
 
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]

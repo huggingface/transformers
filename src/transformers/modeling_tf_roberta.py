@@ -185,7 +185,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
         self.roberta = TFRobertaMainLayer(config, name="roberta")
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
@@ -198,7 +198,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
             objective during Bert pretraining. This output is usually *not* a good summary
             of the semantic content of the input, you're often better with averaging or pooling
             the sequence of hidden-states for the whole input sequence.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -221,7 +221,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
-        outputs = self.roberta(inputs, **kwargs)
+        outputs = self.roberta(inputs, output_hidden_states=output_hidden_states, **kwargs)
         return outputs
 
 
@@ -268,13 +268,13 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
         return self.lm_head.decoder
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -297,7 +297,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel):
         prediction_scores = outputs[0]
 
         """
-        outputs = self.roberta(inputs, **kwargs)
+        outputs = self.roberta(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
@@ -346,13 +346,13 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
         self.classifier = TFRobertaClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -376,7 +376,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel):
         logits = outputs[0]
 
         """
-        outputs = self.roberta(inputs, **kwargs)
+        outputs = self.roberta(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output, training=kwargs.get("training", False))
@@ -403,13 +403,13 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -432,7 +432,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel):
         scores = outputs[0]
 
         """
-        outputs = self.roberta(inputs, **kwargs)
+        outputs = self.roberta(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output = outputs[0]
 
@@ -459,7 +459,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
@@ -467,7 +467,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel):
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`output_hidden_states=True`):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -495,7 +495,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel):
         answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
 
         """
-        outputs = self.roberta(inputs, **kwargs)
+        outputs = self.roberta(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output = outputs[0]
 

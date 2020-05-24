@@ -201,7 +201,6 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
 
         # encoder / decoder, output layer
         self.is_encoder = config.is_encoder
@@ -313,6 +312,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         inputs_embeds=None,
         training=False,
+        output_hidden_states=False,
     ):  # removed: src_enc=None, src_len=None
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -421,7 +421,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         hidden_states = ()
         attentions = ()
         for i in range(self.n_layers):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
@@ -446,7 +446,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             tensor = tensor * mask[..., tf.newaxis]
 
         # Add last hidden state
-        if self.output_hidden_states:
+        if output_hidden_states:
             hidden_states = hidden_states + (tensor,)
 
         # update cache length
@@ -457,7 +457,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         # tensor = tensor.transpose(0, 1)
 
         outputs = (tensor,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (hidden_states,)
         if self.output_attentions:
             outputs = outputs + (attentions,)
@@ -577,13 +577,13 @@ class TFXLMModel(TFXLMPreTrainedModel):
         self.transformer = TFXLMMainLayer(config, name="transformer")
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -607,7 +607,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
-        outputs = self.transformer(inputs, **kwargs)
+        outputs = self.transformer(inputs, output_hidden_states=output_hidden_states, **kwargs)
         return outputs
 
 
@@ -673,13 +673,13 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         return {"inputs": inputs, "langs": langs}
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         prediction_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -703,7 +703,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
-        transformer_outputs = self.transformer(inputs, **kwargs)
+        transformer_outputs = self.transformer(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         output = transformer_outputs[0]
         outputs = self.pred_layer(output)
@@ -726,13 +726,13 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
         self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         logits (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -757,7 +757,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel):
         logits = outputs[0]
 
         """
-        transformer_outputs = self.transformer(inputs, **kwargs)
+        transformer_outputs = self.transformer(inputs, output_hidden_states=output_hidden_states, **kwargs)
         output = transformer_outputs[0]
 
         logits = self.sequence_summary(output)
@@ -780,7 +780,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(XLM_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, output_hidden_states=False, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
@@ -788,7 +788,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
             Span-start scores (before SoftMax).
         end_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -812,7 +812,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel):
         start_scores, end_scores = outputs[:2]
 
         """
-        transformer_outputs = self.transformer(inputs, **kwargs)
+        transformer_outputs = self.transformer(inputs, output_hidden_states=output_hidden_states, **kwargs)
 
         sequence_output = transformer_outputs[0]
 
