@@ -98,7 +98,18 @@ class MultiHeadAttention(torch.nn.Module):
         x = x.reshape(batch_size, -1, self.num_heads, self.depth)
         return x.permute([0, 2, 1, 3])
 
-    def forward(self, v, k, q, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False):
+    def forward(
+        self,
+        v,
+        k,
+        q,
+        mask,
+        layer_past=None,
+        attention_mask=None,
+        head_mask=None,
+        use_cache=False,
+        output_attentions=False,
+    ):
         batch_size = q.shape[0]
 
         q = self.Wq(q)

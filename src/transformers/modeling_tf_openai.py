@@ -145,7 +145,9 @@ class TFAttention(tf.keras.layers.Layer):
         key = self.split_heads(key)
         value = self.split_heads(value)
 
-        attn_outputs = self._attn([query, key, value, attention_mask, head_mask], training=training, output_attentions=output_attentions)
+        attn_outputs = self._attn(
+            [query, key, value, attention_mask, head_mask], training=training, output_attentions=output_attentions
+        )
         a = attn_outputs[0]
 
         a = self.merge_heads(a)

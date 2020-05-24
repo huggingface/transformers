@@ -216,7 +216,6 @@ class TransformerBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-
         assert config.dim % config.n_heads == 0
 
         self.attention = MultiHeadSelfAttention(config)

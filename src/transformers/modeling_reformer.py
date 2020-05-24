@@ -1528,7 +1528,6 @@ class ReformerModel(ReformerPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
 
-
         do_output_hidden_states = self.config.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:

@@ -249,7 +249,17 @@ class XLNetRelativeAttention(nn.Module):
 
         return x
 
-    def rel_attn_core(self, q_head, k_head_h, v_head_h, k_head_r, seg_mat=None, attn_mask=None, head_mask=None, output_attentions=False):
+    def rel_attn_core(
+        self,
+        q_head,
+        k_head_h,
+        v_head_h,
+        k_head_r,
+        seg_mat=None,
+        attn_mask=None,
+        head_mask=None,
+        output_attentions=False,
+    ):
         """Core relative positional attention operations."""
 
         # content based attention score
@@ -303,7 +313,19 @@ class XLNetRelativeAttention(nn.Module):
 
         return output
 
-    def forward(self, h, g, attn_mask_h, attn_mask_g, r, seg_mat, mems=None, target_mapping=None, head_mask=None, output_attentions=False):
+    def forward(
+        self,
+        h,
+        g,
+        attn_mask_h,
+        attn_mask_g,
+        r,
+        seg_mat,
+        mems=None,
+        target_mapping=None,
+        head_mask=None,
+        output_attentions=False,
+    ):
         if g is not None:
             # Two-stream attention with relative positional encoding.
             # content based attention score
