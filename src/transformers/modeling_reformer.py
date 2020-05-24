@@ -533,12 +533,16 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
     def _set_num_buckets(self, sequence_length):
         # recommended `num_buckets` from paper
-        num_buckets = 2 * sequence_length // self.chunk_length
+        num_buckets = 2 * (sequence_length // self.chunk_length)
 
         # factorize `num_buckets` if `num_buckets` becomes too large
-        num_buckets_limit = max(int((self.max_position_embeddings // self.chunk_length) ** (0.5)), self.chunk_length,)
-        if num_buckets > 2 * num_buckets_limit:
-            num_buckets = [num_buckets_limit, num_buckets // num_buckets_limit + 1]
+        num_buckets_limit = 2 * max(
+            int((self.max_position_embeddings // self.chunk_length) ** (0.5)), self.chunk_length,
+        )
+        if num_buckets > num_buckets_limit:
+            pow_2 = num_buckets.bit_length() - 1
+            # make sure buckets are power of 2
+            num_buckets = [2 ** (pow_2 // 2), 2 ** (pow_2 - pow_2 // 2)]
 
         logger.warning("config.num_buckets is not set. Setting config.num_buckets to {}...".format(num_buckets))
         self.num_buckets = num_buckets
