@@ -96,7 +96,7 @@ class TFAttention(tf.keras.layers.Layer):
         return tf.cast(m, dtype)
 
     def _attn(self, inputs, training=False):
-        q, k, v, attention_mask, head_mask = inputs
+        q, k, v, adder, head_mask = inputs
         # q, k, v have shape [batch, heads, sequence, features]
         w = tf.matmul(q, k, transpose_b=True)
         if self.scale:
@@ -109,9 +109,9 @@ class TFAttention(tf.keras.layers.Layer):
         b = tf.reshape(b, [1, 1, nd, ns])
         w = w * b - 1e4 * (1 - b)
 
-        if attention_mask is not None:
+        if adder is not None:
             # Apply the attention mask
-            w = w + attention_mask
+            w = w + adder
 
         w = tf.nn.softmax(w, axis=-1)
         w = self.attn_dropout(w, training=training)
@@ -138,7 +138,7 @@ class TFAttention(tf.keras.layers.Layer):
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
     def call(self, inputs, training=False):
-        x, attention_mask, head_mask = inputs
+        x, adder, head_mask = inputs
 
         x = self.c_attn(x)
         query, key, value = tf.split(x, 3, axis=2)
@@ -146,7 +146,7 @@ class TFAttention(tf.keras.layers.Layer):
         key = self.split_heads(key)
         value = self.split_heads(value)
 
-        attn_outputs = self._attn([query, key, value, attention_mask, head_mask], training=training)
+        attn_outputs = self._attn([query, key, value, adder, head_mask], training=training)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -183,9 +183,9 @@ class TFBlock(tf.keras.layers.Layer):
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
 
     def call(self, inputs, training=False):
-        x, attention_mask, head_mask = inputs
+        x, adder, head_mask = inputs
 
-        output_attn = self.attn([x, attention_mask, head_mask], training=training)
+        output_attn = self.attn([x, adder, head_mask], training=training)
         a = output_attn[0]  # output_attn: a, (attentions)
 
         n = self.ln_1(x + a)
@@ -285,10 +285,10 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
 
-            attention_mask = tf.cast(attention_mask, tf.float32)
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            adder = tf.cast(attention_mask, tf.float32)
+            adder = (1.0 - adder) * -10000.0
         else:
-            attention_mask = None
+            adder = None
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -322,7 +322,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
-            outputs = block([hidden_states, attention_mask, head_mask[i]], training=training)
+            outputs = block([hidden_states, adder, head_mask[i]], training=training)
             hidden_states = outputs[0]
             if self.output_attentions:
                 all_attentions.append(outputs[1])

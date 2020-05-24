@@ -249,7 +249,7 @@ class TFAlbertAttention(TFBertSelfAttention):
         raise NotImplementedError
 
     def call(self, inputs, training=False):
-        input_tensor, attention_mask, head_mask = inputs
+        input_tensor, adder, head_mask = inputs
 
         batch_size = shape_list(input_tensor)[0]
         mixed_query_layer = self.query(input_tensor)
@@ -267,9 +267,9 @@ class TFAlbertAttention(TFBertSelfAttention):
         dk = tf.cast(shape_list(key_layer)[-1], tf.float32)
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
-        if attention_mask is not None:
+        if adder is not None:
             # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
-            attention_scores = attention_scores + attention_mask
+            attention_scores = attention_scores + adder
 
         # Normalize the attention scores to probabilities.
         attention_probs = tf.nn.softmax(attention_scores, axis=-1)
@@ -325,9 +325,9 @@ class TFAlbertLayer(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask = inputs
+        hidden_states, adder, head_mask = inputs
 
-        attention_outputs = self.attention([hidden_states, attention_mask, head_mask], training=training)
+        attention_outputs = self.attention([hidden_states, adder, head_mask], training=training)
         ffn_output = self.ffn(attention_outputs[0])
         ffn_output = self.activation(ffn_output)
         ffn_output = self.ffn_output(ffn_output)
@@ -351,13 +351,13 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
         ]
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask = inputs
+        hidden_states, adder, head_mask = inputs
 
         layer_hidden_states = ()
         layer_attentions = ()
 
         for layer_index, albert_layer in enumerate(self.albert_layers):
-            layer_output = albert_layer([hidden_states, attention_mask, head_mask[layer_index]], training=training)
+            layer_output = albert_layer([hidden_states, adder, head_mask[layer_index]], training=training)
             hidden_states = layer_output[0]
 
             if self.output_attentions:
@@ -393,7 +393,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
         ]
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask = inputs
+        hidden_states, adder, head_mask = inputs
 
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
         all_attentions = ()
@@ -411,7 +411,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
             layer_group_output = self.albert_layer_groups[group_idx](
                 [
                     hidden_states,
-                    attention_mask,
+                    adder,
                     head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
                 ],
                 training=training,
@@ -564,8 +564,8 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
 
-        extended_attention_mask = tf.cast(extended_attention_mask, tf.float32)
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        adder = tf.cast(extended_attention_mask, tf.float32)
+        adder = (1.0 - adder) * -10000.0
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -579,7 +579,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
         embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
-        encoder_outputs = self.encoder([embedding_output, extended_attention_mask, head_mask], training=training)
+        encoder_outputs = self.encoder([embedding_output, adder, head_mask], training=training)
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output[:, 0])

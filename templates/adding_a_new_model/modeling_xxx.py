@@ -362,8 +362,8 @@ class XxxModel(XxxPreTrainedModel):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        adder = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        adder = (1.0 - adder) * -10000.0
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -377,7 +377,7 @@ class XxxModel(XxxPreTrainedModel):
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
-        encoder_outputs = self.encoder(embedding_output, extended_attention_mask, head_mask=head_mask)
+        encoder_outputs = self.encoder(embedding_output, adder, head_mask=head_mask)
         sequence_output = encoder_outputs[0]
         outputs = (sequence_output,) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
 

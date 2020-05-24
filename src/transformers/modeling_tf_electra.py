@@ -180,10 +180,10 @@ class TFElectraPreTrainedModel(TFBertPreTrainedModel):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
 
-        extended_attention_mask = tf.cast(extended_attention_mask, tf.float32)
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        adder = tf.cast(extended_attention_mask, tf.float32)
+        adder = (1.0 - adder) * -10000.0
 
-        return extended_attention_mask
+        return adder
 
     def get_head_mask(self, head_mask):
         if head_mask is not None:
@@ -263,7 +263,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = tf.fill(input_shape, 0)
 
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+        adder = self.get_extended_attention_mask(attention_mask, input_shape)
         head_mask = self.get_head_mask(head_mask)
 
         hidden_states = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
@@ -271,7 +271,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states, training=training)
 
-        hidden_states = self.encoder([hidden_states, extended_attention_mask, head_mask], training=training)
+        hidden_states = self.encoder([hidden_states, adder, head_mask], training=training)
 
         return hidden_states
 

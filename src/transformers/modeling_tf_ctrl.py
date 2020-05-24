@@ -49,7 +49,7 @@ def positional_encoding(position, d_model_size):
     return pos_encoding
 
 
-def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=None):
+def scaled_dot_product_attention(q, k, v, mask, adder=None, head_mask=None):
     # calculate attention
     matmul_qk = tf.matmul(q, k, transpose_b=True)
 
@@ -59,9 +59,9 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
     if mask is not None:
         scaled_attention_logits += mask * -1e4
 
-    if attention_mask is not None:
+    if adder is not None:
         # Apply the attention mask
-        scaled_attention_logits = scaled_attention_logits + attention_mask
+        scaled_attention_logits = scaled_attention_logits + adder
 
     attention_weights = tf.nn.softmax(scaled_attention_logits, axis=-1)
 
@@ -94,7 +94,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
     def call(self, inputs, training=False):
-        v, k, q, mask, layer_past, attention_mask, head_mask, use_cache = inputs
+        v, k, q, mask, layer_past, adder, head_mask, use_cache = inputs
         batch_size = shape_list(q)[0]
 
         q = self.Wq(q)
@@ -124,7 +124,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         else:
             present = (None,)
 
-        output = scaled_dot_product_attention(q, k, v, mask, attention_mask, head_mask)
+        output = scaled_dot_product_attention(q, k, v, mask, adder, head_mask)
         scaled_attention = tf.transpose(output[0], perm=[0, 2, 1, 3])
         attn = output[1]
         original_size_attention = tf.reshape(scaled_attention, (batch_size, -1, self.d_model_size))
@@ -161,10 +161,10 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         self.dropout2 = tf.keras.layers.Dropout(rate)
 
     def call(self, inputs, training=False):
-        x, mask, layer_past, attention_mask, head_mask, use_cache = inputs
+        x, mask, layer_past, adder, head_mask, use_cache = inputs
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
-            [normed, normed, normed, mask, layer_past, attention_mask, head_mask, use_cache], training=training
+            [normed, normed, normed, mask, layer_past, adder, head_mask, use_cache], training=training
         )
         attn_output = attn_outputs[0]
         attn_output = self.dropout1(attn_output, training=training)
@@ -304,10 +304,10 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
 
-            attention_mask = tf.cast(attention_mask, tf.float32)
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            adder = tf.cast(attention_mask, tf.float32)
+            adder = (1.0 - adder) * -10000.0
         else:
-            attention_mask = None
+            adder = None
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -346,7 +346,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         for i, (h, layer_past) in enumerate(zip(self.h, past)):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
-            outputs = h([hidden_states, mask, layer_past, attention_mask, head_mask[i], use_cache], training=training)
+            outputs = h([hidden_states, mask, layer_past, adder, head_mask[i], use_cache], training=training)
             hidden_states, present = outputs[:2]
 
             if use_cache is True:

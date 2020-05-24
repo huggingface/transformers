@@ -154,7 +154,7 @@ class Attention(nn.Module):
         self.n_head = self.n_head - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def _attn(self, q, k, v, attention_mask=None, head_mask=None):
+    def _attn(self, q, k, v, adder=None, head_mask=None):
         w = torch.matmul(q, k)
         if self.scale:
             w = w / math.sqrt(v.size(-1))
@@ -163,9 +163,9 @@ class Attention(nn.Module):
         b = self.bias[:, :, : w.size(-2), : w.size(-1)]
         w = w * b + -1e4 * (1 - b)
 
-        if attention_mask is not None:
+        if adder is not None:
             # Apply the attention mask
-            w = w + attention_mask
+            w = w + adder
 
         w = nn.Softmax(dim=-1)(w)
         w = self.attn_dropout(w)
@@ -192,14 +192,14 @@ class Attention(nn.Module):
         else:
             return x.permute(0, 2, 1, 3)
 
-    def forward(self, x, attention_mask=None, head_mask=None):
+    def forward(self, x, adder=None, head_mask=None):
         x = self.c_attn(x)
         query, key, value = x.split(self.split_size, dim=2)
         query = self.split_heads(query)
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
 
-        attn_outputs = self._attn(query, key, value, attention_mask, head_mask)
+        attn_outputs = self._attn(query, key, value, adder, head_mask)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -234,8 +234,8 @@ class Block(nn.Module):
         self.mlp = MLP(4 * nx, config)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
 
-    def forward(self, x, attention_mask=None, head_mask=None):
-        attn_outputs = self.attn(x, attention_mask=attention_mask, head_mask=head_mask)
+    def forward(self, x, adder=None, head_mask=None):
+        attn_outputs = self.attn(x, adder=adder, head_mask=head_mask)
         a = attn_outputs[0]
 
         n = self.ln_1(x + a)
@@ -419,8 +419,8 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             # positions we want to attend and -10000.0 for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            adder = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+            adder = (1.0 - adder) * -10000.0
 
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
@@ -444,7 +444,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
-            outputs = block(hidden_states, attention_mask, head_mask[i])
+            outputs = block(hidden_states, adder, head_mask[i])
             hidden_states = outputs[0]
             if self.output_attentions:
                 all_attentions = all_attentions + (outputs[1],)

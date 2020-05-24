@@ -139,7 +139,7 @@ class Attention(nn.Module):
         self.n_head = self.n_head - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def _attn(self, q, k, v, attention_mask=None, head_mask=None):
+    def _attn(self, q, k, v, adder=None, head_mask=None):
         w = torch.matmul(q, k)
         if self.scale:
             w = w / (float(v.size(-1)) ** 0.5)
@@ -147,9 +147,9 @@ class Attention(nn.Module):
         mask = self.bias[:, :, ns - nd : ns, :ns]
         w = torch.where(mask.bool(), w, self.masked_bias.to(w.dtype))
 
-        if attention_mask is not None:
+        if adder is not None:
             # Apply the attention mask
-            w = w + attention_mask
+            w = w + adder
 
         w = nn.Softmax(dim=-1)(w)
         w = self.attn_dropout(w)
@@ -176,7 +176,7 @@ class Attention(nn.Module):
         else:
             return x.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
 
-    def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
+    def forward(self, x, layer_past=None, adder=None, head_mask=None, use_cache=False):
         x = self.c_attn(x)
         query, key, value = x.split(self.split_size, dim=2)
         query = self.split_heads(query)
@@ -192,7 +192,7 @@ class Attention(nn.Module):
         else:
             present = (None,)
 
-        attn_outputs = self._attn(query, key, value, attention_mask, head_mask)
+        attn_outputs = self._attn(query, key, value, adder, head_mask)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -227,11 +227,11 @@ class Block(nn.Module):
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
 
-    def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
+    def forward(self, x, layer_past=None, adder=None, head_mask=None, use_cache=False):
         output_attn = self.attn(
             self.ln_1(x),
             layer_past=layer_past,
-            attention_mask=attention_mask,
+            adder=adder,
             head_mask=head_mask,
             use_cache=use_cache,
         )
@@ -463,8 +463,8 @@ class GPT2Model(GPT2PreTrainedModel):
             # positions we want to attend and -10000.0 for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            adder = attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+            adder = (1.0 - adder) * -10000.0
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -494,7 +494,7 @@ class GPT2Model(GPT2PreTrainedModel):
             outputs = block(
                 hidden_states,
                 layer_past=layer_past,
-                attention_mask=attention_mask,
+                attention_mask=adder,
                 head_mask=head_mask[i],
                 use_cache=use_cache,
             )

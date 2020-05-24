@@ -225,7 +225,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask = inputs
+        hidden_states, adder, head_mask = inputs
 
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(hidden_states)
@@ -243,9 +243,9 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         dk = tf.cast(shape_list(key_layer)[-1], tf.float32)  # scale attention_scores
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
-        if attention_mask is not None:
+        if adder is not None:
             # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
-            attention_scores = attention_scores + attention_mask
+            attention_scores = attention_scores + adder
 
         # Normalize the attention scores to probabilities.
         attention_probs = tf.nn.softmax(attention_scores, axis=-1)
@@ -297,9 +297,9 @@ class TFBertAttention(tf.keras.layers.Layer):
         raise NotImplementedError
 
     def call(self, inputs, training=False):
-        input_tensor, attention_mask, head_mask = inputs
+        input_tensor, adder, head_mask = inputs
 
-        self_outputs = self.self_attention([input_tensor, attention_mask, head_mask], training=training)
+        self_outputs = self.self_attention([input_tensor, adder, head_mask], training=training)
         attention_output = self.dense_output([self_outputs[0], input_tensor], training=training)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -348,9 +348,9 @@ class TFBertLayer(tf.keras.layers.Layer):
         self.bert_output = TFBertOutput(config, name="output")
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask = inputs
+        hidden_states, adder, head_mask = inputs
 
-        attention_outputs = self.attention([hidden_states, attention_mask, head_mask], training=training)
+        attention_outputs = self.attention([hidden_states, adder, head_mask], training=training)
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.bert_output([intermediate_output, attention_output], training=training)
@@ -366,7 +366,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
         self.layer = [TFBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask = inputs
+        hidden_states, adder, head_mask = inputs
 
         all_hidden_states = ()
         all_attentions = ()
@@ -374,7 +374,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module([hidden_states, attention_mask, head_mask[i]], training=training)
+            layer_outputs = layer_module([hidden_states, adder, head_mask[i]], training=training)
             hidden_states = layer_outputs[0]
 
             if self.output_attentions:
@@ -553,8 +553,8 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
 
-        extended_attention_mask = tf.cast(extended_attention_mask, tf.float32)
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        adder = tf.cast(extended_attention_mask, tf.float32)
+        adder = (1.0 - adder) * -10000.0
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -568,7 +568,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
         embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
-        encoder_outputs = self.encoder([embedding_output, extended_attention_mask, head_mask], training=training)
+        encoder_outputs = self.encoder([embedding_output, adder, head_mask], training=training)
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)

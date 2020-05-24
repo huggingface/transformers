@@ -53,7 +53,7 @@ def positional_encoding(position, d_model_size, dtype):
     return pos_encoding
 
 
-def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=None):
+def scaled_dot_product_attention(q, k, v, mask, adder=None, head_mask=None):
     # calculate attention
     matmul_qk = torch.matmul(q, k.permute(0, 1, 3, 2))
 
@@ -64,9 +64,9 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
         nd, ns = scaled_attention_logits.size(-2), scaled_attention_logits.size(-1)
         scaled_attention_logits += mask[ns - nd : ns, :ns] * -1e4
 
-    if attention_mask is not None:
+    if adder is not None:
         # Apply the attention mask
-        scaled_attention_logits = scaled_attention_logits + attention_mask
+        scaled_attention_logits = scaled_attention_logits + adder
 
     attention_weights = torch.softmax(scaled_attention_logits, dim=-1)
 
@@ -98,7 +98,7 @@ class MultiHeadAttention(torch.nn.Module):
         x = x.reshape(batch_size, -1, self.num_heads, self.depth)
         return x.permute([0, 2, 1, 3])
 
-    def forward(self, v, k, q, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
+    def forward(self, v, k, q, mask, layer_past=None, adder=None, head_mask=None, use_cache=False):
         batch_size = q.shape[0]
 
         q = self.Wq(q)
@@ -118,7 +118,7 @@ class MultiHeadAttention(torch.nn.Module):
         else:
             present = (None,)
 
-        output = scaled_dot_product_attention(q, k, v, mask, attention_mask, head_mask)
+        output = scaled_dot_product_attention(q, k, v, mask, adder, head_mask)
         scaled_attention = output[0].permute([0, 2, 1, 3])
         attn = output[1]
         original_size_attention = scaled_attention.reshape(batch_size, -1, self.d_model_size)
@@ -147,7 +147,7 @@ class EncoderLayer(torch.nn.Module):
         self.dropout1 = torch.nn.Dropout(rate)
         self.dropout2 = torch.nn.Dropout(rate)
 
-    def forward(self, x, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
+    def forward(self, x, mask, layer_past=None, adder=None, head_mask=None, use_cache=False):
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
             normed,
@@ -155,7 +155,7 @@ class EncoderLayer(torch.nn.Module):
             normed,
             mask,
             layer_past=layer_past,
-            attention_mask=attention_mask,
+            adder=adder,
             head_mask=head_mask,
             use_cache=use_cache,
         )
@@ -392,8 +392,8 @@ class CTRLModel(CTRLPreTrainedModel):
             # positions we want to attend and -10000.0 for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            adder = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            adder = (1.0 - adder) * -10000.0
 
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.n_layer)
@@ -431,7 +431,7 @@ class CTRLModel(CTRLPreTrainedModel):
                 hidden_states,
                 mask,
                 layer_past=layer_past,
-                attention_mask=attention_mask,
+                adder=adder,
                 head_mask=head_mask[i],
                 use_cache=use_cache,
             )
