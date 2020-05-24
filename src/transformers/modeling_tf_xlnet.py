@@ -502,6 +502,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         use_cache=True,
         training=False,
+        output_attentions=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]

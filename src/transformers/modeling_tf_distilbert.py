@@ -300,7 +300,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         self.ffn = TFFFN(config, name="ffn")
         self.output_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="output_layer_norm")
 
-    def call(self, inputs, training=False):  # removed: src_enc=None, src_len=None
+    def call(self, inputs, training=False, output_attentions=False):  # removed: src_enc=None, src_len=None
         """
         Parameters
         ----------
@@ -343,7 +343,7 @@ class TFTransformer(tf.keras.layers.Layer):
 
         self.layer = [TFTransformerBlock(config, name="layer_._{}".format(i)) for i in range(config.n_layers)]
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         """
         Parameters
         ----------

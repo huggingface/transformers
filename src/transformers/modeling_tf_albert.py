@@ -247,7 +247,7 @@ class TFAlbertAttention(TFBertSelfAttention):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         input_tensor, attention_mask, head_mask = inputs
 
         batch_size = shape_list(input_tensor)[0]
