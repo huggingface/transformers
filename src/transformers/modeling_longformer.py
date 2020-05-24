@@ -727,6 +727,13 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
+    
+    def _get_question_end_index(self, input_ids):
+        sep_token_indices = (input_ids == self.config.sep_token_id).nonzero()
+        assert sep_token_indices.ndim == 2
+        assert sep_token_indices.size(0) == 3 * input_ids.size(0)
+        assert sep_token_indices.size(1) == 2
+        return sep_token_indices.view(input_ids.size(0), 3, 2)[:, 0, 1]
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
     def forward(
@@ -778,6 +785,17 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
         """
 
+        # Compute attention mask if not provided,
+        # set global attention on question tokens 
+        if attention_mask is None:
+            question_end_index = self._get_question_end_index(input_ids)
+            question_end_index = question_end_index.unsqueeze(dim=1)   # size: batch_size x 1
+            # bool attention mask with True in locations of global attention
+            attention_mask = torch.arange(input_ids.size(1), device=input_ids.device)
+            attention_mask = attention_mask.expand_as(input_ids) < question_end_index
+
+            attention_mask = attention_mask.int() + 1  # from True, False to 2, 1
+        
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
