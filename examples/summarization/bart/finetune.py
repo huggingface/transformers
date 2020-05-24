@@ -290,7 +290,9 @@ def is_frozen(model):
 def get_layers_to_copy(n_to_get, tot):
     all_layers = list(range(tot))
     if tot == 12:  # Alternating for special cases
-        base = {6: [0, 2, 4, 7, 9, 11], 1: [11], 3: [0, 6, 11], 2: [0, 11], 12: all_layers}
+        base = {6: [0, 2, 4, 7, 9, 11], 1: [11], 3: [0, 6, 11], 2: [0, 11],
+                9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
+                12: all_layers}
         return base[n_to_get]
     else:
         return all_layers[:n_to_get]
@@ -310,31 +312,37 @@ class SummarizationDistiller(SummarizationTrainer):
             "encoder_layers": hparams.student_encoder_layers,
         }
         d_layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
-        e_layers_to_copy = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
+        e_layers_to_copy: List = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
         hparams.layer_to_copy = d_layers_to_copy
+        hparams.e_layer_to_copy = e_layers_to_copy
 
         kw = teacher.config.to_diff_dict()
         kw.update(student_updates)
         # Copy weights
         student_cfg = BartConfig(**kw)
         student = BartForConditionalGeneration(student_cfg)
+
         student, _ = init_student(student, teacher)
-        if hparams.student_decoder_layers != teacher.config.encoder_layers:
+        self.different_encoder: bool = hparams.student_encoder_layers != teacher.config.encoder_layers
+        self.different_decoder = hparams.student_decoder_layers != teacher.config.decoder_layers
+        if self.different_decoder:
             copy_layers(teacher.model.decoder.layers, student.model.decoder.layers, d_layers_to_copy)
-        if hparams.student_encoder_layers != teacher.config.encoder_layers:
+        if self.different_encoder:
             copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
-        # Path(hparams.model_name_or_path).mkdir(exist_ok=True)
+        Path(hparams.output_dir).mkdir(exist_ok=True)
 
         super().__init__(hparams, model=student, config=student_cfg)
+        if torch.cuda.is_available() and hparams.fp16:
+            teacher = teacher.to(self.device).half()
         # assert len(student.model.encoder.layers) == 12
-        freeze_part(self.model.model.encoder)
-        teacher.model.encoder = None
-        if student.model.config.decoder_layers == 12:
+        if not self.different_encoder:
+            freeze_part(self.model.model.encoder)
+            teacher.model.encoder = None
+        if not self.different_decoder:
             freeze_part(self.model.model.decoder)
 
         assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
         self.model.teacher = teacher
-        freeze_part(self.model.teacher)
         self.refreeze()
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
@@ -342,13 +350,13 @@ class SummarizationDistiller(SummarizationTrainer):
         self.alpha_ce = hparams.alpha_ce
 
     def refreeze(self):
-        freeze_part(self.model.model.encoder)
-
         freeze_part(self.model.model.shared)
         d = self.model.model.decoder
+        e = self.model.model.encoder
         freeze_part(d.embed_positions)
         freeze_part(d.embed_tokens)
-        self.model.teacher.encoder = None
+        freeze_part(e.embed_positions)
+        freeze_part(e.embed_tokens)
         freeze_part(self.model.teacher)
 
     def get_dataset(self, type_path) -> SummarizationDataset:
@@ -369,12 +377,16 @@ class SummarizationDistiller(SummarizationTrainer):
         sloss, slogits, enc_outputs = self(
             source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
         )
-        # assert not self.model.teacher
+        if self.different_encoder:
+            enc_outputs = None
+        else:
+            enc_outputs = (enc_outputs,)
+
         with torch.no_grad():
             tloss, tlogits, *trash = self.model.teacher(
                 source_ids,
                 attention_mask=source_mask,
-                encoder_outputs=(enc_outputs,),
+                encoder_outputs=enc_outputs,
                 decoder_input_ids=y_ids,
                 lm_labels=lm_labels,
             )
