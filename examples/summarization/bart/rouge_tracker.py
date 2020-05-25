@@ -14,8 +14,8 @@ except ImportError:
     from .finetune import calculate_rouge
 
 
-LOGDIR = Path("transformers_fork/examples/summarization/bart/dbart/logs/").absolute()
-DATA_DIR = Path("transformers_fork/examples/summarization/bart/dbart/cnn_dm").absolute()
+LOGDIR = Path("examples/summarization/bart/dbart/logs/").absolute()
+DATA_DIR = Path("examples/summarization/bart/dbart/cnn_dm").absolute()
 
 
 def read_gens(exp_name, split="test", n=None):
@@ -37,12 +37,12 @@ def load_cpu(p):
 
 
 class RougeTracker:
-    def __init__(self, csv_path="rouge_test_df.csv", logdir=LOGDIR):
+    def __init__(self, csv_path="rouge_test_df.csv", logdir=LOGDIR, data_dir=DATA_DIR):
         self.df = pd.read_csv(csv_path, index_col=0)
         self.rouged_experiments = self.df.index
         self.finished_experiments = [p.parent.name for p in list(logdir.glob("*/test_generations*.txt"))]
         self.logdir = LOGDIR
-        test_gt = lmap(str.strip, Path(DATA_DIR / "test.target").open().readlines())
+        test_gt = lmap(str.strip, Path(data_dir / "test.target").open().readlines())
         test_gt = lmap(str.strip, test_gt)
         self.gt = test_gt  # {'test': test_gt}
         self.tokenizer = BartTokenizer.from_pretrained("bart-large-cnn")
