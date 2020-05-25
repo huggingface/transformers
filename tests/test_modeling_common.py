@@ -130,6 +130,7 @@ class ModelTesterMixin:
             encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True  
             config.output_hidden_states = False
             model = model_class(config)
             model.to(torch_device)
@@ -170,6 +171,7 @@ class ModelTesterMixin:
                 )
 
             # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
             config.output_hidden_states = True
             model = model_class(config)
             model.to(torch_device)
@@ -260,6 +262,7 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         global_rng.seed()
 
+        inputs_dict["output_attentions"] = True
         config.output_hidden_states = True
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         for model_class in self.all_model_classes:
@@ -315,6 +318,7 @@ class ModelTesterMixin:
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
 
+            inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
             model = model_class(config=config)
             model.to(torch_device)
@@ -343,6 +347,7 @@ class ModelTesterMixin:
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
 
+            inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
             model = model_class(config=config)
             model.to(torch_device)
@@ -375,6 +380,7 @@ class ModelTesterMixin:
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
 
+            inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
 
             heads_to_prune = {
@@ -405,6 +411,7 @@ class ModelTesterMixin:
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
 
+            inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
 
             heads_to_prune = {0: [0], 1: [1, 2]}
