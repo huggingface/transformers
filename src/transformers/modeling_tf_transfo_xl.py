@@ -168,7 +168,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
 
         return x
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         w, r, attn_mask, mems, head_mask = inputs
         qlen, rlen, bsz = shape_list(w)[0], shape_list(r)[0], shape_list(w)[1]
 
@@ -242,7 +242,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
             # residual connection + layer normalization
             outputs = [self.layer_norm(w + attn_out)]
 
-        if self.output_attentions:
+        if output_attentions:
             outputs.append(attn_prob)
 
         return outputs

@@ -93,7 +93,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         v, k, q, mask, layer_past, attention_mask, head_mask, use_cache = inputs
         batch_size = shape_list(q)[0]
 
@@ -131,7 +131,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         output = self.dense(original_size_attention)
 
         outputs = (output, present)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (attn,)
         return outputs
 
