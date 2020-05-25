@@ -16,11 +16,11 @@
 """ Benchmarking the library on inference and training in PyTorch """
 
 
+import inspect
+
 from transformers import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING, PretrainedConfig, is_torch_available
 
 from .benchmark_utils import Benchmarks, start_memory_tracing, stop_memory_tracing
-
-import inspect
 
 
 if is_torch_available():
@@ -43,7 +43,9 @@ class PyTorchBenchmarks(Benchmarks):
             # TODO: Not all models call labels argument labels => this hack using the function signature should be corrected once all models have a common name for labels
             function_argument_names = inspect.getfullargspec(model.forward).args
 
-            input_ids = torch.randint(model.config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device)
+            input_ids = torch.randint(
+                model.config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
+            )
             if "labels" in function_argument_names:
                 loss = model(input_ids, labels=input_ids)[0]
             elif "lm_labels" in function_argument_names:

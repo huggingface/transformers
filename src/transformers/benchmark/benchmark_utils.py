@@ -528,7 +528,7 @@ class Benchmarks(ABC):
     def save_to_csv(self, result_dict, filename):
         if not self.args.save_to_csv:
             return
-        self.printfn("Saving results to csv.")
+        self.print_fn("Saving results to csv.")
         with open(filename, mode="w") as csv_file:
 
             assert len(self.args.model_names) > 0, "At least 1 model should be defined, but got {}".format(
@@ -540,15 +540,17 @@ class Benchmarks(ABC):
             writer.writeheader()
 
             for model_name in self.args.model_names:
-                result_dict = result_dict[model_name]["result"]
-                for bs in result_dict:
-                    for ss in result_dict[bs]:
-                        result = result_dict[bs][ss]
+                result_dict_model = result_dict[model_name]["result"]
+                for bs in result_dict_model:
+                    for ss in result_dict_model[bs]:
+                        result_model = result_dict_model[bs][ss]
                         writer.writerow(
                             {
                                 "model": model_name,
                                 "batch_size": bs,
                                 "sequence_length": ss,
-                                "result": ("{}" if not isinstance(result, float) else "{:.4f}").format(result),
+                                "result": ("{}" if not isinstance(result_model, float) else "{:.4f}").format(
+                                    result_model
+                                ),
                             }
                         )
