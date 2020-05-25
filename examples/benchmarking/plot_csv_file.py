@@ -85,7 +85,7 @@ class Plot:
                 if self.args.plot_along_batch:
                     y_axis_array = np.asarray([results[(x, inner_loop_value)] for x in x_axis_array], dtype=np.int)
                 else:
-                    y_axis_array = np.asarray([results[(inner_loop_value, x)] for x in x_axis_array], dtype=np.int)
+                    y_axis_array = np.asarray([results[(inner_loop_value, x)] for x in x_axis_array], dtype=np.float32)
 
                 ax.set_xscale("log", basex=2)
                 ax.set_yscale("log", basey=10)
