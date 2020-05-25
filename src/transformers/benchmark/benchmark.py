@@ -17,6 +17,7 @@
 
 
 import inspect
+import timeit
 
 from transformers import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING, PretrainedConfig, is_torch_available
 
@@ -39,13 +40,13 @@ class PyTorchBenchmarks(Benchmarks):
         model.to(self.args.device)
         model.train()
 
+        input_ids = torch.randint(
+            model.config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
+        )
+
         def compute_loss_and_backprob():
             # TODO: Not all models call labels argument labels => this hack using the function signature should be corrected once all models have a common name for labels
             function_argument_names = inspect.getfullargspec(model.forward).args
-
-            input_ids = torch.randint(
-                model.config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
-            )
             if "labels" in function_argument_names:
                 loss = model(input_ids, labels=input_ids)[0]
             elif "lm_labels" in function_argument_names:
@@ -77,8 +78,13 @@ class PyTorchBenchmarks(Benchmarks):
 
             return memory
         else:
-            compute_loss_and_backprob()
-        return None
+            # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
+            runtimes = timeit.repeat(
+                lambda: compute_loss_and_backprob(),
+                repeat=self.args.repeat,
+                number=3,
+            )
+            return min(runtimes) / 3.0
 
     def inference(self, model_name, batch_size, sequence_length, trace_memory=False):
         config = self.config_dict[model_name]
@@ -107,6 +113,10 @@ class PyTorchBenchmarks(Benchmarks):
 
             return memory
         else:
-            # only to time it
-            model(input_ids)
-        return None
+            # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
+            runtimes = timeit.repeat(
+                lambda: model(input_ids),
+                repeat=self.args.repeat,
+                number=3,
+            )
+            return min(runtimes) / 3.0

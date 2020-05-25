@@ -71,12 +71,10 @@ class BenchmarkArguments:
         default=f"log_{round(time())}.csv",
         metadata={"help": "Log filename used if print statements are saved in log."},
     )
-    average_over: int = field(default=3, metadata={"help": "Times an experiment will be run."})
-    #    batch_sizes: List[int] = list_field(default=[1, 2, 4, 8], metadata={"help": "List of batch sizes for which memory and time performance will be evaluated"})
+    repeat: int = field(default=3, metadata={"help": "Times an experiment will be run."})
     batch_sizes: List[int] = list_field(
         default=[8], metadata={"help": "List of batch sizes for which memory and time performance will be evaluated"}
     )
-    #    sequence_lengths: List[int] = list_field(default=[8, 64, 128, 256, 512, 1024], metadata={"help": "List of sequence lengths for which memory and time performance will be evaluated"})
     sequence_lengths: List[int] = list_field(
         default=[8, 32, 128, 512],
         metadata={"help": "List of sequence lengths for which memory and time performance will be evaluated"},

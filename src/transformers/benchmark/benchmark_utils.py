@@ -10,7 +10,6 @@ import linecache
 import logging
 import os
 import sys
-import timeit
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Callable, Iterable, List, NamedTuple, Optional, Union
@@ -434,26 +433,16 @@ class Benchmarks(ABC):
                             memory = self.inference(model_name, batch_size, sequence_length, trace_memory=True)
                             inference_result_memory[model_name]["result"][batch_size][sequence_length] = memory
                         if not self.args.no_speed:
-                            runtimes = timeit.repeat(
-                                lambda: self.inference(model_name, batch_size, sequence_length),
-                                repeat=self.args.average_over,
-                                number=3,
-                            )
-                            average_time = sum(runtimes) / float(len(runtimes)) / 3.0
-                            inference_result_time[model_name]["result"][batch_size][sequence_length] = average_time
+                            time = self.inference(model_name, batch_size, sequence_length, trace_memory=False)
+                            inference_result_time[model_name]["result"][batch_size][sequence_length] = time
 
                     if self.args.training:
                         if not self.args.no_memory:
                             memory = self.train(model_name, batch_size, sequence_length)
                             train_result_memory[model_name]["result"][batch_size][sequence_length] = memory
                         if not self.args.no_speed:
-                            runtimes = timeit.repeat(
-                                lambda: self.train(model_name, batch_size, sequence_length),
-                                repeat=self.args.average_over,
-                                number=3,
-                            )
-                            average_time = sum(runtimes) / float(len(runtimes)) / 3.0
-                            train_result_time[model_name]["result"][batch_size][sequence_length] = average_time
+                            time = self.inference(model_name, batch_size, sequence_length, trace_memory=False)
+                            train_result_time[model_name]["result"][batch_size][sequence_length] = time
 
         if not self.args.no_inference:
             if not self.args.no_speed:
