@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "2.9.1"
+__version__ = "2.10.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -321,6 +321,7 @@ if is_torch_available():
         ElectraForMaskedLM,
         ElectraForTokenClassification,
         ElectraPreTrainedModel,
+        ElectraForSequenceClassification,
         ElectraModel,
         load_tf_weights_in_electra,
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,

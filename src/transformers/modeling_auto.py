@@ -88,6 +88,7 @@ from .modeling_electra import (
     ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     ElectraForMaskedLM,
     ElectraForPreTraining,
+    ElectraForSequenceClassification,
     ElectraForTokenClassification,
     ElectraModel,
 )
@@ -256,6 +257,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (XLNetConfig, XLNetForSequenceClassification),
         (FlaubertConfig, FlaubertForSequenceClassification),
         (XLMConfig, XLMForSequenceClassification),
+        (ElectraConfig, ElectraForSequenceClassification),
     ]
 )
 
@@ -402,7 +404,7 @@ class AutoModel:
                 - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
 
             state_dict: (`optional`) dict:
-                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
+                an optional state dictionary for the model to use instead of a state dictionary loaded from saved weights file.
                 This option can be used if you want to create a model from a pretrained configuration but load your own weights.
                 In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
 
@@ -421,7 +423,7 @@ class AutoModel:
                 The proxies are used on each request.
 
             output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
                 These arguments will be passed to the configuration and the model.
@@ -552,7 +554,7 @@ class AutoModelForPreTraining:
                 - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
 
             state_dict: (`optional`) dict:
-                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
+                an optional state dictionary for the model to use instead of a state dictionary loaded from saved weights file.
                 This option can be used if you want to create a model from a pretrained configuration but load your own weights.
                 In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
             cache_dir: (`optional`) string:
@@ -566,7 +568,7 @@ class AutoModelForPreTraining:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
             output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
                 These arguments will be passed to the configuration and the model.
 
@@ -698,7 +700,7 @@ class AutoModelWithLMHead:
                 - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
 
             state_dict: (`optional`) dict:
-                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
+                an optional state dictionary for the model to use instead of a state dictionary loaded from saved weights file.
                 This option can be used if you want to create a model from a pretrained configuration but load your own weights.
                 In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
             cache_dir: (`optional`) string:
@@ -712,7 +714,7 @@ class AutoModelWithLMHead:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
                 The proxies are used on each request.
             output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
                 These arguments will be passed to the configuration and the model.
 
@@ -837,7 +839,7 @@ class AutoModelForSequenceClassification:
                 - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
 
             state_dict: (`optional`) dict:
-                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
+                an optional state dictionary for the model to use instead of a state dictionary loaded from saved weights file.
                 This option can be used if you want to create a model from a pretrained configuration but load your own weights.
                 In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
 
@@ -856,7 +858,7 @@ class AutoModelForSequenceClassification:
                 The proxies are used on each request.
 
             output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
                 These arguments will be passed to the configuration and the model.
@@ -979,7 +981,7 @@ class AutoModelForQuestionAnswering:
                 - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
 
             state_dict: (`optional`) dict:
-                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
+                an optional state dictionary for the model to use instead of a state dictionary loaded from saved weights file.
                 This option can be used if you want to create a model from a pretrained configuration but load your own weights.
                 In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
 
@@ -995,7 +997,7 @@ class AutoModelForQuestionAnswering:
                 The proxies are used on each request.
 
             output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
                 These arguments will be passed to the configuration and the model.
@@ -1124,7 +1126,7 @@ class AutoModelForTokenClassification:
                 - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a configuration JSON file named `config.json` is found in the directory.
 
             state_dict: (`optional`) dict:
-                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved weights file.
+                an optional state dictionary for the model to use instead of a state dictionary loaded from saved weights file.
                 This option can be used if you want to create a model from a pretrained configuration but load your own weights.
                 In this case though, you should check if using :func:`~transformers.PreTrainedModel.save_pretrained` and :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
 
@@ -1140,7 +1142,7 @@ class AutoModelForTokenClassification:
                 The proxies are used on each request.
 
             output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error messages.
+                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:
                 These arguments will be passed to the configuration and the model.
