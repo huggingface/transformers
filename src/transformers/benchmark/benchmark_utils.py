@@ -381,8 +381,6 @@ class Benchmarks(ABC):
     args: BenchmarkArguments
     configs: PretrainedConfig
     print_fn: Callable[[str], None]
-    inference_fn: Callable[[int, int], int]
-    train_fn: Callable[[int, int], int]
 
     def __init__(self, args: BenchmarkArguments = None, configs: PretrainedConfig = None):
         self.args = args
