@@ -246,7 +246,6 @@ def start_memory_tracing(
             for i in devices:
                 handle = py3nvml.nvmlDeviceGetHandleByIndex(i)
                 meminfo = py3nvml.nvmlDeviceGetMemoryInfo(handle)
-                meminfo = py3nvml.nvmlDeviceGetMemoryInfo(handle)
                 gpu_mem += meminfo.used
 
             py3nvml.nvmlShutdown()
