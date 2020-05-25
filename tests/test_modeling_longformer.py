@@ -171,7 +171,7 @@ class LongformerModelTester(object):
             list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size]
         )
         self.check_loss_output(result)
-    
+
     def create_and_check_longformer_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -207,7 +207,7 @@ class LongformerModelTester(object):
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
         return config, inputs_dict
-    
+
     def prepare_config_and_inputs_for_question_answering(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -219,15 +219,14 @@ class LongformerModelTester(object):
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        
+
         # Replace sep_token_id by some random id
         input_ids[input_ids == config.sep_token_id] = torch.randint(0, config.vocab_size, (1,)).item()
         # Make sure there are exactly three sep_token_id
         input_ids[:, -3:] = config.sep_token_id
         input_mask = torch.ones_like(input_ids)
-        
+
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    
 
 
 @require_torch
@@ -252,7 +251,7 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_longformer_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_longformer_for_masked_lm(*config_and_inputs)
-    
+
     def test_longformer_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_question_answering()
         self.model_tester.create_and_check_longformer_for_question_answering(*config_and_inputs)
