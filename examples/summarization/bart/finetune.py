@@ -331,12 +331,13 @@ class SummarizationDistiller(SummarizationTrainer):
         if self.different_encoder:
             copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
         Path(hparams.output_dir).mkdir(exist_ok=True)
-        student.teacher = teacher
+
 
         super().__init__(hparams, model=student, config=student_cfg)
         #if torch.cuda.is_available() and hparams.fp16:
             #teacher = teacher.to(self.device).half()
         # assert len(student.model.encoder.layers) == 12
+        self.model.teacher = teacher
         if not self.different_encoder:
             freeze_part(self.model.model.encoder)
             teacher.model.encoder = None
