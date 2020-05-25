@@ -268,6 +268,7 @@ class ElectraModel(ElectraPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=False,
     ):
         r"""
     Return:
@@ -326,7 +327,12 @@ class ElectraModel(ElectraPreTrainedModel):
         if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states)
 
-        hidden_states = self.encoder(hidden_states, attention_mask=extended_attention_mask, head_mask=head_mask)
+        hidden_states = self.encoder(
+            hidden_states,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+        )
 
         return hidden_states
 

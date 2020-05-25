@@ -409,7 +409,9 @@ class DistilBertModel(DistilBertPreTrainedModel):
             self.transformer.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None):
+    def forward(
+        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, output_attentions=False
+    ):
         r"""
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.DistilBertConfig`) and inputs:
@@ -460,7 +462,9 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)  # (bs, seq_length, dim)
-        tfmr_output = self.transformer(x=inputs_embeds, attn_mask=attention_mask, head_mask=head_mask)
+        tfmr_output = self.transformer(
+            x=inputs_embeds, attn_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions
+        )
         hidden_state = tfmr_output[0]
         output = (hidden_state,) + tfmr_output[1:]
 

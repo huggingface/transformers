@@ -233,12 +233,10 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         pre_lnorm=False,
         r_r_bias=None,
         r_w_bias=None,
-        output_attentions=False,
         layer_norm_epsilon=1e-5,
     ):
         super().__init__()
 
-        self.output_attentions = output_attentions
         self.n_head = n_head
         self.d_model = d_model
         self.d_head = d_head

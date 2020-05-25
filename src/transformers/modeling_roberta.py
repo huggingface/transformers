@@ -185,6 +185,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         masked_lm_labels=None,
+        output_attentions=False,
     ):
         r"""
         masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -230,6 +231,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)

@@ -80,9 +80,8 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
 
 
 class MultiHeadAttention(torch.nn.Module):
-    def __init__(self, d_model_size, num_heads, output_attentions=False):
+    def __init__(self, d_model_size, num_heads):
         super().__init__()
-        self.output_attentions = output_attentions
         self.num_heads = num_heads
         self.d_model_size = d_model_size
 
@@ -146,10 +145,10 @@ def point_wise_feed_forward_network(d_model_size, dff):
 
 
 class EncoderLayer(torch.nn.Module):
-    def __init__(self, d_model_size, num_heads, dff, rate=0.1, output_attentions=False):
+    def __init__(self, d_model_size, num_heads, dff, rate=0.1):
         super().__init__()
 
-        self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads, output_attentions)
+        self.multi_head_attention = MultiHeadAttention(d_model_size, num_heads)
         self.ffn = point_wise_feed_forward_network(d_model_size, dff)
 
         self.layernorm1 = torch.nn.LayerNorm(d_model_size, eps=1e-6)
@@ -158,7 +157,9 @@ class EncoderLayer(torch.nn.Module):
         self.dropout1 = torch.nn.Dropout(rate)
         self.dropout2 = torch.nn.Dropout(rate)
 
-    def forward(self, x, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
+    def forward(
+        self, x, mask, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False
+    ):
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
             normed,
@@ -169,6 +170,7 @@ class EncoderLayer(torch.nn.Module):
             attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         attn_output = attn_outputs[0]
         attn_output = self.dropout1(attn_output)
@@ -285,10 +287,7 @@ class CTRLModel(CTRLPreTrainedModel):
 
         self.dropout = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList(
-            [
-                EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop)
-                for _ in range(config.n_layer)
-            ]
+            [EncoderLayer(config.n_embd, config.n_head, config.dff, config.resid_pdrop) for _ in range(config.n_layer)]
         )
         self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 

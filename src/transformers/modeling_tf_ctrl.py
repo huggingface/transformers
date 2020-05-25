@@ -75,9 +75,8 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
 
 
 class TFMultiHeadAttention(tf.keras.layers.Layer):
-    def __init__(self, d_model_size, num_heads, output_attentions=False, **kwargs):
+    def __init__(self, d_model_size, num_heads, **kwargs):
         super().__init__(**kwargs)
-        self.output_attentions = output_attentions
         self.num_heads = num_heads
         self.d_model_size = d_model_size
 
@@ -144,14 +143,10 @@ def point_wise_feed_forward_network(d_model_size, dff, name=""):
 
 
 class TFEncoderLayer(tf.keras.layers.Layer):
-    def __init__(
-        self, d_model_size, num_heads, dff, rate=0.1, layer_norm_epsilon=1e-6, output_attentions=False, **kwargs
-    ):
+    def __init__(self, d_model_size, num_heads, dff, rate=0.1, layer_norm_epsilon=1e-6, **kwargs):
         super().__init__(**kwargs)
 
-        self.multi_head_attention = TFMultiHeadAttention(
-            d_model_size, num_heads, output_attentions, name="multi_head_attention"
-        )
+        self.multi_head_attention = TFMultiHeadAttention(d_model_size, num_heads, name="multi_head_attention")
         self.ffn = point_wise_feed_forward_network(d_model_size, dff, name="ffn")
 
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layernorm1")
@@ -160,11 +155,13 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         self.dropout1 = tf.keras.layers.Dropout(rate)
         self.dropout2 = tf.keras.layers.Dropout(rate)
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         x, mask, layer_past, attention_mask, head_mask, use_cache = inputs
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
-            [normed, normed, normed, mask, layer_past, attention_mask, head_mask, use_cache], training=training
+            [normed, normed, normed, mask, layer_past, attention_mask, head_mask, use_cache],
+            training=training,
+            output_attentions=output_attentions,
         )
         attn_output = attn_outputs[0]
         attn_output = self.dropout1(attn_output, training=training)
@@ -204,7 +201,6 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
                 config.dff,
                 config.resid_pdrop,
                 config.layer_norm_epsilon,
-                config.output_attentions,
                 name="h_._{}".format(i),
             )
             for i in range(config.n_layer)

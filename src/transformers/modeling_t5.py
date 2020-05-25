@@ -892,6 +892,7 @@ class T5Model(T5PreTrainedModel):
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         head_mask=None,
+        output_attentions=False,
     ):
         r"""
     Return:
@@ -930,7 +931,11 @@ class T5Model(T5PreTrainedModel):
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
             )
 
         hidden_states = encoder_outputs[0]

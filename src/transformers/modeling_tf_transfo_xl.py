@@ -108,14 +108,12 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         pre_lnorm=False,
         r_r_bias=None,
         r_w_bias=None,
-        output_attentions=False,
         layer_norm_epsilon=1e-5,
         init_std=0.02,
         **kwargs
     ):
         super().__init__(**kwargs)
 
-        self.output_attentions = output_attentions
         self.n_head = n_head
         self.d_model = d_model
         self.d_head = d_head
@@ -263,7 +261,6 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
         pre_lnorm=False,
         r_w_bias=None,
         r_r_bias=None,
-        output_attentions=False,
         layer_norm_epsilon=1e-5,
         init_std=0.02,
         **kwargs
@@ -283,7 +280,6 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
             r_w_bias=r_w_bias,
             r_r_bias=r_r_bias,
             init_std=init_std,
-            output_attentions=output_attentions,
             layer_norm_epsilon=layer_norm_epsilon,
             name="dec_attn",
         )
@@ -297,9 +293,11 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
             name="pos_ff",
         )
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         dec_inp, r, dec_attn_mask, mems, head_mask = inputs
-        attn_outputs = self.dec_attn([dec_inp, r, dec_attn_mask, mems, head_mask], training=training)
+        attn_outputs = self.dec_attn(
+            [dec_inp, r, dec_attn_mask, mems, head_mask], training=training, output_attentions=output_attentions
+        )
         ff_output = self.pos_ff(attn_outputs[0], training=training)
 
         outputs = [ff_output] + attn_outputs[1:]
@@ -433,7 +431,6 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                         pre_lnorm=config.pre_lnorm,
                         r_w_bias=None if self.untie_r else self.r_w_bias,
                         r_r_bias=None if self.untie_r else self.r_r_bias,
-                        output_attentions=self.output_attentions,
                         layer_norm_epsilon=config.layer_norm_epsilon,
                         init_std=config.init_std,
                         name="layers_._{}".format(i),
@@ -598,7 +595,11 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             for i, layer in enumerate(self.layers):
                 hids.append(core_out)
                 mems_i = None if mems is None else mems[i]
-                layer_outputs = layer([core_out, pos_emb, dec_attn_mask, mems_i, head_mask[i]], training=training)
+                layer_outputs = layer(
+                    [core_out, pos_emb, dec_attn_mask, mems_i, head_mask[i]],
+                    training=training,
+                    output_attentions=output_attentions,
+                )
                 core_out = layer_outputs[0]
                 if output_attentions:
                     attentions.append(layer_outputs[1])

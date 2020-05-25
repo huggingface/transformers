@@ -643,6 +643,7 @@ class BertModel(BertPreTrainedModel):
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        output_attentions=False,
     ):
         r"""
     Return:
@@ -732,6 +733,7 @@ class BertModel(BertPreTrainedModel):
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
+            output_attentions=output_attentions,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)

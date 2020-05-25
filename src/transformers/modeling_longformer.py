@@ -543,6 +543,7 @@ class LongformerModel(RobertaModel):
         position_ids=None,
         inputs_embeds=None,
         masked_lm_labels=None,
+        output_attentions=False,
     ):
         r"""
 
@@ -610,6 +611,7 @@ class LongformerModel(RobertaModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
+            output_attentions=output_attentions,
         )
 
         # undo padding
@@ -647,6 +649,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
         position_ids=None,
         inputs_embeds=None,
         masked_lm_labels=None,
+        output_attentions=False,
     ):
         r"""
         masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -695,6 +698,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
