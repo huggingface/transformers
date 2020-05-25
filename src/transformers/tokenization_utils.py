@@ -167,14 +167,19 @@ def truncate_and_pad(
         tokenizer.no_padding()
 
 
-def to_framework_tensor(encoded_inputs: MutableMapping, framework: TensorType) -> MutableMapping:
+def to_framework_tensor(encoded_inputs: MutableMapping, framework: Union[str, TensorType]) -> MutableMapping:
+    if isinstance(framework, str):
+        framework = TensorType(framework)
 
     if framework == TensorType.TENSORFLOW and is_tf_available():
         as_tensor = tf.constant
     elif framework == TensorType.PYTORCH and is_torch_available():
         as_tensor = torch.tensor
     else:
-        raise ValueError("Unknown tensor type {}. Please use any of {}".format(framework, TensorType.__members__))
+        raise ValueError(
+            "Unable to convert output to tensors format {}, " \
+            "PyTorch or TensorFlow is not available.".format(framework)
+        )
 
     # Encode everything
     encoded_inputs["input_ids"] = as_tensor([encoded_inputs["input_ids"]])
@@ -2352,31 +2357,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 encoding_dict["offset_mapping"].append(e.offsets)
 
         if return_tensors is not None:
-            if isinstance(return_tensors, str):
-                return_tensors = TensorType(return_tensors)
-
             encoding_dict = to_framework_tensor(encoding_dict, return_tensors)
-            #     if return_tensors == TensorType.TENSORFLOW and is_tf_available():
-            #         encoding_dict[key] = tf.constant(value)
-            #     elif return_tensors == TensorType.PYTORCH and is_torch_available():
-            #         encoding_dict[key] = torch.tensor(value)
-            #     elif return_tensors is not None:
-            #         logger.warning(
-            #             "Unable to convert output to tensors format {}, "
-            #             "PyTorch or TensorFlow is not available.".format(return_tensors)
-            #         )
-
-
-            # for key, value in encoding_dict.items():
-            #     if return_tensors == TensorType.TENSORFLOW and is_tf_available():
-            #         encoding_dict[key] = tf.constant(value)
-            #     elif return_tensors == TensorType.PYTORCH and is_torch_available():
-            #         encoding_dict[key] = torch.tensor(value)
-            #     elif return_tensors is not None:
-            #         logger.warning(
-            #             "Unable to convert output to tensors format {}, "
-            #             "PyTorch or TensorFlow is not available.".format(return_tensors)
-            #         )
 
         return encoding_dict
 
