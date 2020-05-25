@@ -74,11 +74,11 @@ class BenchmarkArguments:
     average_over: int = field(default=3, metadata={"help": "Times an experiment will be run."})
     #    batch_sizes: List[int] = list_field(default=[1, 2, 4, 8], metadata={"help": "List of batch sizes for which memory and time performance will be evaluated"})
     batch_sizes: List[int] = list_field(
-        default=[1], metadata={"help": "List of batch sizes for which memory and time performance will be evaluated"}
+        default=[8], metadata={"help": "List of batch sizes for which memory and time performance will be evaluated"}
     )
     #    sequence_lengths: List[int] = list_field(default=[8, 64, 128, 256, 512, 1024], metadata={"help": "List of sequence lengths for which memory and time performance will be evaluated"})
     sequence_lengths: List[int] = list_field(
-        default=[8],
+        default=[8, 32, 128, 512],
         metadata={"help": "List of sequence lengths for which memory and time performance will be evaluated"},
     )
 
@@ -108,12 +108,3 @@ class BenchmarkArguments:
             ]
         else:
             return self.models
-
-
-@dataclass
-class TensorflowBenchmarkArguments(BenchmarkArguments):
-    xla: bool = field(default=False, metadata={"help": "TensorFlow only: use XLA acceleration."})
-    amp: bool = field(default=False, metadata={"help": "TensorFlow only: use automatic mixed precision acceleration."})
-    keras_predict: bool = field(
-        default=False, metadata={"help": "Whether to use model.predict instead of model() to do a forward pass."}
-    )

@@ -70,14 +70,13 @@ class UsedMemoryState(NamedTuple):
 
 class Memory(NamedTuple):
     """ `Memory` NamedTuple have a single field `bytes` and
-        you can get a human readable string of the number of bytes by calling `__repr__`
+        you can get a human readable int of the number of mega bytes by calling `__repr__`
             - `byte` (integer): number of bytes,
     """
-
     bytes: int
 
-    def __repr__(self) -> str:
-        return bytes_to_human_readable(self.bytes)
+    def __repr__(self) -> int:
+        return bytes_to_mega_bytes(self.bytes)
 
 
 class MemoryState(NamedTuple):
@@ -360,6 +359,12 @@ def stop_memory_tracing(
         )
 
     return None
+
+
+def bytes_to_mega_bytes(memory_amount: int) -> int:
+    """ Utility to convert a number of bytes (int) into a number of mega bytes (int)
+    """
+    return memory_amount >> 20
 
 
 def bytes_to_human_readable(memory_amount: int) -> str:

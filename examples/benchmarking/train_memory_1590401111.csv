@@ -1,0 +1,3 @@
+model,batch_size,sequence_length,result
+distilbert-base-cased,1,8,None
+bert-base-cased,1,8,None

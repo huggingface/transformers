@@ -20,7 +20,7 @@ import inspect
 
 from transformers import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING, PretrainedConfig, is_torch_available
 
-from .benchmark_utils import Benchmarks, start_memory_tracing, stop_memory_tracing
+from .benchmark_utils import Benchmarks, Memory, start_memory_tracing, stop_memory_tracing
 
 
 if is_torch_available():
@@ -71,7 +71,7 @@ class PyTorchBenchmarks(Benchmarks):
                 summary = stop_memory_tracing(trace)
                 memory = summary.total
             else:
-                memory = torch.cuda.max_memory_reserved()
+                memory = Memory(torch.cuda.max_memory_reserved())
 
             return memory
         else:
@@ -99,7 +99,7 @@ class PyTorchBenchmarks(Benchmarks):
                 summary = stop_memory_tracing(trace)
                 memory = summary.total
             else:
-                memory = torch.cuda.max_memory_reserved()
+                memory = Memory(torch.cuda.max_memory_reserved())
 
             return memory
         else:
