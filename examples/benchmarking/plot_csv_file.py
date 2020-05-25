@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import csv
 import math
 from dataclasses import dataclass, field
