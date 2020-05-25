@@ -1,5 +1,4 @@
 import csv
-import math
 from dataclasses import dataclass, field
 
 import matplotlib.pyplot as plt
@@ -78,8 +77,7 @@ class Plot:
                 (batch_sizes, sequence_lengths) if self.args.plot_along_batch else (sequence_lengths, batch_sizes)
             )
 
-            log_x_axis_array = np.asarray([math.log(x, 2) for x in x_axis_array], dtype=np.float)
-            plt.xlim(min(log_x_axis_array), max(log_x_axis_array))
+            plt.xlim(min(x_axis_array), max(x_axis_array))
 
             for inner_loop_value in inner_loop_array:
                 if self.args.plot_along_batch:
@@ -96,10 +94,11 @@ class Plot:
                     else ("sequence_length in #tokens", "batch_size")
                 )
 
+                x_axis_array = np.asarray(x_axis_array, np.int)
                 plt.scatter(
-                    log_x_axis_array, y_axis_array, label=f"{model_name} - {inner_loop_label}: {inner_loop_value}"
+                    x_axis_array, y_axis_array, label=f"{model_name} - {inner_loop_label}: {inner_loop_value}"
                 )
-                plt.plot(log_x_axis_array, y_axis_array, "--")
+                plt.plot(x_axis_array, y_axis_array, "--")
 
             title_str += f" {model_name} vs."
 
