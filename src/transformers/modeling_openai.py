@@ -405,6 +405,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             position_ids = torch.arange(input_shape[-1], dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
+        adder = None
         # Attention mask.
         if attention_mask is not None:
             # We create a 3D attention mask from a 2D tensor mask.
