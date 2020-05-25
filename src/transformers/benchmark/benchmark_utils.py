@@ -73,6 +73,7 @@ class Memory(NamedTuple):
         you can get a human readable str of the number of mega bytes by calling `__repr__`
             - `byte` (integer): number of bytes,
     """
+
     bytes: int
 
     def __repr__(self) -> str:
@@ -554,6 +555,8 @@ class Benchmarks(ABC):
                                 "model": model_name,
                                 "batch_size": bs,
                                 "sequence_length": ss,
-                                "result": ("{}" if not isinstance(result_model, float) else "{:.4f}").format(result_model),
+                                "result": ("{}" if not isinstance(result_model, float) else "{:.4f}").format(
+                                    result_model
+                                ),
                             }
                         )
