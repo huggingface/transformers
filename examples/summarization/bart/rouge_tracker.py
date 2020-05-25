@@ -31,7 +31,7 @@ def read_gens(exp_name, split="test", n=None):
 
 
 
-
+from durbango import tqdm_nice
 def load_cpu(p):
     return torch.load(p, map_location="cpu")
 
@@ -66,9 +66,8 @@ class RougeTracker:
 
     def update(self, split="test"):
         records = []
-        for exp_name in self.finished_experiments:
-            if exp_name in self.rouged_experiments:
-                continue
+        to_score = set(self.finished_experiments).difference(self.rouged_experiments)
+        for exp_name in tqdm_nice(to_score, desc='Rouge Update')
             gens = read_gens(exp_name)
             if len(gens) != len(self.gt):
                 continue
