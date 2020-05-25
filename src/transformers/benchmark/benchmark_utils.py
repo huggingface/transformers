@@ -305,6 +305,7 @@ def stop_memory_tracing(
 
     if memory_trace is not None and len(memory_trace) > 1:
         memory_diff_trace = []
+        memory_curr_trace = []
 
         cumulative_memory_dict = defaultdict(lambda: [0, 0, 0])
 
@@ -436,7 +437,7 @@ class Benchmarks(ABC):
 
                     if self.args.training:
                         if not self.args.no_memory:
-                            memory = self.train(model_name, batch_size, sequence_length)
+                            memory = self.train(model_name, batch_size, sequence_length, trace_memory=True)
                             train_result_memory[model_name]["result"][batch_size][sequence_length] = memory
                         if not self.args.no_speed:
                             time = self.inference(model_name, batch_size, sequence_length, trace_memory=False)
