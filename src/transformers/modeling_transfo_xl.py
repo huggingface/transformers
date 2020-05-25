@@ -552,7 +552,6 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
 class TransfoXLModel(TransfoXLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.output_attentions = False
         self.output_hidden_states = config.output_hidden_states
 
         self.n_token = config.vocab_size
@@ -598,7 +597,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                         pre_lnorm=config.pre_lnorm,
                         r_w_bias=None if config.untie_r else self.r_w_bias,
                         r_r_bias=None if config.untie_r else self.r_r_bias,
-                        output_attentions=self.output_attentions,
+                        output_attentions=False,
                         layer_norm_epsilon=config.layer_norm_epsilon,
                     )
                 )
