@@ -226,7 +226,7 @@ class LongformerModelTester(object):
         input_ids[:, -3:] = config.sep_token_id
         input_mask = torch.ones_like(input_ids)
         
-        return config, input_ids, token_type_ids, None, sequence_labels, token_labels, choice_labels
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     
 
 
