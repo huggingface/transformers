@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from durbango import lmap
+from durbango import lmap, tqdm_nice
 from transformers import BartTokenizer
 
 
@@ -30,8 +30,6 @@ def read_gens(exp_name, split="test", n=None):
     return lns
 
 
-
-from durbango import tqdm_nice
 def load_cpu(p):
     return torch.load(p, map_location="cpu")
 
@@ -62,10 +60,10 @@ class RougeTracker:
         lens = np.mean(lmap(self.tok_len, gens))
         return dict(avg_len=lens, exp_name=k, **rouge_raw)
 
-    def update(self, split="test"):
+    def update(self):
         records = []
         to_score = set(self.finished_experiments).difference(self.rouged_experiments)
-        for exp_name in tqdm_nice(to_score, desc='Rouge Update')
+        for exp_name in tqdm_nice(to_score, desc="Rouge Update"):
             gens = read_gens(exp_name)
             if len(gens) != len(self.gt):
                 continue
@@ -78,4 +76,3 @@ class RougeTracker:
             .dsort("R2")
         )
         return pd.concat([self.df, new_df])
-
