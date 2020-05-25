@@ -1,3 +1,0 @@
-model,batch_size,sequence_length,result
-distilbert-base-cased,1,8,2.0806
-bert-base-cased,1,8,3.5897

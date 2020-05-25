@@ -1,9 +1,0 @@
-model,batch_size,sequence_length,result
-distilbert-base-cased,8,8,27.742MB
-distilbert-base-cased,8,32,53.070MB
-distilbert-base-cased,8,128,311.555MB
-distilbert-base-cased,8,512,2.213GB
-bert-base-cased,8,8,452.000KB
-bert-base-cased,8,32,0.000B
-bert-base-cased,8,128,0.000B
-bert-base-cased,8,512,2.473GB

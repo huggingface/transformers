@@ -62,7 +62,9 @@ class PyTorchBenchmarks(Benchmarks):
             if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
                 trace = start_memory_tracing("transformers")
             else:
+                # clear cuda cache
                 torch.cuda.empty_cache()
+                torch.cuda.reset_peak_memory_stats()
 
             # calculate loss and do backpropagation
             compute_loss_and_backprob()
@@ -91,7 +93,9 @@ class PyTorchBenchmarks(Benchmarks):
             if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
                 trace = start_memory_tracing("transformers")
             else:
+                # clear cuda cache
                 torch.cuda.empty_cache()
+                torch.cuda.reset_peak_memory_stats()
 
             model(input_ids)
 

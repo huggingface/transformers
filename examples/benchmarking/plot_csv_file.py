@@ -29,6 +29,18 @@ class PlotArguments:
             "help": "Whether the csv file has training results or inference results. Defaults to inference results."
         },
     )
+    save_figure: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether the plot should be saved or displayed directly with `plt.show()`. Defaults to directly displaying the plot."
+        },
+    )
+    figure_file: str = field(
+        default="plot.png",
+        metadata={
+            "help": "Filename under which the plot will be saved. Only relevant if `save_fig` is True."
+        }
+    )
 
 
 class Plot:
@@ -99,7 +111,11 @@ class Plot:
         plt.xlabel(x_axis_label)
         plt.ylabel(y_axis_label)
         plt.legend()
-        plt.show()
+
+        if self.args.save_figure:
+            plt.savefig(self.args.figure_file)
+        else:
+            plt.show()
 
 
 def main():
