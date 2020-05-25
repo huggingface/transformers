@@ -730,9 +730,12 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
 
     def _get_question_end_index(self, input_ids):
         sep_token_indices = (input_ids == self.config.sep_token_id).nonzero()
-        assert sep_token_indices.ndim == 2
-        assert sep_token_indices.size(0) == 3 * input_ids.size(0)
-        assert sep_token_indices.size(1) == 2
+        
+        assert sep_token_indices.size(1) == 2, "input_ids should have two dimensions"
+        assert (
+            sep_token_indices.size(0) == 3 * input_ids.size(0)
+        ), "There should be exactly three separator tokens in every sample for questions answering"
+        
         return sep_token_indices.view(input_ids.size(0), 3, 2)[:, 0, 1]
 
     def _compute_global_attention_mask(self, input_ids):
@@ -809,7 +812,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         else:
             # combine global_attention_mask with attention_mask
             # global attention on question tokens, no attention on padding tokens
-            attention_mask = global_attention_mask + attention_mask - 1
+            attention_mask = global_attention_mask * attention_mask
 
         outputs = self.longformer(
             input_ids,
