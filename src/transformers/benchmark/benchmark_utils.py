@@ -305,7 +305,6 @@ def stop_memory_tracing(
 
     if memory_trace is not None and len(memory_trace) > 1:
         memory_diff_trace = []
-        memory_curr_trace = []
 
         cumulative_memory_dict = defaultdict(lambda: [0, 0, 0])
 
