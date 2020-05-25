@@ -196,8 +196,8 @@ class SummarizationTrainer(BaseTransformer):
 
         dataset = self.get_dataset(type_path)
         sampler = None
-        if self.hparams.grouped_sampler and type_path == "train":
-            sampler = dataset.make_sampler(self.hparams)
+        if self.hparams.sortish_sampler and type_path == "train":
+            sampler = dataset.make_sortish_sampler(batch_size)
             shuffle = False
         dataloader = DataLoader(
             dataset,
@@ -241,7 +241,7 @@ class SummarizationTrainer(BaseTransformer):
         )
         parser.add_argument(
             "--max_target_length",
-            default=56,
+            default=142,
             type=int,
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
@@ -274,7 +274,7 @@ class SummarizationTrainer(BaseTransformer):
         parser.add_argument("--n_train", type=int, default=-1, required=False)
         parser.add_argument("--n_val", type=int, default=-1, required=False)
         parser.add_argument("--n_test", type=int, default=-1, required=False)
-        parser.add_argument("--grouped_sampler", action="store_true", default=False)
+        parser.add_argument("--sortish_sampler", action="store_true", default=False)
 
         return parser
 
@@ -485,8 +485,6 @@ class SummarizationDistiller(SummarizationTrainer):
         )
 
         return parser
-
-
 
 
 def main(args):

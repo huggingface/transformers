@@ -5,7 +5,7 @@ from typing import List
 import funcy
 import numpy as np
 import torch
-from torch.utils.data import BatchSampler, DataLoader, Dataset, RandomSampler
+from torch.utils.data import BatchSampler, DataLoader, Dataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
 from durbango import DEFAULT_DEVICE, lmap, pickle_load, pickle_save, tqdm_nice
@@ -187,6 +187,9 @@ class SummarizationDataset(Dataset):
         sampler = GroupedBatchSampler(sampler=sampler, group_ids=groups, batch_size=params.train_batch_size)
         return sampler
 
+    def make_sortish_sampler(self, batch_size):
+        return SortishSampler(self.source, batch_size)
+
     # TODO(SS): Unused Classmethods, can likely be deleted.
     @classmethod
     def from_pickle_paths(self, src_path, tgt_path, **kwargs):
@@ -219,3 +222,33 @@ class SummarizationDataset(Dataset):
         return cls(
             source, target, n_obs=n_obs, max_target_length=max_target_length, max_source_length=max_source_length
         )
+
+
+
+
+class SortishSampler(Sampler):
+    "Go through the text data by order of length with a bit of randomness."
+
+    def __init__(
+        self, data_source, bs,
+    ):
+        self.data_source, self.bs = data_source, bs
+
+    def key(self, i):
+        return len(self.data_source[i])
+
+    def __len__(self) -> int:
+        return len(self.data_source)
+
+    def __iter__(self):
+        idxs = np.random.permutation(len(self.data_source))
+        sz = self.bs * 50
+        ck_idx = [idxs[i : i + sz] for i in range(0, len(idxs), sz)]
+        sort_idx = np.concatenate([sorted(s, key=self.key, reverse=True) for s in ck_idx])
+        sz = self.bs
+        ck_idx = [sort_idx[i : i + sz] for i in range(0, len(sort_idx), sz)]
+        max_ck = np.argmax([self.key(ck[0]) for ck in ck_idx])  # find the chunk with the largest key,
+        ck_idx[0], ck_idx[max_ck] = ck_idx[max_ck], ck_idx[0]  # then make sure it goes first.
+        sort_idx = np.concatenate(np.random.permutation(ck_idx[1:])) if len(ck_idx) > 1 else np.array([], dtype=np.int)
+        sort_idx = np.concatenate((ck_idx[0], sort_idx))
+        return iter(sort_idx)
