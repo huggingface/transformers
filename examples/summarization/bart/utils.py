@@ -224,7 +224,18 @@ class SummarizationDataset(Dataset):
         )
 
 
-
+def remove_mask_token(teacher):
+    from torch import nn
+    orig_emb = teacher.model.shared.weight
+    new_shape = orig_emb.weight.shape[0] - 1
+    teacher.model.shared = nn.Embedding(new_shape, 1024, padding_idx=1)
+    teacher.model.shared.weight = nn.Parameter(torch.cat([orig_emb[:2], orig_emb[3:]]))
+    assert teacher.model.shared.num_embeddings == 50264
+    teacher.model.decoder.embed_tokens = teacher.model.shared
+    teacher.model.encoder.embed_tokens = teacher.model.shared
+    teacher.register_buffer("final_logits_bias",
+                            torch.zeros((1, new_shape)))
+    return teacher
 
 class SortishSampler(Sampler):
     "Go through the text data by order of length with a bit of randomness."

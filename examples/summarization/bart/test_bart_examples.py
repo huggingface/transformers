@@ -129,7 +129,6 @@ class TestBartExamples(unittest.TestCase):
         main(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
         expected_contents = {
-            "checkpointepoch=0.ckpt",
             "checkpointepoch=1.ckpt",
             "test_results.txt",
             "val_results.txt",
@@ -165,7 +164,6 @@ class TestBartExamples(unittest.TestCase):
         main(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
         expected_contents = {
-            "checkpointepoch=0.ckpt",
             "checkpointepoch=1.ckpt",
             "test_results.txt",
             "val_results.txt",

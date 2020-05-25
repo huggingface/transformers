@@ -491,7 +491,7 @@ def main(args):
     Path(args.output_dir).mkdir(exist_ok=True)
     if os.listdir(args.output_dir):
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
-    
+
     module_cls = SummarizationTrainer if args.no_teacher else SummarizationDistiller
     model: SummarizationTrainer = module_cls(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)

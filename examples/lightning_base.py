@@ -296,7 +296,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
     odir = Path(model.hparams.output_dir)
     odir.mkdir(exist_ok=True)
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        filepath=model.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=5
+        filepath=model.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=1
     )
     if args.output_dir.startswith("/var/") or args.fast_dev_run:
         logger = True
