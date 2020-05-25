@@ -314,6 +314,7 @@ class TFModelTesterMixin:
         )
 
         for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
             model = model_class(config)
             outputs = model(inputs_dict)
@@ -337,6 +338,7 @@ class TFModelTesterMixin:
                 )
 
             # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
             config.output_hidden_states = True
             model = model_class(config)
             outputs = model(inputs_dict)
