@@ -64,7 +64,7 @@ class LongformerConfig(RobertaConfig):
     pretrained_config_archive_map = LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "longformer"
 
-    def __init__(self, attention_window: Union[List[int], int] = 512, **kwargs):
+    def __init__(self, attention_window: Union[List[int], int] = 512, sep_token_id: int = 2, **kwargs):
         super().__init__(**kwargs)
         self.attention_window = attention_window
-        self.sep_token_id = 2
+        self.sep_token_id = sep_token_id
