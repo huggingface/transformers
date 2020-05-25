@@ -290,7 +290,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             :obj:`input_ids_length` = ``sequence_length`` if ``past`` is ``None`` else ``past[0].shape[-2]`` (``sequence_length`` of input past key value states).
             Indices of input sequence tokens in the vocabulary.
 
-            If `past` is used, only input_ids that do not have their past calculated should be passed as input_ids.
+            If `past` is used, only `input_ids` that do not have their past calculated should be passed as `input_ids`.
 
             Indices can be obtained using :class:`transformers.GPT2Tokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
@@ -301,7 +301,7 @@ GPT2_INPUTS_DOCSTRING = r"""
         past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `past` output below). Can be used to speed up sequential decoding.
-            The input_ids which have their past given to this model should not be passed as input ids as they have already been computed.
+            The `input_ids` which have their past given to this model should not be passed as `input_ids` as they have already been computed.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
