@@ -34,14 +34,16 @@ class PyTorchBenchmarks(Benchmarks):
     def train(self, model_name, batch_size, sequence_length, trace_memory=False):
         config = self.config_dict[model_name]
         model = MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
+        model.to(self.args.device)
         model.train()
+
         input_ids = torch.randint(model.config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device)
 
         if trace_memory is True:
             if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
                 trace = start_memory_tracing("transformers")
             else:
-                torch.cuda.emtpy_cache()
+                torch.cuda.empty_cache()
 
             # calculate loss and do backpropagation
             # TODO: Not all models call labels = lm_labels => this should be corrected anymays though
@@ -67,7 +69,9 @@ class PyTorchBenchmarks(Benchmarks):
     def inference(self, model_name, batch_size, sequence_length, trace_memory=False):
         config = self.config_dict[model_name]
         model = MODEL_MAPPING[config.__class__](config)
+        model.to(self.args.device)
         model.eval()
+
         input_ids = torch.randint(
             config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
         )
@@ -75,7 +79,7 @@ class PyTorchBenchmarks(Benchmarks):
             if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
                 trace = start_memory_tracing("transformers")
             else:
-                torch.cuda.emtpy_cache()
+                torch.cuda.empty_cache()
 
             model(input_ids)
 
