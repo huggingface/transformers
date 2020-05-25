@@ -57,7 +57,7 @@ class SummarizationTrainer(BaseTransformer):
         super().__init__(hparams, num_labels=None, mode=self.mode, tokenizer=tokenizer, **kwargs)
         self.model: BartForConditionalGeneration
         self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
-        assert Path(self.output_dir).exists()
+
         if os.path.exists(self.metrics_save_path):
             self.metrics = pickle_load(self.metrics_save_path)
         else:
@@ -488,11 +488,10 @@ class SummarizationDistiller(SummarizationTrainer):
 
 
 def main(args):
-    if os.path.exists(args.output_dir) and os.listdir(args.output_dir):
+    Path(args.output_dir).mkdir(exist_ok=True)
+    if os.listdir(args.output_dir):
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
-    if not args.output_dir:
-        args.output_dir = os.path.join("./results", f"dbart_{time.strftime('%Y%m%d_%H%M%S')}",)
-        os.makedirs(args.output_dir)
+    
     module_cls = SummarizationTrainer if args.no_teacher else SummarizationDistiller
     model: SummarizationTrainer = module_cls(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
