@@ -46,8 +46,6 @@ class RougeTracker:
         test_gt = lmap(str.strip, test_gt)
         self.gt = test_gt  # {'test': test_gt}
         self.tokenizer = BartTokenizer.from_pretrained("bart-large-cnn")
-        new_df = self.update()
-        pd.concat([self.df, new_df])
         self.csv_path = csv_path
 
     def tok_len(self, strang):
@@ -79,4 +77,5 @@ class RougeTracker:
             .astype(float)
             .dsort("R2")
         )
-        return new_df
+        return pd.concat([self.df, new_df])
+
