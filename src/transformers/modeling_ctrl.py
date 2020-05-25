@@ -150,14 +150,7 @@ class EncoderLayer(torch.nn.Module):
     def forward(self, x, mask, layer_past=None, adder=None, head_mask=None, use_cache=False):
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
-            normed,
-            normed,
-            normed,
-            mask,
-            layer_past=layer_past,
-            adder=adder,
-            head_mask=head_mask,
-            use_cache=use_cache,
+            normed, normed, normed, mask, layer_past=layer_past, adder=adder, head_mask=head_mask, use_cache=use_cache,
         )
         attn_output = attn_outputs[0]
         attn_output = self.dropout1(attn_output)
@@ -376,6 +369,7 @@ class CTRLModel(CTRLPreTrainedModel):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
+        adder = None
         # Attention mask.
         if attention_mask is not None:
             assert batch_size > 0, "batch_size has to be defined and > 0"
@@ -428,12 +422,7 @@ class CTRLModel(CTRLPreTrainedModel):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
             outputs = h(
-                hidden_states,
-                mask,
-                layer_past=layer_past,
-                adder=adder,
-                head_mask=head_mask[i],
-                use_cache=use_cache,
+                hidden_states, mask, layer_past=layer_past, adder=adder, head_mask=head_mask[i], use_cache=use_cache,
             )
             hidden_states, present = outputs[:2]
             if use_cache is True:

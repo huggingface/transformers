@@ -229,11 +229,7 @@ class Block(nn.Module):
 
     def forward(self, x, layer_past=None, adder=None, head_mask=None, use_cache=False):
         output_attn = self.attn(
-            self.ln_1(x),
-            layer_past=layer_past,
-            adder=adder,
-            head_mask=head_mask,
-            use_cache=use_cache,
+            self.ln_1(x), layer_past=layer_past, adder=adder, head_mask=head_mask, use_cache=use_cache,
         )
         a = output_attn[0]  # output_attn: a, present, (attentions)
 
@@ -447,6 +443,7 @@ class GPT2Model(GPT2PreTrainedModel):
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
+        adder = None
         # Attention mask.
         if attention_mask is not None:
             assert batch_size > 0, "batch_size has to be defined and > 0"
@@ -492,11 +489,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
             outputs = block(
-                hidden_states,
-                layer_past=layer_past,
-                attention_mask=adder,
-                head_mask=head_mask[i],
-                use_cache=use_cache,
+                hidden_states, layer_past=layer_past, adder=adder, head_mask=head_mask[i], use_cache=use_cache,
             )
 
             hidden_states, present = outputs[:2]

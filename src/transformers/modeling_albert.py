@@ -339,9 +339,7 @@ class AlbertTransformer(nn.Module):
             group_idx = int(i / (self.config.num_hidden_layers / self.config.num_hidden_groups))
 
             layer_group_output = self.albert_layer_groups[group_idx](
-                hidden_states,
-                adder,
-                head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
+                hidden_states, adder, head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
             )
             hidden_states = layer_group_output[0]
 
