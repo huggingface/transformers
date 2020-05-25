@@ -290,7 +290,8 @@ def is_frozen(model):
 def get_layers_to_copy(n_to_get, tot):
     all_layers = list(range(tot))
     if tot == 12:  # Alternating for special cases
-        base = {6: [0, 2, 4, 7, 9, 11], 1: [11], 3: [0, 6, 11], 2: [0, 11],
+        base = {6: [0, 2, 4, 7, 9, 11], 1: [11],
+                3: [0, 6, 11], 2: [0, 11], 4: [0, 4, 8, 11],
                 9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
                 12: all_layers}
         return base[n_to_get]
@@ -330,10 +331,11 @@ class SummarizationDistiller(SummarizationTrainer):
         if self.different_encoder:
             copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
         Path(hparams.output_dir).mkdir(exist_ok=True)
+        self.model.teacher = teacher
 
         super().__init__(hparams, model=student, config=student_cfg)
-        if torch.cuda.is_available() and hparams.fp16:
-            teacher = teacher.to(self.device).half()
+        #if torch.cuda.is_available() and hparams.fp16:
+            #teacher = teacher.to(self.device).half()
         # assert len(student.model.encoder.layers) == 12
         if not self.different_encoder:
             freeze_part(self.model.model.encoder)
@@ -342,7 +344,7 @@ class SummarizationDistiller(SummarizationTrainer):
             freeze_part(self.model.model.decoder)
 
         assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
-        self.model.teacher = teacher
+
         self.refreeze()
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
