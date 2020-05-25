@@ -70,13 +70,13 @@ class UsedMemoryState(NamedTuple):
 
 class Memory(NamedTuple):
     """ `Memory` NamedTuple have a single field `bytes` and
-        you can get a human readable int of the number of mega bytes by calling `__repr__`
+        you can get a human readable str of the number of mega bytes by calling `__repr__`
             - `byte` (integer): number of bytes,
     """
     bytes: int
 
-    def __repr__(self) -> int:
-        return bytes_to_mega_bytes(self.bytes)
+    def __repr__(self) -> str:
+        return str(bytes_to_mega_bytes(self.bytes))
 
 
 class MemoryState(NamedTuple):
@@ -554,8 +554,6 @@ class Benchmarks(ABC):
                                 "model": model_name,
                                 "batch_size": bs,
                                 "sequence_length": ss,
-                                "result": ("{}" if not isinstance(result_model, float) else "{:.4f}").format(
-                                    result_model
-                                ),
+                                "result": ("{}" if not isinstance(result_model, float) else "{:.4f}").format(result_model),
                             }
                         )

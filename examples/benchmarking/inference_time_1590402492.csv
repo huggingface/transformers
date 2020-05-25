@@ -1,0 +1,2 @@
+model,batch_size,sequence_length,result
+distilbert-base-cased,1,8,0.9018
