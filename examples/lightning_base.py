@@ -172,7 +172,7 @@ class BaseTransformer(pl.LightningModule):
             "--model_name_or_path",
             default=None,
             type=str,
-            required=True,
+            required=False,
             help="Path to pretrained model or model identifier from huggingface.co/models",
         )
         parser.add_argument(
