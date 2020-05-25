@@ -746,7 +746,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         attention_mask = attention_mask.expand_as(input_ids) < question_end_index
 
         attention_mask = attention_mask.int() + 1  # from True, False to 2, 1
-        return attention_mask
+        return attention_mask.long()
 
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
     def forward(
