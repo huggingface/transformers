@@ -341,8 +341,8 @@ class SummarizationDistiller(SummarizationTrainer):
         if not self.different_encoder:
             freeze_part(self.model.model.encoder)
             teacher.model.encoder = None
-        if not self.different_decoder:
-            freeze_part(self.model.model.decoder)
+        #if not self.different_decoder:
+            #freeze_part(self.model.model.decoder)
 
         assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
 
