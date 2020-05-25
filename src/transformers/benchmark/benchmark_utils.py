@@ -504,7 +504,7 @@ class Benchmarks(ABC):
                             f"\t\t{model_name}/{batch_size}/{sequence_length}: " f"{(round(1000 * result) / 1000)}s"
                         )
                     else:
-                        self.print_fn(f"\t\t{model_name}/{batch_size}/{sequence_length}: " f"{result}")
+                        self.print_fn(f"\t\t{model_name}/{batch_size}/{sequence_length}: " f"{result} MB")
 
     def print_memory_trace_statistics(self, summary: MemorySummary):
         self.print_fn(
