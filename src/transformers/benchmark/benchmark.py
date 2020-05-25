@@ -18,73 +18,57 @@
 # If checking the tensors placement
 # tf.debugging.set_log_device_placement(True)
 
-import csv
-import logging
-import timeit
-from typing import Callable, Dict, List
-from abc import ABC, abstractmethod
+from typing import Callable
+
+
+from .benchmark_utils import Benchmarks, start_memory_tracing, stop_memory_tracing
 
 from transformers import (
-    AutoTokenizer,
-    MemorySummary,
-    is_tf_available,
     is_torch_available,
-    start_memory_tracing,
-    stop_memory_tracing,
-    BenchmarkArguments,
+    PretrainedConfig,
+    MODEL_MAPPING
 )
-
-from .modeling_utils import PreTrainedModel
-
-
-if is_tf_available():
-    import tensorflow as tf
-    from .modeling_tf_auto import TFAutoModel
-    from .benchmark_args import TensorflowBenchmarkArguments
 
 if is_torch_available():
     import torch
-    from .modeling_auto import AutoModel
-    from .benchmark_args import  PyTorchBenchmarkArguments
+    from .benchmark_args import PyTorchBenchmarkArguments
 
 
 class PyTorchBenchmarks(Benchmarks):
 
     args: PyTorchBenchmarkArguments
-    models: PreTrainedModel
+    configs: PretrainedConfig
     train_fn: Callable[[int, int], int]
     inference_fn: Callable[[int, int], int]
 
-    def __init__(
-        self,
-        args: PyTorchBenchmarkArguments,
-        models: List[PreTrainedModel] = None,
-        train_fn: Callable = None,
-        inference_fn: Callable = None
-    ):
-        super().__init__(args=args)
-
-        if models is None:
-            self.model_dict = {model_name: AutoModel.from_pretrained(model_name) for model_name in self.args.model_names}
-        else:
-            self.model_dict = {model_name: model for model_name, model in zip(self.args.model_names, models)}
-
-        self.train_fn = train_fn
-        self.inference_fn = inference_fn
-
-        if inference_fn is None:
-            self.inference_fn = pytorch_default_inference
-
-    def train(self, model_name, batch_size, sequence_length):
-        model = self.model_dict[model_name]
+    def train(self, model_name, batch_size, sequence_length, trace_memory=False):
+        config = self.config_dict[model_name]
+        model = MODEL_MAPPING[config.__class__](config)
+        model.train()
         input_ids = torch.randint(model.config.vocab_size, batch_size, sequence_length)
         return self.train_fn(model, input_ids)
 
-    def inference(self, model_name, batch_size, sequence_length):
-        model = self.model_dict[model_name]
-        input_ids = torch.randint(model.config.vocab_size, batch_size, sequence_length)
-        return self.inference_fn(model, input_ids)
+    def inference(self, model_name, batch_size, sequence_length, trace_memory=False):
+        config = self.config_dict[model_name]
+        model = MODEL_MAPPING[config.__class__](config)
+        model.eval()
+        input_ids = torch.randint(config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device)
+        if trace_memory is True:
+            if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
+                trace = start_memory_tracing("transformers")
+            else:
+                torch.cuda.emtpy_cache()
 
+            model(input_ids)
 
-def pytorch_default_inference(model, input_ids):
-    model(input_ids)
+            if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
+                summary = stop_memory_tracing(trace)
+                memory = summary.total
+            else:
+                memory = torch.cuda.max_memory_reserved()
+
+            return memory
+        else:
+            model(input_ids)
+
+        return None

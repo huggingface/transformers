@@ -4,8 +4,9 @@
 
 from ..file_utils import is_torch_available, is_tf_available
 
-if torch_is_available():
+if is_torch_available():
     from .benchmark_args import PyTorchBenchmarkArguments
+    from .benchmark import PyTorchBenchmarks
 
-if tf_is_available():
+if is_tf_available():
     from .benchmark_tf_args import TensorflowBenchmarkArguments

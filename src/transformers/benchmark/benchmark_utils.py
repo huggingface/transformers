@@ -6,18 +6,27 @@ Copyright by the AllenNLP authors.
 
 import linecache
 import logging
+import timeit
+import copy
+import csv
 import os
 import sys
 from collections import defaultdict
-from typing import Iterable, List, NamedTuple, Optional, Union
+from typing import Iterable, List, NamedTuple, Optional, Union, Callable
 from abc import ABC, abstractmethod
 
-from .file_utils import is_tf_available, is_torch_available
+from ..file_utils import is_tf_available, is_torch_available
 
+from .benchmark_args_utils import BenchmarkArguments
+
+
+from transformers import (
+    PretrainedConfig,
+    AutoConfig
+)
 
 if is_torch_available():
     from torch.cuda import empty_cache as torch_empty_cache
-    import torch
 
 if is_tf_available():
     from tensorflow.python.eager import context as tf_context
@@ -375,15 +384,21 @@ class Benchmarks(ABC):
     """
 
     args: BenchmarkArguments
+    configs: PretrainedConfig
     print_fn: Callable[[str], None]
+    inference_fn: Callable[[int, int], int]
+    train_fn: Callable[[int, int], int]
 
-    @abstractmethod
-    def __init__(
-        self,
-        args: BenchmarkArguments = None,
-    ):
+    def __init__(self, args: BenchmarkArguments = None, configs: PretrainedConfig = None):
         self.args = args
         self.print_fn = self.get_print_function(args)
+
+        if configs is None:
+            self.config_dict = {
+                model_name: AutoConfig.from_pretrained(model_name) for model_name in self.args.model_names
+            }
+        else:
+            self.config_dict = {model_name: config for model_name, config in zip(self.args.model_names, configs)}
 
     @abstractmethod
     def train(self, model_name, batch_size, sequence_length):
@@ -394,46 +409,77 @@ class Benchmarks(ABC):
         pass
 
     def run(self):
-        result = {model_name: {} for model_name in self.args.model_names}
+        result_dict = {model_name: {} for model_name in self.args.model_names}
+        inference_result_time = copy.deepcopy(result_dict)
+        inference_result_memory = copy.deepcopy(result_dict)
+        train_result_time = copy.deepcopy(result_dict)
+        train_result_memory = copy.deepcopy(result_dict)
 
         for c, model_name in enumerate(self.args.model_names):
             self.print_fn(f"{c + 1} / {len(self.args.model_names)}")
 
-            result[model_name] = {"bs": self.args.batch_sizes, "ss": self.args.sequence_lengths, "time": {}, "memory": {}}
-            result[model_name]["time"] = {i: {} for i in self.args.batch_sizes}
-            result[model_name]["memory"] = {i: {} for i in self.args.batch_sizes}
+            model_dict = {
+                "bs": self.args.batch_sizes,
+                "ss": self.args.sequence_lengths,
+                "result": {i: {} for i in self.args.batch_sizes},
+            }
+            inference_result_time[model_name] = copy.deepcopy(model_dict)
+            inference_result_memory[model_name] = copy.deepcopy(model_dict)
+            train_result_time[model_name] = copy.deepcopy(model_dict)
+            train_result_memory[model_name] = copy.deepcopy(model_dict)
 
             for batch_size in self.args.batch_sizes:
                 for sequence_length in self.args.sequence_lengths:
-
+                    if not self.args.no_inference:
                         if not self.args.no_memory:
-                            if self.args.inference:
-                                memory = self.inferencen(model_name, batch_size, sequence_length)
-                                result[model_name]["memory"][batch_size][sequence_length] = memory
-
-                            if not self.args.no_training:
-                                memory = self.train(model_name, batch_size, sequence_length)
-                                result[model_name]["memory"][batch_size][sequence_length] = memory
-
+                            memory = self.inference(model_name, batch_size, sequence_length, trace_memory=True)
+                            inference_result_memory[model_name]["result"][batch_size][sequence_length] = memory
                         if not self.args.no_speed:
-                            if self.args.inference:
-                                runtimes = timeit.repeat(lambda: self.inference(model_name, batch_size, sequence_length), repeat=self.args.average_over, number=3)
-                                average_time = sum(runtimes) / float(len(runtimes)) / 3.0
-                                result[model_name]["time"][batch_size][sequence_length] = average_time
+                            runtimes = timeit.repeat(
+                                lambda: self.inference(model_name, batch_size, sequence_length),
+                                repeat=self.args.average_over,
+                                number=3,
+                            )
+                            average_time = sum(runtimes) / float(len(runtimes)) / 3.0
+                            inference_result_time[model_name]["result"][batch_size][sequence_length] = average_time
 
-                            if not self.args.no_training:
-                                runtimes = timeit.repeat(lambda: self.train(model_name, batch_size, sequence_length), repeat=self.args.average_over, number=3)
-                                average_time = sum(runtimes) / float(len(runtimes)) / 3.0
-                                result[model_name]["time"][batch_size][sequence_length] = average_time
+                    if self.args.training:
+                        if not self.args.no_memory:
+                            memory = self.train(model_name, batch_size, sequence_length)
+                            train_result_memory[model_name]["result"][batch_size][sequence_length] = memory
+                        if not self.args.no_speed:
+                            runtimes = timeit.repeat(
+                                lambda: self.train(model_name, batch_size, sequence_length),
+                                repeat=self.args.average_over,
+                                number=3,
+                            )
+                            average_time = sum(runtimes) / float(len(runtimes)) / 3.0
+                            train_result_time[model_name]["result"][batch_size][sequence_length] = average_time
 
-        if self.args.is_print:
-            self.print_results()
+        if not self.args.no_inference:
+            if not self.args.no_speed:
+                self.print_fn(f"======= INFERENCE - SPEED - RESULT =======")
+                self.print_results(inference_result_time)
+                self.save_to_csv(inference_result_time, self.args.csv_time_filename_inference)
 
-        if self.args.save_to_csv:
-            self.save_to_csv()
+            if not self.args.no_memory:
+                self.print_fn(f"======= INFERENCE - MEMORY - RESULT =======")
+                self.print_results(inference_result_memory)
+                self.save_to_csv(inference_result_memory, self.args.csv_memory_filename_inference)
+
+        if self.args.training:
+            if not self.args.no_speed:
+                self.print_fn(f"======= TRAIN - SPEED - RESULT =======")
+                self.print_results(train_result_time)
+                self.save_to_csv(train_result_time, self.args.csv_time_filename_train)
+
+            if not self.args.no_memory:
+                self.print_fn(f"======= TRAIN - MEMORY - RESULT =======")
+                self.print_results(train_result_memory)
+                self.save_to_csv(train_result_memory, self.args.csv_memory_filename_train)
 
     def get_print_function(self, args):
-        if args.save_print_log:
+        if args.log_print:
             logging.basicConfig(
                 level=logging.DEBUG,
                 filename=args.log_filename,
@@ -441,32 +487,26 @@ class Benchmarks(ABC):
                 format="%(asctime)-15s %(levelname)-8s %(message)s",
             )
 
-            def print_with_print_log(*args):
+            def print_and_log(*args):
                 logging.info(*args)
                 print(*args)
 
-            return print_with_print_log
+            return print_and_log
         else:
             return print
 
-    def print_results(self):
-        self.print_fn("=========== RESULTS ===========")
+    def print_results(self, result_dict):
         for model_name in self.args.model_names:
             self.print_fn("\t" + f"======= MODEL CHECKPOINT: {model_name} =======")
-            for batch_size in self.results[model_name]["bs"]:
-                self.print_fn("\t\t" + f"===== BATCH SIZE: {batch_size} =====")
-                for sequence_length in self.results[model_name]["ss"]:
-                    time = self.results[model_name]["time"][batch_size][sequence_length]
-                    memory = self.results[model_name]["memory"][batch_size][sequence_length]
-                    if isinstance(time, str):
-                        self.print_fn(f"\t\t{model_name}/{batch_size}/{sequence_length}: " f"{time} " f"{memory}")
-                    else:
+            for batch_size in result_dict[model_name]["bs"]:
+                for sequence_length in result_dict[model_name]["ss"]:
+                    result = result_dict[model_name]["result"][batch_size][sequence_length]
+                    if isinstance(result, float):
                         self.print_fn(
-                            f"\t\t{model_name}/{batch_size}/{sequence_length}: "
-                            f"{(round(1000 * time) / 1000)}"
-                            f"s "
-                            f"{memory}"
+                            f"\t\t{model_name}/{batch_size}/{sequence_length}: " f"{(round(1000 * result) / 1000)}s"
                         )
+                    else:
+                        self.print_fn(f"\t\t{model_name}/{batch_size}/{sequence_length}: " f"{result}")
 
     def print_memory_trace_statistics(self, summary: MemorySummary):
         self.print_fn(
@@ -492,40 +532,30 @@ class Benchmarks(ABC):
         )
         self.print_fn(f"\nTotal memory increase: {summary.total}")
 
-    def save_to_csv(self):
-        with open(self.args.csv_time_filename, mode="w") as csv_time_file, open(
-            self.args.csv_memory_filename, mode="w"
-        ) as csv_memory_file:
+    def save_to_csv(self, result_dict, filename):
+        if not self.args.save_to_csv:
+            return
+        self.printfn("Saving results to csv.")
+        with open(filename, mode="w") as csv_file:
 
-            assert len(self.args.model_names) > 0, "At least 1 model should be defined, but got {}".format(self.model_names)
+            assert len(self.args.model_names) > 0, "At least 1 model should be defined, but got {}".format(
+                self.model_names
+            )
 
             fieldnames = ["model", "batch_size", "sequence_length"]
-            time_writer = csv.DictWriter(csv_time_file, fieldnames=fieldnames + ["time_in_s"])
-            time_writer.writeheader()
-            memory_writer = csv.DictWriter(csv_memory_file, fieldnames=fieldnames + ["memory"])
-            memory_writer.writeheader()
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames + ["result"])
+            writer.writeheader()
 
             for model_name in self.args.model_names:
-                time_dict = self.results[model_name]["time"]
-                memory_dict = self.results[model_name]["memory"]
-                for bs in time_dict:
-                    for ss in time_dict[bs]:
-                        time_writer.writerow(
+                result_dict = result_dict[model_name]["result"]
+                for bs in result_dict:
+                    for ss in result_dict[bs]:
+                        result = result_dict[bs][ss]
+                        writer.writerow(
                             {
                                 "model": model_name,
                                 "batch_size": bs,
                                 "sequence_length": ss,
-                                "time_in_s": "{:.4f}".format(time_dict[bs][ss]),
-                            }
-                        )
-
-                for bs in memory_dict:
-                    for ss in time_dict[bs]:
-                        memory_writer.writerow(
-                            {
-                                "model": model_name,
-                                "batch_size": bs,
-                                "sequence_length": ss,
-                                "memory": memory_dict[bs][ss],
+                                "result": ("{}" if not isinstance(result, float) else "{:.4f}").format(result),
                             }
                         )

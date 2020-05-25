@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Tuple
 import logging
 
-from .file_utils import cached_property, is_torch_available, torch_required
+from ..file_utils import cached_property, is_torch_available, torch_required
 from .benchmark_args_utils import BenchmarkArguments
 
 if is_torch_available():
@@ -41,13 +41,13 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-@torch_required
 class PyTorchBenchmarkArguments(BenchmarkArguments):
     no_cuda: bool = field(default=False, metadata={"help": "Weather to run on available cuda devices"})
     torchscript: bool = field(default=False, metadata={"help": "Trace the models using torchscript"})
     fp16: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
 
     @cached_property
+    @torch_required
     def _setup_devices(self) -> Tuple["torch.device", int]:
         logger.info("PyTorch: setting up devices")
         if self.no_cuda:
@@ -62,9 +62,11 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
         return device, n_gpu
 
     @property
+    @torch_required
     def device(self) -> "torch.device":
         return self._setup_devices[0]
 
     @property
+    @torch_required
     def n_gpu(self):
         return self._setup_devices[1]

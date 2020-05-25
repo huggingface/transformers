@@ -19,19 +19,6 @@ else:
 
 import logging
 
-# Benchmarking
-from .benchmark_utils import (
-    Frame,
-    Memory,
-    MemoryState,
-    MemorySummary,
-    MemoryTrace,
-    UsedMemoryState,
-    bytes_to_human_readable,
-    start_memory_tracing,
-    stop_memory_tracing,
-)
-
 # Configurations
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
@@ -358,8 +345,7 @@ if is_torch_available():
     from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
 
 # Benchmarks
-    from .benchmark_args import BenchmarkArguments, PyTorchBenchmarkArguments
-    from .benchmarks import PyTorchBenchmarks
+    from .benchmark import PyTorchBenchmarks, PyTorchBenchmarkArguments
 
 # TensorFlow
 if is_tf_available():
@@ -537,7 +523,7 @@ if is_tf_available():
     from .trainer_tf import TFTrainer
 
 # Benchmarks
-    from .benchmark_args import BenchmarkArguments, TensorflowBenchmarkArguments
+    from .benchmark import TensorflowBenchmarkArguments
 
 
 

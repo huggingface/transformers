@@ -35,19 +35,52 @@ class BenchmarkArguments:
     into argparse arguments to be able to specify them on
     the command line.
     """
-    models: List[str] = list_field(default=[], metadata={"help": "Model checkpoints to be provided to the AutoModel classes. Leave blank to benchmark the base version of all available model "})
 
+    models: List[str] = list_field(
+        default=[],
+        metadata={
+            "help": "Model checkpoints to be provided to the AutoModel classes. Leave blank to benchmark the base version of all available model "
+        },
+    )
+
+    no_inference: bool = field(default=False, metadata={"help": "Don't benchmark inference of model"})
+    training: bool = field(default=False, metadata={"help": "Benchmark training of model"})
     verbose: bool = field(default=False, metadata={"help": "Verbose memory tracing"})
     no_speed: bool = field(default=False, metadata={"help": "Don't perform speed measurments"})
     no_memory: bool = field(default=False, metadata={"help": "Don't perform memory measurments"})
+    trace_memory_line_by_line: bool = field(default=False, metadata={"help": "Trace memory line by line"})
     save_to_csv: bool = field(default=False, metadata={"help": "Save result to a CSV file"})
     log_print: bool = field(default=False, metadata={"help": "Save all print statements in a log file"})
-    csv_time_filename: str = field(default=f"time_{round(time())}.csv", metadata={"help": "CSV filename used if saving time results to csv."})
-    csv_memory_filename: str = field(default=f"memory_{round(time())}.csv", metadata={"help": "CSV filename used if saving memory results to csv."})
-    log_filename: str = field(default=f"log_{round(time())}.csv", metadata={"help": "Log filename used if print statements are saved in log."})
+    csv_time_filename_inference: str = field(
+        default=f"inference_time_{round(time())}.csv",
+        metadata={"help": "CSV filename used if saving time results to csv."},
+    )
+    csv_memory_filename_inference: str = field(
+        default=f"inference_memory_{round(time())}.csv",
+        metadata={"help": "CSV filename used if saving memory results to csv."},
+    )
+    csv_time_filename_train: str = field(
+        default=f"train_time_{round(time())}.csv",
+        metadata={"help": "CSV filename used if saving time results to csv for training."},
+    )
+    csv_memory_filename_train: str = field(
+        default=f"train_memory_{round(time())}.csv",
+        metadata={"help": "CSV filename used if saving memory results to csv for training."},
+    )
+    log_filename: str = field(
+        default=f"log_{round(time())}.csv",
+        metadata={"help": "Log filename used if print statements are saved in log."},
+    )
     average_over: int = field(default=3, metadata={"help": "Times an experiment will be run."})
-    batch_sizes: List[int] = list_field(default=[1, 2, 4, 8], metadata={"help": "List of batch sizes for which memory and time performance will be evaluated"})
-    sequence_lengths: List[int] = list_field(default=[8, 64, 128, 256, 512, 1024], metadata={"help": "List of sequence lengths for which memory and time performance will be evaluated"})
+    #    batch_sizes: List[int] = list_field(default=[1, 2, 4, 8], metadata={"help": "List of batch sizes for which memory and time performance will be evaluated"})
+    batch_sizes: List[int] = list_field(
+        default=[1], metadata={"help": "List of batch sizes for which memory and time performance will be evaluated"}
+    )
+    #    sequence_lengths: List[int] = list_field(default=[8, 64, 128, 256, 512, 1024], metadata={"help": "List of sequence lengths for which memory and time performance will be evaluated"})
+    sequence_lengths: List[int] = list_field(
+        default=[8],
+        metadata={"help": "List of sequence lengths for which memory and time performance will be evaluated"},
+    )
 
     def to_json_string(self):
         """
@@ -70,8 +103,8 @@ class BenchmarkArguments:
                 "roberta-base",
                 "ctrl",
                 "t5-base",
-                "bart-large",
-                "reformer-enwik8"
+                "facebook/bart-large",
+                "google/reformer-enwik8"
             ]
         else:
             return self.models

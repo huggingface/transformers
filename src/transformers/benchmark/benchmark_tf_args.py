@@ -17,7 +17,8 @@
 from dataclasses import dataclass, field
 import logging
 
-from .file_utils import is_tf_available, tf_required
+from ..file_utils import is_tf_available, tf_required
+
 from .benchmark_args_utils import BenchmarkArguments
 
 if is_tf_available():
@@ -28,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-@tf_required
 class TensorflowBenchmarkArguments(BenchmarkArguments):
     xla: bool = field(default=False, metadata={"help": "TensorFlow only: use XLA acceleration."})
     amp: bool = field(default=False, metadata={"help": "TensorFlow only: use automatic mixed precision acceleration."})
