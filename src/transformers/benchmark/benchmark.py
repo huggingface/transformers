@@ -20,6 +20,8 @@ from transformers import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING, PretrainedCo
 
 from .benchmark_utils import Benchmarks, start_memory_tracing, stop_memory_tracing
 
+import inspect
+
 
 if is_torch_available():
     import torch
@@ -37,7 +39,22 @@ class PyTorchBenchmarks(Benchmarks):
         model.to(self.args.device)
         model.train()
 
-        input_ids = torch.randint(model.config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device)
+        def compute_loss_and_backprob():
+            # TODO: Not all models call labels argument labels => this hack using the function signature should be corrected once all models have a common name for labels
+            function_argument_names = inspect.getfullargspec(model.forward).args
+
+            input_ids = torch.randint(model.config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device)
+            if "labels" in function_argument_names:
+                loss = model(input_ids, labels=input_ids)[0]
+            elif "lm_labels" in function_argument_names:
+                loss = model(input_ids, lm_labels=input_ids)[0]
+            elif "masked_lm_labels" in function_argument_names:
+                loss = model(input_ids, masked_lm_labels=input_ids)[0]
+            else:
+                NotImplementedError(f"{model_name} does not seem to allow training with labels")
+
+            loss.backward()
+            model.zero_grad()
 
         if trace_memory is True:
             if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
@@ -46,10 +63,7 @@ class PyTorchBenchmarks(Benchmarks):
                 torch.cuda.empty_cache()
 
             # calculate loss and do backpropagation
-            # TODO: Not all models call labels = lm_labels => this should be corrected anymays though
-            loss = model(input_ids, labels=input_ids)[0]
-            loss.backward()
-            model.zero_grad()
+            compute_loss_and_backprob()
 
             if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
                 summary = stop_memory_tracing(trace)
@@ -59,11 +73,7 @@ class PyTorchBenchmarks(Benchmarks):
 
             return memory
         else:
-            # only to time it
-            # calculate loss and do backpropagation
-            loss = model(input_ids, labels=input_ids)[0]
-            loss.backward()
-            model.zero_grad()
+            compute_loss_and_backprob()
         return None
 
     def inference(self, model_name, batch_size, sequence_length, trace_memory=False):
