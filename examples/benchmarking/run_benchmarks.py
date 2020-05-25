@@ -18,16 +18,12 @@
 # If checking the tensors placement
 # tf.debugging.set_log_device_placement(True)
 
-from transformers import (
-    HfArgumentParser,
-    PyTorchBenchmarkArguments,
-    PyTorchBenchmarks
-)
+from transformers import HfArgumentParser, PyTorchBenchmarkArguments, PyTorchBenchmarks
 
 
 def main():
     parser = HfArgumentParser(PyTorchBenchmarkArguments)
-    benchmark_args = parser.parse_args_into_dataclasses()
+    benchmark_args = parser.parse_args_into_dataclasses()[0]
     benchmark = PyTorchBenchmarks(args=benchmark_args)
     benchmark.run()
 

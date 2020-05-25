@@ -14,12 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 
 from ..file_utils import is_tf_available, tf_required
-
 from .benchmark_args_utils import BenchmarkArguments
+
 
 if is_tf_available():
     import tensorflow as tf
@@ -32,4 +32,6 @@ logger = logging.getLogger(__name__)
 class TensorflowBenchmarkArguments(BenchmarkArguments):
     xla: bool = field(default=False, metadata={"help": "TensorFlow only: use XLA acceleration."})
     amp: bool = field(default=False, metadata={"help": "TensorFlow only: use automatic mixed precision acceleration."})
-    keras_predict: bool = field(default=False, metadata={"help": "Whether to use model.predict instead of model() to do a forward pass."})
+    keras_predict: bool = field(
+        default=False, metadata={"help": "Whether to use model.predict instead of model() to do a forward pass."}
+    )

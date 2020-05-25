@@ -4,7 +4,7 @@ import sys
 from argparse import ArgumentParser
 from enum import Enum
 from pathlib import Path
-from typing import Any, Iterable, NewType, Tuple, Union, List
+from typing import Any, Iterable, List, NewType, Tuple, Union
 
 
 DataClass = NewType("DataClass", Any)

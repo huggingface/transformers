@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 from dataclasses import dataclass, field
 from typing import Tuple
-import logging
 
 from ..file_utils import cached_property, is_torch_available, torch_required
 from .benchmark_args_utils import BenchmarkArguments
+
 
 if is_torch_available():
     import torch

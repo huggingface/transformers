@@ -20,14 +20,10 @@
 
 from typing import Callable
 
+from transformers import MODEL_MAPPING, PretrainedConfig, is_torch_available
 
 from .benchmark_utils import Benchmarks, start_memory_tracing, stop_memory_tracing
 
-from transformers import (
-    is_torch_available,
-    PretrainedConfig,
-    MODEL_MAPPING
-)
 
 if is_torch_available():
     import torch
@@ -52,7 +48,9 @@ class PyTorchBenchmarks(Benchmarks):
         config = self.config_dict[model_name]
         model = MODEL_MAPPING[config.__class__](config)
         model.eval()
-        input_ids = torch.randint(config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device)
+        input_ids = torch.randint(
+            config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
+        )
         if trace_memory is True:
             if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
                 trace = start_memory_tracing("transformers")

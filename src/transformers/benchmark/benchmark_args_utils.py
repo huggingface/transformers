@@ -14,11 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from time import time
 import dataclasses
-from dataclasses import dataclass, field
-from typing import List
 import json
+from dataclasses import dataclass, field
+from time import time
+from typing import List
 
 
 def list_field(default=None, metadata=None):
@@ -104,7 +104,7 @@ class BenchmarkArguments:
                 "ctrl",
                 "t5-base",
                 "facebook/bart-large",
-                "google/reformer-enwik8"
+                "google/reformer-enwik8",
             ]
         else:
             return self.models
@@ -114,4 +114,6 @@ class BenchmarkArguments:
 class TensorflowBenchmarkArguments(BenchmarkArguments):
     xla: bool = field(default=False, metadata={"help": "TensorFlow only: use XLA acceleration."})
     amp: bool = field(default=False, metadata={"help": "TensorFlow only: use automatic mixed precision acceleration."})
-    keras_predict: bool = field(default=False, metadata={"help": "Whether to use model.predict instead of model() to do a forward pass."})
+    keras_predict: bool = field(
+        default=False, metadata={"help": "Whether to use model.predict instead of model() to do a forward pass."}
+    )

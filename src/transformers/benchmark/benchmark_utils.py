@@ -4,26 +4,22 @@ This file is adapted from the AllenNLP library at https://github.com/allenai/all
 Copyright by the AllenNLP authors.
 """
 
-import linecache
-import logging
-import timeit
 import copy
 import csv
+import linecache
+import logging
 import os
 import sys
-from collections import defaultdict
-from typing import Iterable, List, NamedTuple, Optional, Union, Callable
+import timeit
 from abc import ABC, abstractmethod
+from collections import defaultdict
+from typing import Callable, Iterable, List, NamedTuple, Optional, Union
+
+from transformers import AutoConfig, PretrainedConfig
 
 from ..file_utils import is_tf_available, is_torch_available
-
 from .benchmark_args_utils import BenchmarkArguments
 
-
-from transformers import (
-    PretrainedConfig,
-    AutoConfig
-)
 
 if is_torch_available():
     from torch.cuda import empty_cache as torch_empty_cache
@@ -315,10 +311,9 @@ def stop_memory_tracing(
 
         cumulative_memory_dict = defaultdict(lambda: [0, 0, 0])
 
-        for (
-            (frame, cpu_mem, gpu_mem),
-            (next_frame, next_cpu_mem, next_gpu_mem),
-        ) in zip(memory_trace[:-1], memory_trace[1:]):
+        for ((frame, cpu_mem, gpu_mem), (next_frame, next_cpu_mem, next_gpu_mem),) in zip(
+            memory_trace[:-1], memory_trace[1:]
+        ):
             cpu_mem_inc = next_cpu_mem - cpu_mem
             gpu_mem_inc = next_gpu_mem - gpu_mem
             cpu_gpu_mem_inc = cpu_mem_inc + gpu_mem_inc
@@ -330,7 +325,10 @@ def stop_memory_tracing(
 
             memory_curr_trace.append(
                 MemoryState(
-                    frame=frame, cpu=Memory(next_cpu_mem), gpu=Memory(next_gpu_mem), cpu_gpu=Memory(next_gpu_mem + next_cpu_mem),
+                    frame=frame,
+                    cpu=Memory(next_cpu_mem),
+                    gpu=Memory(next_gpu_mem),
+                    cpu_gpu=Memory(next_gpu_mem + next_cpu_mem),
                 )
             )
 
@@ -358,10 +356,7 @@ def stop_memory_tracing(
         total_memory = Memory(total_memory)
 
         return MemorySummary(
-            sequential=memory_diff_trace,
-            cumulative=cumulative_memory,
-            current=memory_curr_trace,
-            total=total_memory,
+            sequential=memory_diff_trace, cumulative=cumulative_memory, current=memory_curr_trace, total=total_memory,
         )
 
     return None
