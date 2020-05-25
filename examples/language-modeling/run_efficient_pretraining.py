@@ -64,7 +64,8 @@ class ModelArguments:
     discriminator_name_or_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The discriminator checkpoint for weights initialization. Leave None if you want to train a model from scratch."
+            "help": "The discriminator checkpoint for weights initialization. Leave None if you want to train a model "
+                    "from scratch."
         },
     )
     discriminator_config_name: Optional[str] = field(
@@ -75,7 +76,8 @@ class ModelArguments:
     generator_name_or_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The generator checkpoint for weights initialization. Leave None if you want to train a model from scratch."
+            "help": "The generator checkpoint for weights initialization. Leave None if you want to train a model "
+                    "from scratch."
         },
     )
     generator_config_name: Optional[str] = field(
@@ -100,6 +102,7 @@ class DataTrainingArguments:
     train_data_file: Optional[str] = field(
         default=None, metadata={"help": "The input training data file (a text file)."}
     )
+
     eval_data_file: Optional[str] = field(
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
@@ -126,6 +129,7 @@ class DataTrainingArguments:
             "Default to the model max input length for single sentence inputs (take into account special tokens)."
         },
     )
+
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
@@ -140,6 +144,17 @@ class DataTrainingArguments:
                                         "of files that will be created."}
     )
 
+    mask_probability: float = field(
+        default=0.15,
+        metadata={"help": "Percentage of the input that will be masked or replaced."}
+    )
+
+    max_predictions_per_sequence: int = field(
+        # Original implementation has a default of :(mask_probability + 0.005) * max_sequence_length
+        default=int((0.15 + 0.005) * 512),
+        metadata={"help": "Maximum tokens that will be masked in a sequence."}
+    )
+
 
 @dataclass
 class EfficientTrainingArguments(TrainingArguments):
@@ -147,12 +162,22 @@ class EfficientTrainingArguments(TrainingArguments):
         default=1_000_000,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
     )
+
     max_eval_steps: int = field(
         default=100,
         metadata={"help": "If > 0: set total number of eval steps to perform."},
     )
     warmup_steps: int = field(default=10_000, metadata={"help": "Linear warmup over warmup_steps."})
+
     weight_decay: float = field(default=0.1, metadata={"help": "Weight decay if we apply some."})
+
+    generator_weight: float = field(default=1.0, metadata={"help": "Weight coefficient for the generator loss"})
+
+    discriminator_weight: float = field(
+        default=50.0,
+        metadata={"help": "Weight coefficient for the discriminator loss"}
+    )
+
 
 
 def get_dataset(data_args: DataTrainingArguments, training_args: TrainingArguments, model_args: ModelArguments, tokenizer: Union[PreTrainedTokenizer, str], evaluate=False, local_rank=-1):
@@ -191,13 +216,15 @@ class OpenWebTextDataset(IterableDataset):
         # The dataset was already processed
         if os.path.exists(self.feature_directory) and not overwrite_cache:
             # TODO update to use logger
-            print("Re-using cache from previous iterations. Warning: we have no way of detecting an incomplete cache. "
-                  "If the tokenization was started but not finished, please use the `--ignore_cache=True` flag.")
+            logger.info(f"Re-using cache from {self.feature_directory}. Warning: we have no way of detecting an "
+                        f"incomplete cache. If the tokenization was started but not finished, please use the "
+                        f"`--ignore_cache=True` flag.")
             self.feature_set_paths = [
                 self.feature_directory / feature_set_path for feature_set_path in os.listdir(self.feature_directory)
             ]
             return
 
+        logger.info(f"Writing features at {self.feature_directory}")
         os.makedirs(self.feature_directory, exist_ok=overwrite_cache)
 
         n_archives_per_job = math.ceil(len(self.archives) / data_args.num_dataset_building_processes)
@@ -298,7 +325,14 @@ class OpenWebTextDataset(IterableDataset):
 
 
 class CombinedModel(nn.Module):
-    def __init__(self, discriminator: PreTrainedModel, generator: PreTrainedModel, tokenizer: PreTrainedTokenizer):
+    def __init__(
+            self,
+            discriminator: PreTrainedModel,
+            generator: PreTrainedModel,
+            tokenizer: PreTrainedTokenizer,
+            training_args: EfficientTrainingArguments,
+            data_args: DataTrainingArguments
+    ):
         super().__init__()
 
         self.discriminator = discriminator
@@ -309,17 +343,20 @@ class CombinedModel(nn.Module):
 
         self.tokenizer = tokenizer
 
+        self.discriminator_weight = training_args.discriminator_weight
+        self.generator_weight = training_args.generator_weight
+        self.mask_probability = data_args.mask_probability
+        self.max_predictions_per_sequence = data_args.max_predictions_per_sequence
+
         class Config:
-            xla_device: False
+            xla_device: bool = False
         self.config = Config()
 
     def mask_inputs(
         self,
         input_ids: torch.Tensor,
         mask_token_id,
-        mask_probability,
         tokens_to_ignore,
-        max_predictions_per_seq,
         proposal_distribution=1.0,
     ):
         input_ids = input_ids.clone()
@@ -334,8 +371,8 @@ class CombinedModel(nn.Module):
         number_of_tokens_to_be_masked = torch.max(
             torch.tensor(1),
             torch.min(
-                torch.tensor(max_predictions_per_seq),
-                torch.tensor(total_number_of_tokens * mask_probability, dtype=torch.long),
+                torch.tensor(self.max_predictions_per_sequence),
+                torch.tensor(total_number_of_tokens * self.mask_probability, dtype=torch.long),
             ),
         )
 
@@ -345,11 +382,11 @@ class CombinedModel(nn.Module):
         # Should be passed through a log function here
 
         # Weight of each position: 1 the position will be masked, 0 the position won't be masked
-        masked_lm_weights = torch.tensor([0] * max_predictions_per_seq, dtype=torch.bool, device=input_ids.device)
+        masked_lm_weights = torch.tensor([0] * self.max_predictions_per_sequence, dtype=torch.bool, device=input_ids.device)
         masked_lm_weights[:number_of_tokens_to_be_masked] = True
 
         # Sample from the probabilities
-        masked_lm_positions = sample_prob.multinomial(max_predictions_per_seq)
+        masked_lm_positions = sample_prob.multinomial(self.max_predictions_per_sequence)
 
         # Apply the weights to the positions
         masked_lm_positions *= masked_lm_weights.long()
@@ -393,9 +430,7 @@ class CombinedModel(nn.Module):
         masked_input_ids, masked_lm_positions = self.mask_inputs(
             input_ids,
             self.tokenizer.mask_token_id,
-            0.2,
             [self.tokenizer.cls_token_id, self.tokenizer.sep_token_id, self.tokenizer.mask_token_id],
-            30,
         )
 
         # only masked values should be counted in the loss; build a tensor containing the true values and -100 otherwise
@@ -433,7 +468,7 @@ class CombinedModel(nn.Module):
 
         discriminator_predictions = torch.round((torch.sign(discriminator_output) + 1) / 2).int().tolist()
 
-        total_loss = discriminator_loss + generator_loss
+        total_loss = (self.discriminator_weight * discriminator_loss) + (self.generator_weight * generator_loss)
 
         return (total_loss, (generator_output, discriminator_output), (fake_tokens, discriminator_predictions))
 
@@ -571,11 +606,14 @@ def main():
     else:
         data_args.block_size = min(data_args.block_size, tokenizer.max_len)
 
-    import torch_xla.core.xla_model as xm
-    if xm.is_master_ordinal(local=True):
-        get_dataset(data_args, training_args, model_args, tokenizer=tokenizer, local_rank=training_args.local_rank)
+    try:
+        import torch_xla.core.xla_model as xm
+        if xm.is_master_ordinal(local=True):
+            get_dataset(data_args, training_args, model_args, tokenizer=tokenizer, local_rank=training_args.local_rank)
 
-    xm.rendezvous("dataset building")
+        xm.rendezvous("dataset building")
+    except ImportError:
+        logger.info("Not running on TPU")
 
     # Get datasets
     train_dataset = (
@@ -590,7 +628,7 @@ def main():
     )
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, mlm_probability=0)
 
-    model = CombinedModel(discriminator, generator, tokenizer)
+    model = CombinedModel(discriminator, generator, tokenizer, training_args, data_args)
 
     # Initialize our Trainer
     trainer = Trainer(
