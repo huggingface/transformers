@@ -373,7 +373,7 @@ class LongformerSelfAttention(nn.Module):
             ]
             attn[extra_attention_mask_nonzeros[::-1]] = nonzero_selected_attn.view(
                 len(selection_padding_mask_nonzeros[0]), -1
-            ).type_as(hidden_states)
+            ).type_as(attn)
 
         context_layer = attn.transpose(0, 1)
         if self.output_attentions:
