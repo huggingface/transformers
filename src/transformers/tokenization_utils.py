@@ -25,7 +25,8 @@ import re
 import warnings
 from collections import UserDict, defaultdict
 from contextlib import contextmanager
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
+from enum import Enum
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union, Mapping, MutableMapping
 
 from tokenizers import AddedToken as AddedTokenFast
 from tokenizers import Encoding as EncodingFast
@@ -56,6 +57,11 @@ EncodedInput = List[int]
 TextInputPair = Tuple[str, str]
 PreTokenizedInputPair = Tuple[List[str], List[str]]
 EncodedInputPair = Tuple[List[int], List[int]]
+
+
+class TensorType(Enum):
+    PYTORCH = "pt"
+    TENSORFLOW = "tf"
 
 
 class CharSpan(NamedTuple):
@@ -159,6 +165,27 @@ def truncate_and_pad(
 
     if pad_to_max_length and (pad_token and pad_token_id >= 0):
         tokenizer.no_padding()
+
+
+def to_framework_tensor(encoded_inputs: MutableMapping, framework: TensorType) -> MutableMapping:
+
+    if framework == TensorType.TENSORFLOW and is_tf_available():
+        as_tensor = tf.constant
+    elif framework == TensorType.PYTORCH and is_torch_available():
+        as_tensor = torch.tensor
+    else:
+        raise ValueError("Unknown tensor type {}. Please use any of {}".format(framework, TensorType.__members__))
+
+    # Encode everything
+    encoded_inputs["input_ids"] = as_tensor([encoded_inputs["input_ids"]])
+
+    if "token_type_ids" in encoded_inputs:
+        encoded_inputs["token_type_ids"] = as_tensor([encoded_inputs["token_type_ids"]])
+
+    if "attention_mask" in encoded_inputs:
+        encoded_inputs["attention_mask"] = as_tensor([encoded_inputs["attention_mask"]])
+
+    return encoded_inputs
 
 
 class BatchEncoding(UserDict):
@@ -1375,7 +1402,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
     ):
         """
@@ -1448,7 +1475,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
         is_pretokenized: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -1609,7 +1636,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
         is_pretokenized: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_masks: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -1826,7 +1853,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -1991,29 +2018,8 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
         # Prepare model inputs as tensors if asked
-        if return_tensors == "tf" and is_tf_available():
-            encoded_inputs["input_ids"] = tf.constant([encoded_inputs["input_ids"]])
-
-            if "token_type_ids" in encoded_inputs:
-                encoded_inputs["token_type_ids"] = tf.constant([encoded_inputs["token_type_ids"]])
-
-            if "attention_mask" in encoded_inputs:
-                encoded_inputs["attention_mask"] = tf.constant([encoded_inputs["attention_mask"]])
-
-        elif return_tensors == "pt" and is_torch_available():
-            encoded_inputs["input_ids"] = torch.tensor([encoded_inputs["input_ids"]])
-
-            if "token_type_ids" in encoded_inputs:
-                encoded_inputs["token_type_ids"] = torch.tensor([encoded_inputs["token_type_ids"]])
-
-            if "attention_mask" in encoded_inputs:
-                encoded_inputs["attention_mask"] = torch.tensor([encoded_inputs["attention_mask"]])
-        elif return_tensors is not None:
-            logger.warning(
-                "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
-                    return_tensors
-                )
-            )
+        if return_tensors is not None:
+            to_framework_tensor(encoded_inputs, return_tensors)
 
         return BatchEncoding(encoded_inputs)
 
@@ -2306,7 +2312,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def _convert_encoding(
         self,
         encoding: EncodingFast,
-        return_tensors: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -2346,16 +2352,31 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 encoding_dict["offset_mapping"].append(e.offsets)
 
         if return_tensors is not None:
-            for key, value in encoding_dict.items():
-                if return_tensors == "tf" and is_tf_available():
-                    encoding_dict[key] = tf.constant(value)
-                elif return_tensors == "pt" and is_torch_available():
-                    encoding_dict[key] = torch.tensor(value)
-                elif return_tensors is not None:
-                    logger.warning(
-                        "Unable to convert output to tensors format {}, "
-                        "PyTorch or TensorFlow is not available.".format(return_tensors)
-                    )
+            if isinstance(return_tensors, str):
+                return_tensors = TensorType(return_tensors)
+
+            encoding_dict = to_framework_tensor(encoding_dict, return_tensors)
+            #     if return_tensors == TensorType.TENSORFLOW and is_tf_available():
+            #         encoding_dict[key] = tf.constant(value)
+            #     elif return_tensors == TensorType.PYTORCH and is_torch_available():
+            #         encoding_dict[key] = torch.tensor(value)
+            #     elif return_tensors is not None:
+            #         logger.warning(
+            #             "Unable to convert output to tensors format {}, "
+            #             "PyTorch or TensorFlow is not available.".format(return_tensors)
+            #         )
+
+
+            # for key, value in encoding_dict.items():
+            #     if return_tensors == TensorType.TENSORFLOW and is_tf_available():
+            #         encoding_dict[key] = tf.constant(value)
+            #     elif return_tensors == TensorType.PYTORCH and is_torch_available():
+            #         encoding_dict[key] = torch.tensor(value)
+            #     elif return_tensors is not None:
+            #         logger.warning(
+            #             "Unable to convert output to tensors format {}, "
+            #             "PyTorch or TensorFlow is not available.".format(return_tensors)
+            #         )
 
         return encoding_dict
 
@@ -2431,7 +2452,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
         is_pretokenized: bool = False,
-        return_tensors: Optional[str] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
@@ -2568,7 +2589,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         is_pretokenized: bool = False,
-        return_tensors: Optional[bool] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
