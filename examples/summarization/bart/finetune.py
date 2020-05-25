@@ -331,7 +331,7 @@ class SummarizationDistiller(SummarizationTrainer):
         if self.different_encoder:
             copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
         Path(hparams.output_dir).mkdir(exist_ok=True)
-        self.model.teacher = teacher
+        student.teacher = teacher
 
         super().__init__(hparams, model=student, config=student_cfg)
         #if torch.cuda.is_available() and hparams.fp16:
