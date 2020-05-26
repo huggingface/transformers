@@ -85,7 +85,7 @@ class SummarizationTrainer(BaseTransformer):
         self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
         self.freeze_embeds()
         if self.hparams.freeze_encoder:
-            freeze_part(self.model.encoder)
+            freeze_part(self.model.model.encoder)
 
 
 
