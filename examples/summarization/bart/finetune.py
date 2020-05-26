@@ -83,12 +83,11 @@ class SummarizationTrainer(BaseTransformer):
         assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
         self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
-        self.freeze_stuff()
+        self.freeze_embeds()
 
 
 
-    def freeze_stuff(self):
-
+    def freeze_embeds(self):
         freeze_part(self.model.model.shared)
         for d in [self.model.model.encoder, self.model.model.decoder]:
             freeze_part(d.embed_positions)
@@ -273,7 +272,7 @@ class SummarizationTrainer(BaseTransformer):
         )
         parser.add_argument("--tgt_suffix", type=str, default="", required=False)
         parser.add_argument("--n_train", type=int, default=-1, required=False)
-        parser.add_argument("--n_val", type=int, default=-1, required=False)
+        parser.add_argument("--n_val", type=int, default=500, required=False)
         parser.add_argument("--n_test", type=int, default=-1, required=False)
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
 
@@ -283,7 +282,21 @@ class SummarizationTrainer(BaseTransformer):
 def freeze_part(model: nn.Module):
     for par in model.parameters():
         par.requires_grad = False
+from typing import Iterable
+def grad_status(model: nn.Module) -> Iterable:
+    return (par.requires_grad for par in model.parameters())
 
+def assert_all_frozen(model):
+    model_grads: List[bool] = list(grad_status(model))
+    n_require_grad = sum(lmap(int, model_grads))
+    npars = len(model_grads)
+    assert not any(model_grads), f'{n_require_grad/npars:.1%} of {npars} weights require grad'
+
+def assert_not_all_frozen(model):
+    model_grads: List[bool] = list(grad_status(model))
+    n_require_grad = sum(lmap(int, model_grads))
+    npars = len(model_grads)
+    assert any(model_grads), f'none of {npars} weights require grad'
 
 def is_frozen(model):
     return not any(p.requires_grad for p in model.parameters())
@@ -304,7 +317,7 @@ def get_layers_to_copy(n_to_get, tot):
         return layers_to_copy[n_to_get]
     else:
         return all_layers[:n_to_get]
-
+BART_LARGE_N_LAYERS = 12
 
 class SummarizationDistiller(SummarizationTrainer):
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss"]
@@ -339,38 +352,35 @@ class SummarizationDistiller(SummarizationTrainer):
             copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
         Path(hparams.output_dir).mkdir(exist_ok=True)
 
+
         super().__init__(hparams, model=student, config=student_cfg)
-        # if torch.cuda.is_available() and hparams.fp16:
-        # teacher = teacher.to(self.device).half()
-        # assert len(student.model.encoder.layers) == 12
-        self.model.teacher = teacher
-        if not self.different_encoder:
-            freeze_part(self.model.model.encoder)
-            teacher.model.encoder = None
-        if not self.different_decoder:
-            freeze_part(self.model.model.decoder)
+        self.teacher = teacher
+        freeze_part(self.teacher)
 
-
-        # if not self.different_decoder:
-        # freeze_part(self.model.model.decoder)
 
         assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
+        assert_all_frozen(self.teacher)
+        assert_all_frozen(self.model.model.decoder.embed_tokens)
+        assert_all_frozen(self.model.model.encoder.embed_tokens)
 
-        self.refreeze()
+
+
+
+        if self.different_encoder:
+            assert any(grad_status(self.model.model.encoder))
+        else:
+            freeze_part(self.model.model.encoder)
+            teacher.model.encoder = None
+        
+        if self.different_decoder:
+            assert any(grad_status(self.model.model.decoder))
+        else:
+            freeze_part(self.model.model.decoder)
+
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
         self.alpha_mlm = hparams.alpha_mlm
         self.alpha_ce = hparams.alpha_ce
-
-    def refreeze(self):
-        freeze_part(self.model.model.shared)
-        d = self.model.model.decoder
-        e = self.model.model.encoder
-        freeze_part(d.embed_positions)
-        freeze_part(d.embed_tokens)
-        freeze_part(e.embed_positions)
-        freeze_part(e.embed_tokens)
-        freeze_part(self.model.teacher)
 
     def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
@@ -380,7 +390,7 @@ class SummarizationDistiller(SummarizationTrainer):
         return dataset
 
     def _step(self, batch):
-        # assert is_frozen(self.model.teacher)
+        # assert is_frozen(self.teacher)
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
         y_ids = y[:, :-1].contiguous()
@@ -393,7 +403,7 @@ class SummarizationDistiller(SummarizationTrainer):
         loss_encoder = torch.tensor(0.0)
         if self.different_encoder:
             with torch.no_grad():
-                teacher_enc_outputs = self.model.teacher.model.encoder(source_ids, attention_mask=source_mask)
+                teacher_enc_outputs = self.teacher.model.encoder(source_ids, attention_mask=source_mask)
             if self.hparams.alpha_encoder_loss > 0:
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs[0], source_mask)
         else:
@@ -402,7 +412,7 @@ class SummarizationDistiller(SummarizationTrainer):
             return loss_encoder, torch.tensor(0.0), torch.tensor(0.0), loss_encoder
 
         with torch.no_grad():
-            tloss, tlogits, *trash = self.model.teacher(
+            tloss, tlogits, *trash = self.teacher(
                 source_ids,
                 attention_mask=source_mask,
                 encoder_outputs=teacher_enc_outputs,
@@ -515,6 +525,7 @@ def main(args):
     # if not args.do_train:
 
     trainer.test(model)
+    return model
     # model.metrics_df.to_csv(Path(model.output_dir)/'metrics.csv')
 
 
