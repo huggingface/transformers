@@ -67,3 +67,10 @@ LongformerForMaskedLM
 
 .. autoclass:: transformers.LongformerForMaskedLM
     :members:
+
+
+LongformerForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LongformerForQuestionAnswering
+    :members:
