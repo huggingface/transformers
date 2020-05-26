@@ -81,7 +81,7 @@ class GlueDataset(Dataset):
                 raise KeyError("mode is not a valid split name")
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(
-            args.data_dir,
+            args.cache_dir,
             "cached_{}_{}_{}_{}".format(
                 mode.value, tokenizer.__class__.__name__, str(args.max_seq_length), args.task_name,
             ),
