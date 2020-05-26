@@ -323,14 +323,19 @@ def squad_convert_examples_to_features(
             max_query_length=max_query_length,
             is_training=is_training,
         )
-        features = list(
-            tqdm(
-                p.imap(annotate_, examples, chunksize=32),
-                total=len(examples),
-                desc="convert squad examples to features",
-                disable=not tqdm_enabled,
+        if 1 == threads:  # It will be easier to debug without multiprocessing
+            squad_convert_example_to_features_init(tokenizer)
+            for example in tqdm(examples):
+                features.append(annotate_(example))
+        else:
+            features = list(
+                tqdm(
+                    p.imap(annotate_, examples, chunksize=32),
+                    total=len(examples),
+                    desc="convert squad examples to features",
+                    disable=not tqdm_enabled,
+                )
             )
-        )
     new_features = []
     unique_id = 1000000000
     example_index = 0
