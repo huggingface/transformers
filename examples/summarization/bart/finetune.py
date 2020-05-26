@@ -389,7 +389,7 @@ class SummarizationDistiller(SummarizationTrainer):
         sloss, slogits, enc_outputs = self(
             source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
         )
-        loss_encoder = 0.0
+        loss_encoder = torch.tensor(0.0)
         if self.different_encoder:
             with torch.no_grad():
                 teacher_enc_outputs = self.model.teacher.model.encoder(source_ids, attention_mask=source_mask)
@@ -398,7 +398,7 @@ class SummarizationDistiller(SummarizationTrainer):
         else:
             teacher_enc_outputs = (enc_outputs,)
         if self.alpha_ce == 0 and self.alpha_mlm == 0:
-            return loss_encoder, 0., 0., loss_encoder
+            return loss_encoder, torch.tensor(0.0), torch.tensor(0.0), loss_encoder
 
         with torch.no_grad():
             tloss, tlogits, *trash = self.model.teacher(
