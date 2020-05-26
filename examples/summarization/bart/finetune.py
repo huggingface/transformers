@@ -292,7 +292,7 @@ def is_frozen(model):
 def get_layers_to_copy(n_to_get, tot):
     all_layers = list(range(tot))
     if tot == 12:  # Alternating for special cases
-        base = {
+        layers_to_copy = {  # maps # layers in student -> which teacher layers to copy
             6: [0, 2, 4, 7, 9, 11],
             1: [11],
             3: [0, 6, 11],
@@ -301,7 +301,7 @@ def get_layers_to_copy(n_to_get, tot):
             9: [0, 1, 2, 4, 5, 7, 9, 10, 11],
             12: all_layers,
         }
-        return base[n_to_get]
+        return layers_to_copy[n_to_get]
     else:
         return all_layers[:n_to_get]
 

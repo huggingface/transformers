@@ -4,9 +4,7 @@
 export PYTHONPATH="../../":"${PYTHONPATH}"
 
 python finetune.py \
---data_dir=$CNN_DIR \
 --teacher=bart-large-cnn \
---model_name_or_path=student \
 --learning_rate=3e-5 \
 --do_train \
 --do_predict \
