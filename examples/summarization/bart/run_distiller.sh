@@ -4,7 +4,6 @@
 export PYTHONPATH="../../":"${PYTHONPATH}"
 
 python finetune.py \
---teacher=bart-large-cnn \
 --learning_rate=3e-5 \
 --do_train \
 --do_predict \
