@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "longformer-base-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096/pytorch_model.bin",
     "longformer-large-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096/pytorch_model.bin",
-    "longformer-base-4096-finetuned-triviaqa": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096-finetuned-triviaqa/pytorch_model.bin",
+    "longformer-large-4096-finetuned-triviaqa": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096-finetuned-triviaqa/pytorch_model.bin",
 }
 
 
@@ -793,8 +793,8 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         from transformers import LongformerTokenizer, LongformerForQuestionAnswering
         import torch
 
-        tokenizer = LongformerTokenizer.from_pretrained("longformer-large-4096")
-        model = LongformerForQuestionAnswering.from_pretrained("longformer-base-4096-finetuned-triviaqa")
+        tokenizer = LongformerTokenizer.from_pretrained("longformer-large-4096-finetuned-triviaqa")
+        model = LongformerForQuestionAnswering.from_pretrained("longformer-large-4096-finetuned-triviaqa")
 
         question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         encoding = tokenizer.encode_plus(question, text, return_tensors="pt")
