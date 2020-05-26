@@ -19,7 +19,6 @@ import functools
 import itertools
 import json
 import logging
-import numpy as np
 import operator
 import os
 import re
@@ -27,8 +26,9 @@ import warnings
 from collections import UserDict, defaultdict
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union, MutableMapping
+from typing import Any, Dict, List, MutableMapping, NamedTuple, Optional, Sequence, Tuple, Union
 
+import numpy as np
 from tokenizers import AddedToken as AddedTokenFast
 from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
