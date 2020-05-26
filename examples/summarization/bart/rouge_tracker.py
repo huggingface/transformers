@@ -75,4 +75,5 @@ class RougeTracker:
             .astype(float)
             .dsort("R2")
         )
-        return pd.concat([self.df, new_df])
+        self.df = pd.concat([self.df, new_df])
+        return self.df

@@ -86,6 +86,7 @@ class SummarizationTrainer(BaseTransformer):
         self.freeze_stuff()
 
 
+
     def freeze_stuff(self):
 
         freeze_part(self.model.model.shared)
