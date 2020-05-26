@@ -3,11 +3,11 @@ language: italian
 thumbnail:
 ---
 
-# Italian BERT :it: fine-tuned on SQuAD_it v1 :book: :mag: :question:
+# Italian BERT fine-tuned on SQuAD_it v1
 
 [Italian BERT base cased](https://huggingface.co/dbmdz/bert-base-italian-cased) fine-tuned on [italian SQuAD](https://github.com/crux82/squad-it) for **Q&A** downstream task.
 
-## Details of Italian BERT :hugs: :it:
+## Details of Italian BERT
 
 The source data for the Italian BERT model consists of a recent Wikipedia dump and various texts from the OPUS corpora collection. The final training corpus has a size of 13GB and 2,050,057,573 tokens.
 
@@ -18,7 +18,7 @@ More in its official [model card](https://huggingface.co/dbmdz/bert-base-italian
 
 Created by [Stefan](https://huggingface.co/stefan-it) at [MDZ](https://huggingface.co/dbmdz)
 
-## Details of the downstream task (Q&A) - Dataset :books:
+## Details of the downstream task (Q&A) - Dataset 📚 🧐 ❓
 
 [Italian SQuAD v1.1](https://rajpurkar.github.io/SQuAD-explorer/) is derived from the SQuAD dataset and it is obtained through semi-automatic translation of the SQuAD dataset
 into Italian. It represents a large-scale dataset for open question answering processes on factoid questions in Italian.
@@ -29,12 +29,12 @@ into Italian. It represents a large-scale dataset for open question answering pr
 
 More details about SQuAD-it can be found in [Croce et al. 2018]. The original paper can be found at this [link](https://link.springer.com/chapter/10.1007/978-3-030-03840-3_29).
 
-## Model training :gear:
+## Model training 🏋️‍
 
 The model was trained on a Tesla P100 GPU and 25GB of RAM.
 The script for fine tuning can be found [here](https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_squad.py)
 
-## Results :chart_with_upwards_trend:
+## Results 📝
 
 | Metric | # Value   |
 | ------ | --------- |
@@ -58,14 +58,14 @@ The script for fine tuning can be found [here](https://github.com/huggingface/tr
 }
 ```
 
-## Comparison :balance_scale:
+## Comparison ⚖️
 
 | Model                                                                                                                            | EM        | F1 score  |
 | -------------------------------------------------------------------------------------------------------------------------------- | --------- | --------- |
 | [DrQA-it trained on SQuAD-it ](https://github.com/crux82/squad-it/blob/master/README.md#evaluating-a-neural-model-over-squad-it) | 56.1      | 65.9      |
 | This one                                                                                                                         | **62.51** | **74.16** |
 
-## Model in action :rocket:
+## Model in action 🚀
 
 Fast usage with **pipelines** 🧪
 
