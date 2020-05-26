@@ -15,7 +15,7 @@
 
 import logging
 
-from .tokenization_roberta import RobertaTokenizer
+from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 
 
 logger = logging.getLogger(__name__)
@@ -24,16 +24,26 @@ logger = logging.getLogger(__name__)
 # vocab and merges same as roberta
 vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json"
 merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
-_all_longformer_models = ["longformer-base-4096", "longformer-large-4096"]
+_all_longformer_models = ["longformer-base-4096", "longformer-large-4096", "longformer-large-4096-finetuned-triviaqa"]
 
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "longformer-base-4096": 4096,
     "longformer-large-4096": 4096,
+    "longformer-large-4096-finetuned-triviaqa": 4096,
 }
 
 
 class LongformerTokenizer(RobertaTokenizer):
+    # merges and vocab same as Roberta
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_vocab_files_map = {
+        "vocab_file": {m: vocab_url for m in _all_longformer_models},
+        "merges_file": {m: merges_url for m in _all_longformer_models},
+    }
+
+
+class LongformerTokenizerFast(RobertaTokenizerFast):
     # merges and vocab same as Roberta
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_vocab_files_map = {

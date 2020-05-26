@@ -31,13 +31,12 @@ jobs:
     - name: Install dependencies
       run: |
         source .env/bin/activate
-        pip install .[sklearn,tf,torch,testing]
+        pip install .[sklearn,torch,testing]
 
     - name: Are GPUs recognized by our DL frameworks
       run: |
         source .env/bin/activate
         python -c "import torch; print(torch.cuda.is_available())"
-        python -c "import tensorflow as tf; print(tf.test.is_built_with_cuda(), tf.config.list_physical_devices('GPU'))"
 
     - name: Run all tests on GPU
       env:
