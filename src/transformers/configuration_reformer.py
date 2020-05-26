@@ -149,7 +149,7 @@ class ReformerConfig(PretrainedConfig):
         attn_layers=["local", "lsh", "local", "lsh", "local", "lsh"],
         axial_norm_std=1.0,
         axial_pos_embds=True,
-        axial_pos_shape=[64, 64],
+        axial_pos_shape=None,
         axial_pos_embds_dim=[64, 192],
         chunk_size_lm_head=0,
         chunk_size_feed_forward=0,
