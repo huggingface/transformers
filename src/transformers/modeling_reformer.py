@@ -21,6 +21,7 @@ from collections import namedtuple
 from functools import reduce
 from operator import mul
 
+import math
 import numpy as np
 import torch
 from torch import nn
@@ -96,6 +97,7 @@ class AxialPositionEmbeddings(nn.Module):
 
         self.least_common_mult_chunk_length = _get_least_common_mult_chunk_len(config)
         self.weights = nn.ParameterList()
+        self.set_ax_pos_shape(self)
 
         assert (
             sum(self.axial_pos_embds_dim) == config.hidden_size
@@ -113,6 +115,17 @@ class AxialPositionEmbeddings(nn.Module):
             # create tensor and init
             self.weights.append(nn.Parameter(torch.ones(ax_shape, dtype=torch.float32)))
 
+            
+    def set_ax_pos_shape(self):
+        if(self.axial_pos_shape == None):
+            if(int(sqrt(self.max_position_embeddings)) * int(sqrt(self.max_position_embeddings)) == self.max_position_embeddings):
+                self.axial_pos_shape = [int(sqrt(self.max_position_embeddings)),int(sqrt(self.max_position_embeddings))]
+            elif(int(sqrt(self.max_position_embeddings/2)) * int(sqrt(self.max_position_embeddings)*2) == self.max_position_embeddings):
+                self.axial_pos_shape = [int(sqrt(self.max_position_embeddings/2)),int(sqrt(self.max_position_embeddings)*2)]
+            else:
+                #TODO replace with error message or bruteforce like method 
+                pass
+            
     def forward(self, position_ids):
         # broadcast weights to correct shape
         batch_size = position_ids.shape[0]
