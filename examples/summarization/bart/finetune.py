@@ -494,7 +494,7 @@ class SummarizationDistiller(SummarizationTrainer):
         )
         parser.add_argument("--alpha_ce", default=0.8, type=float)
         parser.add_argument("--alpha_mlm", default=0.2, type=float)
-        parser.add_argument("--alpha_loss_encoder", default=0.0, type=float)
+        parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
         parser.add_argument(
             "--student_decoder_layers", default=6, type=int, required=False,
         )
