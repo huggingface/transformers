@@ -307,9 +307,7 @@ class LongformerSelfAttention(nn.Module):
             selected_v[selection_padding_mask_nonzeros] = v[extra_attention_mask_nonzeros]
             # use `matmul` because `einsum` crashes sometimes with fp16
             # attn = torch.einsum('blhs,bshd->blhd', (selected_attn_probs, selected_v))
-            attn = torch.matmul(
-                selected_attn_probs.transpose(1, 2), selected_v.transpose(1, 2).type_as(selected_attn_probs)
-            ).transpose(1, 2)
+            attn = torch.matmul(selected_attn_probs.transpose(1, 2), selected_v.transpose(1, 2)).transpose(1, 2)
             attn_probs = attn_probs.narrow(
                 -1, max_num_extra_indices_per_batch, attn_probs.size(-1) - max_num_extra_indices_per_batch
             ).contiguous()
@@ -373,7 +371,7 @@ class LongformerSelfAttention(nn.Module):
             ]
             attn[extra_attention_mask_nonzeros[::-1]] = nonzero_selected_attn.view(
                 len(selection_padding_mask_nonzeros[0]), -1
-            ).type_as(attn)
+            )
 
         context_layer = attn.transpose(0, 1)
         if self.output_attentions:
