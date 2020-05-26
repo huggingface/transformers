@@ -393,6 +393,8 @@ class SummarizationDistiller(SummarizationTrainer):
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs[0], source_mask)
         else:
             teacher_enc_outputs = (enc_outputs,)
+        if self.alpha_ce == 0 and self.alpha_mlm == 0:
+            return loss_encoder
 
         with torch.no_grad():
             tloss, tlogits, *trash = self.model.teacher(
@@ -418,6 +420,7 @@ class SummarizationDistiller(SummarizationTrainer):
             t_logits_slct = teacher_outputs
             s_logits_slct = student_outputs
         mse_loss = F.mse_loss(s_logits_slct, t_logits_slct)
+
         return mse_loss
 
     def calc_ce_loss(self, mask, s_logits, t_logits):
