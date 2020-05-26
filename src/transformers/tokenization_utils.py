@@ -19,6 +19,7 @@ import functools
 import itertools
 import json
 import logging
+import numpy as np
 import operator
 import os
 import re
@@ -74,6 +75,7 @@ EncodedInputPair = Tuple[List[int], List[int]]
 class TensorType(Enum):
     PYTORCH = "pt"
     TENSORFLOW = "tf"
+    NUMPY = "np"
 
 
 class CharSpan(NamedTuple):
@@ -189,6 +191,8 @@ def convert_to_tensors(batch_outputs: MutableMapping, return_tensors: Union[str,
         as_tensor = tf.constant
     elif return_tensors == TensorType.PYTORCH and is_torch_available():
         as_tensor = torch.tensor
+    elif return_tensors == TensorType.NUMPY:
+        as_tensor = np.ndarray
     else:
        raise ImportError(
             "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
