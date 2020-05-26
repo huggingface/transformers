@@ -26,7 +26,7 @@ from transformers.tokenization_bert_japanese import (
 )
 
 from .test_tokenization_common import TokenizerTesterMixin
-from .utils import custom_tokenizers, slow
+from .utils import custom_tokenizers
 
 
 @custom_tokenizers
@@ -126,7 +126,6 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokenizer.tokenize("こんばんは こんばんにちは こんにちは"), ["こん", "##ばんは", "[UNK]", "こんにちは"])
 
-    @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("bert-base-japanese")
 
@@ -141,6 +140,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_pair == [2] + text + [3] + text_2 + [3]
 
 
+@custom_tokenizers
 class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertJapaneseTokenizer
@@ -187,7 +187,6 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
 
         self.assertListEqual(tokenizer.tokenize("こんにちほ"), ["こ", "ん", "に", "ち", "[UNK]"])
 
-    @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("bert-base-japanese-char")
 

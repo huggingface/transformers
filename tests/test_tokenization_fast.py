@@ -75,6 +75,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assert_special_tokens_map_equal(tokenizer_r, tokenizer_p)
         self.assert_embeded_special_tokens(tokenizer_r, tokenizer_p)
         self.assert_padding(tokenizer_r, tokenizer_p)
+        self.assert_create_token_type_ids(tokenizer_r, tokenizer_p)
         # TODO: enable for v3.0.0
         # self.assert_empty_output_no_special_tokens(tokenizer_r, tokenizer_p)
 
@@ -307,6 +308,20 @@ class CommonFastTokenizerTest(unittest.TestCase):
         for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
             self.assertEqual(len(tokens[key].shape), 2)
             self.assertEqual(tokens[key].shape[-1], 6)
+
+    def assert_create_token_type_ids(self, tokenizer_r, tokenizer_p):
+        input_simple = [1, 2, 3]
+        input_pair = [1, 2, 3]
+
+        # Generate output
+        output_r = tokenizer_r.create_token_type_ids_from_sequences(input_simple)
+        output_p = tokenizer_p.create_token_type_ids_from_sequences(input_simple)
+        self.assertEqual(output_p, output_r)
+
+        # Generate pair output
+        output_r = tokenizer_r.create_token_type_ids_from_sequences(input_simple, input_pair)
+        output_p = tokenizer_p.create_token_type_ids_from_sequences(input_simple, input_pair)
+        self.assertEqual(output_p, output_r)
 
     def assert_build_inputs_with_special_tokens(self, tokenizer_r, tokenizer_p):
         # Input string

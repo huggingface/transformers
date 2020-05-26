@@ -3,8 +3,7 @@
 
 Based on the script [`run_language_modeling.py`](https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_language_modeling.py).
 
-Fine-tuning (or training from scratch) the library models for language modeling on a text dataset for GPT, GPT-2, BERT and RoBERTa (DistilBERT
-to be added soon). GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa
+Fine-tuning (or training from scratch) the library models for language modeling on a text dataset for GPT, GPT-2, BERT, DistilBERT and RoBERTa. GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT, DistilBERT and RoBERTa
 are fine-tuned using a masked language modeling (MLM) loss.
 
 Before running the following example, you should get a file that contains text on which the language model will be
@@ -35,7 +34,7 @@ python run_language_modeling.py \
 This takes about half an hour to train on a single K80 GPU and about one minute for the evaluation to run. It reaches
 a score of ~20 perplexity once fine-tuned on the dataset.
 
-### RoBERTa/BERT and masked language modeling
+### RoBERTa/BERT/DistilBERT and masked language modeling
 
 The following example fine-tunes RoBERTa on WikiText-2. Here too, we're using the raw WikiText-2. The loss is different
 as BERT/RoBERTa have a bidirectional mechanism; we're therefore using the same loss that was used during their
