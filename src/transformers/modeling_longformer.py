@@ -800,7 +800,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         # the forward method will automatically set global attention on question tokens
         attention_mask = encoding["attention_mask"]
 
-        start_scores, end_scores = model(torch.tensor([input_ids]), attention_mask=attention_mask)
+        start_scores, end_scores = model(torch.tensor([input_ids]), attention_mask=torch.tensor([attention_mask]))
         all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
         answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
         """
