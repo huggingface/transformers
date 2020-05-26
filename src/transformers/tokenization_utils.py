@@ -26,7 +26,7 @@ import warnings
 from collections import UserDict, defaultdict
 from contextlib import contextmanager
 from enum import Enum
-from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union, Mapping, MutableMapping
+from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union, MutableMapping
 
 from tokenizers import AddedToken as AddedTokenFast
 from tokenizers import Encoding as EncodingFast
@@ -42,6 +42,18 @@ if is_torch_available():
     import torch
 
 logger = logging.getLogger(__name__)
+
+NO_PAD_TOKEN_FOR_BATCH_MSG = (
+    "No padding token is set for this model, therefore no batch can be made with uneven "
+    "sequences. Set a padding token or adjust the lengths of the sequences building the "
+    "batch so that every sequence is of the same length."
+)
+
+UNEVEN_SEQUENCES_FOR_BATCH_MSG = (
+    "The sequences building the batch are not of the same size, no tensor "
+    "can be built. Set `pad_to_max_length=True` to pad the smaller sequences"
+    "up to the larger sequence's length."
+)
 
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
@@ -167,30 +179,42 @@ def truncate_and_pad(
         tokenizer.no_padding()
 
 
-def to_framework_tensor(encoded_inputs: MutableMapping, framework: Union[str, TensorType]) -> MutableMapping:
-    if isinstance(framework, str):
-        framework = TensorType(framework)
+def convert_to_tensors(batch_outputs: MutableMapping, return_tensors: Union[str, TensorType]) -> MutableMapping:
+    # Convert to TensorType
+    if not isinstance(return_tensors, TensorType):
+        return_tensors = TensorType(return_tensors)
 
-    if framework == TensorType.TENSORFLOW and is_tf_available():
+    # Get a function reference for the correct framework
+    if return_tensors == TensorType.TENSORFLOW and is_tf_available():
         as_tensor = tf.constant
-    elif framework == TensorType.PYTORCH and is_torch_available():
+    elif return_tensors == TensorType.PYTORCH and is_torch_available():
         as_tensor = torch.tensor
     else:
-        raise ValueError(
-            "Unable to convert output to tensors format {}, " \
-            "PyTorch or TensorFlow is not available.".format(framework)
+       raise ImportError(
+            "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
+                return_tensors
+            )
         )
 
-    # Encode everything
-    encoded_inputs["input_ids"] = as_tensor([encoded_inputs["input_ids"]])
+    # Do the tensor conversion in batch
+    for key, value in batch_outputs.items():
+        try:
+            tensor = as_tensor(value)
 
-    if "token_type_ids" in encoded_inputs:
-        encoded_inputs["token_type_ids"] = as_tensor([encoded_inputs["token_type_ids"]])
+            # at-least2d
+            if tensor.ndim > 2:
+                tensor.squeeze_(0)
+            elif tensor.ndim < 2:
+                tensor = tensor[None, :]
 
-    if "attention_mask" in encoded_inputs:
-        encoded_inputs["attention_mask"] = as_tensor([encoded_inputs["attention_mask"]])
+            batch_outputs[key] = tensor
+        except ValueError:
+            if None in [item for sequence in value for item in sequence]:
+                raise ValueError(NO_PAD_TOKEN_FOR_BATCH_MSG)
+            else:
+                raise ValueError(UNEVEN_SEQUENCES_FOR_BATCH_MSG)
 
-    return encoded_inputs
+    return batch_outputs
 
 
 class BatchEncoding(UserDict):
@@ -786,18 +810,6 @@ class PreTrainedTokenizer(SpecialTokensMixin):
     model_input_names: List[str] = ["token_type_ids", "attention_mask"]
 
     padding_side: str = "right"
-
-    NO_PAD_TOKEN_FOR_BATCH_MSG = (
-        "No padding token is set for this model, therefore no batch can be made with uneven "
-        "sequences. Set a padding token or adjust the lengths of the sequences building the "
-        "batch so that every sequence is of the same length."
-    )
-
-    UNEVEN_SEQUENCES_FOR_BATCH_MSG = (
-        "The sequences building the batch are not of the same size, no tensor "
-        "can be built. Set `pad_to_max_length=True` to pad the smaller sequences"
-        "up to the larger sequence's length."
-    )
 
     @property
     def vocab_size(self) -> int:
@@ -1816,38 +1828,9 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 batch_outputs[key].append(value)
 
         if return_tensors is not None:
+            convert_to_tensors(batch_outputs, return_tensors)
 
-            self.convert_to_tensors_(batch_outputs, return_tensors)
         return BatchEncoding(batch_outputs)
-
-    def convert_to_tensors_(self, batch_outputs: dict, return_tensors: str) -> None:
-        # Do the tensor conversion in batch
-        for key, value in batch_outputs.items():
-            if return_tensors == "tf" and is_tf_available():
-                try:
-                    batch_outputs[key] = tf.constant(value)
-                except ValueError:
-                    if None in [item for sequence in value for item in sequence]:
-                        raise ValueError(self.NO_PAD_TOKEN_FOR_BATCH_MSG)
-                    else:
-                        raise ValueError(self.UNEVEN_SEQUENCES_FOR_BATCH_MSG)
-            elif return_tensors == "pt" and is_torch_available():
-                try:
-                    batch_outputs[key] = torch.tensor(value)
-                except ValueError:
-                    raise ValueError(self.UNEVEN_SEQUENCES_FOR_BATCH_MSG)
-                except RuntimeError:
-                    if None in [item for sequence in value for item in sequence]:
-                        raise ValueError(self.NO_PAD_TOKEN_FOR_BATCH_MSG)
-                    else:
-                        raise
-
-            elif return_tensors is not None:
-                logger.warning(
-                    "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
-                        return_tensors
-                    )
-                )
 
     def prepare_for_model(
         self,
@@ -2024,7 +2007,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         # Prepare model inputs as tensors if asked
         if return_tensors is not None:
-            to_framework_tensor(encoded_inputs, return_tensors)
+            convert_to_tensors(encoded_inputs, return_tensors)
 
         return BatchEncoding(encoded_inputs)
 
@@ -2357,7 +2340,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 encoding_dict["offset_mapping"].append(e.offsets)
 
         if return_tensors is not None:
-            encoding_dict = to_framework_tensor(encoding_dict, return_tensors)
+            encoding_dict = convert_to_tensors(encoding_dict, return_tensors)
 
         return encoding_dict
 
