@@ -531,8 +531,6 @@ class RetrievalQAEmbedder(torch.nn.Module):
                     inputs[0],
                     attention_mask=inputs[1],
                     head_mask=head_mask,
-                    encoder_hidden_states=None,
-                    encoder_attention_mask=None,
                 )
                 sequence_output = encoder_outputs[0]
                 pooled_output = self.sent_encoder.pooler(sequence_output)
@@ -576,7 +574,11 @@ class RetrievalQAEmbedder(torch.nn.Module):
 def make_qa_retriever_model(model_name="google/bert_uncased_L-8_H-512_A-8", from_file=None, device="cuda:0"):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     bert_model = AutoModel.from_pretrained(model_name).to(device)
-    qa_embedder = RetrievalQAEmbedder(bert_model, 512).to(device)
+    # run bert_model on a dummy batch to get output dimension
+    d_ids = torch.LongTensor([[bert_model.config.bos_token_id if bert_model.config.bos_token_id is not None else 1]]).to(device)
+    d_mask = torch.LongTensor([[1]]).to(device)
+    sent_dim = bert_model(d_ids, attention_mask=d_mask)[1].shape[-1]
+    qa_embedder = RetrievalQAEmbedder(bert_model, sent_dim).to(device)
     if from_file is not None:
         param_dict = torch.load(from_file) # has model weights, optimizer, and scheduler states
         qa_embedder.load_state_dict(param_dict['model'])
@@ -773,6 +775,44 @@ def train_qa_s2s_epoch(model, dataset, tokenizer, optimizer, scheduler, args, e=
             )
             loc_loss = 0
             loc_steps = 0
+
+# generate answer from input "question: ... context: <p> ..."
+def qa_s2s_generate(question_doc, qa_s2s_model, qa_s2s_tokenizer,
+                    num_answers=1,
+                    num_beams=None,
+                    min_len=64,
+                    max_len=256,
+                    do_sample=False,
+                    temp=1.,
+                    top_p=None,
+                    top_k=None,
+                    max_input_length=512,
+                    device="cuda:0"):
+    model_inputs = make_qa_s2s_batch(
+        [(question_doc, 'A')],
+        qa_s2s_tokenizer,
+        max_input_length,
+        device
+    )
+    n_beams = num_answers if num_beams is None else max(num_beams, num_answers)
+    generated_ids = qa_s2s_model.generate(
+        input_ids=model_inputs['input_ids'],
+        attention_mask=model_inputs['attention_mask'],
+        min_length=min_len,
+        max_length=max_len,
+        do_sample=do_sample,
+        early_stopping=True,
+        num_beams=1 if do_sample else n_beams,
+        temperature=temp,
+        top_k=top_k,
+        top_p=top_p,
+        eos_token_id=qa_s2s_tokenizer.eos_token_id,
+        no_repeat_ngram_size=3,
+        num_return_sequences=num_answers,
+            decoder_start_token_id=qa_s2s_tokenizer.bos_token_id,
+    )
+    return [qa_s2s_tokenizer.decode(ans_ids, skip_special_tokens=True).strip()
+            for ans_ids in generated_ids]
 
 ###############
 ### ELI5-trained retrieval model usage
