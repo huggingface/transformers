@@ -84,7 +84,7 @@ class SummarizationTrainer(BaseTransformer):
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
         self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
         self.freeze_stuff()
-        freeze_part(self.model.model.encoder)
+
 
     def freeze_stuff(self):
 
