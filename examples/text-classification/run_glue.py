@@ -139,7 +139,6 @@ def main():
     test_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="test") if training_args.do_predict else None
 
     def build_compute_metrics_fn(task_name: str) -> Dict:
-
         def compute_metrics_fn(p: EvalPrediction):
             if output_mode == "classification":
                 preds = np.argmax(p.predictions, axis=1)
