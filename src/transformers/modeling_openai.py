@@ -232,8 +232,8 @@ class Block(nn.Module):
         self.mlp = MLP(4 * nx, config)
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
 
-    def forward(self, x, attention_mask=None, head_mask=None):
-        attn_outputs = self.attn(x, attention_mask=attention_mask, head_mask=head_mask)
+    def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
+        attn_outputs = self.attn(x, attention_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions)
         a = attn_outputs[0]
 
         n = self.ln_1(x + a)
@@ -315,6 +315,8 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Should the model returns attentions weights.
 """
 
 
@@ -442,7 +444,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
 
-            outputs = block(hidden_states, attention_mask, head_mask[i])
+            outputs = block(hidden_states, attention_mask, head_mask[i], output_attentions=output_attentions)
             hidden_states = outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (outputs[1],)
@@ -485,6 +487,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -535,6 +538,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions
         )
         hidden_states = transformer_outputs[0]
         lm_logits = self.lm_head(hidden_states)
@@ -586,6 +590,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         mc_token_ids=None,
         lm_labels=None,
         mc_labels=None,
+        output_attentions=None,
     ):
         r"""
         mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
@@ -653,6 +658,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions
         )
         hidden_states = transformer_outputs[0]
 
