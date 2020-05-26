@@ -398,7 +398,7 @@ class SummarizationDistiller(SummarizationTrainer):
         else:
             teacher_enc_outputs = (enc_outputs,)
         if self.alpha_ce == 0 and self.alpha_mlm == 0:
-            return loss_encoder
+            return loss_encoder, 0., 0., loss_encoder
 
         with torch.no_grad():
             tloss, tlogits, *trash = self.model.teacher(
@@ -489,21 +489,13 @@ class SummarizationDistiller(SummarizationTrainer):
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         SummarizationTrainer.add_model_specific_args(parser, root_dir)
-        parser.add_argument(
-            "--teacher", default="bart-large-cnn", type=str, required=True,
-        )
+        parser.add_argument("--teacher", default="bart-large-cnn", type=str, )
         parser.add_argument("--alpha_ce", default=0.8, type=float)
         parser.add_argument("--alpha_mlm", default=0.2, type=float)
         parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
-        parser.add_argument(
-            "--student_decoder_layers", default=6, type=int, required=False,
-        )
-        parser.add_argument(
-            "--student_encoder_layers", default=12, type=int, required=False,
-        )
-        parser.add_argument(
-            "--no_teacher", action="store_true", default=False,
-        )
+        parser.add_argument("--student_decoder_layers", default=6, type=int, required=False,)
+        parser.add_argument("--student_encoder_layers", default=12, type=int, required=False,)
+        parser.add_argument("--no_teacher", action="store_true", default=False,)
 
         return parser
 
