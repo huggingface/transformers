@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # vocab and merges same as roberta
 vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json"
 merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
-_all_longformer_models = ["longformer-base-4096", "longformer-large-4096"]
+_all_longformer_models = ["longformer-base-4096", "longformer-large-4096", "longformer-base-4096-finetuned-triviaqa"]
 
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
