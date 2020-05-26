@@ -64,6 +64,7 @@ CHEAP_ARGS = {
     "n_val": -1,
     "n_test": -1,
     "student_encoder_layers": 1,
+    "alpha_loss_encoder": 0.0,
 }
 
 
@@ -160,6 +161,8 @@ class TestBartExamples(unittest.TestCase):
             alpha_mlm=0.2,
             alpha_ce=0.8,
             val_check_interval=0.5,
+            alpha_encoder_loss=1.0,
+            student_encoder_layers=1,
         )
         main(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)

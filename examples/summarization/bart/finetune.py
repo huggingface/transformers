@@ -306,7 +306,7 @@ def get_layers_to_copy(n_to_get, tot):
 
 
 class SummarizationDistiller(SummarizationTrainer):
-    loss_names = ["loss", "ce_loss", "mlm_loss"]
+    loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss"]
 
     def __init__(self, hparams):
         assert Path(hparams.data_dir).exists()
@@ -385,22 +385,40 @@ class SummarizationDistiller(SummarizationTrainer):
         sloss, slogits, enc_outputs = self(
             source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
         )
+        loss_encoder = 0.0
         if self.different_encoder:
-            enc_outputs = None
+            with torch.no_grad():
+                teacher_enc_outputs = self.model.teacher.model.encoder(source_ids, attention_mask=source_mask)
+            if self.hparams.alpha_encoder_loss > 0:
+                loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs[0], source_mask)
         else:
-            enc_outputs = (enc_outputs,)
+            teacher_enc_outputs = (enc_outputs,)
 
         with torch.no_grad():
             tloss, tlogits, *trash = self.model.teacher(
                 source_ids,
                 attention_mask=source_mask,
-                encoder_outputs=enc_outputs,
+                encoder_outputs=teacher_enc_outputs,
                 decoder_input_ids=y_ids,
                 lm_labels=lm_labels,
             )
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(self.model.model.last_padding_mask, slogits, tlogits)
-        blended_loss = loss_ce * self.alpha_ce + self.alpha_mlm * sloss
-        return blended_loss, loss_ce, sloss
+        blended_loss = (
+            loss_ce * self.alpha_ce + self.alpha_mlm * sloss + self.hparams.alpha_encoder_loss * loss_encoder
+        )
+        return blended_loss, loss_ce, sloss, loss_encoder
+
+    def calc_mse_loss(self, teacher_outputs: torch.Tensor, student_outputs: torch.Tensor, mask) -> torch.FloatTensor:
+        if mask is not None:
+            # mask has False at padding_idx
+            sel_mask = mask[:, :, None].expand_as(student_outputs).bool()
+            s_logits_slct = torch.masked_select(student_outputs, sel_mask)
+            t_logits_slct = torch.masked_select(teacher_outputs, sel_mask)
+        else:
+            t_logits_slct = teacher_outputs
+            s_logits_slct = student_outputs
+        mse_loss = F.mse_loss(s_logits_slct, t_logits_slct)
+        return mse_loss
 
     def calc_ce_loss(self, mask, s_logits, t_logits):
         if mask is not None:
@@ -414,7 +432,6 @@ class SummarizationDistiller(SummarizationTrainer):
                 t_logits, sel_mask
             )  # (bs * seq_length * voc_size) modulo the 1s in mask
         else:
-
             t_logits_slct = t_logits
             s_logits_slct = s_logits  # (bs * seq_length * voc_size) modulo the 1s in mask
         s_logits_slct = s_logits_slct.view(-1, s_logits.size(-1))  # (bs * seq_length, voc_size) modulo the 1s in mask
@@ -466,14 +483,11 @@ class SummarizationDistiller(SummarizationTrainer):
     def add_model_specific_args(parser, root_dir):
         SummarizationTrainer.add_model_specific_args(parser, root_dir)
         parser.add_argument(
-            "--teacher", default=None, type=str, required=True,
+            "--teacher", default="bart-large-cnn", type=str, required=True,
         )
-        parser.add_argument(
-            "--alpha_ce", default=0.8, type=float,
-        )
-        parser.add_argument(
-            "--alpha_mlm", default=0.2, type=float,
-        )
+        parser.add_argument("--alpha_ce", default=0.8, type=float)
+        parser.add_argument("--alpha_mlm", default=0.2, type=float)
+        parser.add_argument("--alpha_loss_encoder", default=0.0, type=float)
         parser.add_argument(
             "--student_decoder_layers", default=6, type=int, required=False,
         )
