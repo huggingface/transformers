@@ -70,6 +70,7 @@ class GlueDataset(Dataset):
         tokenizer: PreTrainedTokenizer,
         limit_length: Optional[int] = None,
         mode: Union[str, Split] = Split.train,
+        cache_dir: str = None,
     ):
         self.args = args
         self.processor = glue_processors[args.task_name]()
@@ -81,7 +82,7 @@ class GlueDataset(Dataset):
                 raise KeyError("mode is not a valid split name")
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(
-            args.cache_dir,
+            args.data_dir if not cache_dir else cache_dir,
             "cached_{}_{}_{}_{}".format(
                 mode.value, tokenizer.__class__.__name__, str(args.max_seq_length), args.task_name,
             ),
