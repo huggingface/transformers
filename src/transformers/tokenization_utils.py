@@ -194,7 +194,7 @@ def convert_to_tensors(batch_outputs: MutableMapping, return_tensors: Union[str,
     elif return_tensors == TensorType.NUMPY:
         as_tensor = np.ndarray
     else:
-       raise ImportError(
+        raise ImportError(
             "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
                 return_tensors
             )
