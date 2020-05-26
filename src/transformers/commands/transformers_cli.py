@@ -8,9 +8,10 @@ from transformers.commands.run import RunCommand
 from transformers.commands.serving import ServeCommand
 from transformers.commands.user import UserCommands
 
-if __name__ == '__main__':
-    parser = ArgumentParser('Transformers CLI tool', usage='transformers-cli <command> [<args>]')
-    commands_parser = parser.add_subparsers(help='transformers-cli command helpers')
+
+def main():
+    parser = ArgumentParser("Transformers CLI tool", usage="transformers-cli <command> [<args>]")
+    commands_parser = parser.add_subparsers(help="transformers-cli command helpers")
 
     # Register commands
     ConvertCommand.register_subcommand(commands_parser)
@@ -23,10 +24,14 @@ if __name__ == '__main__':
     # Let's go
     args = parser.parse_args()
 
-    if not hasattr(args, 'func'):
+    if not hasattr(args, "func"):
         parser.print_help()
         exit(1)
 
     # Run
     service = args.func(args)
     service.run()
+
+
+if __name__ == "__main__":
+    main()

@@ -127,7 +127,9 @@ setup(
         "sacremoses",
     ],
     extras_require=extras,
-    scripts=["transformers-cli"],
+    entry_points={
+        "console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]
+    },
     python_requires=">=3.6.0",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
