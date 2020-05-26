@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "longformer-base-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096/config.json",
     "longformer-large-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096/config.json",
+    "longformer-base-4096-finetuned-triviaqa": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096-finetuned-triviaqa/config.json",
 }
 
 
