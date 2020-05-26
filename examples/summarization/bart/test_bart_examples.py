@@ -64,6 +64,7 @@ CHEAP_ARGS = {
     "n_test": -1,
     "student_encoder_layers": 1,
     "alpha_loss_encoder": 0.0,
+    "freeze_encoder": False,
 }
 
 

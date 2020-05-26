@@ -84,6 +84,8 @@ class SummarizationTrainer(BaseTransformer):
         assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
         self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
         self.freeze_embeds()
+        if self.hparams.freeze_encoder:
+            freeze_part(self.model.encoder)
 
 
 
@@ -267,9 +269,8 @@ class SummarizationTrainer(BaseTransformer):
             required=True,
             help="The input data dir. Should contain the dataset files for the CNN/DM summarization task.",
         )
-        parser.add_argument(
-            "--no_cache", action="store_true",
-        )
+        parser.add_argument("--no_cache", action="store_true",)
+        parser.add_argument("--freeze_encoder", action="store_true", )
         parser.add_argument("--tgt_suffix", type=str, default="", required=False)
         parser.add_argument("--n_train", type=int, default=-1, required=False)
         parser.add_argument("--n_val", type=int, default=500, required=False)
@@ -371,7 +372,7 @@ class SummarizationDistiller(SummarizationTrainer):
         else:
             freeze_part(self.model.model.encoder)
             teacher.model.encoder = None
-        
+
         if self.different_decoder:
             assert any(grad_status(self.model.model.decoder))
         else:
