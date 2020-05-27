@@ -94,44 +94,49 @@ class PyTorchBenchmark(Benchmark):
             return min(runtimes) / 10.0
 
     def inference(self, model_name, batch_size, sequence_length, trace_memory=False):
-        config = self.config_dict[model_name]
-        model = MODEL_MAPPING[config.__class__](config)
-        model.to(self.args.device)
-        model.eval()
+        try:
+            config = self.config_dict[model_name]
+            model = MODEL_MAPPING[config.__class__](config)
+            model.to(self.args.device)
+            model.eval()
 
-        input_ids = torch.randint(
-            config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
-        )
-        if trace_memory is True:
-            if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
-                trace = start_memory_tracing("transformers")
-            else:
-                # clear cuda cache
-                torch.cuda.empty_cache()
-                if hasattr(torch.cuda, "max_memory_reserved"):
-                    torch.cuda.reset_peak_memory_stats()
+            input_ids = torch.randint(
+                config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
+            )
+            if trace_memory is True:
+                if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
+                    trace = start_memory_tracing("transformers")
                 else:
-                    logger.info(
-                        "Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage"
-                    )
-                    torch.cuda.reset_max_memory_cached()
+                    # clear cuda cache
+                    torch.cuda.empty_cache()
+                    if hasattr(torch.cuda, "max_memory_reserved"):
+                        torch.cuda.reset_peak_memory_stats()
+                    else:
+                        logger.info(
+                            "Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage"
+                        )
+                        torch.cuda.reset_max_memory_cached()
 
-            model(input_ids)
+                model(input_ids)
 
-            if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
-                summary = stop_memory_tracing(trace)
-                memory = summary.total
-            else:
-                if hasattr(torch.cuda, "max_memory_reserved"):
-                    memory = Memory(torch.cuda.max_memory_reserved())
+                if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
+                    summary = stop_memory_tracing(trace)
+                    memory = summary.total
                 else:
-                    logger.info(
-                        "Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage"
-                    )
-                    memory = Memory(torch.cuda.max_memory_cached())
+                    if hasattr(torch.cuda, "max_memory_reserved"):
+                        memory = Memory(torch.cuda.max_memory_reserved())
+                    else:
+                        logger.info(
+                            "Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage"
+                        )
+                        memory = Memory(torch.cuda.max_memory_cached())
 
-            return memory
-        else:
-            # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
-            runtimes = timeit.repeat(lambda: model(input_ids), repeat=self.args.repeat, number=10,)
-            return min(runtimes) / 10.0
+                return memory
+            else:
+                # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
+                runtimes = timeit.repeat(lambda: model(input_ids), repeat=self.args.repeat, number=10,)
+                return min(runtimes) / 10.0
+
+        except RuntimeError as e:
+            self.print_fn("Doesn't fit on GPU. {}".format(e))
+            return "N/A"
