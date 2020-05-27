@@ -505,9 +505,7 @@ class SummarizationDistiller(SummarizationTrainer):
         else:
             t_logits_slct = teacher_outputs
             s_logits_slct = student_outputs
-        mse_loss = F.mse_loss(s_logits_slct, t_logits_slct)
-
-        return mse_loss
+        return F.mse_loss(s_logits_slct, t_logits_slct)
 
     def calc_ce_loss(self, mask, s_logits, t_logits):
         if mask is not None:
@@ -589,6 +587,8 @@ class SummarizationDistiller(SummarizationTrainer):
         parser.add_argument(
             "--enc_only", action="store_true", default=False,
         )
+        parser.add_argument('--auto_scale_batch_size', default=False, action='store_true')
+
 
         return parser
 
@@ -640,7 +640,6 @@ def main(args):
     trainer.logger.log_hyperparams(model.hparams)
     trainer.test(model)
     return model
-    # model.metrics_df.to_csv(Path(model.output_dir)/'metrics.csv')
 
 
 if __name__ == "__main__":

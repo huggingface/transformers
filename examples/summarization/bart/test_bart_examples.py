@@ -68,6 +68,7 @@ CHEAP_ARGS = {
     "alpha_loss_encoder": 0.0,
     "freeze_encoder": False,
     "freeze_decoder": False,
+    "auto_scale_batch_size": False,
 }
 
 
