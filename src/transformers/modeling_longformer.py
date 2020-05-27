@@ -816,7 +816,7 @@ class LongformerClassificationHead(nn.Module):
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
 
     def forward(self, hidden_states, **kwargs):
-        hidden_states = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+        hidden_states = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.dense(hidden_states)
         hidden_states = torch.tanh(hidden_states)
