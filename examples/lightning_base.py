@@ -157,6 +157,13 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument("--train_batch_size", default=32, type=int)
         parser.add_argument("--eval_batch_size", default=32, type=int)
         parser.add_argument("--num_workers", default=0, type=int)
+
+        # Parse temp args and import xm if using TPU so we have it available in global namespace
+        temp_args, _ = parser.parse_known_args()
+        if temp_args.tpu_cores is not None:
+            global xm
+            import xm
+
         return parser
 
 
