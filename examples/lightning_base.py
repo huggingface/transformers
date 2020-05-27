@@ -247,6 +247,7 @@ class LoggingCallback(pl.Callback):
             content = "\n".join(metrics["preds"])
             generations_file.open("w+").write(content)
 
+    @rank_zero_only
     def on_train_start(self, trainer, pl_module):
         npars = pl_module.model.model.num_parameters()
         n_trainable_pars = count_trainable_parameters(pl_module)
@@ -300,45 +301,18 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--resume_from_checkpoint", type=str, default=None)
 
 
-class BartCheckpointer(ModelCheckpoint):
-    dringus = 4
-    # def format_checkpoint_name(self, epoch, metrics, ver=None):
-    #     """Generate a filename according to the defined template.
-    #
-    #     Example::
-    #
-    #         >>> tmpdir = os.path.dirname(__file__)
-    #         >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch}'))
-    #         >>> os.path.basename(ckpt.format_checkpoint_name(0, {}))
-    #         'epoch=0.ckpt'
-    #         >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch:03d}'))
-    #         >>> os.path.basename(ckpt.format_checkpoint_name(5, {}))
-    #         'epoch=005.ckpt'
-    #         >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch}-{val_loss:.2f}'))
-    #         >>> os.path.basename(ckpt.format_checkpoint_name(2, dict(val_loss=0.123456)))
-    #         'epoch=2-val_loss=0.12.ckpt'
-    #         >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{missing:d}'))
-    #         >>> os.path.basename(ckpt.format_checkpoint_name(0, {}))
-    #         'missing=0.ckpt'
-    #     """
-    #
-    #     # check if user passed in keys to the string
-    #     rouge = metrics.get("val_avg_rouge2", -1.0)
-    #     return f"{self.dirpath}/val_rouge={rouge:.4f}_ep{epoch}.ckpt"
-
-
 def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callbacks=[], **extra_train_kwargs):
     # init model
     set_seed(args)
     odir = Path(model.hparams.output_dir)
     odir.mkdir(exist_ok=True)
-    if args.output_dir.startswith("/var/") or args.fast_dev_run or args.output_dir.startswith("/tmp/"):
+    if args.output_dir.startswith("/var/") or args.fast_dev_run or args.output_dir.startswith("/tmp/") or args.n_gpu > 1:
         logger = True
     else:
         logger = WandbLogger(name=model.output_dir.name)
         logger.log_hyperparams(args)
 
-    checkpoint_callback = BartCheckpointer(
+    checkpoint_callback = ModelCheckpoint(
         filepath=str(model.output_dir / "{epoch}-{val_avg_rouge2:.4f}"), monitor="val_loss", mode="min", save_top_k=1,
     )
 
