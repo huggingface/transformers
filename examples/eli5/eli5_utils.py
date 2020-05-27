@@ -320,7 +320,7 @@ class KiltSnippets(nlp.GeneratorBasedBuilder):
 
 def wiki40b_article_snippets(article, passage_len=100, overlap=0):
     paragraphs = article['text'].split('\n')
-    aticle_idx = paragraphs.index('_START_ARTICLE_')
+    aticle_idx = paragraphs.index('_START_ARTICLE_') + 1
     article_title = paragraphs[aticle_idx] if aticle_idx < len(paragraphs) else ''
     section_indices = [i+1 for i, par in enumerate(paragraphs[:-1]) if par == '_START_SECTION_']
     par_tabs = [par.split(' ') for par in paragraphs]
@@ -340,18 +340,17 @@ def wiki40b_article_snippets(article, passage_len=100, overlap=0):
             'start_char_id': pre_toks[0][1],
             'end_paragraph': pre_toks[-1][0],
             'end_char_id': pre_toks[-1][1] + len(pre_toks[-1][2]) + 1,
-            'passage_text': passage_text,
+            'passage_text': passage_text.replace('_NEWLINE_', '\n'),
                      }]
     return passages
 
-def wiki40b_generate_snippets(article, passage_len=100, overlap=0):
+def wiki40b_generate_snippets(wikipedia, passage_len=100, overlap=0):
      for i, article in enumerate(wikipedia):
-        article_title = article['title']
-        for doc in kilt_article_snippets(article, passage_len, overlap):
+        for doc in wiki40b_article_snippets(article, passage_len, overlap):
             part_id = json.dumps(
                 {
                     'nlp_id': i,
-                    'kilt_id': article['wikidata_id'],
+                    'wiki_id': article['wikidata_id'],
                     'sp': doc['start_paragraph'],
                     'sc': doc['start_char_id'],
                     'ep': doc['end_paragraph'],
@@ -360,7 +359,7 @@ def wiki40b_generate_snippets(article, passage_len=100, overlap=0):
             )
             doc['_id'] = part_id
             doc['nlp_id'] = i
-            doc['kilt_id'] = article['wikidata_id']
+            doc['wiki_id'] = article['wikidata_id']
             yield doc
 
 class Wiki40bSnippets(nlp.GeneratorBasedBuilder):
@@ -372,7 +371,7 @@ class Wiki40bSnippets(nlp.GeneratorBasedBuilder):
                 description="Wiki-KILT Wikipedia pre-processed for KILT/ELI5 and split into 100-words snippets",
                 features=nlp.Features({
                         "nlp_id": nlp.Value("int32"),
-                        "kilt_id": nlp.Value("string"),
+                        "wiki_id": nlp.Value("string"),
                         "start_paragraph": nlp.Value("int32"),
                         "start_character": nlp.Value("int32"),
                         "end_paragraph": nlp.Value("int32"),
@@ -402,7 +401,7 @@ class Wiki40bSnippets(nlp.GeneratorBasedBuilder):
                 id_ = doc['_id']
                 res_dct = {
                         "nlp_id": doc["nlp_id"],
-                        "kilt_id": doc["kilt_id"],
+                        "wiki_id": doc["wiki_id"],
                         "start_paragraph": doc["start_paragraph"],
                         "start_character": doc["start_char_id"],
                         "end_paragraph": doc["end_paragraph"],
@@ -817,9 +816,8 @@ def qa_s2s_generate(question_doc, qa_s2s_model, qa_s2s_tokenizer,
 ###############
 ### ELI5-trained retrieval model usage
 ###############
-def embed_passages_for_retrieval(passage_list, tokenizer, qa_embedder, max_length=128, device='cuda:0'):
-    a_ls = [p for p in passage_list['passage_text']]
-    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=max_length, pad_to_max_length=True)
+def embed_passages_for_retrieval(passages, tokenizer, qa_embedder, max_length=128, device='cuda:0'):
+    a_toks = tokenizer.batch_encode_plus(passages, max_length=max_length, pad_to_max_length=True)
     a_ids, a_mask = (
         torch.LongTensor(a_toks['input_ids']).to(device),
         torch.LongTensor(a_toks['attention_mask']).to(device),
@@ -828,7 +826,7 @@ def embed_passages_for_retrieval(passage_list, tokenizer, qa_embedder, max_lengt
         a_reps = qa_embedder.embed_answers(a_ids, a_mask).cpu().type(torch.float)
     return a_reps.numpy()
 
-def embed_question_for_retrieval(q_ls, tokenizer, qa_embedder, device='cuda:0'):
+def embed_questions_for_retrieval(q_ls, tokenizer, qa_embedder, device='cuda:0'):
     q_toks = tokenizer.batch_encode_plus(q_ls, max_length=128, pad_to_max_length=True)
     q_ids, q_mask = (
         torch.LongTensor(q_toks['input_ids']).to(device),
@@ -845,8 +843,9 @@ def make_qa_dense_index(qa_embedder, tokenizer, passages_dset,
     fp = np.memmap(index_name, dtype='float16', mode='w+', shape=(passages_dset.num_rows, 128))
     n_batches = math.ceil(passages_dset.num_rows / batch_size)
     for i in range(n_batches):
+        passages = [p for p in passages_dset[i*batch_size:(i+1)*batch_size]['passage_text']]
         reps = embed_passages_for_retrieval(
-            passages_dset[i * batch_size:(i+1) * batch_size],
+            passages,
             tokenizer, qa_embedder, max_length, device
         )
         fp[i * batch_size:(i+1) * batch_size] = reps
@@ -855,7 +854,7 @@ def make_qa_dense_index(qa_embedder, tokenizer, passages_dset,
 
 # build a support document for the question out of Wikipedia snippets
 def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10):
-    q_rep = embed_question_for_retrieval([question], tokenizer, qa_embedder)
+    q_rep = embed_question_for_retrievals([question], tokenizer, qa_embedder)
     D, I = wiki_index.search(q_rep, n_results)
     res_passages = [wiki_passages[int(i)] for i in I[0]]
     support_doc = '<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
@@ -865,7 +864,7 @@ def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_i
     return support_doc, res_list
 
 def batch_query_qa_dense_index(questions, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10):
-    q_rep = embed_question_for_retrieval(questions, tokenizer, qa_embedder)
+    q_rep = embed_question_for_retrievals(questions, tokenizer, qa_embedder)
     D, I = wiki_index.search(q_rep, n_results)
     res_passages_lst = [[wiki_passages[int(i)] for i in i_lst] for i_lst in I]
     support_doc_lst = ['<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
@@ -881,7 +880,7 @@ def batch_query_qa_dense_index(questions, qa_embedder, tokenizer, wiki_passages,
 
 # find nearest neighbors of an answer or declarative text in Wikipedia snippets
 def query_qa_dense_index_nn(passage, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10):
-    a_rep = embed_passages_for_retrieval({'passage_text': [passage]}, tokenizer, qa_embedder)
+    a_rep = embed_passages_for_retrieval([passage], tokenizer, qa_embedder)
     D, I = wiki_index.search(a_rep, n_results)
     res_passages = [wiki_passages[int(i)] for i in I[0]]
     support_doc = '<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
