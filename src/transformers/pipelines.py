@@ -818,7 +818,7 @@ class FillMaskPipeline(Pipeline):
         return results
 
 
-class NerPipeline(Pipeline):
+class TokenClassificationPipeline(Pipeline):
     """
     Named Entity Recognition pipeline using ModelForTokenClassification head. See the
     `named entity recognition usage <../usage.html#named-entity-recognition>`__ examples for more information.
@@ -982,7 +982,7 @@ class NerPipeline(Pipeline):
         return entity_group
 
 
-TokenClassificationPipeline = NerPipeline
+NerPipeline = TokenClassificationPipeline
 
 
 class QuestionAnsweringArgumentHandler(ArgumentHandler):
@@ -1592,7 +1592,7 @@ SUPPORTED_TASKS = {
         },
     },
     "ner": {
-        "impl": NerPipeline,
+        "impl": TokenClassificationPipeline,
         "tf": TFAutoModelForTokenClassification if is_tf_available() else None,
         "pt": AutoModelForTokenClassification if is_torch_available() else None,
         "default": {
@@ -1693,7 +1693,7 @@ def pipeline(
 
             - "feature-extraction": will return a :class:`~transformers.FeatureExtractionPipeline`
             - "sentiment-analysis": will return a :class:`~transformers.TextClassificationPipeline`
-            - "ner": will return a :class:`~transformers.NerPipeline`
+            - "ner": will return a :class:`~transformers.TokenClassificationPipeline`
             - "question-answering": will return a :class:`~transformers.QuestionAnsweringPipeline`
             - "fill-mask": will return a :class:`~transformers.FillMaskPipeline`
             - "summarization": will return a :class:`~transformers.SummarizationPipeline`
