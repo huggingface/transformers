@@ -24,10 +24,10 @@ from .configuration_albert import AlbertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
 from .modeling_tf_utils import (
+    TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
-    TFMultipleChoiceLoss,
     TFTokenClassificationLoss,
     get_initializer,
     keras_serializable,

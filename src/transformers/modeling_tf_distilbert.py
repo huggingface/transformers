@@ -25,10 +25,10 @@ import tensorflow as tf
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
+    TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
-    TFMultipleChoiceLoss,
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
     get_initializer,
