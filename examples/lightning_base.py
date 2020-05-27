@@ -335,7 +335,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
     checkpoint_callback = BartCheckpointer(
         filepath=model.output_dir/'{epoch}-{val_avg_rouge2:.4f}', monitor="val_loss", mode="min", save_top_k=1,
     )
-    if args.output_dir.startswith("/var/") or args.fast_dev_run:
+    if args.output_dir.startswith("/var/") or args.fast_dev_run or args.output_dir.startswith("/tmp/"):
         logger = True
     else:
         logger = WandbLogger(name=model.output_dir.name)
