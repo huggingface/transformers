@@ -842,7 +842,7 @@ def make_qa_dense_index(qa_embedder, tokenizer, passages_dset,
                         batch_size=512, max_length=128, index_name='kilt_passages_reps.dat',
                         device='cuda:0'):
     st_time = time()
-    fp = np.memmap(index_name, dtype='float16', mode='w+', shape=(wiki_passages.num_rows, 128))
+    fp = np.memmap(index_name, dtype='float16', mode='w+', shape=(passages_dset.num_rows, 128))
     n_batches = math.ceil(passages_dset.num_rows / batch_size)
     for i in range(n_batches):
         reps = embed_passages_for_retrieval(
