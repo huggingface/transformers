@@ -27,7 +27,8 @@ from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_
 from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
-    TFSequenceClassificationAndMultipleChoiceLoss,
+    TFSequenceClassificationLoss,
+    TFMultipleChoiceLoss,
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
     get_initializer,
@@ -674,9 +675,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForSequenceClassification(
-    TFDistilBertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss
-):
+class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -797,7 +796,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
+class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

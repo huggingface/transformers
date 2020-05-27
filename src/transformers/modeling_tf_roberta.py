@@ -26,7 +26,8 @@ from .modeling_tf_bert import TFBertEmbeddings, TFBertMainLayer, gelu
 from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
-    TFSequenceClassificationAndMultipleChoiceLoss,
+    TFSequenceClassificationLoss,
+    TFMultipleChoiceLoss,
     TFTokenClassificationLoss,
     get_initializer,
     keras_serializable,
@@ -346,7 +347,7 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
     on top of the pooled output) e.g. for GLUE tasks. """,
     ROBERTA_START_DOCSTRING,
 )
-class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
+class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -400,7 +401,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     ROBERTA_START_DOCSTRING,
 )
-class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
+class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

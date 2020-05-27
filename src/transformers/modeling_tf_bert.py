@@ -26,7 +26,8 @@ from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_
 from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
-    TFSequenceClassificationAndMultipleChoiceLoss,
+    TFSequenceClassificationLoss,
+    TFMultipleChoiceLoss,
     TFTokenClassificationLoss,
     get_initializer,
     keras_serializable,
@@ -888,7 +889,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     BERT_START_DOCSTRING,
 )
-class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
+class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -946,7 +947,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     BERT_START_DOCSTRING,
 )
-class TFBertForMultipleChoice(TFBertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
+class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

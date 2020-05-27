@@ -26,7 +26,8 @@ from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
 from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
-    TFSequenceClassificationAndMultipleChoiceLoss,
+    TFSequenceClassificationLoss,
+    TFMultipleChoiceLoss,
     TFTokenClassificationLoss,
     get_initializer,
     keras_serializable,
@@ -849,7 +850,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     ALBERT_START_DOCSTRING,
 )
-class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
+class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1030,7 +1031,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     ALBERT_START_DOCSTRING,
 )
-class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
+class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

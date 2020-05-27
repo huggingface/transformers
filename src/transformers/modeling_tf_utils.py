@@ -129,7 +129,7 @@ class TFTokenClassificationLoss:
         return loss_fn(labels, reduced_logits)
 
 
-class TFSequenceClassificationAndMultipleChoiceLoss:
+class TFSequenceClassificationLoss:
     def compute_loss(self, labels, logits):
         if shape_list(logits[0])[2] == 1:
             loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
@@ -139,6 +139,9 @@ class TFSequenceClassificationAndMultipleChoiceLoss:
             )
 
         return loss_fn(labels, logits[0])
+
+
+TFMultipleChoiceLoss = TFSequenceClassificationLoss
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):

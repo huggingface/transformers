@@ -27,7 +27,8 @@ from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_
 from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
-    TFSequenceClassificationAndMultipleChoiceLoss,
+    TFSequenceClassificationLoss,
+    TFMultipleChoiceLoss,
     TFSequenceSummary,
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
@@ -941,7 +942,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     XLNET_START_DOCSTRING,
 )
-class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
+class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1005,7 +1006,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     XLNET_START_DOCSTRING,
 )
-class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFSequenceClassificationAndMultipleChoiceLoss):
+class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
