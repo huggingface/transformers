@@ -328,6 +328,7 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+@require_tf
 class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gpt2(self):

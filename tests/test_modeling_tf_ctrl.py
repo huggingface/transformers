@@ -205,6 +205,7 @@ class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+@require_tf
 class TFCTRLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_ctrl(self):
