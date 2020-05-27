@@ -6,3 +6,4 @@ sacrebleu
 rouge-score
 tensorflow_datasets
 pytorch-lightning==0.7.6  # May 15, 2020 release
+nlp==0.1.0
