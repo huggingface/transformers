@@ -31,9 +31,11 @@ from .modeling_roberta import RobertaLMHead, RobertaModel
 logger = logging.getLogger(__name__)
 
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "longformer-base-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096/pytorch_model.bin",
-    "longformer-large-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096/pytorch_model.bin",
-    "longformer-large-4096-finetuned-triviaqa": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096-finetuned-triviaqa/pytorch_model.bin",
+    "allenai/longformer-base-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096/pytorch_model.bin",
+    "allenai/longformer-large-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096/pytorch_model.bin",
+    "allenai/longformer-large-4096-finetuned-triviaqa": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096-finetuned-triviaqa/pytorch_model.bin",
+    "allenai/longformer-base-4096-extra.pos.embd.only": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096-extra.pos.embd.only/pytorch_model.bin",
+    "allenai/longformer-large-4096-extra.pos.embd.only": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096-extra.pos.embd.only/pytorch_model.bin",
 }
 
 
@@ -736,8 +738,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         attention_mask = torch.arange(input_ids.shape[1], device=input_ids.device)
         attention_mask = attention_mask.expand_as(input_ids) < question_end_index
 
-        attention_mask = attention_mask.int() + 1  # True => global attention; False => local attention
-        return attention_mask.long()
+        return attention_mask.long() + 1  # True => global attention; False => local attention
 
     def _get_question_end_index(self, input_ids):
         sep_token_indices = (input_ids == self.config.sep_token_id).nonzero()
