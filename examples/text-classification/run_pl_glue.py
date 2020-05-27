@@ -2,7 +2,7 @@ import glob
 import logging
 import os
 from argparse import ArgumentParser, Namespace
-from typing import Tuple, Union
+from typing import List, Union
 
 import nlp
 import numpy as np
@@ -121,7 +121,7 @@ class GLUETransformer(BaseTransformer):
             # TODO - is there a way to do this with just the nlp library?
             torch.save(self.dataset, cached_dataset_file)
 
-    def load_dataset(self, mode: str, batch_size: int) -> Union[Tuple[DataLoader], DataLoader]:
+    def load_dataset(self, mode: str, batch_size: int) -> Union[List[DataLoader], DataLoader]:
         """Get DataLoader(s) corresponding to the given split 'mode'
 
         Args:
@@ -129,7 +129,7 @@ class GLUETransformer(BaseTransformer):
             batch_size (int): Number of examples to feed to model on each step.
 
         Returns:
-            Union[Tuple[DataLoader], DataLoader]: Single loader or tuple of loaders if MNLI
+            Union[List[DataLoader], DataLoader]: Single loader or list of loaders if MNLI
         """
 
         # Return two dataloaders for val/test datasets if MNLI
