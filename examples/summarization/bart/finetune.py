@@ -448,7 +448,7 @@ class SummarizationDistiller(SummarizationTrainer):
         if self.different_decoder:
             assert any(grad_status(self.model.model.decoder))
         else:
-            freeze_part(self.model.model.decoder)
+            freeze_part(self.model.model.decoder)  # TODO(SS): very suspicious
 
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
@@ -463,6 +463,7 @@ class SummarizationDistiller(SummarizationTrainer):
         self.hparams.need_decoder = self.need_decoder
 
         gc.collect()
+        torch.cuda.empty_cache()
 
     def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
