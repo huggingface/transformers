@@ -105,6 +105,7 @@ from .modeling_longformer import (
     LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
     LongformerForMaskedLM,
     LongformerForQuestionAnswering,
+    LongformerForSequenceClassification,
     LongformerModel,
 )
 from .modeling_marian import MarianMTModel
@@ -252,6 +253,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (CamembertConfig, CamembertForSequenceClassification),
         (XLMRobertaConfig, XLMRobertaForSequenceClassification),
         (BartConfig, BartForSequenceClassification),
+        (LongformerConfig, LongformerForSequenceClassification),
         (RobertaConfig, RobertaForSequenceClassification),
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
