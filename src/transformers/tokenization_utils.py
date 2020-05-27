@@ -202,6 +202,9 @@ class BatchEncoding(UserDict):
     def __getattr__(self, item: str):
         return self.data[item]
 
+    def __getstate__(self):
+        return self.__dict__
+
     def keys(self):
         return self.data.keys()
 
