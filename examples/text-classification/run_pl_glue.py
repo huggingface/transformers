@@ -2,7 +2,7 @@ import glob
 import logging
 import os
 from argparse import ArgumentParser, Namespace
-from typing import Dict, List, Tuple, Union
+from typing import Tuple, Union
 
 import nlp
 import numpy as np
@@ -61,7 +61,7 @@ class GLUETransformer(BaseTransformer):
         cached_dataset_file = self._feature_file(self.hparams.task)
 
         if os.path.exists(cached_dataset_file) and not self.hparams.overwrite_cache:
-            logger.info(f"Loading from cached dataloader file ", cached_dataset_file)
+            logger.info("Loading from cached dataloader file ", cached_dataset_file)
             self.dataset = torch.load(cached_dataset_file)
         else:
             logger.info("No cache file found. Creating one at", cached_dataset_file)
