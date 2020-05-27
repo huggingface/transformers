@@ -24,6 +24,7 @@ from lightning_base import BaseTransformer, add_generic_args, generic_train, get
 from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.modeling_bart import invert_mask
 from transformers.optimization import AdamW
+import gc
 
 
 try:
@@ -442,7 +443,7 @@ class SummarizationDistiller(SummarizationTrainer):
             assert any(grad_status(self.model.model.encoder))
         else:
             freeze_part(self.model.model.encoder)
-            teacher.model.encoder = None
+            del teacher.model.encoder
 
         if self.different_decoder:
             assert any(grad_status(self.model.model.decoder))
@@ -453,6 +454,15 @@ class SummarizationDistiller(SummarizationTrainer):
         self.temperature = 2.0
         self.alpha_mlm = hparams.alpha_mlm
         self.alpha_ce = hparams.alpha_ce
+        self.alpha_encoder_loss = self.hparams.alpha_encoder_loss
+        self.need_decoder = True
+
+        if self.alpha_ce <= 0 and self.alpha_mlm <= 0 and self.hparams.alpha_encoder_loss > 0:
+            self.need_decoder = False
+            del teacher.model.decoder
+        self.hparams.need_decoder = self.need_decoder
+
+        gc.collect()
 
     def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
@@ -480,8 +490,7 @@ class SummarizationDistiller(SummarizationTrainer):
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs[0], source_mask)
         else:
             teacher_enc_outputs = (enc_outputs,)
-        if self.alpha_ce == 0 and self.alpha_mlm == 0:
-            return loss_encoder, torch.tensor(0.0).type_as(loss_encoder), torch.tensor(0.0).type_as(loss_encoder), loss_encoder
+
 
         with torch.no_grad():
             tloss, tlogits, *trash = self.teacher(
@@ -587,23 +596,57 @@ class SummarizationDistiller(SummarizationTrainer):
         parser.add_argument(
             "--no_teacher", action="store_true", default=False,
         )
+        parser.add_argument(
+            "--enc_only", action="store_true", default=False,
+        )
 
         return parser
+
+
+class EncoderDistiller(SummarizationDistiller):
+    loss_names = ['loss']
+    def __init__(self, hparams):
+        assert hparams.enc_only
+        assert not hparams.no_teacher
+        super().__init__(hparams)
+        assert not self.need_decoder
+        self.teacher_enc = self.teacher.model.encoder
+        del self.teacher
+
+
+    def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
+        return self.model.model.encoder(input_ids, attention_mask=attention_mask)
+
+    def _step(self, batch):
+        source_ids, source_mask, _ = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
+        enc_outputs = self(source_ids, source_mask)
+        with torch.no_grad():
+            teacher_enc_outputs = self.teacher_enc(source_ids, attention_mask=source_mask)
+        loss_encoder = self.calc_mse_loss(enc_outputs[0], teacher_enc_outputs[0], source_mask)
+        return (loss_encoder,)
 
 
 def main(args):
     Path(args.output_dir).mkdir(exist_ok=True)
     if os.listdir(args.output_dir):
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
+    if args.no_teacher:
+        assert not args.enc_only
+        module_cls = SummarizationTrainer
+    elif args.enc_only:
+        module_cls = EncoderDistiller
+    else:
+        module_cls = SummarizationDistiller
 
-    module_cls = SummarizationTrainer if args.no_teacher else SummarizationDistiller
-    model: SummarizationTrainer = module_cls(args)
+    model: BaseTransformer = module_cls(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
-    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
-    if checkpoints:
-        model = model.load_from_checkpoint(checkpoints[-1])
-    # if not args.do_train:
+    model.hparams.test_checkpoint = ''
+    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
 
+    if checkpoints:
+        model.hparams.test_checkpoint = checkpoints[-1]
+        model = model.load_from_checkpoint(checkpoints[-1])
+    trainer.logger.log_hyperparams(model.hparams)
     trainer.test(model)
     return model
     # model.metrics_df.to_csv(Path(model.output_dir)/'metrics.csv')
