@@ -115,95 +115,67 @@ class TestBartExamples(unittest.TestCase):
             self.assertTrue(Path(output_file_name).exists())
             os.remove(Path(output_file_name))
 
-    def test_bart_run_sum_cli_sasha_ds(self):
-        args_d: dict = CHEAP_ARGS.copy()
-        tmp_dir = make_test_data_dir()
-        output_dir = tempfile.mkdtemp(prefix="output_")
-        args_d.update(
-            data_dir=tmp_dir,
-            model_type="bart",
-            train_batch_size=2,
-            eval_batch_size=2,
-            num_train_epochs=2,
+    def test_bdc_no_teacher(self):
+        updates = dict(
+            student_encoder_layers=2,
+            student_decoder_layers=1,
             no_teacher=True,
             tgt_suffix=".pseudo",
-            output_dir=output_dir,
             freeze_decoder=True,
-        )
-        main(argparse.Namespace(**args_d))
-        contents = os.listdir(output_dir)
-        expected_contents = {
-            "checkpointepoch=1.ckpt",
-            "test_results.txt",
-            "val_results.txt",
-            "metrics.pkl",
-            "test_generations_1.txt",
-            "val_generations_0.txt",
-            # "val_generations_1.txt",
-            "val_generations_.txt",
-            # "test"
-        }
-        created_files = {os.path.basename(p) for p in contents}
-        self.assertSetEqual(expected_contents, created_files)
-
-    def test_bart_distiller_cli(self):
-        updates = dict(
-            model_type="bart",
-            train_batch_size=1,
-            eval_batch_size=2,
-            num_train_epochs=2,
-            n_gpu=0,
-            do_predict=True,
-            model_name_or_path="student",
-            teacher=CHEAP_ARGS["model_name_or_path"],
-            alpha_mlm=0.2,
-            alpha_ce=0.8,
-            val_check_interval=0.5,
-            alpha_encoder_loss=0.0,
         )
         self._bart_distiller_cli(updates)
 
-    def test_bart_distiller_unfrozen_encoder(self):
+    def test_bdc_yes_teacher(self):
         updates = dict(
-            model_type="bart",
-            train_batch_size=1,
-            eval_batch_size=2,
-            num_train_epochs=2,
-            n_gpu=0,
-            do_predict=True,
-            model_name_or_path="student",
-            teacher=CHEAP_ARGS["model_name_or_path"],
+            student_encoder_layers=2,
+            student_decoder_layers=1,
+        )
+        self._bart_distiller_cli(updates)
+
+    def test_bdc_unfrozen_encoder(self):
+        updates = dict(
             alpha_mlm=0.0,
             alpha_ce=0.0,
-            val_check_interval=0.5,
-            alpha_encoder_loss=1.0,
             student_encoder_layers=1,
             student_decoder_layers=2,
+            freeze_decoder=True,
         )
         model = self._bart_distiller_cli(updates)
         self.assertFalse(model.different_decoder)
 
     def _bart_distiller_cli(self, updates):
+        default_updates = dict(
+            model_type="bart",
+            train_batch_size=1,
+            eval_batch_size=2,
+            num_train_epochs=2,
+            alpha_mlm=0.2,
+            alpha_ce=0.8,
+            do_predict=True,
+            n_gpu=0,
+            model_name_or_path="student",
+            teacher=CHEAP_ARGS["model_name_or_path"],
+            val_check_interval=0.5,
+            alpha_encoder_loss=0.4,
+        )
+        default_updates.update(updates)
         args_d: dict = CHEAP_ARGS.copy()
         tmp_dir = make_test_data_dir()
         output_dir = tempfile.mkdtemp(prefix="output_")
 
-        args_d.update(data_dir=tmp_dir, output_dir=output_dir, **updates)
+        args_d.update(data_dir=tmp_dir, output_dir=output_dir, **default_updates)
         model = main(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
-        expected_contents = {
-            "checkpointepoch=1.ckpt",
-            "test_results.txt",
-            "val_results.txt",
-            "metrics.pkl",
-            "test_generations_1.txt",
-            "val_generations_0.txt",
-            "val_generations_1.txt",
-            "val_generations_.txt",
-            # "test"
-        }
-        created_files = {os.path.basename(p) for p in contents}
-        self.assertSetEqual(expected_contents, created_files)
+        ckpt_name = "epoch=1-val_avg_rouge2=0.0000.ckpt"
+        contents = {os.path.basename(p) for p in contents}
+        self.assertIn(ckpt_name, contents)
+        self.assertIn("metrics.pkl", contents)
+        self.assertIn("test_generations.txt", contents)
+        self.assertIn("val_generations_3.txt", contents)
+        self.assertIn("val_3_results.txt", contents)
+        self.assertIn("test_results.txt", contents)
+        self.assertEqual(len(contents), 12)
+
 
         metrics = pickle_load(Path(output_dir) / "metrics.pkl")
         val_df = pd.DataFrame(metrics["val"])
