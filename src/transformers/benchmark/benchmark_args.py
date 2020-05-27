@@ -64,6 +64,11 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
 
     @property
     @torch_required
+    def device_idx(self) -> int:
+        return torch.cuda.current_device()
+
+    @property
+    @torch_required
     def device(self) -> "torch.device":
         return self._setup_devices[0]
 

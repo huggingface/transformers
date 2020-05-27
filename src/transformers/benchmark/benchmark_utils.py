@@ -468,23 +468,23 @@ class Benchmark(ABC):
 
         if not self.args.no_inference:
             if not self.args.no_speed:
-                self.print_fn(f"======= INFERENCE - SPEED - RESULT =======")
+                self.print_fn("======= INFERENCE - SPEED - RESULT =======")
                 self.print_results(inference_result_time)
                 self.save_to_csv(inference_result_time, self.args.csv_time_filename_inference)
 
             if not self.args.no_memory:
-                self.print_fn(f"======= INFERENCE - MEMORY - RESULT =======")
+                self.print_fn("======= INFERENCE - MEMORY - RESULT =======")
                 self.print_results(inference_result_memory)
                 self.save_to_csv(inference_result_memory, self.args.csv_memory_filename_inference)
 
         if self.args.training:
             if not self.args.no_speed:
-                self.print_fn(f"======= TRAIN - SPEED - RESULT =======")
+                self.print_fn("======= TRAIN - SPEED - RESULT =======")
                 self.print_results(train_result_time)
                 self.save_to_csv(train_result_time, self.args.csv_time_filename_train)
 
             if not self.args.no_memory:
-                self.print_fn(f"======= TRAIN - MEMORY - RESULT =======")
+                self.print_fn("======= TRAIN - MEMORY - RESULT =======")
                 self.print_results(train_result_memory)
                 self.save_to_csv(train_result_memory, self.args.csv_memory_filename_train)
 
@@ -515,7 +515,38 @@ class Benchmark(ABC):
         else:
             info["cpu_ram_mb"] = bytes_to_mega_bytes(psutil.virtual_memory().total)
 
-        return info
+        if self.is_gpu:
+            try:
+                from py3nvml import py3nvml
+
+                py3nvml.nvmlInit()
+                handle = py3nvml.nvmlDeviceGetHandleByIndex(self.args.device_idx)
+            except ImportError:
+                logger.warning(
+                    "py3nvml not installed, we won't log GPU memory usage. "
+                    "Install py3nvml (pip install py3nvml) to log information about GPU."
+                )
+                info["gpu"] = "N/A"
+                info["gpu_ram_mb"] = "N/A"
+                info["gpu_power_watts"] = "N/A"
+                info["gpu_performance_state"] = "N/A"
+            except (OSError, py3nvml.NVMLError):
+                logger.warning(
+                    "Error while initializing comunication with GPU. " "We won't log information about GPU."
+                )
+                info["gpu"] = "N/A"
+                info["gpu_ram_mb"] = "N/A"
+                info["gpu_power_watts"] = "N/A"
+                info["gpu_performance_state"] = "N/A"
+                py3nvml.nvmlShutdown()
+            else:
+                info["gpu"] = py3nvml.nvmlDeviceGetName(handle)
+                info["gpu_ram_mb"] = bytes_to_mega_bytes(py3nvml.nvmlDeviceGetMemoryInfo(handle).total)
+                info["gpu_power_watts"] = py3nvml.nvmlDeviceGetPowerManagementLimit(handle) / 1000
+                info["gpu_performance_state"] = py3nvml.nvmlDeviceGetPerformanceState(handle)
+                py3nvml.nvmlShutdown()
+
+            return info
 
     def print_results(self, result_dict):
         for model_name in self.args.model_names:
