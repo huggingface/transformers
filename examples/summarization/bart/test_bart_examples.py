@@ -123,6 +123,7 @@ class TestBartExamples(unittest.TestCase):
             no_teacher=True,
             freeze_encoder=True,
             n_gpu=2,
+            sortish_sampler=False,
         )
         self._bart_distiller_cli(updates)
 

@@ -21,7 +21,7 @@ from lightning_base import BaseTransformer, add_generic_args, generic_train, get
 from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.modeling_bart import invert_mask
 from transformers.optimization import AdamW
-
+from pytorch_lightning.utilities import rank_zero_only, rank_zero_warn
 
 try:
     from .utils import SummarizationDataset, flatten_list
@@ -234,12 +234,13 @@ class SummarizationTrainer(BaseTransformer):
         if self.hparams.sortish_sampler and type_path == "train":
             sampler = dataset.make_sortish_sampler(batch_size)
             shuffle = False
+            assert self.hparams.n_gpu == 1
         dataloader = DataLoader(
             dataset,
             batch_size=batch_size,
             collate_fn=dataset.collate_fn,
             shuffle=shuffle,
-            num_workers=4,
+            #num_workers=4,
             sampler=sampler,
         )
         return dataloader
