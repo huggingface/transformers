@@ -7,11 +7,12 @@ import pyarrow
 from torch.utils.data import DataLoader
 import pandas as pd
 import numpy as np
+import glob
 import torch
 from typing import Dict, List, Tuple, Union
 
 from transformers.data import glue_tasks_num_labels
-from lightning_base import BaseTransformer, set_seed
+from lightning_base import BaseTransformer, LoggingCallback, set_seed
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -71,7 +72,7 @@ class GLUETransformer(BaseTransformer):
                 field.name for field in self.dataset['train'].schema if pyarrow.types.is_string(field.type)
             ]
 
-            def convert_to_features(example_batch: Dict[List]) -> Dict[List]:
+            def convert_to_features(example_batch):
                 """Function to be mapped across GLUE datasets. Tokenizes text(s) and renames label column.
 
                 Args:
@@ -267,6 +268,7 @@ def parse_args(args=None):
 
     # add some script specific args
     parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--output_dir', type=str, default="", help="Directory to write outputs to or load checkpoint from")
     parser.add_argument("--do_train", action="store_true", help="Run training loop")
     parser.add_argument("--do_predict", action="store_true", help="Run test loop")
 
@@ -293,15 +295,35 @@ def main(args):
     # Init Trainer
     trainer = Trainer.from_argparse_args(args)
 
-    # Fit the Model
+    # Include custom callback for logging results
+    trainer.callbacks.append(LoggingCallback())
+
+    # Run training and reload best model from checkpoint
     if args.do_train:
+
+        # Fit the model
         trainer.fit(model)
+
+        # Reload best model from current experiment run's checkpoint directory
+        experiment_ckpt_dir = model.trainer.weights_save_path
+        checkpoints = list(sorted(glob.glob(os.path.join(experiment_ckpt_dir, "epoch=*.ckpt"), recursive=True)))
+        trainer.resume_from_checkpoint = checkpoints[-1]
 
     # Predict on test split and write to submission files
     if args.do_predict:
 
-        # Submissions will be written to ./lightning_logs/version_x/
-        output_dir = os.path.dirname(model.trainer.weights_save_path)
+        # If we didn't train and and output directory is not supplied, raise an exception
+        if not args.do_train and not bool(args.output_dir):
+            raise RuntimeError('No output_dir is specified for writing results. Try setting --output_dir flag')
+        # If we did train, but an output_dir was supplied, use the output_dir
+        elif bool(args.output_dir):
+            output_dir = args.output_dir
+        # If we did train and no output_dir was supplied, use lightning_logs/version_x directory
+        elif args.do_train and not bool(args.output_dir):
+            output_dir = os.path.dirname(experiment_ckpt_dir)
+
+        # Make the output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
 
         # Run on test data
         trainer.test(model)
