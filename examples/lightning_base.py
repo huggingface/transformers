@@ -100,7 +100,7 @@ class BaseTransformer(pl.LightningModule):
         t_total = (
             (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.gpus)))
             // self.hparams.accumulate_grad_batches
-            * float(self.hparams.num_train_epochs)
+            * float(self.hparams.max_epochs)
         )
         scheduler = get_linear_schedule_with_warmup(
             self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
@@ -161,8 +161,17 @@ class BaseTransformer(pl.LightningModule):
 
 
 class LoggingCallback(pl.Callback):
+
+    """Custom Pytorch Lightning Callback that logs val results to CLI and writes test results to file
+
+    Reference:
+        https://pytorch-lightning.readthedocs.io/en/latest/callbacks.html
+    """
+
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
+
         logger.info("***** Validation results *****")
+
         if trainer.proc_rank <= 0:
             metrics = trainer.callback_metrics
             # Log results
@@ -171,13 +180,16 @@ class LoggingCallback(pl.Callback):
                     logger.info("{} = {}\n".format(key, str(metrics[key])))
 
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
+
         logger.info("***** Test results *****")
 
         if trainer.proc_rank <= 0:
             metrics = trainer.callback_metrics
 
+            output_dir = pl_module.hparams.output_dir or os.path.dirname(pl_module.trainer.weights_save_path)
+
             # Log and save results to file
-            output_test_results_file = os.path.join(pl_module.hparams.output_dir, "test_results.txt")
+            output_test_results_file = os.path.join(output_dir, f"{pl_module.hparams.task}_test_results.txt")
             with open(output_test_results_file, "w") as writer:
                 for key in sorted(metrics):
                     if key not in ["log", "progress_bar"]:
