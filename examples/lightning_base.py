@@ -38,7 +38,7 @@ def set_seed(args: argparse.Namespace):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
+    if args.gpus > 0:
         torch.cuda.manual_seed_all(args.seed)
 
 
@@ -98,8 +98,8 @@ class BaseTransformer(pl.LightningModule):
         dataloader = self.load_dataset("train", train_batch_size)
 
         t_total = (
-            (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.n_gpu)))
-            // self.hparams.gradient_accumulation_steps
+            (len(dataloader.dataset) // (train_batch_size * max(1, self.hparams.gpus)))
+            // self.hparams.accumulate_grad_batches
             * float(self.hparams.num_train_epochs)
         )
         scheduler = get_linear_schedule_with_warmup(
@@ -125,7 +125,7 @@ class BaseTransformer(pl.LightningModule):
         )
 
     @staticmethod
-    def add_model_specific_args(parent_parser, root_dir):
+    def add_model_specific_args(parent_parser):
         parser = argparse.ArgumentParser(parents=[parent_parser], add_help=False)
 
         parser.add_argument(
