@@ -68,7 +68,7 @@ python run_glue.py \
   --do_eval \
   --data_dir $GLUE_DIR/$TASK_NAME \
   --max_seq_length 128 \
-  --per_gpu_train_batch_size 32 \
+  --per_device_train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \
   --output_dir /tmp/$TASK_NAME/
@@ -141,7 +141,7 @@ python run_glue.py \
   --do_eval \
   --data_dir $GLUE_DIR/MRPC/ \
   --max_seq_length 128 \
-  --per_gpu_train_batch_size 32 \
+  --per_device_train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \
   --output_dir /tmp/mrpc_output/
@@ -166,7 +166,7 @@ python run_glue.py \
   --do_eval \
   --data_dir $GLUE_DIR/MRPC/ \
   --max_seq_length 128 \
-  --per_gpu_train_batch_size 32 \
+  --per_device_train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \
   --output_dir /tmp/mrpc_output/ \
@@ -189,7 +189,7 @@ python -m torch.distributed.launch \
     --do_eval \
     --data_dir $GLUE_DIR/MRPC/ \
     --max_seq_length 128 \
-    --per_gpu_train_batch_size 8 \
+    --per_device_train_batch_size 8 \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
     --output_dir /tmp/mrpc_output/
@@ -221,7 +221,7 @@ python -m torch.distributed.launch \
     --do_eval \
     --data_dir $GLUE_DIR/MNLI/ \
     --max_seq_length 128 \
-    --per_gpu_train_batch_size 8 \
+    --per_device_train_batch_size 8 \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
     --output_dir output_dir \
@@ -280,7 +280,7 @@ python run_xnli.py \
   --do_train \
   --do_eval \
   --data_dir $XNLI_DIR \
-  --per_gpu_train_batch_size 32 \
+  --per_device_train_batch_size 32 \
   --learning_rate 5e-5 \
   --num_train_epochs 2.0 \
   --max_seq_length 128 \
