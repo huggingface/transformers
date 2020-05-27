@@ -301,29 +301,30 @@ def add_generic_args(parser, root_dir):
 
 
 class BartCheckpointer(ModelCheckpoint):
-    def format_checkpoint_name(self, epoch, metrics, ver=None):
-        """Generate a filename according to the defined template.
-
-        Example::
-
-            >>> tmpdir = os.path.dirname(__file__)
-            >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch}'))
-            >>> os.path.basename(ckpt.format_checkpoint_name(0, {}))
-            'epoch=0.ckpt'
-            >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch:03d}'))
-            >>> os.path.basename(ckpt.format_checkpoint_name(5, {}))
-            'epoch=005.ckpt'
-            >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch}-{val_loss:.2f}'))
-            >>> os.path.basename(ckpt.format_checkpoint_name(2, dict(val_loss=0.123456)))
-            'epoch=2-val_loss=0.12.ckpt'
-            >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{missing:d}'))
-            >>> os.path.basename(ckpt.format_checkpoint_name(0, {}))
-            'missing=0.ckpt'
-        """
-
-        # check if user passed in keys to the string
-        rouge = metrics.get("val_avg_rouge2", -1.0)
-        return f"{self.dirpath}/val_rouge={rouge:.4f}_ep{epoch}.ckpt"
+    dringus = 4
+    # def format_checkpoint_name(self, epoch, metrics, ver=None):
+    #     """Generate a filename according to the defined template.
+    #
+    #     Example::
+    #
+    #         >>> tmpdir = os.path.dirname(__file__)
+    #         >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch}'))
+    #         >>> os.path.basename(ckpt.format_checkpoint_name(0, {}))
+    #         'epoch=0.ckpt'
+    #         >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch:03d}'))
+    #         >>> os.path.basename(ckpt.format_checkpoint_name(5, {}))
+    #         'epoch=005.ckpt'
+    #         >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch}-{val_loss:.2f}'))
+    #         >>> os.path.basename(ckpt.format_checkpoint_name(2, dict(val_loss=0.123456)))
+    #         'epoch=2-val_loss=0.12.ckpt'
+    #         >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{missing:d}'))
+    #         >>> os.path.basename(ckpt.format_checkpoint_name(0, {}))
+    #         'missing=0.ckpt'
+    #     """
+    #
+    #     # check if user passed in keys to the string
+    #     rouge = metrics.get("val_avg_rouge2", -1.0)
+    #     return f"{self.dirpath}/val_rouge={rouge:.4f}_ep{epoch}.ckpt"
 
 
 def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callbacks=[], **extra_train_kwargs):
@@ -332,7 +333,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
     odir = Path(model.hparams.output_dir)
     odir.mkdir(exist_ok=True)
     checkpoint_callback = BartCheckpointer(
-        filepath=model.output_dir, monitor="val_avg_rouge2", mode="max", save_top_k=5
+        filepath=model.output_dir/'{epoch}-{val_avg_rouge2:.4f}', monitor="val_loss", mode="min", save_top_k=1,
     )
     if args.output_dir.startswith("/var/") or args.fast_dev_run:
         logger = True
