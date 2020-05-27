@@ -9,6 +9,7 @@ import csv
 import linecache
 import logging
 import os
+import platform
 import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -16,7 +17,6 @@ from typing import Iterable, List, NamedTuple, Optional, Union
 
 from transformers import AutoConfig, PretrainedConfig
 from transformers import __version__ as version
-import platform
 
 from ..file_utils import is_tf_available, is_torch_available
 from .benchmark_args_utils import BenchmarkArguments
@@ -493,16 +493,16 @@ class Benchmark(ABC):
 
     def get_environment_info(self):
         info = {}
-        info['framework'] = self.framework
-        info['framework_version'] = self.framework_version
-        info['gpu'] = self.is_gpu
+        info["framework"] = self.framework
+        info["framework_version"] = self.framework_version
+        info["gpu"] = self.is_gpu
         if self.is_gpu:
-            info['num_gpus'] = self.args.n_gpu
-        info['python_version'] = platform.python_version()
-        info['transformers_version'] = version
-        info['system'] = platform.system()
-        info['cpu'] = platform.processor()
-        info['architecture'] = platform.architecture()
+            info["num_gpus"] = self.args.n_gpu
+        info["python_version"] = platform.python_version()
+        info["transformers_version"] = version
+        info["system"] = platform.system()
+        info["cpu"] = platform.processor()
+        info["architecture"] = platform.architecture()
 
         try:
             import psutil
@@ -511,9 +511,9 @@ class Benchmark(ABC):
                 "Psutil not installed, we won't log available CPU memory."
                 "Install psutil (pip install psutil) to log available CPU memory."
             )
-            info['cpu_ram_mb'] = "N/A"
+            info["cpu_ram_mb"] = "N/A"
         else:
-            info['cpu_ram_mb'] = bytes_to_mega_bytes(psutil.virtual_memory().total)
+            info["cpu_ram_mb"] = bytes_to_mega_bytes(psutil.virtual_memory().total)
 
         return info
 
