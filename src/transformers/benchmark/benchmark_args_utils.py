@@ -88,21 +88,4 @@ class BenchmarkArguments:
 
     @property
     def model_names(self):
-        if len(self.models) == 0:
-            return [
-                "gpt2",
-                "bert-base-cased",
-                "xlnet-base-cased",
-                "xlm-mlm-en-2048",
-                "transfo-xl-wt103",
-                "openai-gpt",
-                "distilbert-base-uncased",
-                "distilgpt2",
-                "roberta-base",
-                "ctrl",
-                "t5-base",
-                "facebook/bart-large",
-                "google/reformer-enwik8",
-            ]
-        else:
-            return self.models
+        return self.models

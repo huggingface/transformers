@@ -345,7 +345,7 @@ if is_torch_available():
     from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
 
     # Benchmarks
-    from .benchmark import PyTorchBenchmarks, PyTorchBenchmarkArguments
+    from .benchmark import PyTorchBenchmark, PyTorchBenchmarkArguments
 
 # TensorFlow
 if is_tf_available():
@@ -521,9 +521,6 @@ if is_tf_available():
 
     # Trainer
     from .trainer_tf import TFTrainer
-
-    # Benchmarks
-    from .benchmark import TensorflowBenchmarkArguments
 
 
 if not is_tf_available() and not is_torch_available():

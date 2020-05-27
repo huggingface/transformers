@@ -368,6 +368,16 @@ def bytes_to_mega_bytes(memory_amount: int) -> int:
     return memory_amount >> 20
 
 
+def bytes_to_human_readable(memory_amount: int) -> str:
+    """ Utility to convert a number of bytes (int) in a human readable string (with units)
+    """
+    for unit in ["B", "KB", "MB", "GB"]:
+        if memory_amount > -1024.0 and memory_amount < 1024.0:
+            return "{:.3f}{}".format(memory_amount, unit)
+        memory_amount /= 1024.0
+    return "{:.3f}TB".format(memory_amount)
+
+
 class Benchmark(ABC):
     """
     Benchmarks is a simple but feature-complete benchmarking script
@@ -503,7 +513,6 @@ class Benchmark(ABC):
         info['system'] = platform.system()
         info['cpu'] = platform.processor()
         info['architecture'] = platform.architecture()
-
         try:
             import psutil
         except (ImportError):
@@ -511,9 +520,8 @@ class Benchmark(ABC):
                 "Psutil not installed, we won't log available CPU memory."
                 "Install psutil (pip install psutil) to log available CPU memory."
             )
-            info['cpu_ram_mb'] = "N/A"
         else:
-            info['cpu_ram_mb'] = bytes_to_mega_bytes(psutil.virtual_memory().total)
+            info['cpu_available_ram'] = psutil.virtual_memory().total
 
         return info
 

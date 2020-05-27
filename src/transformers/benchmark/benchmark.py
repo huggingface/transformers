@@ -21,7 +21,7 @@ import timeit
 
 from transformers import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING, PretrainedConfig, is_torch_available
 
-from .benchmark_utils import Benchmarks, Memory, start_memory_tracing, stop_memory_tracing
+from .benchmark_utils import Benchmark, Memory, start_memory_tracing, stop_memory_tracing
 
 
 if is_torch_available():
@@ -29,10 +29,15 @@ if is_torch_available():
     from .benchmark_args import PyTorchBenchmarkArguments
 
 
-class PyTorchBenchmarks(Benchmarks):
+class PyTorchBenchmark(Benchmark):
 
     args: PyTorchBenchmarkArguments
     configs: PretrainedConfig
+    framework: str = "PyTorch"
+
+    @property
+    def framework_version(self):
+        return torch.__version__
 
     def train(self, model_name, batch_size, sequence_length, trace_memory=False):
         config = self.config_dict[model_name]
@@ -79,8 +84,8 @@ class PyTorchBenchmarks(Benchmarks):
             return memory
         else:
             # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
-            runtimes = timeit.repeat(lambda: compute_loss_and_backprob(), repeat=self.args.repeat, number=3,)
-            return min(runtimes) / 3.0
+            runtimes = timeit.repeat(lambda: compute_loss_and_backprob(), repeat=self.args.repeat, number=10,)
+            return min(runtimes) / 10.0
 
     def inference(self, model_name, batch_size, sequence_length, trace_memory=False):
         config = self.config_dict[model_name]
@@ -110,5 +115,5 @@ class PyTorchBenchmarks(Benchmarks):
             return memory
         else:
             # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
-            runtimes = timeit.repeat(lambda: model(input_ids), repeat=self.args.repeat, number=3,)
-            return min(runtimes) / 3.0
+            runtimes = timeit.repeat(lambda: model(input_ids), repeat=self.args.repeat, number=10,)
+            return min(runtimes) / 10.0
