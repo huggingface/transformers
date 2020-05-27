@@ -1,6 +1,6 @@
 import csv
-from dataclasses import dataclass, field
 from collections import defaultdict
+from dataclasses import dataclass, field
 from typing import Optional
 
 import matplotlib.pyplot as plt
@@ -31,8 +31,7 @@ class PlotArguments:
         },
     )
     figure_png_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "Filename under which the plot will be saved. If unused no plot is saved."},
+        default=None, metadata={"help": "Filename under which the plot will be saved. If unused no plot is saved."},
     )
 
 

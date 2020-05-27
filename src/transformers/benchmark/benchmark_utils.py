@@ -12,9 +12,9 @@ import os
 import platform
 import sys
 from abc import ABC, abstractmethod
-from collections import defaultdict
-from typing import Iterable, List, NamedTuple, Optional, Union
+from collections import defaultdict, namedtuple
 from datetime import datetime
+from typing import Iterable, List, NamedTuple, Optional, Union
 
 from transformers import AutoConfig, PretrainedConfig
 from transformers import __version__ as version
@@ -34,6 +34,10 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 _is_memory_tracing_enabled = False
+
+BenchmarkOutput = namedtuple(
+    "BenchmarkOutput", ["time_inference_result", "memory_inference_result", "time_train_result", "memory_train_result"]
+)
 
 
 def is_memory_tracing_enabled():
@@ -492,13 +496,17 @@ class Benchmark(ABC):
 
         if not self.args.no_env_print:
             self.print_fn("\n======== ENVIRONMENT - INFORMATION ========")
-            self.print_fn("\n".join(["- {}: {}".format(prop, val) for prop, val in self.environment_info.items()]) + "\n")
+            self.print_fn(
+                "\n".join(["- {}: {}".format(prop, val) for prop, val in self.environment_info.items()]) + "\n"
+            )
 
         if self.args.save_to_csv:
             with open(self.args.env_info_csv_file, mode="w", newline="") as csv_file:
                 writer = csv.writer(csv_file)
                 for key, value in self.environment_info.items():
                     writer.writerow([key, value])
+
+        return BenchmarkOutput(inference_result_time, inference_result_memory, train_result_time, train_result_memory)
 
     @property
     def environment_info(self):

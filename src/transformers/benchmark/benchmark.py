@@ -19,8 +19,8 @@
 
 
 import inspect
-import timeit
 import logging
+import timeit
 
 from transformers import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING, PretrainedConfig, is_torch_available
 
@@ -111,7 +111,9 @@ class PyTorchBenchmark(Benchmark):
                 if hasattr(torch.cuda, "max_memory_reserved"):
                     torch.cuda.reset_peak_memory_stats()
                 else:
-                    logger.info("Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage")
+                    logger.info(
+                        "Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage"
+                    )
                     torch.cuda.reset_max_memory_cached()
 
             model(input_ids)
@@ -123,7 +125,9 @@ class PyTorchBenchmark(Benchmark):
                 if hasattr(torch.cuda, "max_memory_reserved"):
                     memory = Memory(torch.cuda.max_memory_reserved())
                 else:
-                    logger.info("Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage")
+                    logger.info(
+                        "Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage"
+                    )
                     memory = Memory(torch.cuda.max_memory_cached())
 
             return memory
