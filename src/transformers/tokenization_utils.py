@@ -1656,6 +1656,9 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 - 'left': pads on the left of the sequences
                 - 'right': pads on the right of the sequences
                 Defaults to False: no padding.
+            pad_to_next_multiple_of (:obj: `int`, `optional`, defaults to :obj:`None`):
+                If set to a positive integer, the sequence will be padded so that (seq_len % multiple) = 0.
+                This is especially useful when working on TPU and/or Tensor Cores.
             is_pretokenized (:obj:`bool`, defaults to :obj:`False`):
                 Set to True to indicate the input is already tokenized
             return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
@@ -2430,6 +2433,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
+        pad_to_next_multiple_of: Optional[int] = None,
         is_pretokenized: bool = False,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
