@@ -126,6 +126,9 @@ class HfArgumentParser(ArgumentParser):
         if return_remaining_strings:
             return (*outputs, remaining_args)
         else:
+            if remaining_args:
+                raise ValueError(f"Some specified arguments are not used by the trainer: {remaining_args}")
+
             return (*outputs,)
 
     def parse_json_file(self, json_file: str) -> Tuple[DataClass, ...]:
