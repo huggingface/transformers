@@ -21,7 +21,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 import numpy as np
 
@@ -148,7 +148,7 @@ def main():
         else None
     )
 
-    def build_compute_metrics_fn(task_name: str) -> Dict:
+    def build_compute_metrics_fn(task_name: str) -> Callable[EvalPrediction, Dict]:
         def compute_metrics_fn(p: EvalPrediction):
             if output_mode == "classification":
                 preds = np.argmax(p.predictions, axis=1)
