@@ -72,7 +72,7 @@ class RougeTracker:
     def update(self):
         records = []
         to_score = self.new_experiments
-        for exp_name in tqdm_nice(se, desc="Rouge Update"):
+        for exp_name in tqdm_nice(to_score, desc="Rouge Update"):
             gens = read_gens(exp_name)
             if len(gens) != len(self.gt):
                 continue

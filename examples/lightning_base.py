@@ -300,8 +300,6 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--resume_from_checkpoint", type=str, default=None)
 
 
-
-
 class BartCheckpointer(ModelCheckpoint):
     def format_checkpoint_name(self, epoch, metrics, ver=None):
         """Generate a filename according to the defined template.
