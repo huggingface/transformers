@@ -334,6 +334,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
         logger=logger,
         weights_summary=None,
         resume_from_checkpoint=args.resume_from_checkpoint,
+        auto_scale_batch_size=args.auto_scale_batch_size,
     )
 
     if args.fp16:
