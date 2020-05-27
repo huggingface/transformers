@@ -712,10 +712,23 @@ class TextClassificationPipeline(Pipeline):
             on the associated CUDA device id.
     """
 
+    def __init__(self, return_all_scores: bool = False, **kwargs):
+        super().__init__(**kwargs)
+
+        self.return_all_scores = return_all_scores
+
     def __call__(self, *args, **kwargs):
         outputs = super().__call__(*args, **kwargs)
         scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
-        return [{"label": self.model.config.id2label[item.argmax()], "score": item.max().item()} for item in scores]
+        if self.return_all_scores:
+            return [
+                [{"label": self.model.config.id2label[i], "score": score} for i, score in enumerate(item)]
+                for item in scores
+            ]
+        else:
+            return [
+                {"label": self.model.config.id2label[item.argmax()], "score": item.max().item()} for item in scores
+            ]
 
 
 class FillMaskPipeline(Pipeline):
