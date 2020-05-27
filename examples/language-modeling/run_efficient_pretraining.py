@@ -416,6 +416,26 @@ class CombinedModel(nn.Module):
         gathered = flat_sequence.index_select(0, flat_positions)
         return torch.reshape(gathered, [batch_size, -1, dimension])
 
+    @staticmethod
+    def compute_metrics(
+            input_ids: torch.Tensor,
+            masked_lm_ids: torch.Tensor,
+            masked_lm_preds: torch.Tensor,
+            input_mask: torch.Tensor,
+            discriminator_labels: torch.Tensor,
+            discriminator_predictions: torch.Tensor,
+            sampled_tokids: torch.Tensor
+    ):
+
+        input_ids
+        masked_lm_accuracy = masked_lm_ids.eq(masked_lm_preds)
+        sampled_masked_lm_accuracy = masked_lm_ids.eq(sampled_tokids)
+        discriminator_accuracy = discriminator_labels.eq(discriminator_predictions)
+        input_mask
+
+
+
+
     def forward(
         self,
         input_ids=None,
