@@ -13,11 +13,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Benchmarking the library on inference and training in PyTorch """
+"""
+    Benchmarking the library on inference and training in PyTorch.
+"""
 
 
 import inspect
 import timeit
+import logging
 
 from transformers import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING, PretrainedConfig, is_torch_available
 
@@ -27,6 +30,9 @@ from .benchmark_utils import Benchmark, Memory, start_memory_tracing, stop_memor
 if is_torch_available():
     import torch
     from .benchmark_args import PyTorchBenchmarkArguments
+
+
+logger = logging.getLogger(__name__)
 
 
 class PyTorchBenchmark(Benchmark):
@@ -102,7 +108,11 @@ class PyTorchBenchmark(Benchmark):
             else:
                 # clear cuda cache
                 torch.cuda.empty_cache()
-                torch.cuda.reset_peak_memory_stats()
+                if hasattr(torch.cuda, "max_memory_reserved"):
+                    torch.cuda.reset_peak_memory_stats()
+                else:
+                    logger.info("Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage")
+                    torch.cuda.reset_max_memory_cached()
 
             model(input_ids)
 
@@ -110,7 +120,11 @@ class PyTorchBenchmark(Benchmark):
                 summary = stop_memory_tracing(trace)
                 memory = summary.total
             else:
-                memory = Memory(torch.cuda.max_memory_reserved())
+                if hasattr(torch.cuda, "max_memory_reserved"):
+                    memory = Memory(torch.cuda.max_memory_reserved())
+                else:
+                    logger.info("Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage")
+                    memory = Memory(torch.cuda.max_memory_cached())
 
             return memory
         else:

@@ -15,9 +15,6 @@
 # limitations under the License.
 """ Benchmarking the library on inference and training """
 
-# If checking the tensors placement
-# tf.debugging.set_log_device_placement(True)
-
 from transformers import HfArgumentParser, PyTorchBenchmark, PyTorchBenchmarkArguments
 
 

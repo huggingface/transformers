@@ -1,0 +1,5 @@
+model,batch_size,sequence_length,result
+distilbert-base-uncased,8,8,0.0720
+distilbert-base-uncased,8,32,0.1953
+distilbert-base-uncased,8,128,0.7960
+distilbert-base-uncased,8,512,3.8314

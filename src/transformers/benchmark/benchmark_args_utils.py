@@ -43,6 +43,15 @@ class BenchmarkArguments:
         },
     )
 
+    batch_sizes: List[int] = list_field(
+        default=[8], metadata={"help": "List of batch sizes for which memory and time performance will be evaluated"}
+    )
+
+    sequence_lengths: List[int] = list_field(
+        default=[8, 32, 128, 512],
+        metadata={"help": "List of sequence lengths for which memory and time performance will be evaluated"},
+    )
+
     no_inference: bool = field(default=False, metadata={"help": "Don't benchmark inference of model"})
     training: bool = field(default=False, metadata={"help": "Benchmark training of model"})
     verbose: bool = field(default=False, metadata={"help": "Verbose memory tracing"})
@@ -51,34 +60,32 @@ class BenchmarkArguments:
     trace_memory_line_by_line: bool = field(default=False, metadata={"help": "Trace memory line by line"})
     save_to_csv: bool = field(default=False, metadata={"help": "Save result to a CSV file"})
     log_print: bool = field(default=False, metadata={"help": "Save all print statements in a log file"})
-    csv_time_filename_inference: str = field(
+    no_env_print: bool = field(default=False, metadata={"help": "Don't print environment information"})
+    inference_time_csv_file: str = field(
         default=f"inference_time_{round(time())}.csv",
         metadata={"help": "CSV filename used if saving time results to csv."},
     )
-    csv_memory_filename_inference: str = field(
+    inference_memory_csv_file: str = field(
         default=f"inference_memory_{round(time())}.csv",
         metadata={"help": "CSV filename used if saving memory results to csv."},
     )
-    csv_time_filename_train: str = field(
+    train_time_csv_file: str = field(
         default=f"train_time_{round(time())}.csv",
         metadata={"help": "CSV filename used if saving time results to csv for training."},
     )
-    csv_memory_filename_train: str = field(
+    train_memory_csv_file: str = field(
         default=f"train_memory_{round(time())}.csv",
         metadata={"help": "CSV filename used if saving memory results to csv for training."},
+    )
+    env_info_csv_file: str = field(
+        default=f"env_info_{round(time())}.csv",
+        metadata={"help": "CSV filename used if saving environment information."},
     )
     log_filename: str = field(
         default=f"log_{round(time())}.csv",
         metadata={"help": "Log filename used if print statements are saved in log."},
     )
     repeat: int = field(default=3, metadata={"help": "Times an experiment will be run."})
-    batch_sizes: List[int] = list_field(
-        default=[8], metadata={"help": "List of batch sizes for which memory and time performance will be evaluated"}
-    )
-    sequence_lengths: List[int] = list_field(
-        default=[8, 32, 128, 512],
-        metadata={"help": "List of sequence lengths for which memory and time performance will be evaluated"},
-    )
 
     def to_json_string(self):
         """

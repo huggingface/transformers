@@ -14,6 +14,7 @@ import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import Iterable, List, NamedTuple, Optional, Union
+from datetime import datetime
 
 from transformers import AutoConfig, PretrainedConfig
 from transformers import __version__ as version
@@ -390,6 +391,7 @@ class Benchmark(ABC):
 
         self._print_fn = None
         self._framework_version = None
+        self._environment_info = None
 
     @property
     def print_fn(self):
@@ -470,83 +472,94 @@ class Benchmark(ABC):
             if not self.args.no_speed:
                 self.print_fn("======= INFERENCE - SPEED - RESULT =======")
                 self.print_results(inference_result_time)
-                self.save_to_csv(inference_result_time, self.args.csv_time_filename_inference)
+                self.save_to_csv(inference_result_time, self.args.inference_time_csv_file)
 
             if not self.args.no_memory:
                 self.print_fn("======= INFERENCE - MEMORY - RESULT =======")
                 self.print_results(inference_result_memory)
-                self.save_to_csv(inference_result_memory, self.args.csv_memory_filename_inference)
+                self.save_to_csv(inference_result_memory, self.args.inference_memory_csv_file)
 
         if self.args.training:
             if not self.args.no_speed:
                 self.print_fn("======= TRAIN - SPEED - RESULT =======")
                 self.print_results(train_result_time)
-                self.save_to_csv(train_result_time, self.args.csv_time_filename_train)
+                self.save_to_csv(train_result_time, self.args.train_time_csv_file)
 
             if not self.args.no_memory:
                 self.print_fn("======= TRAIN - MEMORY - RESULT =======")
                 self.print_results(train_result_memory)
-                self.save_to_csv(train_result_memory, self.args.csv_memory_filename_train)
+                self.save_to_csv(train_result_memory, self.args.train_memory_csv_file)
 
-        environment_info = self.get_environment_info()
-        print(environment_info)
+        if not self.args.no_env_print:
+            self.print_fn("\n======== ENVIRONMENT - INFORMATION ========")
+            self.print_fn("\n".join(["- {}: {}".format(prop, val) for prop, val in self.environment_info.items()]) + "\n")
 
-    def get_environment_info(self):
-        info = {}
-        info["framework"] = self.framework
-        info["framework_version"] = self.framework_version
-        info["gpu"] = self.is_gpu
-        if self.is_gpu:
-            info["num_gpus"] = self.args.n_gpu
-        info["python_version"] = platform.python_version()
-        info["transformers_version"] = version
-        info["system"] = platform.system()
-        info["cpu"] = platform.processor()
-        info["architecture"] = platform.architecture()
+        if self.args.save_to_csv:
+            with open(self.args.env_info_csv_file, mode="w", newline="") as csv_file:
+                writer = csv.writer(csv_file)
+                for key, value in self.environment_info.items():
+                    writer.writerow([key, value])
 
-        try:
-            import psutil
-        except (ImportError):
-            logger.warning(
-                "Psutil not installed, we won't log available CPU memory."
-                "Install psutil (pip install psutil) to log available CPU memory."
-            )
-            info["cpu_ram_mb"] = "N/A"
-        else:
-            info["cpu_ram_mb"] = bytes_to_mega_bytes(psutil.virtual_memory().total)
+    @property
+    def environment_info(self):
+        if self._environment_info is None:
+            info = {}
+            info["transformers_version"] = version
+            info["framework"] = self.framework
+            info["framework_version"] = self.framework_version
+            info["python_version"] = platform.python_version()
+            info["system"] = platform.system()
+            info["cpu"] = platform.processor()
+            info["architecture"] = platform.architecture()[0]
+            info["date"] = datetime.date(datetime.now())
+            info["time"] = datetime.time(datetime.now())
 
-        if self.is_gpu:
             try:
-                from py3nvml import py3nvml
-
-                py3nvml.nvmlInit()
-                handle = py3nvml.nvmlDeviceGetHandleByIndex(self.args.device_idx)
-            except ImportError:
+                import psutil
+            except (ImportError):
                 logger.warning(
-                    "py3nvml not installed, we won't log GPU memory usage. "
-                    "Install py3nvml (pip install py3nvml) to log information about GPU."
+                    "Psutil not installed, we won't log available CPU memory."
+                    "Install psutil (pip install psutil) to log available CPU memory."
                 )
-                info["gpu"] = "N/A"
-                info["gpu_ram_mb"] = "N/A"
-                info["gpu_power_watts"] = "N/A"
-                info["gpu_performance_state"] = "N/A"
-            except (OSError, py3nvml.NVMLError):
-                logger.warning(
-                    "Error while initializing comunication with GPU. " "We won't log information about GPU."
-                )
-                info["gpu"] = "N/A"
-                info["gpu_ram_mb"] = "N/A"
-                info["gpu_power_watts"] = "N/A"
-                info["gpu_performance_state"] = "N/A"
-                py3nvml.nvmlShutdown()
+                info["cpu_ram_mb"] = "N/A"
             else:
-                info["gpu"] = py3nvml.nvmlDeviceGetName(handle)
-                info["gpu_ram_mb"] = bytes_to_mega_bytes(py3nvml.nvmlDeviceGetMemoryInfo(handle).total)
-                info["gpu_power_watts"] = py3nvml.nvmlDeviceGetPowerManagementLimit(handle) / 1000
-                info["gpu_performance_state"] = py3nvml.nvmlDeviceGetPerformanceState(handle)
-                py3nvml.nvmlShutdown()
+                info["cpu_ram_mb"] = bytes_to_mega_bytes(psutil.virtual_memory().total)
 
-            return info
+            info["use_gpu"] = self.is_gpu
+            if self.is_gpu:
+                info["num_gpus"] = self.args.n_gpu
+                try:
+                    from py3nvml import py3nvml
+
+                    py3nvml.nvmlInit()
+                    handle = py3nvml.nvmlDeviceGetHandleByIndex(self.args.device_idx)
+                except ImportError:
+                    logger.warning(
+                        "py3nvml not installed, we won't log GPU memory usage. "
+                        "Install py3nvml (pip install py3nvml) to log information about GPU."
+                    )
+                    info["gpu"] = "N/A"
+                    info["gpu_ram_mb"] = "N/A"
+                    info["gpu_power_watts"] = "N/A"
+                    info["gpu_performance_state"] = "N/A"
+                except (OSError, py3nvml.NVMLError):
+                    logger.warning(
+                        "Error while initializing comunication with GPU. " "We won't log information about GPU."
+                    )
+                    info["gpu"] = "N/A"
+                    info["gpu_ram_mb"] = "N/A"
+                    info["gpu_power_watts"] = "N/A"
+                    info["gpu_performance_state"] = "N/A"
+                    py3nvml.nvmlShutdown()
+                else:
+                    info["gpu"] = py3nvml.nvmlDeviceGetName(handle)
+                    info["gpu_ram_mb"] = bytes_to_mega_bytes(py3nvml.nvmlDeviceGetMemoryInfo(handle).total)
+                    info["gpu_power_watts"] = py3nvml.nvmlDeviceGetPowerManagementLimit(handle) / 1000
+                    info["gpu_performance_state"] = py3nvml.nvmlDeviceGetPerformanceState(handle)
+                    py3nvml.nvmlShutdown()
+
+            self._environment_info = info
+        return self._environment_info
 
     def print_results(self, result_dict):
         for model_name in self.args.model_names:
@@ -563,7 +576,7 @@ class Benchmark(ABC):
 
     def print_memory_trace_statistics(self, summary: MemorySummary):
         self.print_fn(
-            "\nLines by line memory consumption:\n"
+            "\nLine by line memory consumption:\n"
             + "\n".join(
                 f"{state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
                 for state in summary.sequential

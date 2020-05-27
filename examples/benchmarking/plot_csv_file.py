@@ -1,5 +1,7 @@
 import csv
 from dataclasses import dataclass, field
+from collections import defaultdict
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,33 +30,21 @@ class PlotArguments:
             "help": "Whether the csv file has training results or inference results. Defaults to inference results."
         },
     )
-    save_figure: bool = field(
-        default=False,
-        metadata={
-            "help": "Whether the plot should be saved or displayed directly with `plt.show()`. Defaults to directly displaying the plot."
-        },
-    )
-    figure_file: str = field(
-        default="plot.png",
-        metadata={"help": "Filename under which the plot will be saved. Only relevant if `save_fig` is True."},
+    figure_png_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "Filename under which the plot will be saved. If unused no plot is saved."},
     )
 
 
 class Plot:
     def __init__(self, args):
         self.args = args
-        self.result_dict = {}
+        self.result_dict = defaultdict(lambda: dict(bsz=[], seq_len=[], result={}))
 
         with open(self.args.csv_file, newline="") as csv_file:
             reader = csv.DictReader(csv_file)
             for row in reader:
                 model_name = row["model"]
-                if model_name not in self.result_dict:
-                    self.result_dict[model_name] = {}
-                    self.result_dict[model_name]["bsz"] = []
-                    self.result_dict[model_name]["seq_len"] = []
-                    self.result_dict[model_name]["result"] = {}
-
                 self.result_dict[model_name]["bsz"].append(int(row["batch_size"]))
                 self.result_dict[model_name]["seq_len"].append(int(row["sequence_length"]))
                 self.result_dict[model_name]["result"][(int(row["batch_size"]), int(row["sequence_length"]))] = row[
@@ -107,8 +97,8 @@ class Plot:
         plt.ylabel(y_axis_label)
         plt.legend()
 
-        if self.args.save_figure:
-            plt.savefig(self.args.figure_file)
+        if self.args.figure_png_file is not None:
+            plt.savefig(self.args.figure_png_file)
         else:
             plt.show()
 
