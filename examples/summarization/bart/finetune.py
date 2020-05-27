@@ -52,6 +52,34 @@ class SummarizationTrainer(BaseTransformer):
     mode = "language-modeling"
     loss_names = ["loss"]
 
+
+    def configure_optimizers(self):
+        "Prepare optimizer and schedule (linear warmup and decay)"
+
+        model = self.model
+        grps = [[], [], []]
+        def get_group(n):
+            no_decay = any(nd in n for nd in ["bias", "LayerNorm.weight"])
+            if self.hparams.freeze_decoder and 'decoder' in n:
+                return 2
+            elif no_decay:
+                return 1
+            else:
+                return 0
+        for n, p in model.named_parameters():
+            g = get_group(n)
+            grps[g].append(p)
+
+        optimizer_grouped_parameters = [
+            {"params": grps[0], "weight_decay": self.hparams.weight_decay,},
+            {"params": grps[1], "weight_decay": 0.0,},
+            {"params": grps[2], "learning_rate": 0.0, },
+        ]
+
+        optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
+        self.opt = optimizer
+        return [optimizer]
+
     def __init__(self, hparams, **kwargs):
         tokenizer = BartTokenizer.from_pretrained("bart-large")
         super().__init__(hparams, num_labels=None, mode=self.mode, tokenizer=tokenizer, **kwargs)
@@ -180,6 +208,10 @@ class SummarizationTrainer(BaseTransformer):
 
         return self.test_end(outputs)
 
+    def validation_epoch_end(self, outputs):
+        self.validation_end(outputs, 'val')
+
+
     def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
         max_target_length = self.target_lens[type_path]
@@ -270,9 +302,8 @@ class SummarizationTrainer(BaseTransformer):
         parser.add_argument(
             "--no_cache", action="store_true",
         )
-        parser.add_argument(
-            "--freeze_encoder", action="store_true",
-        )
+        parser.add_argument("--freeze_encoder", action="store_true",)
+        parser.add_argument("--freeze_decoder", action="store_true", )
         parser.add_argument("--tgt_suffix", type=str, default="", required=False)
         parser.add_argument("--n_train", type=int, default=-1, required=False)
         parser.add_argument("--n_val", type=int, default=500, required=False)

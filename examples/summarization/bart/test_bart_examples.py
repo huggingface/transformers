@@ -66,6 +66,7 @@ CHEAP_ARGS = {
     "student_encoder_layers": 1,
     "alpha_loss_encoder": 0.0,
     "freeze_encoder": False,
+    "freeze_decoder": False,
 }
 
 
@@ -127,6 +128,7 @@ class TestBartExamples(unittest.TestCase):
             no_teacher=True,
             tgt_suffix=".pseudo",
             output_dir=output_dir,
+            freeze_decoder=True,
         )
         main(argparse.Namespace(**args_d))
         contents = os.listdir(output_dir)
@@ -228,9 +230,6 @@ class TestBartExamples(unittest.TestCase):
             do_predict=True,
         )
         main(argparse.Namespace(**args_d))
-
-        # args_d.update({"do_train": False, "do_predict": True})
-        # main(argparse.Namespace(**args_d))
 
     def test_bart_summarization_dataset(self):
         tmp_dir = Path(tempfile.gettempdir())
