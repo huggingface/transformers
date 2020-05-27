@@ -215,6 +215,7 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+@require_torch
 class CTRLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_ctrl(self):

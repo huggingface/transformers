@@ -430,6 +430,7 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+@require_torch
 class XLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):
