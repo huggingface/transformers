@@ -127,7 +127,7 @@ class HfArgumentParser(ArgumentParser):
             return (*outputs, remaining_args)
         else:
             if remaining_args:
-                raise ValueError(f"Some specified arguments are not used by the trainer: {remaining_args}")
+                raise ValueError(f"Some specified arguments are not used by the HfArgumentParser: {remaining_args}")
 
             return (*outputs,)
 
