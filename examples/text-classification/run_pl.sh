@@ -1,7 +1,7 @@
 # # Install newest ptl.
 # pip install -U git+http://github.com/PyTorchLightning/pytorch-lightning/
-# # Install example requirements
-# pip install -r ../requirements.txt
+# Install example requirements
+pip install -r ../requirements.txt
 
 export TASK=mrpc
 export DATA_DIR=./glue_data
