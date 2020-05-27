@@ -66,10 +66,12 @@ class TrainingArguments:
     )
 
     per_gpu_train_batch_size: Optional[int] = field(
-        default=None, metadata={"help": "Batch size per GPU/TPU core/CPU for training."},
+        default=None, metadata={"help": "Deprecated, the use of `--per_device_train_batch_size` is preferred. "
+                                        "Batch size per GPU/TPU core/CPU for training."},
     )
     per_gpu_eval_batch_size: Optional[int] = field(
-        default=None, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."},
+        default=None, metadata={"help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred."
+                                        "Batch size per GPU/TPU core/CPU for evaluation."},
     )
 
     gradient_accumulation_steps: int = field(
