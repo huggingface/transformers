@@ -39,7 +39,7 @@ class BenchmarkArguments:
     models: List[str] = list_field(
         default=[],
         metadata={
-            "help": "Model checkpoints to be provided to the AutoModel classes. Leave blank to benchmark the base version of all available model "
+            "help": "Model checkpoints to be provided to the AutoModel classes. Leave blank to benchmark the base version of all available models"
         },
     )
 
