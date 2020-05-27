@@ -17,6 +17,7 @@ from .evaluate_cnn import run_generate
 from .finetune import main
 from .utils import PSEUDO_ID_SUFFIX, SummarizationDataset, summaries_for_file
 
+
 logging.basicConfig(level=logging.DEBUG)
 
 logger = logging.getLogger()

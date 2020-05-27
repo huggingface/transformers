@@ -4,7 +4,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -86,8 +86,6 @@ class SummarizationTrainer(BaseTransformer):
         self.freeze_embeds()
         if self.hparams.freeze_encoder:
             freeze_part(self.model.model.encoder)
-
-
 
     def freeze_embeds(self):
         freeze_part(self.model.model.shared)
@@ -269,8 +267,12 @@ class SummarizationTrainer(BaseTransformer):
             required=True,
             help="The input data dir. Should contain the dataset files for the CNN/DM summarization task.",
         )
-        parser.add_argument("--no_cache", action="store_true",)
-        parser.add_argument("--freeze_encoder", action="store_true", )
+        parser.add_argument(
+            "--no_cache", action="store_true",
+        )
+        parser.add_argument(
+            "--freeze_encoder", action="store_true",
+        )
         parser.add_argument("--tgt_suffix", type=str, default="", required=False)
         parser.add_argument("--n_train", type=int, default=-1, required=False)
         parser.add_argument("--n_val", type=int, default=500, required=False)
@@ -283,21 +285,27 @@ class SummarizationTrainer(BaseTransformer):
 def freeze_part(model: nn.Module):
     for par in model.parameters():
         par.requires_grad = False
-from typing import Iterable
+
+
+
+
 def grad_status(model: nn.Module) -> Iterable:
     return (par.requires_grad for par in model.parameters())
+
 
 def assert_all_frozen(model):
     model_grads: List[bool] = list(grad_status(model))
     n_require_grad = sum(lmap(int, model_grads))
     npars = len(model_grads)
-    assert not any(model_grads), f'{n_require_grad/npars:.1%} of {npars} weights require grad'
+    assert not any(model_grads), f"{n_require_grad/npars:.1%} of {npars} weights require grad"
+
 
 def assert_not_all_frozen(model):
     model_grads: List[bool] = list(grad_status(model))
     n_require_grad = sum(lmap(int, model_grads))
     npars = len(model_grads)
-    assert any(model_grads), f'none of {npars} weights require grad'
+    assert any(model_grads), f"none of {npars} weights require grad"
+
 
 def is_frozen(model):
     return not any(p.requires_grad for p in model.parameters())
@@ -318,7 +326,10 @@ def get_layers_to_copy(n_to_get, tot):
         return layers_to_copy[n_to_get]
     else:
         return all_layers[:n_to_get]
+
+
 BART_LARGE_N_LAYERS = 12
+
 
 class SummarizationDistiller(SummarizationTrainer):
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss"]
@@ -353,19 +364,14 @@ class SummarizationDistiller(SummarizationTrainer):
             copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
         Path(hparams.output_dir).mkdir(exist_ok=True)
 
-
         super().__init__(hparams, model=student, config=student_cfg)
         self.teacher = teacher
         freeze_part(self.teacher)
-
 
         assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
         assert_all_frozen(self.teacher)
         assert_all_frozen(self.model.model.decoder.embed_tokens)
         assert_all_frozen(self.model.model.encoder.embed_tokens)
-
-
-
 
         if self.different_encoder:
             assert any(grad_status(self.model.model.encoder))
@@ -501,13 +507,21 @@ class SummarizationDistiller(SummarizationTrainer):
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         SummarizationTrainer.add_model_specific_args(parser, root_dir)
-        parser.add_argument("--teacher", default="bart-large-cnn", type=str, )
+        parser.add_argument(
+            "--teacher", default="bart-large-cnn", type=str,
+        )
         parser.add_argument("--alpha_ce", default=0.8, type=float)
         parser.add_argument("--alpha_mlm", default=0.2, type=float)
         parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
-        parser.add_argument("--student_decoder_layers", default=6, type=int, required=False,)
-        parser.add_argument("--student_encoder_layers", default=12, type=int, required=False,)
-        parser.add_argument("--no_teacher", action="store_true", default=False,)
+        parser.add_argument(
+            "--student_decoder_layers", default=6, type=int, required=False,
+        )
+        parser.add_argument(
+            "--student_encoder_layers", default=12, type=int, required=False,
+        )
+        parser.add_argument(
+            "--no_teacher", action="store_true", default=False,
+        )
 
         return parser
 

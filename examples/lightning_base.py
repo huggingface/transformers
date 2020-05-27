@@ -2,12 +2,15 @@ import argparse
 import logging
 import os
 import random
+import re
 from pathlib import Path
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.utilities import rank_zero_only, rank_zero_warn
 
 from transformers import (
     AdamW,
@@ -216,7 +219,10 @@ class LoggingCallback(pl.Callback):
         trainer.logger.log_metrics({k: v for k, v in metrics.items() if k not in ["log", "progress_bar", "preds"]})
         # Log results
         od = Path(pl_module.hparams.output_dir)
-        output_val_results_file = od / f"{type_path}_results.txt"
+        if type_path == "test":
+            output_val_results_file = od / f"{type_path}_results.txt"
+        else:
+            output_val_results_file = od / f"{type_path}_{trainer.global_step}_results.txt"
 
         with open(output_val_results_file, "a+") as writer:
             for key in sorted(metrics):
@@ -232,8 +238,10 @@ class LoggingCallback(pl.Callback):
         if not save_generations:
             return
         epoch = metrics.get("epoch", "")
-
-        generations_file = od / f"{type_path}_generations_{epoch}.txt"
+        if type_path == "val":
+            generations_file = od / f"{type_path}_generations_{trainer.global_step}.txt"
+        else:
+            generations_file = od / f"{type_path}_generations.txt"
         # sanity_path = od/ f"{type_path}_generations_sanity.txt"
         if "preds" in metrics:
             content = "\n".join(metrics["preds"])
@@ -244,9 +252,11 @@ class LoggingCallback(pl.Callback):
         n_trainable_pars = count_trainable_parameters(pl_module)
         trainer.logger.log_metrics({"n_params": npars, "mp": npars / 1e6, "grad_mp": n_trainable_pars / 1e6})
 
+    @rank_zero_only
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         return self._do_work(trainer, pl_module, "val")
 
+    @rank_zero_only
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         return self._do_work(trainer, pl_module, "test")
 
@@ -290,13 +300,41 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--resume_from_checkpoint", type=str, default=None)
 
 
+
+
+class BartCheckpointer(ModelCheckpoint):
+    def format_checkpoint_name(self, epoch, metrics, ver=None):
+        """Generate a filename according to the defined template.
+
+        Example::
+
+            >>> tmpdir = os.path.dirname(__file__)
+            >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch}'))
+            >>> os.path.basename(ckpt.format_checkpoint_name(0, {}))
+            'epoch=0.ckpt'
+            >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch:03d}'))
+            >>> os.path.basename(ckpt.format_checkpoint_name(5, {}))
+            'epoch=005.ckpt'
+            >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{epoch}-{val_loss:.2f}'))
+            >>> os.path.basename(ckpt.format_checkpoint_name(2, dict(val_loss=0.123456)))
+            'epoch=2-val_loss=0.12.ckpt'
+            >>> ckpt = ModelCheckpoint(os.path.join(tmpdir, '{missing:d}'))
+            >>> os.path.basename(ckpt.format_checkpoint_name(0, {}))
+            'missing=0.ckpt'
+        """
+
+        # check if user passed in keys to the string
+        rouge = metrics.get("val_avg_rouge2", -1.0)
+        return f"{self.dirpath}/val_rouge={rouge:.4f}_ep{epoch}.ckpt"
+
+
 def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callbacks=[], **extra_train_kwargs):
     # init model
     set_seed(args)
     odir = Path(model.hparams.output_dir)
     odir.mkdir(exist_ok=True)
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        filepath=model.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=1
+    checkpoint_callback = BartCheckpointer(
+        filepath=model.output_dir, monitor="val_avg_rouge2", mode="max", save_top_k=5
     )
     if args.output_dir.startswith("/var/") or args.fast_dev_run:
         logger = True
