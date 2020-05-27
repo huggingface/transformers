@@ -36,15 +36,20 @@ def load_cpu(p):
 
 class RougeTracker:
     def __init__(self, csv_path="rouge_test_df.csv", logdir=LOGDIR, data_dir=DATA_DIR):
-        self.df = pd.read_csv(csv_path, index_col=0)
-        self.rouged_experiments = self.df.index
-        self.finished_experiments = [p.parent.name for p in list(logdir.glob("*/test_generations*.txt"))]
-        self.logdir = LOGDIR
+        try:
+            self.df = pd.read_csv(csv_path, index_col=0)
+        except FileNotFoundError:
+            self.df = pd.DataFrame()
+        self.logdir = logdir
         test_gt = lmap(str.strip, Path(data_dir / "test.target").open().readlines())
         test_gt = lmap(str.strip, test_gt)
         self.gt = test_gt  # {'test': test_gt}
         self.tokenizer = BartTokenizer.from_pretrained("bart-large-cnn")
         self.csv_path = csv_path
+
+    @property
+    def finished_experiments(self):
+        return [p.parent.name for p in list(self.logdir.glob("*/test_generations*.txt"))]
 
     def tok_len(self, strang):
         return len(self.tokenizer.encode(strang))
@@ -60,10 +65,14 @@ class RougeTracker:
         lens = np.mean(lmap(self.tok_len, gens))
         return dict(avg_len=lens, exp_name=k, **rouge_raw)
 
+    @property
+    def new_experiments(rt):
+        return set(rt.finished_experiments).difference(rt.df.index)
+
     def update(self):
         records = []
-        to_score = set(self.finished_experiments).difference(self.rouged_experiments)
-        for exp_name in tqdm_nice(to_score, desc="Rouge Update"):
+        to_score = self.new_experiments
+        for exp_name in tqdm_nice(se, desc="Rouge Update"):
             gens = read_gens(exp_name)
             if len(gens) != len(self.gt):
                 continue
