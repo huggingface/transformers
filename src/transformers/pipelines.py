@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence,
 
 import numpy as np
 
-from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, AutoConfig
+from .configuration_auto import AutoConfig
 from .configuration_utils import PretrainedConfig
 from .data import SquadExample, squad_convert_examples_to_features
 from .file_utils import is_tf_available, is_torch_available
@@ -1572,11 +1572,7 @@ SUPPORTED_TASKS = {
         "impl": FeatureExtractionPipeline,
         "tf": TFAutoModel if is_tf_available() else None,
         "pt": AutoModel if is_torch_available() else None,
-        "default": {
-            "model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"},
-            "config": None,
-            "tokenizer": "distilbert-base-cased",
-        },
+        "default": {"model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"}},
     },
     "sentiment-analysis": {
         "impl": TextClassificationPipeline,
@@ -1587,8 +1583,6 @@ SUPPORTED_TASKS = {
                 "pt": "distilbert-base-uncased-finetuned-sst-2-english",
                 "tf": "distilbert-base-uncased-finetuned-sst-2-english",
             },
-            "config": "distilbert-base-uncased-finetuned-sst-2-english",
-            "tokenizer": "distilbert-base-uncased",
         },
     },
     "ner": {
@@ -1600,8 +1594,6 @@ SUPPORTED_TASKS = {
                 "pt": "dbmdz/bert-large-cased-finetuned-conll03-english",
                 "tf": "dbmdz/bert-large-cased-finetuned-conll03-english",
             },
-            "config": "dbmdz/bert-large-cased-finetuned-conll03-english",
-            "tokenizer": "bert-large-cased",
         },
     },
     "question-answering": {
@@ -1610,61 +1602,43 @@ SUPPORTED_TASKS = {
         "pt": AutoModelForQuestionAnswering if is_torch_available() else None,
         "default": {
             "model": {"pt": "distilbert-base-cased-distilled-squad", "tf": "distilbert-base-cased-distilled-squad"},
-            "config": None,
-            "tokenizer": ("distilbert-base-cased", {"use_fast": False}),
         },
     },
     "fill-mask": {
         "impl": FillMaskPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {
-            "model": {"pt": "distilroberta-base", "tf": "distilroberta-base"},
-            "config": None,
-            "tokenizer": ("distilroberta-base", {"use_fast": False}),
-        },
+        "default": {"model": {"pt": "distilroberta-base", "tf": "distilroberta-base"}},
     },
     "summarization": {
         "impl": SummarizationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {"model": {"pt": "bart-large-cnn", "tf": "t5-small"}, "config": None, "tokenizer": None},
+        "default": {"model": {"pt": "bart-large-cnn", "tf": "t5-small"}},
     },
     "translation_en_to_fr": {
         "impl": TranslationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {
-            "model": {"pt": "t5-base", "tf": "t5-base"},
-            "config": None,
-            "tokenizer": ("t5-base", {"use_fast": False}),
-        },
+        "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "translation_en_to_de": {
         "impl": TranslationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {
-            "model": {"pt": "t5-base", "tf": "t5-base"},
-            "config": None,
-            "tokenizer": ("t5-base", {"use_fast": False}),
-        },
+        "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "translation_en_to_ro": {
         "impl": TranslationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {
-            "model": {"pt": "t5-base", "tf": "t5-base"},
-            "config": None,
-            "tokenizer": ("t5-base", {"use_fast": False}),
-        },
+        "default": {"model": {"pt": "t5-base", "tf": "t5-base"}},
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
         "tf": TFAutoModelWithLMHead if is_tf_available() else None,
         "pt": AutoModelWithLMHead if is_torch_available() else None,
-        "default": {"model": {"pt": "gpt2", "tf": "gpt2"}, "config": None, "tokenizer": "gpt2"},
+        "default": {"model": {"pt": "gpt2", "tf": "gpt2"}},
     },
 }
 
@@ -1698,6 +1672,7 @@ def pipeline(
             - "fill-mask": will return a :class:`~transformers.FillMaskPipeline`
             - "summarization": will return a :class:`~transformers.SummarizationPipeline`
             - "translation_xx_to_yy": will return a :class:`~transformers.TranslationPipeline`
+            - "text-generation": will return a :class:`~transformers.TextGenerationPipeline`
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`, defaults to :obj:`None`):
             The model that will be used by the pipeline to make predictions. This can be :obj:`None`,
             a model identifier or an actual pre-trained model inheriting from
@@ -1754,14 +1729,13 @@ def pipeline(
 
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
-        models, config, tokenizer = [targeted_task["default"][k] for k in ["model", "config", "tokenizer"]]
-        model = models[framework]
+        model = targeted_task["default"]["model"][framework]
 
     # Try to infer tokenizer from model or config name (if provided as str)
     if tokenizer is None:
-        if isinstance(model, str) and model in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
+        if isinstance(model, str):
             tokenizer = model
-        elif isinstance(config, str) and config in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
+        elif isinstance(config, str):
             tokenizer = config
         else:
             # Impossible to guest what is the right tokenizer here
