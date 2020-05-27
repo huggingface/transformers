@@ -18,7 +18,7 @@ LOGDIR = Path("examples/summarization/bart/dbart/logs/").absolute()
 DATA_DIR = Path("examples/summarization/bart/dbart/cnn_dm").absolute()
 
 
-def rouge_files(src_file:Path, tgt_file:Path):
+def rouge_files(src_file: Path, tgt_file: Path):
     src = lmap(str.strip, list(src_file.open().readlines()))
     tgt = lmap(str.strip, list(tgt_file.open().readlines()))
     return calculate_rouge(src, tgt)

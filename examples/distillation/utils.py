@@ -32,7 +32,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-import git
+
+
 def git_log(folder_path: str):
     """
     Log commit info.

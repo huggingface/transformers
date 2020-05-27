@@ -115,7 +115,7 @@ class TestBartExamples(unittest.TestCase):
             self.assertTrue(Path(output_file_name).exists())
             os.remove(Path(output_file_name))
 
-    @unittest.skipUnless(DEFAULT_DEVICE.startswith('cuda'), 'skipping multiGPU test')
+    @unittest.skipUnless(DEFAULT_DEVICE.startswith("cuda"), "skipping multiGPU test")
     def test_bdc_multigpu(self):
         updates = dict(
             student_encoder_layers=2,
@@ -138,19 +138,12 @@ class TestBartExamples(unittest.TestCase):
         self._bart_distiller_cli(updates)
 
     def test_bdc_yes_teacher(self):
-        updates = dict(
-            student_encoder_layers=2,
-            student_decoder_layers=1,
-        )
+        updates = dict(student_encoder_layers=2, student_decoder_layers=1,)
         self._bart_distiller_cli(updates)
 
     def test_bdc_unfrozen_encoder(self):
         updates = dict(
-            alpha_mlm=0.0,
-            alpha_ce=0.0,
-            student_encoder_layers=1,
-            student_decoder_layers=2,
-            freeze_decoder=True,
+            alpha_mlm=0.0, alpha_ce=0.0, student_encoder_layers=1, student_decoder_layers=2, freeze_decoder=True,
         )
         model = self._bart_distiller_cli(updates)
         self.assertFalse(model.different_decoder)

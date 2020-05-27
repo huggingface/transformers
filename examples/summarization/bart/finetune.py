@@ -1,17 +1,20 @@
 import argparse
 import glob
+import json
 import logging
 import os
 import time
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple, Union
 
+import git
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.utilities import rank_zero_only, rank_zero_warn
 from rouge_score import rouge_scorer, scoring
 from torch import nn
 from torch.utils.data import DataLoader
@@ -21,7 +24,7 @@ from lightning_base import BaseTransformer, add_generic_args, generic_train, get
 from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.modeling_bart import invert_mask
 from transformers.optimization import AdamW
-from pytorch_lightning.utilities import rank_zero_only, rank_zero_warn
+
 
 try:
     from .utils import SummarizationDataset, flatten_list
@@ -35,8 +38,8 @@ logger = logging.getLogger(__name__)
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
 
 
-import git
-import json
+
+
 def save_git_info(folder_path: str):
     """
     Log commit info.
@@ -73,9 +76,6 @@ def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
 class SummarizationTrainer(BaseTransformer):
     mode = "language-modeling"
     loss_names = ["loss"]
-
-
-
 
     def __init__(self, hparams, **kwargs):
         tokenizer = BartTokenizer.from_pretrained("bart-large")
@@ -115,8 +115,7 @@ class SummarizationTrainer(BaseTransformer):
             freeze_part(self.model.model.encoder)
         self.hparams.git_sha = get_git_info()["repo_sha"]
         pickle_save(self.hparams, self.hparams_save_path)
-        #self.hparams.
-
+        # self.hparams.
 
     def freeze_embeds(self):
         freeze_part(self.model.model.shared)
@@ -212,8 +211,7 @@ class SummarizationTrainer(BaseTransformer):
         return self.test_end(outputs)
 
     def validation_epoch_end(self, outputs):
-        self.validation_end(outputs, 'val')
-
+        self.validation_end(outputs, "val")
 
     def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
@@ -234,13 +232,14 @@ class SummarizationTrainer(BaseTransformer):
         if self.hparams.sortish_sampler and type_path == "train":
             sampler = dataset.make_sortish_sampler(batch_size)
             shuffle = False
-            assert self.hparams.n_gpu == 1
+            assert self.hparams.n_gpu <= 1
+
         dataloader = DataLoader(
             dataset,
             batch_size=batch_size,
             collate_fn=dataset.collate_fn,
             shuffle=shuffle,
-            #num_workers=4,
+            # num_workers=4,
             sampler=sampler,
         )
         return dataloader
@@ -263,19 +262,22 @@ class SummarizationTrainer(BaseTransformer):
 
     def test_dataloader(self) -> DataLoader:
         return self.get_dataloader("test", batch_size=self.hparams.eval_batch_size)
+
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
 
         model = self.model
         grps = [[], [], []]
+
         def get_group(n):
             no_decay = any(nd in n for nd in ["bias", "LayerNorm.weight"])
-            if self.hparams.freeze_decoder and 'decoder' in n:
+            if self.hparams.freeze_decoder and "decoder" in n:
                 return 2
             elif no_decay:
                 return 1
             else:
                 return 0
+
         for n, p in model.named_parameters():
             g = get_group(n)
             grps[g].append(p)
@@ -283,7 +285,7 @@ class SummarizationTrainer(BaseTransformer):
         optimizer_grouped_parameters = [
             {"params": grps[0], "weight_decay": self.hparams.weight_decay,},
             {"params": grps[1], "weight_decay": 0.0,},
-            {"params": grps[2], "learning_rate": 0.0, },
+            {"params": grps[2], "learning_rate": 0.0,},
         ]
 
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
@@ -332,8 +334,12 @@ class SummarizationTrainer(BaseTransformer):
         parser.add_argument(
             "--no_cache", action="store_true",
         )
-        parser.add_argument("--freeze_encoder", action="store_true",)
-        parser.add_argument("--freeze_decoder", action="store_true", )
+        parser.add_argument(
+            "--freeze_encoder", action="store_true",
+        )
+        parser.add_argument(
+            "--freeze_decoder", action="store_true",
+        )
         parser.add_argument("--tgt_suffix", type=str, default="", required=False)
         parser.add_argument("--n_train", type=int, default=-1, required=False)
         parser.add_argument("--n_val", type=int, default=500, required=False)
