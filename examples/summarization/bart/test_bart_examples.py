@@ -115,6 +115,17 @@ class TestBartExamples(unittest.TestCase):
             self.assertTrue(Path(output_file_name).exists())
             os.remove(Path(output_file_name))
 
+    @unittest.skipUnless(DEFAULT_DEVICE.startswith('cuda'), 'skipping multiGPU test')
+    def test_bdc_multigpu(self):
+        updates = dict(
+            student_encoder_layers=2,
+            student_decoder_layers=1,
+            no_teacher=True,
+            freeze_encoder=True,
+            n_gpu=2,
+        )
+        self._bart_distiller_cli(updates)
+
     def test_bdc_no_teacher(self):
         updates = dict(
             student_encoder_layers=2,
@@ -174,8 +185,7 @@ class TestBartExamples(unittest.TestCase):
         self.assertIn("val_generations_3.txt", contents)
         self.assertIn("val_3_results.txt", contents)
         self.assertIn("test_results.txt", contents)
-        self.assertEqual(len(contents), 12)
-
+        self.assertEqual(len(contents), 14)
 
         metrics = pickle_load(Path(output_dir) / "metrics.pkl")
         val_df = pd.DataFrame(metrics["val"])

@@ -35,6 +35,28 @@ logger = logging.getLogger(__name__)
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
 
 
+import git
+import json
+def save_git_info(folder_path: str):
+    """
+    Log commit info.
+    """
+    repo_infos = get_git_info()
+
+    with open(os.path.join(folder_path, "git_log.json"), "w") as f:
+        json.dump(repo_infos, f, indent=4)
+
+
+def get_git_info():
+    repo = git.Repo(search_parent_directories=True)
+    repo_infos = {
+        "repo_id": str(repo),
+        "repo_sha": str(repo.head.object.hexsha),
+        "repo_branch": str(repo.active_branch),
+    }
+    return repo_infos
+
+
 def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
     # score_file = Path(score_path).open("w")
     scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=True)
@@ -53,38 +75,15 @@ class SummarizationTrainer(BaseTransformer):
     loss_names = ["loss"]
 
 
-    def configure_optimizers(self):
-        "Prepare optimizer and schedule (linear warmup and decay)"
 
-        model = self.model
-        grps = [[], [], []]
-        def get_group(n):
-            no_decay = any(nd in n for nd in ["bias", "LayerNorm.weight"])
-            if self.hparams.freeze_decoder and 'decoder' in n:
-                return 2
-            elif no_decay:
-                return 1
-            else:
-                return 0
-        for n, p in model.named_parameters():
-            g = get_group(n)
-            grps[g].append(p)
-
-        optimizer_grouped_parameters = [
-            {"params": grps[0], "weight_decay": self.hparams.weight_decay,},
-            {"params": grps[1], "weight_decay": 0.0,},
-            {"params": grps[2], "learning_rate": 0.0, },
-        ]
-
-        optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
-        self.opt = optimizer
-        return [optimizer]
 
     def __init__(self, hparams, **kwargs):
         tokenizer = BartTokenizer.from_pretrained("bart-large")
         super().__init__(hparams, num_labels=None, mode=self.mode, tokenizer=tokenizer, **kwargs)
+        save_git_info(self.hparams.output_dir)
         self.model: BartForConditionalGeneration
         self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
+        self.hparams_save_path = Path(self.output_dir) / "hparams.pkl"
 
         if os.path.exists(self.metrics_save_path):
             self.metrics = pickle_load(self.metrics_save_path)
@@ -114,6 +113,10 @@ class SummarizationTrainer(BaseTransformer):
         self.freeze_embeds()
         if self.hparams.freeze_encoder:
             freeze_part(self.model.model.encoder)
+        self.hparams.git_sha = get_git_info()["repo_sha"]
+        pickle_save(self.hparams, self.hparams_save_path)
+        #self.hparams.
+
 
     def freeze_embeds(self):
         freeze_part(self.model.model.shared)
@@ -259,6 +262,32 @@ class SummarizationTrainer(BaseTransformer):
 
     def test_dataloader(self) -> DataLoader:
         return self.get_dataloader("test", batch_size=self.hparams.eval_batch_size)
+    def configure_optimizers(self):
+        "Prepare optimizer and schedule (linear warmup and decay)"
+
+        model = self.model
+        grps = [[], [], []]
+        def get_group(n):
+            no_decay = any(nd in n for nd in ["bias", "LayerNorm.weight"])
+            if self.hparams.freeze_decoder and 'decoder' in n:
+                return 2
+            elif no_decay:
+                return 1
+            else:
+                return 0
+        for n, p in model.named_parameters():
+            g = get_group(n)
+            grps[g].append(p)
+
+        optimizer_grouped_parameters = [
+            {"params": grps[0], "weight_decay": self.hparams.weight_decay,},
+            {"params": grps[1], "weight_decay": 0.0,},
+            {"params": grps[2], "learning_rate": 0.0, },
+        ]
+
+        optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
+        self.opt = optimizer
+        return [optimizer]
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
