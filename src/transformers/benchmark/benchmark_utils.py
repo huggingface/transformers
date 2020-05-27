@@ -384,11 +384,9 @@ class Benchmarks(ABC):
 
     args: BenchmarkArguments
     configs: PretrainedConfig
-    print_fn: Callable[[str], None]
 
     def __init__(self, args: BenchmarkArguments = None, configs: PretrainedConfig = None):
         self.args = args
-        self.print_fn = self.get_print_function(args)
 
         if configs is None:
             self.config_dict = {
@@ -396,6 +394,8 @@ class Benchmarks(ABC):
             }
         else:
             self.config_dict = {model_name: config for model_name, config in zip(self.args.model_names, configs)}
+
+        self._print_fn = None
 
     @abstractmethod
     def train(self, model_name, batch_size, sequence_length):
@@ -465,22 +465,25 @@ class Benchmarks(ABC):
                 self.print_results(train_result_memory)
                 self.save_to_csv(train_result_memory, self.args.csv_memory_filename_train)
 
-    def get_print_function(self, args):
-        if args.log_print:
-            logging.basicConfig(
-                level=logging.DEBUG,
-                filename=args.log_filename,
-                filemode="a+",
-                format="%(asctime)-15s %(levelname)-8s %(message)s",
-            )
+    @property
+    def print_fn(self):
+        if self._print_fn is None:
+            if self.args.log_print:
+                logging.basicConfig(
+                    level=logging.DEBUG,
+                    filename=self.args.log_filename,
+                    filemode="a+",
+                    format="%(asctime)-15s %(levelname)-8s %(message)s",
+                )
 
-            def print_and_log(*args):
-                logging.info(*args)
-                print(*args)
+                def print_and_log(*args):
+                    logging.info(*args)
+                    print(*args)
 
-            return print_and_log
-        else:
-            return print
+                self._print_fn = print_and_log
+            else:
+                self._print_fn = print
+        return self._print_fn
 
     def print_results(self, result_dict):
         for model_name in self.args.model_names:

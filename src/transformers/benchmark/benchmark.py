@@ -79,11 +79,7 @@ class PyTorchBenchmarks(Benchmarks):
             return memory
         else:
             # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
-            runtimes = timeit.repeat(
-                lambda: compute_loss_and_backprob(),
-                repeat=self.args.repeat,
-                number=3,
-            )
+            runtimes = timeit.repeat(lambda: compute_loss_and_backprob(), repeat=self.args.repeat, number=3,)
             return min(runtimes) / 3.0
 
     def inference(self, model_name, batch_size, sequence_length, trace_memory=False):
@@ -114,9 +110,5 @@ class PyTorchBenchmarks(Benchmarks):
             return memory
         else:
             # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
-            runtimes = timeit.repeat(
-                lambda: model(input_ids),
-                repeat=self.args.repeat,
-                number=3,
-            )
+            runtimes = timeit.repeat(lambda: model(input_ids), repeat=self.args.repeat, number=3,)
             return min(runtimes) / 3.0

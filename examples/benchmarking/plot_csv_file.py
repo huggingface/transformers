@@ -36,9 +36,7 @@ class PlotArguments:
     )
     figure_file: str = field(
         default="plot.png",
-        metadata={
-            "help": "Filename under which the plot will be saved. Only relevant if `save_fig` is True."
-        }
+        metadata={"help": "Filename under which the plot will be saved. Only relevant if `save_fig` is True."},
     )
 
 
@@ -95,9 +93,7 @@ class Plot:
                 )
 
                 x_axis_array = np.asarray(x_axis_array, np.int)
-                plt.scatter(
-                    x_axis_array, y_axis_array, label=f"{model_name} - {inner_loop_label}: {inner_loop_value}"
-                )
+                plt.scatter(x_axis_array, y_axis_array, label=f"{model_name} - {inner_loop_label}: {inner_loop_value}")
                 plt.plot(x_axis_array, y_axis_array, "--")
 
             title_str += f" {model_name} vs."

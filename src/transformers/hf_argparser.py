@@ -52,9 +52,13 @@ class HfArgumentParser(ArgumentParser):
                     "We will add compatibility when Python 3.9 is released."
                 )
             typestring = str(field.type)
-            for x in (int, float, str):
-                if typestring == f"typing.Union[{x.__name__}, NoneType]":
-                    field.type = x
+            for prim_type in (int, float, str):
+                for collection in (List,):
+                    if typestring == f"typing.Union[{collection[prim_type]}, NoneType]":
+                        field.type = collection[prim_type]
+                if typestring == f"typing.Union[{prim_type.__name__}, NoneType]":
+                    field.type = prim_type
+
             if isinstance(field.type, type) and issubclass(field.type, Enum):
                 kwargs["choices"] = list(field.type)
                 kwargs["type"] = field.type
