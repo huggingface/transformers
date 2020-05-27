@@ -28,6 +28,7 @@ python run_squad.py \
   --model_name_or_path bert-base-uncased \
   --do_train \
   --do_eval \
+  --do_lower_case \
   --train_file $SQUAD_DIR/train-v1.1.json \
   --predict_file $SQUAD_DIR/dev-v1.1.json \
   --per_gpu_train_batch_size 12 \
@@ -56,6 +57,7 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answer
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
     --do_eval \
+    --do_lower_case \
     --train_file $SQUAD_DIR/train-v1.1.json \
     --predict_file $SQUAD_DIR/dev-v1.1.json \
     --learning_rate 3e-5 \
