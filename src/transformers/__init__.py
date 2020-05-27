@@ -152,7 +152,6 @@ from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
 from .trainer_utils import EvalPrediction
 from .training_args import TrainingArguments
 from .training_args_tf import TFTrainingArguments
-from .benchmark_args import BenchmarkArguments
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -358,6 +357,10 @@ if is_torch_available():
     from .data.data_collator import DefaultDataCollator, DataCollator, DataCollatorForLanguageModeling
     from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
 
+# Benchmarks
+    from .benchmark_args import BenchmarkArguments, PyTorchBenchmarkArguments
+    from .benchmarks import PyTorchBenchmarks
+
 # TensorFlow
 if is_tf_available():
     from .modeling_tf_utils import (
@@ -532,6 +535,10 @@ if is_tf_available():
 
     # Trainer
     from .trainer_tf import TFTrainer
+
+# Benchmarks
+    from .benchmark_args import BenchmarkArguments, TensorflowBenchmarkArguments
+
 
 
 if not is_tf_available() and not is_torch_available():

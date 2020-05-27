@@ -21,27 +21,31 @@
 import csv
 import logging
 import timeit
-from typing import Callable, Dict
+from typing import Callable, Dict, List
 from abc import ABC, abstractmethod
 
 from transformers import (
-    AutoConfig,
     AutoTokenizer,
     MemorySummary,
     is_tf_available,
     is_torch_available,
     start_memory_tracing,
     stop_memory_tracing,
+    BenchmarkArguments,
 )
+
+from .modeling_utils import PreTrainedModel
 
 
 if is_tf_available():
     import tensorflow as tf
-    from transformers import TFAutoModel
+    from .modeling_tf_auto import TFAutoModel
+    from .benchmark_args import TensorflowBenchmarkArguments
 
 if is_torch_available():
     import torch
-    from transformers import AutoModel
+    from .modeling_auto import AutoModel
+    from .benchmark_args import  PyTorchBenchmarkArguments
 
 
 class Benchmarks(ABC):
@@ -56,24 +60,54 @@ class Benchmarks(ABC):
     @abstractmethod
     def __init__(
         self,
-        args: BenchmarkArguments = None
+        args: BenchmarkArguments = None,
     ):
         self.args = args
         self.print_fn = self.get_print_function(args)
 
     @abstractmethod
-    def compute(self, result_dict: Dict[str]) -> Dict[str]:
+    def train(self, model_name, batch_size, sequence_length):
+        pass
+
+    @abstractmethod
+    def inference(self, model_name, batch_size, sequence_length):
         pass
 
     def run(self):
-        result_dict = {model_name: {} for model_name in self.args.model_names}
-        self.results = self.compute(result_dict)
+        result = {model_name: {} for model_name in self.args.model_names}
+
+        for c, model_name in enumerate(self.args.model_names):
+            self.print_fn(f"{c + 1} / {len(self.args.model_names)}")
+
+            result[model_name] = {"bs": self.args.batch_sizes, "ss": self.args.sequence_lengths, "time": {}, "memory": {}}
+            result[model_name]["time"] = {i: {} for i in self.args.batch_sizes}
+            result[model_name]["memory"] = {i: {} for i in self.args.batch_sizes}
+
+            for batch_size in self.args.batch_sizes:
+                for sequence_length in self.args.sequence_lengths:
+
+                        if not self.args.no_memory:
+                            if self.args.inference:
+                                memory = self.inferencen(model_name, batch_size, sequence_length)
+                                result[model_name]["memory"][batch_size][sequence_length] = memory
+
+                            if not self.args.no_training:
+                                memory = self.train(model_name, batch_size, sequence_length)
+                                result[model_name]["memory"][batch_size][sequence_length] = memory
+
+                        if not self.args.no_speed:
+                            if self.args.inference:
+                                runtimes = timeit.repeat(lambda: self.inference(model_name, batch_size, sequence_length), repeat=self.args.average_over, number=3)
+                                average_time = sum(runtimes) / float(len(runtimes)) / 3.0
+                                result[model_name]["time"][batch_size][sequence_length] = average_time
+
+                            if not self.args.no_training:
+                                runtimes = timeit.repeat(lambda: self.train(model_name, batch_size, sequence_length), repeat=self.args.average_over, number=3)
+                                average_time = sum(runtimes) / float(len(runtimes)) / 3.0
+                                result[model_name]["time"][batch_size][sequence_length] = average_time
 
         if self.args.is_print:
             self.print_results()
-
-#        if self.args.do_trace:
-#            self.print_memory_trace_statistics()
 
         if self.args.save_to_csv:
             self.save_to_csv()
@@ -101,14 +135,14 @@ class Benchmarks(ABC):
             self.print_fn("\t" + f"======= MODEL CHECKPOINT: {model_name} =======")
             for batch_size in self.results[model_name]["bs"]:
                 self.print_fn("\t\t" + f"===== BATCH SIZE: {batch_size} =====")
-                for slice_size in self.results[model_name]["ss"]:
-                    time = self.results[model_name]["time"][batch_size][slice_size]
-                    memory = self.results[model_name]["memory"][batch_size][slice_size]
+                for sequence_length in self.results[model_name]["ss"]:
+                    time = self.results[model_name]["time"][batch_size][sequence_length]
+                    memory = self.results[model_name]["memory"][batch_size][sequence_length]
                     if isinstance(time, str):
-                        self.print_fn(f"\t\t{model_name}/{batch_size}/{slice_size}: " f"{time} " f"{memory}")
+                        self.print_fn(f"\t\t{model_name}/{batch_size}/{sequence_length}: " f"{time} " f"{memory}")
                     else:
                         self.print_fn(
-                            f"\t\t{model_name}/{batch_size}/{slice_size}: "
+                            f"\t\t{model_name}/{batch_size}/{sequence_length}: "
                             f"{(round(1000 * time) / 1000)}"
                             f"s "
                             f"{memory}"
@@ -179,95 +213,41 @@ class Benchmarks(ABC):
 
 class PyTorchBenchmarks(Benchmarks):
 
-    args: PyTorchBenchMarkArguments
+    args: PyTorchBenchmarkArguments
     models: PreTrainedModel
+    train_fn: Callable[[int, int], int]
+    inference_fn: Callable[[int, int], int]
 
-    def __init__(self, args: PyTorchBenchMarkArguments, models: PretrainedModel = None):
+    def __init__(
+        self,
+        args: PyTorchBenchmarkArguments,
+        models: List[PreTrainedModel] = None,
+        train_fn: Callable = None,
+        inference_fn: Callable = None
+    ):
         super().__init__(args=args)
-#        config = AutoConfig.from_pretrained(model_name, torchscript=self.args.torchscript)
-#        model = AutoModel.from_pretrained(model_name, config=config)
+
         if models is None:
-            self.models = [AutoModel.from_pretrained(model_name) for model_name in self.args.model_names]
+            self.model_dict = {model_name: AutoModel.from_pretrained(model_name) for model_name in self.args.model_names}
         else:
-            self.models = models
+            self.model_dict = {model_name: model for model_name, model in zip(self.args.model_names, models)}
 
-    def compute(self, result):
-        for c, (model, model_name) in enumerate(zip(self.models, self.args.model_names)):
-            self.print_fn(f"{c + 1} / {len(self.args.model_names)}")
+        self.train_fn = train_fn
+        self.inference_fn = inference_fn
 
-            try:
-                tokenizer = AutoTokenizer.from_pretrained(model_name)
-                max_input_size = tokenizer.max_model_input_sizes[model_name]
-            except:
-                # some models don't have a tokenizer
-                max_input_size = model.config.max_position_embeddings
+        if inference_fn is None:
+            self.inference_fn = pytorch_default_inference
 
-            result[model_name] = {"bs": self.args.batch_sizes, "ss": self.args.slice_sizes, "time": {}, "memory": {}}
-            result[model_name]["time"] = {i: {} for i in batch_sizes}
-            result[model_name]["memory"] = {i: {} for i in batch_sizes}
+    def train(self, model_name, batch_size, sequence_length):
+        model = self.model_dict[model_name]
+        input_ids = torch.randint(model.config.vocab_size, batch_size, sequence_length)
+        return self.train_fn(model, input_ids)
 
-            self.print_fn("Using model {}".format(model))
-            self.print_fn("Number of all parameters {}".format(model.num_parameters()))
-
-            for batch_size in self.args.batch_sizes:
-                if self.args.fp16:
-                    model.half()
-                model.to(device)
-                model.eval()
-
-                for sequence_length in self.args.sequence_lengths:
-                    if max_input_size is not None and slice_size > max_input_size:
-                        result[model_name]["time"][batch_size][slice_size] = "N/A"
-                    else:
-                        sequence = torch.randint(model.config.vocab_size, (batch_size, self.args.sequence_length), device=self.device)
-                        try:
-                            if self.args.torchscript:
-                                self.print_fn("Tracing model with sequence size {}".format(sequence.shape))
-                                inference = torch.jit.trace(model, sequence)
-                                inference(sequence)
-                            else:
-                                inference = model
-                                inference(sequence)
-
-                            if not self.args.no_memory:
-                                # model.add_memory_hooks()  # Forward method tracing (only for PyTorch models)
-
-                                # Line by line memory tracing (all code in the module `transformers`) works for all models/arbitrary code
-
-#                                if self.args.verbose:
-#                                    trace = start_memory_tracing("transformers")
-#                                    inference(sequence)
-#                                    summary = stop_memory_tracing(trace)
-#                                    print_summary_statistics(summary)
-
-                                # TODO: change
-#                                result[model_name]["memory"][batch_size][slice_size] = str(summary.total)
-                                result[model_name]["memory"][batch_size][slice_size] = memory
-                            else:
-                                result[model_name]["memory"][batch_size][slice_size] = "N/A"
-
-                            if not self.args.no_speed:
-                                self.print_fn("Going through model with sequence of shape".format(sequence.shape))
-                                runtimes = timeit.repeat(lambda: inference(sequence), repeat=self.args.average_over, number=3)
-                                average_time = sum(runtimes) / float(len(runtimes)) / 3.0
-                                result[model_name]["time"][batch_size][slice_size] = average_time
-                            else:
-                                result[model_name]["time"][batch_size][slice_size] = "N/A"
-
-                        except RuntimeError as e:
-                            self.print_fn("Doesn't fit on GPU. {}".format(e))
-                            torch.cuda.empty_cache()
-                            result[model_name]["time"][batch_size][slice_size] = "N/A"
-                            result[model_name]["memory"][batch_size][slice_size] = "N/A"
-        return result
+    def inference(self, model_name, batch_size, sequence_length):
+        model = self.model_dict[model_name]
+        input_ids = torch.randint(model.config.vocab_size, batch_size, sequence_length)
+        return self.inference_fn(model, input_ids)
 
 
-class TensorflowBenchmarks(Benchmarks):
-
-    args: TensorflowBenchMarkArguments
-
-    def __init__(self, args: TensorflowBenchMarkArguments):
-        super().__init__(args=args)
-
-    def compute(self):
-        pass
+def pytorch_default_inference(model, input_ids):
+    model(input_ids)

@@ -4,7 +4,7 @@ import sys
 from argparse import ArgumentParser
 from enum import Enum
 from pathlib import Path
-from typing import Any, Iterable, NewType, Tuple, Union
+from typing import Any, Iterable, NewType, Tuple, Union, List, _GenericAlias
 
 
 DataClass = NewType("DataClass", Any)
@@ -65,6 +65,13 @@ class HfArgumentParser(ArgumentParser):
                 if field.default is True:
                     field_name = f"--no-{field.name}"
                     kwargs["dest"] = field.name
+            elif isinstance(field.type, _GenericAlias):
+                if issubclass(field.type.__origin__, List):
+                    kwargs["nargs"] = "+"
+                    kwargs["type"] = field.type.__args__[0]
+                    assert all(x == kwargs["type"] for x in field.type.__args__), "{} cannot be a List of mixed types".format(field.name)
+                    if field.default is not dataclasses.MISSING:
+                        kwargs["default"] = field.default
             else:
                 kwargs["type"] = field.type
                 if field.default is not dataclasses.MISSING:
