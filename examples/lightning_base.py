@@ -306,7 +306,12 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
     set_seed(args)
     odir = Path(model.hparams.output_dir)
     odir.mkdir(exist_ok=True)
-    if args.output_dir.startswith("/var/") or args.fast_dev_run or args.output_dir.startswith("/tmp/") or args.n_gpu > 1:
+    if (
+        args.output_dir.startswith("/var/")
+        or args.fast_dev_run
+        or args.output_dir.startswith("/tmp/")
+        or args.n_gpu > 1
+    ):
         logger = True
     else:
         logger = WandbLogger(name=model.output_dir.name)

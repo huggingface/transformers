@@ -1,4 +1,5 @@
 import argparse
+import gc
 import glob
 import json
 import logging
@@ -24,7 +25,6 @@ from lightning_base import BaseTransformer, add_generic_args, generic_train, get
 from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.modeling_bart import invert_mask
 from transformers.optimization import AdamW
-import gc
 
 
 try:
@@ -37,8 +37,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
-
-
 
 
 def save_git_info(folder_path: str):
@@ -455,13 +453,6 @@ class SummarizationDistiller(SummarizationTrainer):
         self.alpha_mlm = hparams.alpha_mlm
         self.alpha_ce = hparams.alpha_ce
         self.alpha_encoder_loss = self.hparams.alpha_encoder_loss
-        self.need_decoder = True
-
-        if self.alpha_ce <= 0 and self.alpha_mlm <= 0 and self.hparams.alpha_encoder_loss > 0:
-            self.need_decoder = False
-            del teacher.model.decoder
-        self.hparams.need_decoder = self.need_decoder
-
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -491,8 +482,6 @@ class SummarizationDistiller(SummarizationTrainer):
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs[0], source_mask)
         else:
             teacher_enc_outputs = (enc_outputs,)
-
-
         with torch.no_grad():
             tloss, tlogits, *trash = self.teacher(
                 source_ids,
@@ -605,15 +594,16 @@ class SummarizationDistiller(SummarizationTrainer):
 
 
 class EncoderDistiller(SummarizationDistiller):
-    loss_names = ['loss']
+    loss_names = ["loss"]
+
     def __init__(self, hparams):
         assert hparams.enc_only
         assert not hparams.no_teacher
         super().__init__(hparams)
-        assert not self.need_decoder
         self.teacher_enc = self.teacher.model.encoder
         del self.teacher
-
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
         return self.model.model.encoder(input_ids, attention_mask=attention_mask)
@@ -641,7 +631,7 @@ def main(args):
 
     model: BaseTransformer = module_cls(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
-    model.hparams.test_checkpoint = ''
+    model.hparams.test_checkpoint = ""
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
 
     if checkpoints:

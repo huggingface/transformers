@@ -33,7 +33,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-
 def git_log(folder_path: str):
     """
     Log commit info.
