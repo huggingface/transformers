@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PyTorchBenchmarkArguments(BenchmarkArguments):
-    no_cuda: bool = field(default=False, metadata={"help": "Weather to run on available cuda devices"})
+    no_cuda: bool = field(default=False, metadata={"help": "Whether to run on available cuda devices"})
     torchscript: bool = field(default=False, metadata={"help": "Trace the models using torchscript"})
     fp16: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
 
