@@ -366,7 +366,6 @@ if is_tf_available():
         TFAutoModelForQuestionAnswering,
         TFAutoModelWithLMHead,
         TFAutoModelForTokenClassification,
-        TF_ALL_PRETRAINED_MODEL_ARCHIVE_LIST,
         TF_MODEL_MAPPING,
         TF_MODEL_FOR_PRETRAINING_MAPPING,
         TF_MODEL_WITH_LM_HEAD_MAPPING,
