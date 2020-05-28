@@ -38,7 +38,7 @@ def ensure_valid_input(model, tokens, input_names):
 
     """
     model_args_name = model.forward.__code__.co_varnames
-    
+
     ordered_input_names = []
     model_args = []
     for arg_name in model_args_name[1:]:  # start at index 1 to skip "self" argument

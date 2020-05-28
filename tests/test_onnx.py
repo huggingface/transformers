@@ -4,7 +4,7 @@ from os.path import dirname, exists
 from shutil import rmtree
 
 from tests.utils import require_tf, require_torch, slow
-from transformers import BertModel, BertConfig, BertTokenizerFast, FeatureExtractionPipeline
+from transformers import BertConfig, BertTokenizerFast, FeatureExtractionPipeline
 from transformers.convert_graph_to_onnx import convert, ensure_valid_input, infer_shapes
 
 
