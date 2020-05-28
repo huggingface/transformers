@@ -268,6 +268,8 @@ class ElectraModel(ElectraPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
     ):
         r"""
     Return:
@@ -317,6 +319,16 @@ class ElectraModel(ElectraPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, device)
+
+        if self.config.is_decoder and encoder_hidden_states is not None:
+            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            if encoder_attention_mask is None:
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        else:
+            encoder_extended_attention_mask = None
+
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         hidden_states = self.embeddings(
@@ -326,7 +338,8 @@ class ElectraModel(ElectraPreTrainedModel):
         if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states)
 
-        hidden_states = self.encoder(hidden_states, attention_mask=extended_attention_mask, head_mask=head_mask)
+        hidden_states = self.encoder(hidden_states, attention_mask=extended_attention_mask, head_mask=head_mask,
+                                     encoder_hidden_states=encoder_hidden_states, encoder_attention_mask=encoder_extended_attention_mask,)
 
         return hidden_states
 
@@ -562,6 +575,9 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         masked_lm_labels=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        lm_labels=None,
     ):
         r"""
         masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -604,7 +620,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         """
 
         generator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, encoder_hidden_states, encoder_attention_mask
         )
         generator_sequence_output = generator_hidden_states[0]
 
@@ -619,9 +635,40 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
             loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
             output = (loss,) + output
 
+        if lm_labels is not None:
+            # we are doing next-token prediction; shift prediction scores and input ids by one
+            prediction_scores = prediction_scores[:, :-1, :].contiguous()
+            lm_labels = lm_labels[:, 1:].contiguous()
+            loss_fct = CrossEntropyLoss()
+            ltr_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), lm_labels.view(-1))
+            output = (ltr_lm_loss,) + output
+
         output += generator_hidden_states[1:]
 
         return output  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
+
+
+    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
+        input_shape = input_ids.shape
+        effective_batch_size = input_shape[0]
+
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = input_ids.new_ones(input_shape)
+
+        # if model is does not use a causal mask then add a dummy token
+        if self.config.is_decoder is False:
+            assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
+            attention_mask = torch.cat(
+                [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1
+            )
+
+            dummy_token = torch.full(
+                (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
+            )
+            input_ids = torch.cat([input_ids, dummy_token], dim=1)
+
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
 @add_start_docstrings(
