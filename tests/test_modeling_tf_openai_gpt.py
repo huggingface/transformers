@@ -240,6 +240,7 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+@require_tf
 class TFOPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_openai_gpt(self):

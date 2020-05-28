@@ -58,8 +58,28 @@ class TrainingArguments:
         default=False, metadata={"help": "Run evaluation during training at each logging step."},
     )
 
-    per_gpu_train_batch_size: int = field(default=8, metadata={"help": "Batch size per GPU/CPU for training."})
-    per_gpu_eval_batch_size: int = field(default=8, metadata={"help": "Batch size per GPU/CPU for evaluation."})
+    per_device_train_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
+    )
+    per_device_eval_batch_size: int = field(
+        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+    )
+
+    per_gpu_train_batch_size: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Deprecated, the use of `--per_device_train_batch_size` is preferred. "
+            "Batch size per GPU/TPU core/CPU for training."
+        },
+    )
+    per_gpu_eval_batch_size: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred."
+            "Batch size per GPU/TPU core/CPU for evaluation."
+        },
+    )
+
     gradient_accumulation_steps: int = field(
         default=1,
         metadata={"help": "Number of updates steps to accumulate before performing a backward/update pass."},
@@ -115,11 +135,23 @@ class TrainingArguments:
 
     @property
     def train_batch_size(self) -> int:
-        return self.per_gpu_train_batch_size * max(1, self.n_gpu)
+        if self.per_gpu_train_batch_size:
+            logger.warning(
+                "Using deprecated `--per_gpu_train_batch_size` argument which will be removed in a future "
+                "version. Using `--per_device_train_batch_size` is preferred."
+            )
+        per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
+        return per_device_batch_size * max(1, self.n_gpu)
 
     @property
     def eval_batch_size(self) -> int:
-        return self.per_gpu_eval_batch_size * max(1, self.n_gpu)
+        if self.per_gpu_eval_batch_size:
+            logger.warning(
+                "Using deprecated `--per_gpu_eval_batch_size` argument which will be removed in a future "
+                "version. Using `--per_device_eval_batch_size` is preferred."
+            )
+        per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
+        return per_device_batch_size * max(1, self.n_gpu)
 
     @cached_property
     @torch_required
