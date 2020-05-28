@@ -4,7 +4,7 @@ from os.path import dirname, exists
 from shutil import rmtree
 
 from tests.utils import require_tf, require_torch, slow
-from transformers import BertConfig, BertTokenizerFast, FeatureExtractionPipeline
+from transformers import BertModel, BertConfig, BertTokenizerFast, FeatureExtractionPipeline
 from transformers.convert_graph_to_onnx import convert, ensure_valid_input, infer_shapes
 
 
@@ -99,20 +99,25 @@ class OnnxExportTestCase(unittest.TestCase):
         # All generated args are valid
         input_names = ["input_ids", "attention_mask", "token_type_ids"]
         tokens = {"input_ids": [1, 2, 3, 4], "attention_mask": [0, 0, 0, 0], "token_type_ids": [1, 1, 1, 1]}
-        inputs_args = ensure_valid_input(FuncContiguousArgs(), tokens, input_names)
+        ordered_input_names, inputs_args = ensure_valid_input(FuncContiguousArgs(), tokens, input_names)
 
         # Should have exactly the same number of args (all are valid)
         self.assertEqual(len(inputs_args), 3)
+
+        # Should have exactly the same input names
+        self.assertEqual(set(ordered_input_names), set(input_names))
 
         # Parameter should be reordered according to their respective place in the function:
         # (input_ids, token_type_ids, attention_mask)
         self.assertEqual(inputs_args, (tokens["input_ids"], tokens["token_type_ids"], tokens["attention_mask"]))
 
         # Generated args are interleaved with another args (for instance parameter "past" in GPT2)
-        inputs_args = ensure_valid_input(FuncNonContiguousArgs(), tokens, input_names)
+        ordered_input_names, inputs_args = ensure_valid_input(FuncNonContiguousArgs(), tokens, input_names)
 
         # Should have exactly the one arg (all before the one not provided "some_other_args")
         self.assertEqual(len(inputs_args), 1)
+        self.assertEqual(len(ordered_input_names), 1)
 
         # Should have only "input_ids"
         self.assertEqual(inputs_args[0], tokens["input_ids"])
+        self.assertEqual(ordered_input_names[0], "input_ids")
