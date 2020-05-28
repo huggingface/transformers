@@ -163,6 +163,7 @@ For reproducibility purposes, we share the detailed results presented in the pap
 
 Early experiments show that even though models fine-pruned with (soft) movement pruning are extremely sparse, they do not benefit from significant improvement in terms of inference speed when using the standard PyTorch inference.
 We are currently benchmarking and exploring inference setups specifically for sparse architectures.
+In particular, hardware manufacturers are announcing devices that will speedup inference for sparse networks considerably.
 
 ## Citation
 
