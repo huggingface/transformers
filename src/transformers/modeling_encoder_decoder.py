@@ -125,7 +125,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
         Examples::
 
-            from tranformers import EncoderDecoder
+            from transformers import EncoderDecoder
 
             model = EncoderDecoder.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert
         """

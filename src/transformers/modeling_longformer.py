@@ -19,7 +19,7 @@ import math
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from .configuration_longformer import LongformerConfig
@@ -31,8 +31,11 @@ from .modeling_roberta import RobertaLMHead, RobertaModel
 logger = logging.getLogger(__name__)
 
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "longformer-base-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096/pytorch_model.bin",
-    "longformer-large-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096/pytorch_model.bin",
+    "allenai/longformer-base-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096/pytorch_model.bin",
+    "allenai/longformer-large-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096/pytorch_model.bin",
+    "allenai/longformer-large-4096-finetuned-triviaqa": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096-finetuned-triviaqa/pytorch_model.bin",
+    "allenai/longformer-base-4096-extra.pos.embd.only": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096-extra.pos.embd.only/pytorch_model.bin",
+    "allenai/longformer-large-4096-extra.pos.embd.only": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096-extra.pos.embd.only/pytorch_model.bin",
 }
 
 
@@ -707,3 +710,264 @@ class LongformerForMaskedLM(BertPreTrainedModel):
             outputs = (masked_lm_loss,) + outputs
 
         return outputs  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
+    """Longformer Model transformer with a sequence classification/regression head on top (a linear layer
+    on top of the pooled output) e.g. for GLUE tasks. """,
+    LONGFORMER_START_DOCSTRING,
+)
+class LongformerForSequenceClassification(BertPreTrainedModel):
+    config_class = LongformerConfig
+    pretrained_model_archive_map = LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "longformer"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.longformer = LongformerModel(config)
+        self.classifier = LongformerClassificationHead(config)
+
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        labels=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.LongformerConfig`) and inputs:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
+
+        from transformers import LongformerTokenizer, LongformerForSequenceClassification
+        import torch
+
+        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
+        model = LongformerForSequenceClassification.from_pretrained('longformer-base-4096')
+        input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+        labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, logits = outputs[:2]
+
+        """
+
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
+        # global attention on cls token
+        attention_mask[:, 0] = 2
+
+        outputs = self.longformer(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+        )
+        sequence_output = outputs[0]
+        logits = self.classifier(sequence_output)
+
+        outputs = (logits,) + outputs[2:]
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
+
+
+class LongformerClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+
+    def forward(self, hidden_states, **kwargs):
+        hidden_states = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = torch.tanh(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        output = self.out_proj(hidden_states)
+        return output
+
+
+@add_start_docstrings(
+    """Longformer Model with a span classification head on top for extractive question-answering tasks like SQuAD / TriviaQA (a linear layers on top of
+    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    LONGFORMER_START_DOCSTRING,
+)
+class LongformerForQuestionAnswering(BertPreTrainedModel):
+    config_class = LongformerConfig
+    pretrained_model_archive_map = LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "longformer"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.longformer = LongformerModel(config)
+        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    def _compute_global_attention_mask(self, input_ids):
+        question_end_index = self._get_question_end_index(input_ids)
+        question_end_index = question_end_index.unsqueeze(dim=1)  # size: batch_size x 1
+        # bool attention mask with True in locations of global attention
+        attention_mask = torch.arange(input_ids.shape[1], device=input_ids.device)
+        attention_mask = attention_mask.expand_as(input_ids) < question_end_index
+
+        return attention_mask.long() + 1  # True => global attention; False => local attention
+
+    def _get_question_end_index(self, input_ids):
+        sep_token_indices = (input_ids == self.config.sep_token_id).nonzero()
+        batch_size = input_ids.shape[0]
+
+        assert sep_token_indices.shape[1] == 2, "`input_ids` should have two dimensions"
+        assert (
+            sep_token_indices.shape[0] == 3 * batch_size
+        ), f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for questions answering"
+
+        return sep_token_indices.view(batch_size, 3, 2)[:, 0, 1]
+
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        start_positions=None,
+        end_positions=None,
+    ):
+        r"""
+        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.LongformerConfig`) and inputs:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
+        start_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-start scores (before SoftMax).
+        end_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-end scores (before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
+
+        from transformers import LongformerTokenizer, LongformerForQuestionAnswering
+        import torch
+
+        tokenizer = LongformerTokenizer.from_pretrained("longformer-large-4096-finetuned-triviaqa")
+        model = LongformerForQuestionAnswering.from_pretrained("longformer-large-4096-finetuned-triviaqa")
+
+        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        encoding = tokenizer.encode_plus(question, text, return_tensors="pt")
+        input_ids = encoding["input_ids"]
+
+        # default is local attention everywhere
+        # the forward method will automatically set global attention on question tokens
+        attention_mask = encoding["attention_mask"]
+
+        start_scores, end_scores = model(input_ids, attention_mask=attention_mask)
+        all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].tolist())
+
+        answer_tokens = all_tokens[torch.argmax(start_scores) :torch.argmax(end_scores)+1]
+        answer = tokenizer.decode(tokenizer.convert_tokens_to_ids(answer_tokens)) # remove space prepending space token
+
+        """
+
+        # set global attention on question tokens
+        global_attention_mask = self._compute_global_attention_mask(input_ids)
+        if attention_mask is None:
+            attention_mask = global_attention_mask
+        else:
+            # combine global_attention_mask with attention_mask
+            # global attention on question tokens, no attention on padding tokens
+            attention_mask = global_attention_mask * attention_mask
+
+        outputs = self.longformer(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+        )
+
+        sequence_output = outputs[0]
+
+        logits = self.qa_outputs(sequence_output)
+        start_logits, end_logits = logits.split(1, dim=-1)
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
+
+        outputs = (start_logits, end_logits,) + outputs[2:]
+        if start_positions is not None and end_positions is not None:
+            # If we are on multi-GPU, split add a dimension
+            if len(start_positions.size()) > 1:
+                start_positions = start_positions.squeeze(-1)
+            if len(end_positions.size()) > 1:
+                end_positions = end_positions.squeeze(-1)
+            # sometimes the start/end positions are outside our model inputs, we ignore these terms
+            ignored_index = start_logits.size(1)
+            start_positions.clamp_(0, ignored_index)
+            end_positions.clamp_(0, ignored_index)
+
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            start_loss = loss_fct(start_logits, start_positions)
+            end_loss = loss_fct(end_logits, end_positions)
+            total_loss = (start_loss + end_loss) / 2
+            outputs = (total_loss,) + outputs
+
+        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)

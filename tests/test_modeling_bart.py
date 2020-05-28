@@ -240,7 +240,7 @@ class BartTranslationTests(unittest.TestCase):
         with torch.no_grad():
             logits, *other_stuff = model(**self.net_input)
 
-        expected_slice = torch.tensor([9.0078, 10.1113, 14.4787])
+        expected_slice = torch.tensor([9.0078, 10.1113, 14.4787], device=torch_device)
         result_slice = logits[0][0][:3]
         self.assertTrue(torch.allclose(expected_slice, result_slice, atol=TOLERANCE))
 
