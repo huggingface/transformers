@@ -19,8 +19,9 @@ and adapts it to the specificities of MaskedBert (`pruning_method`, `mask_init` 
 
 import logging
 
-from transformers.configuration_utils import PretrainedConfig
 from transformers.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+from transformers.configuration_utils import PretrainedConfig
+
 
 logger = logging.getLogger(__name__)
 

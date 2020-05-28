@@ -1,11 +1,9 @@
-from .modules import *
-
 from .configuration_bert_masked import MaskedBertConfig
-
 from .modeling_bert_masked import (
-    MaskedBertModel,
+    MaskedBertForMultipleChoice,
     MaskedBertForQuestionAnswering,
     MaskedBertForSequenceClassification,
     MaskedBertForTokenClassification,
-    MaskedBertForMultipleChoice,
+    MaskedBertModel,
 )
+from .modules import *

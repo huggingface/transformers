@@ -19,14 +19,14 @@ the weight matrix to prune a portion of the weights.
 The pruned weight matrix is then multiplied against the inputs (and if necessary, the bias is added).
 """
 
+import math
+
 import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.nn import init
 
-import math
-
-from .binarizer import ThresholdBinarizer, TopKBinarizer, MagnitudeBinarizer
+from .binarizer import MagnitudeBinarizer, ThresholdBinarizer, TopKBinarizer
 
 
 class MaskedLinear(nn.Linear):

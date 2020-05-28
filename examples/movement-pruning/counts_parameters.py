@@ -15,12 +15,12 @@
 Count remaining (non-zero) weights in the encoder (i.e. the transformer layers).
 Sparsity and remaining weights levels are equivalent: sparsity % = 100 - remaining weights %.
 """
-import os
 import argparse
+import os
 
 import torch
 
-from emmental.modules import TopKBinarizer, ThresholdBinarizer
+from emmental.modules import ThresholdBinarizer, TopKBinarizer
 
 
 def main(args):
