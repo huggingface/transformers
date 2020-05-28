@@ -33,9 +33,10 @@ from .modeling_utils import PreTrainedModel
 
 logger = logging.getLogger(__name__)
 
-TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "transfo-xl-wt103": "https://cdn.huggingface.co/transfo-xl-wt103-pytorch_model.bin",
-}
+TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "transfo-xl-wt103",
+    # See all Transformer XL models at https://huggingface.co/models?filter=transfo-xl
+]
 
 
 def build_tf_to_pytorch_map(model, config):
@@ -453,7 +454,6 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
     """
 
     config_class = TransfoXLConfig
-    pretrained_model_archive_map = TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_transfo_xl
     base_model_prefix = "transformer"
 

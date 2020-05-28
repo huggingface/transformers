@@ -28,12 +28,13 @@ from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 
 logger = logging.getLogger(__name__)
 
-TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "roberta-base": "https://cdn.huggingface.co/roberta-base-tf_model.h5",
-    "roberta-large": "https://cdn.huggingface.co/roberta-large-tf_model.h5",
-    "roberta-large-mnli": "https://cdn.huggingface.co/roberta-large-mnli-tf_model.h5",
-    "distilroberta-base": "https://cdn.huggingface.co/distilroberta-base-tf_model.h5",
-}
+TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "roberta-base",
+    "roberta-large",
+    "roberta-large-mnli",
+    "distilroberta-base",
+    # See all RoBERTa models at https://huggingface.co/models?filter=roberta
+]
 
 
 class TFRobertaEmbeddings(TFBertEmbeddings):
@@ -100,7 +101,6 @@ class TFRobertaPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = RobertaConfig
-    pretrained_model_archive_map = TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
 

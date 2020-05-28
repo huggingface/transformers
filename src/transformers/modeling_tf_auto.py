@@ -34,7 +34,6 @@ from .configuration_auto import (
 )
 from .configuration_utils import PretrainedConfig
 from .modeling_tf_albert import (
-    TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFAlbertForMaskedLM,
     TFAlbertForMultipleChoice,
     TFAlbertForPreTraining,
@@ -43,7 +42,6 @@ from .modeling_tf_albert import (
     TFAlbertModel,
 )
 from .modeling_tf_bert import (
-    TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFBertForMaskedLM,
     TFBertForMultipleChoice,
     TFBertForPreTraining,
@@ -52,40 +50,32 @@ from .modeling_tf_bert import (
     TFBertForTokenClassification,
     TFBertModel,
 )
-from .modeling_tf_ctrl import TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, TFCTRLLMHeadModel, TFCTRLModel
+from .modeling_tf_ctrl import TFCTRLLMHeadModel, TFCTRLModel
 from .modeling_tf_distilbert import (
-    TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFDistilBertForMaskedLM,
     TFDistilBertForQuestionAnswering,
     TFDistilBertForSequenceClassification,
     TFDistilBertForTokenClassification,
     TFDistilBertModel,
 )
-from .modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, TFGPT2LMHeadModel, TFGPT2Model
-from .modeling_tf_openai import TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
+from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
+from .modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from .modeling_tf_roberta import (
-    TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFRobertaForMaskedLM,
     TFRobertaForQuestionAnswering,
     TFRobertaForSequenceClassification,
     TFRobertaForTokenClassification,
     TFRobertaModel,
 )
-from .modeling_tf_t5 import TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP, TFT5ForConditionalGeneration, TFT5Model
-from .modeling_tf_transfo_xl import (
-    TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
-    TFTransfoXLLMHeadModel,
-    TFTransfoXLModel,
-)
+from .modeling_tf_t5 import TFT5ForConditionalGeneration, TFT5Model
+from .modeling_tf_transfo_xl import TFTransfoXLLMHeadModel, TFTransfoXLModel
 from .modeling_tf_xlm import (
-    TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFXLMForQuestionAnsweringSimple,
     TFXLMForSequenceClassification,
     TFXLMModel,
     TFXLMWithLMHeadModel,
 )
 from .modeling_tf_xlnet import (
-    TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFXLNetForQuestionAnsweringSimple,
     TFXLNetForSequenceClassification,
     TFXLNetForTokenClassification,
@@ -96,24 +86,6 @@ from .modeling_tf_xlnet import (
 
 logger = logging.getLogger(__name__)
 
-
-TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
-    (key, value)
-    for pretrained_map in [
-        TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP,
-    ]
-    for key, value, in pretrained_map.items()
-)
 
 TF_MODEL_MAPPING = OrderedDict(
     [

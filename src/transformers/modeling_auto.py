@@ -43,7 +43,6 @@ from .configuration_auto import (
 from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .modeling_albert import (
-    ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     AlbertForMaskedLM,
     AlbertForPreTraining,
     AlbertForQuestionAnswering,
@@ -51,14 +50,8 @@ from .modeling_albert import (
     AlbertForTokenClassification,
     AlbertModel,
 )
-from .modeling_bart import (
-    BART_PRETRAINED_MODEL_ARCHIVE_MAP,
-    BartForConditionalGeneration,
-    BartForSequenceClassification,
-    BartModel,
-)
+from .modeling_bart import BartForConditionalGeneration, BartForSequenceClassification, BartModel
 from .modeling_bert import (
-    BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     BertForMaskedLM,
     BertForMultipleChoice,
     BertForPreTraining,
@@ -68,16 +61,14 @@ from .modeling_bert import (
     BertModel,
 )
 from .modeling_camembert import (
-    CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     CamembertForMaskedLM,
     CamembertForMultipleChoice,
     CamembertForSequenceClassification,
     CamembertForTokenClassification,
     CamembertModel,
 )
-from .modeling_ctrl import CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, CTRLLMHeadModel, CTRLModel
+from .modeling_ctrl import CTRLLMHeadModel, CTRLModel
 from .modeling_distilbert import (
-    DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     DistilBertForMaskedLM,
     DistilBertForQuestionAnswering,
     DistilBertForSequenceClassification,
@@ -85,7 +76,6 @@ from .modeling_distilbert import (
     DistilBertModel,
 )
 from .modeling_electra import (
-    ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
     ElectraForMaskedLM,
     ElectraForPreTraining,
     ElectraForSequenceClassification,
@@ -94,15 +84,13 @@ from .modeling_electra import (
 )
 from .modeling_encoder_decoder import EncoderDecoderModel
 from .modeling_flaubert import (
-    FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     FlaubertForQuestionAnsweringSimple,
     FlaubertForSequenceClassification,
     FlaubertModel,
     FlaubertWithLMHeadModel,
 )
-from .modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, GPT2LMHeadModel, GPT2Model
+from .modeling_gpt2 import GPT2LMHeadModel, GPT2Model
 from .modeling_longformer import (
-    LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
     LongformerForMaskedLM,
     LongformerForMultipleChoice,
     LongformerForQuestionAnswering,
@@ -111,10 +99,9 @@ from .modeling_longformer import (
     LongformerModel,
 )
 from .modeling_marian import MarianMTModel
-from .modeling_openai import OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, OpenAIGPTLMHeadModel, OpenAIGPTModel
+from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_reformer import ReformerModel, ReformerModelWithLMHead
 from .modeling_roberta import (
-    ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     RobertaForMaskedLM,
     RobertaForMultipleChoice,
     RobertaForQuestionAnswering,
@@ -122,10 +109,9 @@ from .modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-from .modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP, T5ForConditionalGeneration, T5Model
-from .modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP, TransfoXLLMHeadModel, TransfoXLModel
+from .modeling_t5 import T5ForConditionalGeneration, T5Model
+from .modeling_transfo_xl import TransfoXLLMHeadModel, TransfoXLModel
 from .modeling_xlm import (
-    XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
     XLMForQuestionAnsweringSimple,
     XLMForSequenceClassification,
     XLMForTokenClassification,
@@ -133,7 +119,6 @@ from .modeling_xlm import (
     XLMWithLMHeadModel,
 )
 from .modeling_xlm_roberta import (
-    XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     XLMRobertaForMaskedLM,
     XLMRobertaForMultipleChoice,
     XLMRobertaForSequenceClassification,
@@ -141,7 +126,6 @@ from .modeling_xlm_roberta import (
     XLMRobertaModel,
 )
 from .modeling_xlnet import (
-    XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
     XLNetForMultipleChoice,
     XLNetForQuestionAnsweringSimple,
     XLNetForSequenceClassification,
@@ -153,30 +137,6 @@ from .modeling_xlnet import (
 
 logger = logging.getLogger(__name__)
 
-
-ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
-    (key, value)
-    for pretrained_map in [
-        BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        BART_PRETRAINED_MODEL_ARCHIVE_MAP,
-        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
-        GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
-        CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
-        XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
-        XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
-        ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
-        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        T5_PRETRAINED_MODEL_ARCHIVE_MAP,
-        FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
-        XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
-        ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
-        LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
-    ]
-    for key, value, in pretrained_map.items()
-)
 
 MODEL_MAPPING = OrderedDict(
     [

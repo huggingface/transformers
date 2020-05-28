@@ -261,14 +261,9 @@ class PretrainedConfig(object):
                 )
             else:
                 msg = (
-                    "Can't load '{}'. Make sure that:\n\n"
-                    "- '{}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
-                    "- or '{}' is the correct path to a directory containing a '{}' file\n\n".format(
-                        pretrained_model_name_or_path,
-                        pretrained_model_name_or_path,
-                        pretrained_model_name_or_path,
-                        CONFIG_NAME,
-                    )
+                    f"Can't load config for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {CONFIG_NAME} file\n\n"
                 )
             raise EnvironmentError(msg)
 

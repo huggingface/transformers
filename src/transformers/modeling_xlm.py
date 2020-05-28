@@ -34,18 +34,19 @@ from .modeling_utils import PreTrainedModel, SequenceSummary, SQuADHead, prune_l
 
 logger = logging.getLogger(__name__)
 
-XLM_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xlm-mlm-en-2048": "https://cdn.huggingface.co/xlm-mlm-en-2048-pytorch_model.bin",
-    "xlm-mlm-ende-1024": "https://cdn.huggingface.co/xlm-mlm-ende-1024-pytorch_model.bin",
-    "xlm-mlm-enfr-1024": "https://cdn.huggingface.co/xlm-mlm-enfr-1024-pytorch_model.bin",
-    "xlm-mlm-enro-1024": "https://cdn.huggingface.co/xlm-mlm-enro-1024-pytorch_model.bin",
-    "xlm-mlm-tlm-xnli15-1024": "https://cdn.huggingface.co/xlm-mlm-tlm-xnli15-1024-pytorch_model.bin",
-    "xlm-mlm-xnli15-1024": "https://cdn.huggingface.co/xlm-mlm-xnli15-1024-pytorch_model.bin",
-    "xlm-clm-enfr-1024": "https://cdn.huggingface.co/xlm-clm-enfr-1024-pytorch_model.bin",
-    "xlm-clm-ende-1024": "https://cdn.huggingface.co/xlm-clm-ende-1024-pytorch_model.bin",
-    "xlm-mlm-17-1280": "https://cdn.huggingface.co/xlm-mlm-17-1280-pytorch_model.bin",
-    "xlm-mlm-100-1280": "https://cdn.huggingface.co/xlm-mlm-100-1280-pytorch_model.bin",
-}
+XLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xlm-mlm-en-2048",
+    "xlm-mlm-ende-1024",
+    "xlm-mlm-enfr-1024",
+    "xlm-mlm-enro-1024",
+    "xlm-mlm-tlm-xnli15-1024",
+    "xlm-mlm-xnli15-1024",
+    "xlm-clm-enfr-1024",
+    "xlm-clm-ende-1024",
+    "xlm-mlm-17-1280",
+    "xlm-mlm-100-1280",
+    # See all XLM models at https://huggingface.co/models?filter=xlm
+]
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -207,7 +208,6 @@ class XLMPreTrainedModel(PreTrainedModel):
     """
 
     config_class = XLMConfig
-    pretrained_model_archive_map = XLM_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = None
     base_model_prefix = "transformer"
 

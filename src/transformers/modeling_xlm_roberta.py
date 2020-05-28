@@ -31,14 +31,15 @@ from .modeling_roberta import (
 
 logger = logging.getLogger(__name__)
 
-XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xlm-roberta-base": "https://cdn.huggingface.co/xlm-roberta-base-pytorch_model.bin",
-    "xlm-roberta-large": "https://cdn.huggingface.co/xlm-roberta-large-pytorch_model.bin",
-    "xlm-roberta-large-finetuned-conll02-dutch": "https://cdn.huggingface.co/xlm-roberta-large-finetuned-conll02-dutch-pytorch_model.bin",
-    "xlm-roberta-large-finetuned-conll02-spanish": "https://cdn.huggingface.co/xlm-roberta-large-finetuned-conll02-spanish-pytorch_model.bin",
-    "xlm-roberta-large-finetuned-conll03-english": "https://cdn.huggingface.co/xlm-roberta-large-finetuned-conll03-english-pytorch_model.bin",
-    "xlm-roberta-large-finetuned-conll03-german": "https://cdn.huggingface.co/xlm-roberta-large-finetuned-conll03-german-pytorch_model.bin",
-}
+XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xlm-roberta-base",
+    "xlm-roberta-large",
+    "xlm-roberta-large-finetuned-conll02-dutch",
+    "xlm-roberta-large-finetuned-conll02-spanish",
+    "xlm-roberta-large-finetuned-conll03-english",
+    "xlm-roberta-large-finetuned-conll03-german",
+    # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
+]
 
 
 XLM_ROBERTA_START_DOCSTRING = r"""
@@ -65,7 +66,6 @@ class XLMRobertaModel(RobertaModel):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -78,7 +78,6 @@ class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -93,7 +92,6 @@ class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -108,7 +106,6 @@ class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -123,4 +120,3 @@ class XLMRobertaForTokenClassification(RobertaForTokenClassification):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP

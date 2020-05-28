@@ -32,13 +32,13 @@ from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 logger = logging.getLogger(__name__)
 
 ####################################################
-# This dict contrains shortcut names and associated url
-# for the pretrained weights provided with the models
+# This list contrains shortcut names for some of
+# the pretrained weights provided with the models
 ####################################################
-TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xxx-base-uncased": "https://cdn.huggingface.co/xxx-base-uncased-tf_model.h5",
-    "xxx-large-uncased": "https://cdn.huggingface.co/xxx-large-uncased-tf_model.h5",
-}
+TF_XXX_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xxx-base-uncased",
+    "xxx-large-uncased",
+]
 
 
 ####################################################
@@ -180,7 +180,6 @@ class TFXxxPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = XxxConfig
-    pretrained_model_archive_map = TF_XXX_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
 
 

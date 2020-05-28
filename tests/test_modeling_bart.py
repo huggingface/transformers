@@ -39,7 +39,7 @@ if is_torch_available():
         MBartTokenizer,
     )
     from transformers.modeling_bart import (
-        BART_PRETRAINED_MODEL_ARCHIVE_MAP,
+        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
         shift_tokens_right,
         invert_mask,
         _prepare_bart_decoder_inputs,
@@ -561,7 +561,7 @@ class BartModelIntegrationTests(unittest.TestCase):
     @unittest.skip("This is just too slow")
     def test_model_from_pretrained(self):
         # Forces 1.6GB download from S3 for each model
-        for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys()):
+        for model_name in BART_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = BartModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

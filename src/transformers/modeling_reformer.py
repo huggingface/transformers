@@ -35,10 +35,11 @@ from .modeling_utils import PreTrainedModel, apply_chunking_to_forward
 
 logger = logging.getLogger(__name__)
 
-REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "google/reformer-crime-and-punishment": "https://cdn.huggingface.co/google/reformer-crime-and-punishment/pytorch_model.bin",
-    "google/reformer-enwik8": "https://cdn.huggingface.co/google/reformer-enwik8/pytorch_model.bin",
-}
+REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "google/reformer-crime-and-punishment",
+    "google/reformer-enwik8",
+    # See all Reformer models at https://huggingface.co/models?filter=reformer
+]
 
 
 def mish(x):
@@ -1373,7 +1374,6 @@ class ReformerPreTrainedModel(PreTrainedModel):
     """
 
     config_class = ReformerConfig
-    pretrained_model_archive_map = REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "reformer"
 
     @property

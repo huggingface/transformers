@@ -36,7 +36,10 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
-TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP = {"openai-gpt": "https://cdn.huggingface.co/openai-gpt-tf_model.h5"}
+TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "openai-gpt",
+    # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-gpt
+]
 
 
 def gelu(x):
@@ -349,7 +352,6 @@ class TFOpenAIGPTPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = OpenAIGPTConfig
-    pretrained_model_archive_map = TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
 
 

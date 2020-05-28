@@ -30,9 +30,10 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
-TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "transfo-xl-wt103": "https://cdn.huggingface.co/transfo-xl-wt103-tf_model.h5",
-}
+TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "transfo-xl-wt103",
+    # See all Transformer XL models at https://huggingface.co/models?filter=transfo-xl
+]
 
 
 class TFPositionalEmbedding(tf.keras.layers.Layer):
@@ -630,7 +631,6 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = TransfoXLConfig
-    pretrained_model_archive_map = TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
 
 

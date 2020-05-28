@@ -30,7 +30,10 @@ from .modeling_utils import Conv1D, PreTrainedModel
 
 logger = logging.getLogger(__name__)
 
-CTRL_PRETRAINED_MODEL_ARCHIVE_MAP = {"ctrl": "https://storage.googleapis.com/sf-ctrl/pytorch/seqlen256_v1.bin"}
+CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "ctrl"
+    # See all CTRL models at https://huggingface.co/models?filter=ctrl
+]
 
 
 def angle_defn(pos, i, d_model_size):
@@ -178,7 +181,6 @@ class CTRLPreTrainedModel(PreTrainedModel):
     """
 
     config_class = CTRLConfig
-    pretrained_model_archive_map = CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
 
     def _init_weights(self, module):
