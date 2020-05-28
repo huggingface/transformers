@@ -7,7 +7,7 @@ import re
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -469,9 +469,13 @@ class Trainer:
                 parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
                     self.args.device
                 )
-                epoch_iterator = tqdm(parallel_loader, desc="Iteration", disable=not self.is_local_master(), total=total_epoch_steps)
+                epoch_iterator = tqdm(
+                    parallel_loader, desc="Iteration", disable=not self.is_local_master(), total=total_epoch_steps
+                )
             else:
-                epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=not self.is_local_master(), total=total_epoch_steps)
+                epoch_iterator = tqdm(
+                    train_dataloader, desc="Iteration", disable=not self.is_local_master(), total=total_epoch_steps
+                )
 
             for step, inputs in enumerate(epoch_iterator):
 
@@ -758,7 +762,9 @@ class Trainer:
             dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
 
         evaluation_total_steps = 0
-        evaluation_iterator = tqdm(dataloader, desc=description, total=self.args.max_eval_steps if self.args.max_eval_steps > 0 else None)
+        evaluation_iterator = tqdm(
+            dataloader, desc=description, total=self.args.max_eval_steps if self.args.max_eval_steps > 0 else None
+        )
 
         for inputs in evaluation_iterator:
             has_labels = any(inputs.get(k) is not None for k in ["labels", "lm_labels", "masked_lm_labels"])
@@ -780,14 +786,15 @@ class Trainer:
                         if "preds" not in evaluation_values["preds"]:
                             evaluation_values["preds"] = logits.detach()
                         else:
-                            evaluation_values["preds"] = torch.cat((evaluation_values["preds"], logits.detach()), dim=0)
+                            evaluation_values["preds"] = torch.cat(
+                                (evaluation_values["preds"], logits.detach()), dim=0
+                            )
                         if inputs.get("labels") is not None:
                             if "label_ids" not in evaluation_values["label_ids"]:
                                 evaluation_values["label_ids"] = inputs["labels"].detach()
                             else:
                                 evaluation_values["label_ids"] = torch.cat(
-                                    (evaluation_values["label_ids"], inputs["labels"].detach()),
-                                    dim=0
+                                    (evaluation_values["label_ids"], inputs["labels"].detach()), dim=0
                                 )
                 else:
                     if not len(evaluation_values):
@@ -804,7 +811,9 @@ class Trainer:
 
         if self.args.local_rank != -1:
             # In distributed mode, concatenate all results from all nodes:
-            total_examples = self.args.max_eval_steps if self.args.max_eval_steps > 0 else self.num_examples(dataloader)
+            total_examples = (
+                self.args.max_eval_steps if self.args.max_eval_steps > 0 else self.num_examples(dataloader)
+            )
             for key, value in evaluation_values.items():
                 if value is not None:
                     evaluation_values[key] = self.distributed_concat(value, num_total_examples=total_examples)
@@ -826,8 +835,7 @@ class Trainer:
                 metrics = self.compute_metrics(eval_predictions)
             elif evaluation_values_numpy["preds"] is not None and evaluation_values_numpy["label_ids"] is not None:
                 eval_predictions = EvalPrediction(
-                    predictions=evaluation_values_numpy["preds"],
-                    label_ids=evaluation_values_numpy["label_ids"]
+                    predictions=evaluation_values_numpy["preds"], label_ids=evaluation_values_numpy["label_ids"]
                 )
                 metrics = self.compute_metrics(eval_predictions)
             else:
@@ -845,9 +853,7 @@ class Trainer:
                 metrics[f"eval_{key}"] = metrics.pop(key)
 
         return PredictionOutput(
-            predictions=eval_predictions.predictions,
-            label_ids=eval_predictions.label_ids,
-            metrics=metrics
+            predictions=eval_predictions.predictions, label_ids=eval_predictions.label_ids, metrics=metrics
         )
 
     def distributed_concat(self, tensor: torch.Tensor, num_total_examples: int) -> torch.Tensor:

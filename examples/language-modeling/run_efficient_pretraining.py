@@ -25,17 +25,16 @@ import math
 import multiprocessing
 import os
 import tarfile
+from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
+from typing import Dict, Optional, Tuple, Union
 
-from dataclasses import dataclass, field
-from typing import Optional, Union, Tuple, Dict, Callable
-
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import IterableDataset
 from tqdm import tqdm
-import numpy as np
 
 from transformers import (
     AutoConfig,
@@ -43,18 +42,19 @@ from transformers import (
     DataCollatorForLanguageModeling,
     ElectraForMaskedLM,
     ElectraForPreTraining,
+    EvalPrediction,
     HfArgumentParser,
     PreTrainedTokenizer,
     TextDataset,
     Trainer,
-    set_seed, EvalPrediction,
+    set_seed,
 )
-
 from transformers.modeling_utils import PreTrainedModel
 from transformers.training_args import TrainingArguments
 
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class ModelArguments:
@@ -66,9 +66,10 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "The discriminator checkpoint for weights initialization. Leave None if you want to train a model "
-                    "from scratch."
+            "from scratch."
         },
     )
+
     discriminator_config_name: Optional[str] = field(
         default=None,
         metadata={"help": "Pretrained config name or path if not the same as the discriminator model_name"},
@@ -78,9 +79,10 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "The generator checkpoint for weights initialization. Leave None if you want to train a model "
-                    "from scratch."
+            "from scratch."
         },
     )
+
     generator_config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as the generator model_name"}
     )
@@ -89,6 +91,7 @@ class ModelArguments:
         default=None,
         metadata={"help": "Pretrained tokenizer name or path if not the same as discriminator model_name"},
     )
+
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
@@ -109,17 +112,9 @@ class DataTrainingArguments:
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
 
-    use_openwebtext: bool = field(
-        default=False,
-        metadata={"help": "Whether to use the OpenWebText dataset. If using this dataset, the user"
-                          "should provide a path to the extracted zip directory. via the "
-                          "--data_directory argument"}
-    )
-
-    data_directory: Optional[str] = field(
-        default=False,
-        metadata={"help": "The directory containing files that will be used for training and evaluation. Only used if"
-                          "using OpenWebText."}
+    open_web_text_directory: Optional[str] = field(
+        default=None,
+        metadata={"help": "The directory containing files that will be used for training and evaluation."},
     )
 
     block_size: int = field(
@@ -140,20 +135,22 @@ class DataTrainingArguments:
     )
 
     num_tensors_per_file: int = field(
-        default=2048, metadata={"help": "The number of tensors that will be stored in each file after tokenization."
-                                        "The smaller the amount, the smaller the filesize, but the larger the amount"
-                                        "of files that will be created."}
+        default=2048,
+        metadata={
+            "help": "The number of tensors that will be stored in each file after tokenization."
+            "The smaller the amount, the smaller the filesize, but the larger the amount"
+            "of files that will be created."
+        },
     )
 
     mask_probability: float = field(
-        default=0.15,
-        metadata={"help": "Percentage of the input that will be masked or replaced."}
+        default=0.15, metadata={"help": "Percentage of the input that will be masked or replaced."}
     )
 
     max_predictions_per_sequence: int = field(
         # Original implementation has a default of :(mask_probability + 0.005) * max_sequence_length
         default=int((0.15 + 0.005) * 128),
-        metadata={"help": "Maximum tokens that will be masked in a sequence."}
+        metadata={"help": "Maximum tokens that will be masked in a sequence."},
     )
 
 
@@ -165,8 +162,7 @@ class EfficientTrainingArguments(TrainingArguments):
     )
 
     max_eval_steps: int = field(
-        default=100,
-        metadata={"help": "If > 0: set total number of eval steps to perform."},
+        default=100, metadata={"help": "If > 0: set total number of eval steps to perform."},
     )
     warmup_steps: int = field(default=10_000, metadata={"help": "Linear warmup over warmup_steps."})
 
@@ -175,14 +171,19 @@ class EfficientTrainingArguments(TrainingArguments):
     generator_weight: float = field(default=1.0, metadata={"help": "Weight coefficient for the generator loss"})
 
     discriminator_weight: float = field(
-        default=50.0,
-        metadata={"help": "Weight coefficient for the discriminator loss"}
+        default=50.0, metadata={"help": "Weight coefficient for the discriminator loss"}
     )
 
 
-
-def get_dataset(data_args: DataTrainingArguments, training_args: TrainingArguments, model_args: ModelArguments, tokenizer: Union[PreTrainedTokenizer, str], evaluate=False, local_rank=-1):
-    if data_args.use_openwebtext:
+def get_dataset(
+    data_args: DataTrainingArguments,
+    training_args: TrainingArguments,
+    model_args: ModelArguments,
+    tokenizer: Union[PreTrainedTokenizer, str],
+    evaluate=False,
+    local_rank=-1,
+):
+    if data_args.open_web_text_directory is not None:
         # Whether to overwrite the cache. We don't want to overwrite the cache when evaluating if we're both training
         # and evaluating, as the same dataset is used. We don't need to tokenize twice for training
         # and evaluation.
@@ -194,32 +195,34 @@ def get_dataset(data_args: DataTrainingArguments, training_args: TrainingArgumen
         if data_args.overwrite_cache and training_args.do_eval and not training_args.do_train:
             should_overwrite_cache = True
 
-        return OpenWebTextDataset(
-            data_args,
-            model_args,
-            overwrite_cache=should_overwrite_cache
-        )
+        return OpenWebTextDataset(data_args, model_args, overwrite_cache=should_overwrite_cache)
     else:
         file_path = data_args.eval_data_file if evaluate else data_args.train_data_file
-        return TextDataset(tokenizer=tokenizer, file_path=file_path, block_size=data_args.block_size, local_rank=local_rank,)
+        return TextDataset(
+            tokenizer=tokenizer, file_path=file_path, block_size=data_args.block_size, local_rank=local_rank,
+        )
 
 
 class OpenWebTextDataset(IterableDataset):
     def __init__(self, data_args, model_args, overwrite_cache=False):
         self.tokenizer_cache = model_args.cache_dir
-        self.directory = Path(data_args.data_directory)
-        self.archives = os.listdir(data_args.data_directory)
+        self.directory = Path(data_args.open_web_text_directory)
+        self.archives = os.listdir(self.directory)
         self.tokenizer_identifier = model_args.tokenizer_name
         self.num_tensors_per_file = data_args.num_tensors_per_file
-        self.feature_directory = self.directory / f"features_{self.tokenizer_identifier.replace('/', '_')}_{data_args.block_size if data_args.block_size is not None else 'no-max-seq'}_{self.num_tensors_per_file}"
+        self.feature_directory = (
+            self.directory
+            / f"features_{self.tokenizer_identifier.replace('/', '_')}_{data_args.block_size if data_args.block_size is not None else 'no-max-seq'}_{self.num_tensors_per_file}"
+        )
         self.block_size = data_args.block_size
 
         # The dataset was already processed
         if os.path.exists(self.feature_directory) and not overwrite_cache:
-            # TODO update to use logger
-            logger.info(f"Re-using cache from {self.feature_directory}. Warning: we have no way of detecting an "
-                        f"incomplete cache. If the tokenization was started but not finished, please use the "
-                        f"`--ignore_cache=True` flag.")
+            logger.info(
+                f"Re-using cache from {self.feature_directory}. Warning: we have no way of detecting an "
+                f"incomplete cache. If the tokenization was started but not finished, please use the "
+                f"`--ignore_cache=True` flag."
+            )
             self.feature_set_paths = [
                 self.feature_directory / feature_set_path for feature_set_path in os.listdir(self.feature_directory)
             ]
@@ -230,7 +233,8 @@ class OpenWebTextDataset(IterableDataset):
 
         n_archives_per_job = math.ceil(len(self.archives) / data_args.num_dataset_building_processes)
         self.job_archives = [
-            self.archives[i * n_archives_per_job: (i + 1) * n_archives_per_job] for i in range(data_args.num_dataset_building_processes)
+            self.archives[i * n_archives_per_job : (i + 1) * n_archives_per_job]
+            for i in range(data_args.num_dataset_building_processes)
         ]
         # Sanity check: make sure we're not leaving any archive behind.
         assert sum([len(archive) for archive in self.job_archives]) == len(self.archives)
@@ -239,7 +243,9 @@ class OpenWebTextDataset(IterableDataset):
             self.feature_set_paths = self._extract_open_web_text()
         else:
             pool = multiprocessing.Pool(processes=data_args.num_dataset_building_processes)
-            self.feature_set_paths = pool.map(self._extract_open_web_text, range(data_args.num_dataset_building_processes))
+            self.feature_set_paths = pool.map(
+                self._extract_open_web_text, range(data_args.num_dataset_building_processes)
+            )
             self.feature_set_paths = [file_path for feature_set in self.feature_set_paths for file_path in feature_set]
 
     def _extract_open_web_text(self, job_id=0):
@@ -256,7 +262,9 @@ class OpenWebTextDataset(IterableDataset):
                 ...
             ...
         """
-        tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_identifier, use_fast=True, cache_dir=self.tokenizer_cache)
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.tokenizer_identifier, use_fast=True, cache_dir=self.tokenizer_cache
+        )
 
         # Create openwebtext/tmp directory to store temporary files
         temporary_directory = self.directory / "tmp" / f"job_{job_id}"
@@ -273,8 +281,7 @@ class OpenWebTextDataset(IterableDataset):
         features = []
         for archive in progress_bar:
             if os.path.isdir(self.directory / archive):
-                # TODO replace by logger
-                print("Ignoring rogue directory.")
+                logger.info("Ignoring rogue directory.")
                 continue
             with tarfile.open(self.directory / archive) as t:
                 extracted_archive = temporary_directory / f"{archive}-extracted"
@@ -287,9 +294,7 @@ class OpenWebTextDataset(IterableDataset):
                 with open(file_path, "r") as f:
                     text = f.read()
                     block_size = tokenizer.model_max_length if self.block_size is None else self.block_size
-                    encoding = tokenizer.encode_plus(
-                        text, return_overflowing_tokens=True, max_length=block_size
-                    )
+                    encoding = tokenizer.encode_plus(text, return_overflowing_tokens=True, max_length=block_size)
 
                     features.append(torch.tensor(encoding["input_ids"]))
 
@@ -298,8 +303,8 @@ class OpenWebTextDataset(IterableDataset):
 
             while len(features) > self.num_tensors_per_file:
                 feature_set_path = self.feature_directory / f"feature_set_{job_id}_{feature_index}.pt"
-                torch.save(features[:self.num_tensors_per_file], feature_set_path)
-                features = features[self.num_tensors_per_file:]
+                torch.save(features[: self.num_tensors_per_file], feature_set_path)
+                features = features[self.num_tensors_per_file :]
                 feature_index += 1
                 feature_set_paths.append(feature_set_path)
 
@@ -327,12 +332,12 @@ class OpenWebTextDataset(IterableDataset):
 
 class CombinedModel(nn.Module):
     def __init__(
-            self,
-            discriminator: PreTrainedModel,
-            generator: PreTrainedModel,
-            tokenizer: PreTrainedTokenizer,
-            training_args: EfficientTrainingArguments,
-            data_args: DataTrainingArguments
+        self,
+        discriminator: PreTrainedModel,
+        generator: PreTrainedModel,
+        tokenizer: PreTrainedTokenizer,
+        training_args: EfficientTrainingArguments,
+        data_args: DataTrainingArguments,
     ):
         super().__init__()
 
@@ -351,14 +356,11 @@ class CombinedModel(nn.Module):
 
         class Config:
             xla_device: bool = False
+
         self.config = Config()
 
     def mask_inputs(
-        self,
-        input_ids: torch.Tensor,
-        mask_token_id,
-        tokens_to_ignore,
-        proposal_distribution=1.0,
+        self, input_ids: torch.Tensor, tokens_to_ignore, proposal_distribution=1.0,
     ):
         input_ids = input_ids.clone()
         inputs_which_can_be_masked = torch.ones_like(input_ids)
@@ -406,13 +408,11 @@ class CombinedModel(nn.Module):
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
-        inputs_embeds=None,
         labels=None,
     ):
         # get the masked positions as well as their original values
         masked_input_ids, masked_lm_positions = self.mask_inputs(
             input_ids,
-            self.tokenizer.mask_token_id,
             [self.tokenizer.cls_token_id, self.tokenizer.sep_token_id, self.tokenizer.mask_token_id],
         )
 
@@ -425,7 +425,9 @@ class CombinedModel(nn.Module):
         masked_lm_inputs = input_ids.clone()
 
         # Of the evaluated tokens, 15% of those will keep their original tokens
-        replace_with_mask_positions = masked_lm_positions * (torch.rand(masked_lm_positions.shape, device=masked_lm_positions.device) < 0.85)
+        replace_with_mask_positions = masked_lm_positions * (
+            torch.rand(masked_lm_positions.shape, device=masked_lm_positions.device) < (1 - self.mask_probability)
+        )
 
         # Scatter the masks at the masked positions
         masked_lm_inputs.scatter_(-1, replace_with_mask_positions, masked_tokens)
@@ -451,17 +453,25 @@ class CombinedModel(nn.Module):
         discriminator_labels = (labels != fake_tokens).int()
 
         discriminator_loss, discriminator_output = self.discriminator(
-            fake_tokens, attention_mask, token_type_ids, position_ids, head_mask, position_ids, labels=discriminator_labels
+            fake_tokens,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            position_ids,
+            labels=discriminator_labels,
         )[:2]
 
         discriminator_predictions = torch.round((torch.sign(discriminator_output) + 1) / 2)
 
         total_loss = (self.discriminator_weight * discriminator_loss) + (self.generator_weight * generator_loss)
 
-        # generator_accuracy = masked_input_ids.eq(fake_argmaxes).sum().float() / fake_argmaxes.numel()
-        # discriminator_accuracy = discriminator_labels.eq(discriminator_predictions).sum().float() / attention_mask.sum()
-
-        return (total_loss, (generator_output, discriminator_output), (masked_input_ids, fake_argmaxes), (discriminator_labels, discriminator_predictions))
+        return (
+            total_loss,
+            (generator_output, discriminator_output),
+            (masked_input_ids, fake_argmaxes),
+            (discriminator_labels, discriminator_predictions),
+        )
 
     def save_pretrained(self, directory):
         if self.config.xla_device:
@@ -492,7 +502,7 @@ def main():
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, EfficientTrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if not data_args.use_openwebtext and data_args.eval_data_file is None and training_args.do_eval:
+    if data_args.open_web_text_directory is None and data_args.eval_data_file is None and training_args.do_eval:
         raise ValueError(
             "Cannot do evaluation without an evaluation data file. Either supply a file to --eval_data_file "
             "or remove the --do_eval argument."
@@ -597,8 +607,10 @@ def main():
     else:
         data_args.block_size = min(data_args.block_size, tokenizer.max_len)
 
+    # Need to update this to something cleaner
     try:
         import torch_xla.core.xla_model as xm
+
         if xm.is_master_ordinal(local=True):
             get_dataset(data_args, training_args, model_args, tokenizer=tokenizer, local_rank=training_args.local_rank)
 
@@ -613,10 +625,19 @@ def main():
         else None
     )
     eval_dataset = (
-        get_dataset(data_args, training_args, model_args, tokenizer=tokenizer, local_rank=training_args.local_rank, evaluate=True)
+        get_dataset(
+            data_args,
+            training_args,
+            model_args,
+            tokenizer=tokenizer,
+            local_rank=training_args.local_rank,
+            evaluate=True,
+        )
         if training_args.do_eval
         else None
     )
+
+    # Masking is done inside the CombinedModel
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, mlm_probability=0)
 
     model = CombinedModel(discriminator, generator, tokenizer, training_args, data_args)
@@ -628,12 +649,34 @@ def main():
         generator_labels, generator_predictions = labels["generator"], predictions["generator"]
         discriminator_labels, discriminator_predictions = labels["discriminator"], predictions["discriminator"]
 
-        true_positives = np.logical_and(np.equal(discriminator_predictions, discriminator_labels), np.equal(discriminator_labels, 1)).sum().astype(float)
-        false_negatives = np.logical_and(np.not_equal(discriminator_predictions, discriminator_labels), np.equal(discriminator_labels, 1)).sum().astype(float)
-        false_positives = np.logical_and(np.not_equal(discriminator_predictions, discriminator_labels), np.equal(discriminator_labels, 0)).sum().astype(float)
+        true_positives = (
+            np.logical_and(
+                np.equal(discriminator_predictions, discriminator_labels), np.equal(discriminator_labels, 1)
+            )
+            .sum()
+            .astype(float)
+        )
+        false_negatives = (
+            np.logical_and(
+                np.not_equal(discriminator_predictions, discriminator_labels), np.equal(discriminator_labels, 1)
+            )
+            .sum()
+            .astype(float)
+        )
+        false_positives = (
+            np.logical_and(
+                np.not_equal(discriminator_predictions, discriminator_labels), np.equal(discriminator_labels, 0)
+            )
+            .sum()
+            .astype(float)
+        )
 
-        generator_accuracy = np.equal(generator_labels, generator_predictions).sum().astype(float) / generator_predictions.size
-        discriminator_accuracy = np.equal(discriminator_labels, discriminator_predictions).sum().astype(float) / discriminator_labels.size
+        generator_accuracy = (
+            np.equal(generator_labels, generator_predictions).sum().astype(float) / generator_predictions.size
+        )
+        discriminator_accuracy = (
+            np.equal(discriminator_labels, discriminator_predictions).sum().astype(float) / discriminator_labels.size
+        )
         discriminator_precision = true_positives / (true_positives + false_positives)
         discriminator_recall = true_positives / (true_positives + false_negatives)
 
@@ -641,7 +684,7 @@ def main():
             "generator_accuracy": generator_accuracy,
             "discriminator_accuracy": discriminator_accuracy,
             "discriminator_precision": discriminator_precision,
-            "discriminator_recall": discriminator_recall
+            "discriminator_recall": discriminator_recall,
         }
 
     def manage_evaluation_predictions(model_outputs: Tuple[torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -653,17 +696,14 @@ def main():
             "generator_labels": generator_labels.detach(),
             "generator_predictions": generator_predictions.detach(),
             "discriminator_labels": discriminator_labels.detach(),
-            "discriminator_predictions": discriminator_predictions.detach()
+            "discriminator_predictions": discriminator_predictions.detach(),
         }
 
     def eval_prediction_mapping(dictionary: Dict[str, np.ndarray]) -> EvalPrediction:
-        labels = {
-            "generator": dictionary["generator_labels"],
-            "discriminator": dictionary["discriminator_labels"]
-        }
+        labels = {"generator": dictionary["generator_labels"], "discriminator": dictionary["discriminator_labels"]}
         predictions = {
             "generator": dictionary["generator_predictions"],
-            "discriminator": dictionary["discriminator_predictions"]
+            "discriminator": dictionary["discriminator_predictions"],
         }
 
         return EvalPrediction(labels, predictions)
