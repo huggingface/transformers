@@ -621,47 +621,52 @@ def main():
 
     model = CombinedModel(discriminator, generator, tokenizer, training_args, data_args)
 
-    def compute_accuracy(evaluation_predictions: EvalPrediction) -> Dict[str, int]:
+    def compute_metrics(evaluation_predictions: EvalPrediction) -> Dict[str, int]:
         predictions: Dict[str, np.ndarray] = evaluation_predictions.predictions
         labels: Dict[str, np.ndarray] = evaluation_predictions.label_ids
 
         generator_labels, generator_predictions = labels["generator"], predictions["generator"]
         discriminator_labels, discriminator_predictions = labels["discriminator"], predictions["discriminator"]
 
+        true_positives = np.logical_and(np.equal(discriminator_predictions, discriminator_labels), np.equal(discriminator_labels, 1)).sum().astype(float)
+        false_negatives = np.logical_and(np.not_equal(discriminator_predictions, discriminator_labels), np.equal(discriminator_labels, 1)).sum().astype(float)
+        false_positives = np.logical_and(np.not_equal(discriminator_predictions, discriminator_labels), np.equal(discriminator_labels, 0)).sum().astype(float)
+
         generator_accuracy = np.equal(generator_labels, generator_predictions).sum().astype(float) / generator_predictions.size
         discriminator_accuracy = np.equal(discriminator_labels, discriminator_predictions).sum().astype(float) / discriminator_labels.size
+        discriminator_precision = true_positives / (true_positives + false_positives)
+        discriminator_recall = true_positives / (true_positives + false_negatives)
 
-        return {"generator_accuracy": generator_accuracy, "discriminator_accuracy": discriminator_accuracy}
+        return {
+            "generator_accuracy": generator_accuracy,
+            "discriminator_accuracy": discriminator_accuracy,
+            "discriminator_precision": discriminator_precision,
+            "discriminator_recall": discriminator_recall
+        }
 
-    def manage_evaluation_predictions(model_outputs: Tuple[torch.Tensor]) -> Tuple[
-        Dict[str, torch.Tensor],
-        Callable[[Dict[str, np.ndarray]], EvalPrediction]
-    ]:
+    def manage_evaluation_predictions(model_outputs: Tuple[torch.Tensor]) -> Dict[str, torch.Tensor]:
         total_loss, models_output, generator_evaluation_values, discriminator_evaluation_values = model_outputs
         generator_labels, generator_predictions = generator_evaluation_values
         discriminator_labels, discriminator_predictions = discriminator_evaluation_values
 
-        label_dictionary = {
+        return {
             "generator_labels": generator_labels.detach(),
             "generator_predictions": generator_predictions.detach(),
             "discriminator_labels": discriminator_labels.detach(),
             "discriminator_predictions": discriminator_predictions.detach()
         }
 
-        def mapping(dictionary: Dict[str, np.ndarray]) -> EvalPrediction:
-            labels = {
-                "generator": dictionary["generator_labels"],
-                "discriminator": dictionary["discriminator_labels"]
-            }
-            predictions = {
-                "generator": dictionary["generator_predictions"],
-                "discriminator": dictionary["discriminator_predictions"]
-            }
+    def eval_prediction_mapping(dictionary: Dict[str, np.ndarray]) -> EvalPrediction:
+        labels = {
+            "generator": dictionary["generator_labels"],
+            "discriminator": dictionary["discriminator_labels"]
+        }
+        predictions = {
+            "generator": dictionary["generator_predictions"],
+            "discriminator": dictionary["discriminator_predictions"]
+        }
 
-            return EvalPrediction(labels, predictions)
-
-        return label_dictionary, mapping
-
+        return EvalPrediction(labels, predictions)
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -670,8 +675,9 @@ def main():
         data_collator=data_collator,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        compute_metrics=compute_accuracy,
+        compute_metrics=compute_metrics,
         manage_evaluation_predictions=manage_evaluation_predictions,
+        eval_prediction_mapping=eval_prediction_mapping,
         prediction_loss_only=True,
     )
 
