@@ -105,6 +105,7 @@ from .modeling_longformer import (
     LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
     LongformerForMaskedLM,
     LongformerForQuestionAnswering,
+    LongformerForMultipleChoice,
     LongformerForSequenceClassification,
     LongformerForTokenClassification,
     LongformerModel,
@@ -298,6 +299,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (CamembertConfig, CamembertForMultipleChoice),
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),
         (RobertaConfig, RobertaForMultipleChoice),
+        (LongformerConfig, LongformerForMultipleChoice),
         (BertConfig, BertForMultipleChoice),
         (XLNetConfig, XLNetForMultipleChoice),
     ]
