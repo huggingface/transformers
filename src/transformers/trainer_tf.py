@@ -65,7 +65,12 @@ class TFTrainer:
         else:
             self.train_steps: int = math.ceil(self.num_train_examples / self.args.train_batch_size)
 
-        ds = self.train_dataset.cache().shuffle(self.num_train_examples).batch(self.args.train_batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+        ds = (
+            self.train_dataset.cache()
+            .shuffle(self.num_train_examples)
+            .batch(self.args.train_batch_size)
+            .prefetch(tf.data.experimental.AUTOTUNE)
+        )
 
         if self.args.max_steps > 0:
             self.train_dataset = self.train_dataset.repeat(-1)
@@ -100,7 +105,11 @@ class TFTrainer:
             return self.optimizers
 
         optimizer, scheduler = create_optimizer(
-            self.args.learning_rate, self.train_steps, self.args.warmup_steps, adam_epsilon=self.args.adam_epsilon, weight_decay_rate=self.args.weight_decay
+            self.args.learning_rate,
+            self.train_steps,
+            self.args.warmup_steps,
+            adam_epsilon=self.args.adam_epsilon,
+            weight_decay_rate=self.args.weight_decay,
         )
 
         return optimizer, scheduler
@@ -225,7 +234,9 @@ class TFTrainer:
             self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, PREFIX_CHECKPOINT_DIR, max_to_keep=5)
 
             if self.model.ckpt_manager.latest_checkpoint:
-                logger.info("Checkpoint file %s found and restoring from checkpoint", self.model.ckpt_manager.latest_checkpoint)
+                logger.info(
+                    "Checkpoint file %s found and restoring from checkpoint", self.model.ckpt_manager.latest_checkpoint
+                )
 
                 ckpt.restore(self.model.ckpt_manager.latest_checkpoint).expect_partial()
 
@@ -240,7 +251,7 @@ class TFTrainer:
         epochs = 1 if self.args.max_steps > 0 else self.args.num_train_epochs
 
         if self.args.fp16:
-            policy = tf.keras.mixed_precision.experimental.Policy('mixed_float16')
+            policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
             tf.keras.mixed_precision.experimental.set_policy(policy)
 
         if self.tb_writer is not None:
