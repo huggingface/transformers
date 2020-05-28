@@ -98,7 +98,7 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.7.0",
+        "tokenizers == 0.8.0.dev1",
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
         # filesystem locks e.g. to prevent parallel downloads
