@@ -109,7 +109,6 @@ class FlaxPreTrainedModel(ABC):
                             pretrained_model_name_or_path,
                             ", ".join(cls.pretrained_model_archive_map.keys()),
                             archive_file,
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME],
                         )
                     )
                 raise EnvironmentError(msg)
