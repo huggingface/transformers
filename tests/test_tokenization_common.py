@@ -126,13 +126,13 @@ class TokenizerTesterMixin:
         # Test for str and pathlib.Path
         for path in [self.tmpdirname, Path(self.tmpdirname)]:
             tokenizer.save_pretrained(path)
-            tokenizer = self.tokenizer_class.from_pretrained(path)
+            tokenizer = self.tokenizer_class.from_pretrained(str(path))
 
             after_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
             self.assertListEqual(before_tokens, after_tokens)
 
             self.assertEqual(tokenizer.max_len, 42)
-            tokenizer = self.tokenizer_class.from_pretrained(path, max_len=43)
+            tokenizer = self.tokenizer_class.from_pretrained(str(path), max_len=43)
             self.assertEqual(tokenizer.max_len, 43)
 
     def test_pickle_tokenizer(self):
