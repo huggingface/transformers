@@ -448,6 +448,7 @@ if is_tf_available():
         TFElectraForPreTraining,
         TFElectraForQuestionAnswering,
         TFElectraForTokenClassification,
+        TFElectraForSequenceClassification,
         TFElectraModel,
         TFElectraPreTrainedModel,
     )
