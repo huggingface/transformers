@@ -729,3 +729,72 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             outputs = (loss,) + outputs
 
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
+
+
+
+class TFElectraClassificationHead(tf.keras.layers.Layer):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.out_proj = tf.keras.layers.Dense(
+            config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="out_proj",
+            activation="tanh", #gelu is not included yet in tf (!) so I don't want to add a dependency in tfa for now.
+        )
+
+    def call(self, features, training=False):
+        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = self.dropout(x, training=training)
+        x = self.out_proj(x)
+        return x
+
+@add_start_docstrings(
+    """ELECTRA Model transformer with a sequence classification/regression head on top (a linear layer on top of
+    the pooled output) e.g. for GLUE tasks. """,
+    ELECTRA_START_DOCSTRING,
+)
+class TFElectraForSequenceClassification(TFElectraPreTrainedModel):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+        self.electra = TFElectraModel(config, name="electra")
+        self.classifier = TFElectraClassificationHead(config=config)
+
+    @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
+    def call(self, inputs, **kwargs):
+        r"""
+    Returns:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
+        logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`)
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import ElectraTokenizer, TFElectraForSequenceClassification
+
+        tokenizer = ElectraTokenizer.from_pretrained('electra-base')
+        model = TFElectraForSequenceClassification.from_pretrained('electra-base')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        logits = outputs[0]
+
+        """
+        outputs = self.electra(inputs, **kwargs)
+        logits = self.classifier(outputs[0])
+        outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        return outputs  # logits, (hidden_states), (attentions)

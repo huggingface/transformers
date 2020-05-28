@@ -108,6 +108,7 @@ class ElectraConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        classifier_dropout_prob=0.1,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -125,3 +126,4 @@ class ElectraConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.classifier_dropout_prob = classifier_dropout_prob

@@ -78,7 +78,7 @@ from .modeling_tf_electra import (
     TFElectraForQuestionAnswering,
     TFElectraForTokenClassification,
     TFElectraModel,
-)
+    TFElectraForSequenceClassification)
 from .modeling_tf_flaubert import (
     TFFlaubertForMultipleChoice,
     TFFlaubertForQuestionAnsweringSimple,
@@ -228,6 +228,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (XLMConfig, TFXLMForSequenceClassification),
         (XLMRobertaConfig, TFXLMRobertaForSequenceClassification),
         (XLNetConfig, TFXLNetForSequenceClassification),
+        (ElectraConfig, TFElectraForSequenceClassification),
     ]
 )
 
