@@ -332,14 +332,20 @@ class ElectraModel(ElectraPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         hidden_states = self.embeddings(
-            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+            input_ids=input_ids, 
+            position_ids=position_ids, 
+            token_type_ids=token_type_ids, 
+            inputs_embeds=inputs_embeds
         )
 
         if hasattr(self, "embeddings_project"):
             hidden_states = self.embeddings_project(hidden_states)
 
-        hidden_states = self.encoder(hidden_states, attention_mask=extended_attention_mask, head_mask=head_mask,
-                                     encoder_hidden_states=encoder_hidden_states, encoder_attention_mask=encoder_extended_attention_mask,)
+        hidden_states = self.encoder(hidden_states, 
+                                     attention_mask=extended_attention_mask, 
+                                     head_mask=head_mask,
+                                     encoder_hidden_states=encoder_hidden_states, 
+                                     encoder_attention_mask=encoder_extended_attention_mask)
 
         return hidden_states
 
@@ -429,7 +435,12 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
 
         """
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
+            input_ids, 
+            attention_mask, 
+            token_type_ids, 
+            position_ids, 
+            head_mask, 
+            inputs_embeds,
         )
 
         sequence_output = discriminator_hidden_states[0]
@@ -620,7 +631,14 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         """
 
         generator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, encoder_hidden_states, encoder_attention_mask
+            input_ids, 
+            attention_mask, 
+            token_type_ids, 
+            position_ids, 
+            head_mask, 
+            inputs_embeds, 
+            encoder_hidden_states, 
+            encoder_attention_mask
         )
         generator_sequence_output = generator_hidden_states[0]
 
@@ -738,7 +756,12 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         """
 
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
+            input_ids, 
+            attention_mask, 
+            token_type_ids, 
+            position_ids, 
+            head_mask, 
+            inputs_embeds
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 
