@@ -146,8 +146,7 @@ class DataTrainingArguments:
     )
 
     max_predictions_per_sequence: int = field(
-        default=-1,
-        metadata={"help": "Maximum tokens that will be masked in a sequence."},
+        default=-1, metadata={"help": "Maximum tokens that will be masked in a sequence."},
     )
 
 
@@ -375,15 +374,14 @@ class CombinedModel(nn.Module):
         number_of_tokens_to_be_masked = torch.max(
             torch.tensor(1),
             torch.min(
-                torch.tensor(self.max_predictions_per_sequence),
-                torch.tensor(total_number_of_tokens * self.mask_probability, dtype=torch.long),
+                torch.tensor(self.max_predictions_per_sequence, dtype=torch.long),
+                torch.tensor(int(total_number_of_tokens * self.mask_probability), dtype=torch.long),
             ),
         )
 
         # The probability of each token being masked
         sample_prob = proposal_distribution * inputs_which_can_be_masked
         sample_prob /= torch.sum(sample_prob)
-        # Should be passed through a log function here
 
         # Sample from the probabilities
         masked_lm_positions = sample_prob.multinomial(number_of_tokens_to_be_masked)
@@ -403,18 +401,11 @@ class CombinedModel(nn.Module):
         return torch.reshape(gathered, [batch_size, -1, dimension])
 
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        labels=None,
+        self, input_ids=None, attention_mask=None, token_type_ids=None, position_ids=None, head_mask=None, labels=None,
     ):
         # get the masked positions as well as their original values
         masked_input_ids, masked_lm_positions = self.mask_inputs(
-            input_ids,
-            [self.tokenizer.cls_token_id, self.tokenizer.sep_token_id, self.tokenizer.mask_token_id],
+            input_ids, [self.tokenizer.cls_token_id, self.tokenizer.sep_token_id, self.tokenizer.mask_token_id],
         )
 
         # only masked values should be counted in the loss; build a tensor containing the true values and -100 otherwise
