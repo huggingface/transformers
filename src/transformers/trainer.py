@@ -783,14 +783,14 @@ class Trainer:
                         logits = outputs[0]
 
                     if not prediction_loss_only:
-                        if "preds" not in evaluation_values["preds"]:
+                        if "preds" not in evaluation_values:
                             evaluation_values["preds"] = logits.detach()
                         else:
                             evaluation_values["preds"] = torch.cat(
                                 (evaluation_values["preds"], logits.detach()), dim=0
                             )
                         if inputs.get("labels") is not None:
-                            if "label_ids" not in evaluation_values["label_ids"]:
+                            if "label_ids" not in evaluation_values:
                                 evaluation_values["label_ids"] = inputs["labels"].detach()
                             else:
                                 evaluation_values["label_ids"] = torch.cat(
@@ -833,7 +833,7 @@ class Trainer:
             if self.manage_evaluation_predictions is not None and self.eval_prediction_mapping is not None:
                 eval_predictions = self.eval_prediction_mapping(evaluation_values_numpy)
                 metrics = self.compute_metrics(eval_predictions)
-            elif evaluation_values_numpy["preds"] is not None and evaluation_values_numpy["label_ids"] is not None:
+            elif "preds" in evaluation_values_numpy and "label_ids" in evaluation_values_numpy:
                 eval_predictions = EvalPrediction(
                     predictions=evaluation_values_numpy["preds"], label_ids=evaluation_values_numpy["label_ids"]
                 )
