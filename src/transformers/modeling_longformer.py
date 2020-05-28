@@ -1099,7 +1099,6 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         attention_mask=None,
         labels=None,
         position_ids=None,
-        head_mask=None,
         inputs_embeds=None,
     ):
         r"""
@@ -1153,7 +1152,6 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
             position_ids=flat_position_ids,
             token_type_ids=flat_token_type_ids,
             attention_mask=flat_attention_mask,
-            head_mask=head_mask,
         )
         pooled_output = outputs[1]
 

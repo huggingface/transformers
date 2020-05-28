@@ -104,8 +104,8 @@ from .modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, GPT2LMHeadModel, G
 from .modeling_longformer import (
     LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
     LongformerForMaskedLM,
-    LongformerForQuestionAnswering,
     LongformerForMultipleChoice,
+    LongformerForQuestionAnswering,
     LongformerForSequenceClassification,
     LongformerForTokenClassification,
     LongformerModel,
@@ -298,8 +298,8 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         (CamembertConfig, CamembertForMultipleChoice),
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),
-        (RobertaConfig, RobertaForMultipleChoice),
         (LongformerConfig, LongformerForMultipleChoice),
+        (RobertaConfig, RobertaForMultipleChoice),
         (BertConfig, BertForMultipleChoice),
         (XLNetConfig, XLNetForMultipleChoice),
     ]
