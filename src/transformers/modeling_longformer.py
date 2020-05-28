@@ -411,7 +411,7 @@ LONGFORMER_START_DOCSTRING = r"""
 
 LONGFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`transformers.LonmgformerTokenizer`.
@@ -419,7 +419,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Mask to decide the attention given on each token, local attention, global attenion, or no attention (for padding tokens).
             Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
@@ -431,13 +431,13 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             ``2`` for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
@@ -537,7 +537,7 @@ class LongformerModel(RobertaModel):
 
         return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -641,7 +641,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -729,7 +729,7 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         self.longformer = LongformerModel(config)
         self.classifier = LongformerClassificationHead(config)
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -866,7 +866,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
 
         return sep_token_indices.view(batch_size, 3, 2)[:, 0, 1]
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids,
@@ -993,7 +993,7 @@ class LongformerForTokenClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -1091,7 +1091,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -1134,7 +1134,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         import torch
 
         tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
-        model = LongformerForMultipleChoice.from_pretrained('longformer-base-4096') 
+        model = LongformerForMultipleChoice.from_pretrained('longformer-base-4096')
         choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
         input_ids = torch.tensor([tokenizer.encode(s, add_special_tokens=True) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
         labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
