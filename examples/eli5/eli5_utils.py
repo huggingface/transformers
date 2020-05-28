@@ -166,7 +166,7 @@ class WikiKILT(nlp.GeneratorBasedBuilder):
 
     def _info(self):
         return nlp.DatasetInfo(
-                description=_DESCRIPTION,
+                description=_DESCRIPTION_KILT,
                 features=nlp.Features({
                         "title": nlp.Value("string"),
                         "kilt_id": nlp.Value("string"),
@@ -185,7 +185,7 @@ class WikiKILT(nlp.GeneratorBasedBuilder):
                 }),
                 supervised_keys=None,
                 homepage="https://facebookresearch.github.io/KILT",
-                citation=_CITATION,
+                citation=_CITATION_KILT,
         )
 
     def _split_generators(self, dl_manager):
@@ -292,7 +292,7 @@ class KiltSnippets(nlp.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager):
         kilt_dbuilder = WikiKILT(data_dir='wiki_kilt')
-        kilt_dbuilder.download_and_prepare(ignore_checksums=True)
+        kilt_dbuilder.download_and_prepare()
         self.kilt_dataset = kilt_dbuilder.as_dataset(split=nlp.splits.Split.TRAIN)
         return [
                 nlp.SplitGenerator(
@@ -854,7 +854,7 @@ def make_qa_dense_index(qa_embedder, tokenizer, passages_dset,
 
 # build a support document for the question out of Wikipedia snippets
 def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10):
-    q_rep = embed_question_for_retrievals([question], tokenizer, qa_embedder)
+    q_rep = embed_questions_for_retrieval([question], tokenizer, qa_embedder)
     D, I = wiki_index.search(q_rep, n_results)
     res_passages = [wiki_passages[int(i)] for i in I[0]]
     support_doc = '<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
@@ -864,7 +864,7 @@ def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_i
     return support_doc, res_list
 
 def batch_query_qa_dense_index(questions, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10):
-    q_rep = embed_question_for_retrievals(questions, tokenizer, qa_embedder)
+    q_rep = embed_questions_for_retrieval(questions, tokenizer, qa_embedder)
     D, I = wiki_index.search(q_rep, n_results)
     res_passages_lst = [[wiki_passages[int(i)] for i in i_lst] for i_lst in I]
     support_doc_lst = ['<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
