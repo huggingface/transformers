@@ -1,4 +1,4 @@
-from typing import Dict, NamedTuple, Optional
+from typing import Dict, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -9,8 +9,8 @@ class EvalPrediction(NamedTuple):
     to compute metrics.
     """
 
-    predictions: np.ndarray
-    label_ids: np.ndarray
+    predictions: Union[np.ndarray, Dict[str, np.ndarray]]
+    label_ids: Union[np.ndarray, Dict[str, np.ndarray]]
 
 
 class PredictionOutput(NamedTuple):

@@ -7,7 +7,7 @@ import re
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -162,6 +162,10 @@ class Trainer:
     train_dataset: Optional[Dataset]
     eval_dataset: Optional[Dataset]
     compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None
+    manage_evaluation_predictions: Optional[Callable[
+        [Tuple[torch.Tensor]],
+        Tuple[Dict[str, torch.Tensor], Callable[[Dict[str, np.ndarray]], EvalPrediction]]]
+    ] = None
     prediction_loss_only: bool
     tb_writer: Optional["SummaryWriter"] = None
     optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None
@@ -176,6 +180,7 @@ class Trainer:
         train_dataset: Optional[Dataset] = None,
         eval_dataset: Optional[Dataset] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
+        manage_evaluation_predictions: Optional[Callable[[Tuple[torch.Tensor]], EvalPrediction]] = None,
         prediction_loss_only=False,
         tb_writer: Optional["SummaryWriter"] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None,
@@ -197,6 +202,7 @@ class Trainer:
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
+        self.manage_evaluation_predictions = manage_evaluation_predictions
         self.prediction_loss_only = prediction_loss_only
         self.optimizers = optimizers
         if tb_writer is not None:
@@ -745,8 +751,7 @@ class Trainer:
         logger.info("  Num examples = %d", self.num_examples(dataloader))
         logger.info("  Batch size = %d", batch_size)
         eval_losses: List[float] = []
-        preds: torch.Tensor = None
-        label_ids: torch.Tensor = None
+        evaluation_values: Union[Dict[str, Union[torch.Tensor, None]], None] = None
         model.eval()
 
         if is_tpu_available():
@@ -763,22 +768,40 @@ class Trainer:
 
             with torch.no_grad():
                 outputs = model(**inputs)
-                if has_labels:
-                    step_eval_loss, logits = outputs[:2]
-                    eval_losses += [step_eval_loss.mean().item()]
-                else:
-                    logits = outputs[0]
 
-            if not prediction_loss_only:
-                if preds is None:
-                    preds = logits.detach()
-                else:
-                    preds = torch.cat((preds, logits.detach()), dim=0)
-                if inputs.get("labels") is not None:
-                    if label_ids is None:
-                        label_ids = inputs["labels"].detach()
+                if self.manage_evaluation_predictions is None:
+                    evaluation_values = {"preds": None, "label_ids": None}
+                    if has_labels:
+                        step_eval_loss, logits = outputs[:2]
+                        eval_losses += [step_eval_loss.mean().item()]
                     else:
-                        label_ids = torch.cat((label_ids, inputs["labels"].detach()), dim=0)
+                        logits = outputs[0]
+
+                    if not prediction_loss_only:
+                        if evaluation_values["preds"] is None:
+                            evaluation_values["preds"] = logits.detach()
+                        else:
+                            evaluation_values["preds"] = torch.cat((evaluation_values["preds"], logits.detach()), dim=0)
+                        if inputs.get("labels") is not None:
+                            if evaluation_values["label_ids"] is None:
+                                evaluation_values["label_ids"] = inputs["labels"].detach()
+                            else:
+                                evaluation_values["label_ids"] = torch.cat(
+                                    (evaluation_values["label_ids"], inputs["labels"].detach()),
+                                    dim=0
+                                )
+                else:
+                    if evaluation_values is None:
+                        evaluation_items = self.manage_evaluation_predictions(outputs)
+                        if len(evaluation_items) == 2:
+                            evaluation_values, mapping_method = evaluation_items
+                        else:
+                            evaluation_values = evaluation_items[0]
+                            mapping_method = None
+                    else:
+                        for key, value in self.manage_evaluation_predictions(outputs)[0].items():
+                            evaluation_values[key] = torch.cat((evaluation_values[key], value), dim=0)
+
 
             evaluation_total_steps += 1
 
@@ -790,25 +813,33 @@ class Trainer:
         if self.args.local_rank != -1:
             # In distributed mode, concatenate all results from all nodes:
             total_examples = self.args.max_eval_steps if self.args.max_eval_steps > 0 else self.num_examples(dataloader)
-            if preds is not None:
-                preds = self.distributed_concat(preds, num_total_examples=total_examples)
-            if label_ids is not None:
-                label_ids = self.distributed_concat(label_ids, num_total_examples=total_examples)
+            for key, value in evaluation_values.items():
+                if value is not None:
+                    evaluation_values[key] = self.distributed_concat(value, num_total_examples=total_examples)
         elif is_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
-            if preds is not None:
-                preds = xm.mesh_reduce("eval_preds", preds, torch.cat)
-            if label_ids is not None:
-                label_ids = xm.mesh_reduce("eval_label_ids", label_ids, torch.cat)
+            for key, value in evaluation_values.items():
+                if value is not None:
+                    evaluation_values[key] = xm.mesh_reduce(key, value, torch.cat)
 
         # Finally, turn the aggregated tensors into numpy arrays.
-        if preds is not None:
-            preds = preds.cpu().numpy()
-        if label_ids is not None:
-            label_ids = label_ids.cpu().numpy()
+        for key, value in evaluation_values.items():
+            if value is not None:
+                evaluation_values[key] = value.cpu().numpy()
 
-        if self.compute_metrics is not None and preds is not None and label_ids is not None:
-            metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
+        eval_predictions = EvalPrediction(None, None)
+        if self.compute_metrics is not None:
+            if self.manage_evaluation_predictions is not None and mapping_method is not None:
+                eval_predictions = mapping_method(evaluation_values)
+                metrics = self.compute_metrics(eval_predictions)
+            elif evaluation_values["preds"] is not None and evaluation_values["label_ids"] is not None:
+                eval_predictions = EvalPrediction(
+                    predictions=evaluation_values["preds"],
+                    label_ids=evaluation_values["label_ids"]
+                )
+                metrics = self.compute_metrics(eval_predictions)
+            else:
+                metrics = {}
         else:
             metrics = {}
         if len(eval_losses) > 0:
@@ -819,7 +850,11 @@ class Trainer:
             if not key.startswith("eval_"):
                 metrics[f"eval_{key}"] = metrics.pop(key)
 
-        return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
+        return PredictionOutput(
+            predictions=eval_predictions.predictions,
+            label_ids=eval_predictions.label_ids,
+            metrics=metrics
+        )
 
     def distributed_concat(self, tensor: torch.Tensor, num_total_examples: int) -> torch.Tensor:
         assert self.args.local_rank != -1
