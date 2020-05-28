@@ -14,9 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for language modeling on a text file (GPT, GPT-2, BERT, RoBERTa).
-GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa are fine-tuned
-using a masked language modeling (MLM) loss.
+Pre-training language models using the ELECTRA method.
 """
 
 
@@ -148,14 +146,13 @@ class DataTrainingArguments:
     )
 
     max_predictions_per_sequence: int = field(
-        # Original implementation has a default of :(mask_probability + 0.005) * max_sequence_length
-        default=int((0.15 + 0.005) * 128),
+        default=-1,
         metadata={"help": "Maximum tokens that will be masked in a sequence."},
     )
 
 
 @dataclass
-class EfficientTrainingArguments(TrainingArguments):
+class ElectraTrainingArguments(TrainingArguments):
     max_steps: int = field(
         default=1_000_000,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
@@ -336,7 +333,7 @@ class CombinedModel(nn.Module):
         discriminator: PreTrainedModel,
         generator: PreTrainedModel,
         tokenizer: PreTrainedTokenizer,
-        training_args: EfficientTrainingArguments,
+        training_args: ElectraTrainingArguments,
         data_args: DataTrainingArguments,
     ):
         super().__init__()
@@ -353,6 +350,10 @@ class CombinedModel(nn.Module):
         self.generator_weight = training_args.generator_weight
         self.mask_probability = data_args.mask_probability
         self.max_predictions_per_sequence = data_args.max_predictions_per_sequence
+
+        # Original implementation has a default of :(mask_probability + 0.005) * max_sequence_length
+        if self.max_predictions_per_sequence == -1:
+            self.max_predictions_per_sequence = (self.mask_probability + 0.005) * data_args.block_size
 
         class Config:
             xla_device: bool = False
@@ -499,7 +500,7 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, EfficientTrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, ElectraTrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if data_args.open_web_text_directory is None and data_args.eval_data_file is None and training_args.do_eval:
@@ -572,8 +573,8 @@ def main():
         model_args.tokenizer_name = model_args.discriminator_name_or_path
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported, but you can do it from another script, save it,"
-            "and load it from here, using --tokenizer_name"
+            "You are instantiating a new tokenizer from scratch. This is not supported, but you can do it from another "
+            "script, save it, and load it from here, using --tokenizer_name"
         )
 
     if model_args.discriminator_name_or_path:
