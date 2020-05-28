@@ -393,7 +393,7 @@ class TFTrainer:
           test_dataset: something similar to a PT Dataset. This is just
             temporary before to have a framework-agnostic approach for datasets.
         """
-        test_ds = self.get_test_tfdataset()
+        test_ds = self.get_test_tfdataset(test_dataset)
 
         return self._prediction_loop(test_ds, description="Prediction")
 
