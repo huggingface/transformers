@@ -19,6 +19,7 @@ import pickle
 import shutil
 import tempfile
 from collections import OrderedDict
+from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Tuple, Union
 
 from tests.utils import require_tf, require_torch
@@ -122,15 +123,17 @@ class TokenizerTesterMixin:
         sample_text = "He is very happy, UNwant\u00E9d,running"
         before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
 
-        tokenizer.save_pretrained(self.tmpdirname)
-        tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname)
+        # Test for str and pathlib.Path
+        for path in [self.tmpdirname, Path(self.tmpdirname)]:
+            tokenizer.save_pretrained(path)
+            tokenizer = self.tokenizer_class.from_pretrained(path)
 
-        after_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
-        self.assertListEqual(before_tokens, after_tokens)
+            after_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
+            self.assertListEqual(before_tokens, after_tokens)
 
-        self.assertEqual(tokenizer.max_len, 42)
-        tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname, max_len=43)
-        self.assertEqual(tokenizer.max_len, 43)
+            self.assertEqual(tokenizer.max_len, 42)
+            tokenizer = self.tokenizer_class.from_pretrained(path, max_len=43)
+            self.assertEqual(tokenizer.max_len, 43)
 
     def test_pickle_tokenizer(self):
         """Google pickle __getstate__ __setstate__ if you are struggling with this."""
