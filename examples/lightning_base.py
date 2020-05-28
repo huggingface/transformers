@@ -160,7 +160,7 @@ class BaseTransformer(pl.LightningModule):
 
         # Parse temp args and import xm if using TPU so we have it available in global namespace
         temp_args, _ = parser.parse_known_args()
-        if temp_args.tpu_cores is not None:
+        if temp_args.num_tpu_cores is not None:
             global xm
             import xm
 

@@ -98,24 +98,16 @@ class GLUETransformer(BaseTransformer):
 
                 return features
 
-            # TODO - check if this is still right or if it needs updating
-            if self.config.model_type in ["bert", "xlnet", "albert"]:
-                cols_to_keep = ["input_ids", "attention_mask", "token_type_ids", "labels"]
-            else:
-                cols_to_keep = ["input_ids", "attention_mask", "labels"]
-
-            # Splits are train, val, and test, but for MNLI there will be 2 val and 2 test datasets
-            splits = ["train", "validation", "test"]
-            if self.hparams.task == "mnli":
-                splits = ["train"] + [s + mnli_split for mnli_split in ("_matched", "_mismatched") for s in splits[1:]]
-
+            drop_cols = text_fields + ["label", "idx"]
             # Process each dataset inplace and set the format to torch tensors
-            for split in splits:
+            for split in self.dataset.keys():
                 logger.info(f"Preparing {self.hparams.task} - Split: {split}")
-                self.dataset[split] = self.dataset[split].map(convert_to_features, batched=True)
-                self.dataset[split].set_format(
-                    type="torch", columns=cols_to_keep if not split.startswith("test") else cols_to_keep + ["idx"]
+                self.dataset[split] = self.dataset[split].map(
+                    convert_to_features,
+                    remove_columns=drop_cols if not split.startswith("test") else drop_cols[:-1],
+                    batched=True,
                 )
+                self.dataset[split].set_format(type="torch")
 
             # Save the processed data to cache file so we don't have to process same data more than once
             # TODO - is there a way to do this with just the nlp library?
