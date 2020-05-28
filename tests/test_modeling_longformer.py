@@ -30,6 +30,7 @@ if is_torch_available():
         LongformerModel,
         LongformerForMaskedLM,
         LongformerForSequenceClassification,
+        LongformerForTokenClassification,
         LongformerForQuestionAnswering,
     )
 
@@ -212,6 +213,21 @@ class LongformerModelTester(object):
         self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
         self.check_loss_output(result)
 
+    def create_and_check_longformer_for_token_classification(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = LongformerForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        loss, logits = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        result = {
+            "loss": loss,
+            "logits": logits,
+        }
+        self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels])
+        self.check_loss_output(result)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -277,6 +293,10 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_longformer_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_longformer_for_token_classification(*config_and_inputs)
 
 
 class LongformerModelIntegrationTest(unittest.TestCase):
