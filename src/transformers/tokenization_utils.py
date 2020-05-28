@@ -207,7 +207,7 @@ def convert_to_tensors(batch_outputs: MutableMapping, return_tensors: Union[str,
 
             # at-least2d
             if tensor.ndim > 2:
-                tensor.squeeze_(0)
+                tensor = tensor.squeeze(0)
             elif tensor.ndim < 2:
                 tensor = tensor[None, :]
 
