@@ -92,7 +92,7 @@ class TFTrainer:
         return self.args.strategy.experimental_distribute_dataset(ds)
 
     def get_optimizers(
-        self
+        self,
     ) -> Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule]:
         """
         Setup the optimizer and the learning rate scheduler.
@@ -229,7 +229,7 @@ class TFTrainer:
 
         with self.args.strategy.scope():
             optimizer, lr_scheduler = self.get_optimizers()
-            iterations = self.optimizer.iterations
+            iterations = optimizer.iterations
             ckpt = tf.train.Checkpoint(optimizer=optimizer, model=self.model)
             self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, PREFIX_CHECKPOINT_DIR, max_to_keep=5)
 
@@ -254,10 +254,10 @@ class TFTrainer:
             policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
             tf.keras.mixed_precision.experimental.set_policy(policy)
 
-        if self.tb_writer is not None:
-            self.tb_writer.text("args", self.args.to_json_string())
-            for k, v in self.args.to_sanitized_dict.items():
-                tf.summary.scalar(k, v)
+        with self.tb_writer.as_default():
+            tf.summary.text("args", self.args.to_json_string())
+
+        self.tb_writer.flush()
 
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", self.num_train_examples)
@@ -269,11 +269,11 @@ class TFTrainer:
                 step = iterations.numpy()
 
                 if self.args.debug:
-                    with self.writer.as_default():
+                    with self.tb_writer.as_default():
                         tf.summary.scalar("loss", training_loss, step=step)
 
                 if step == 1 and self.args.debug:
-                    with self.writer.as_default():
+                    with self.tb_writer.as_default():
                         tf.summary.trace_export(name="training", step=step, profiler_outdir=self.args.logging_dir)
 
                 if self.args.evaluate_during_training and step % self.args.eval_steps == 0:
@@ -288,7 +288,7 @@ class TFTrainer:
 
                     logger.info("Epoch {} Step {} Validation Metrics {}".format(epoch, step, logs))
 
-                    with self.writer.as_default():
+                    with self.tb_writer.as_default():
                         for k, v in logs.items():
                             tf.summary.scalar(k, v, step=step)
 
@@ -316,7 +316,7 @@ class TFTrainer:
     @tf.function
     def _apply_gradients(self, optimizer):
         """Applies the gradients (cross-replica)."""
-        self.args.strategy.experimental_run_v2(self._step, args=(optimizer))
+        self.args.strategy.experimental_run_v2(self._step, args=(optimizer,))
 
     def _step(self, optimizer):
         """Applies gradients and resets accumulation."""
