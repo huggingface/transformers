@@ -27,10 +27,10 @@ While movement pruning does not directly optimize for memory footprint (but rath
 
 ## Fine-pruned models
 
-As examples, we release two fine-pruned English models on SQuAD and MNLI:
+As examples, we release two English PruneBERT checkpoints (models fine-pruned from a pre-trained `BERT` checkpoint), one on SQuAD and the other on MNLI.
 
-- **`prunebert-6-finetuned-squad`**: Pre-trained `BERT-base-uncased` fine-pruned with soft movement pruning on SQuAD v1.1. The encoder counts 6% of total non-null weights and reaches 83.8 F1 score (95% of `BERT-base-uncased`'s performance). The model can be accessed with: `pruned_bert = BertForQuestionAnswering.from_pretrained(TODO)`
-- **`prunebert-6-finetuned-mnli`**: Pre-trained `BERT-base-uncased` fine-pruned with soft movement pruning on MNLI. The encoder counts 6% of total non-null weights and reaches 80.7 (matched) accuracy (95% of `BERT-base-uncased`'s performance). The model can be accessed with: `pruned_bert = BertForSequenceClassification.from_pretrained(TODO)`
+- **`prunebert-6-finetuned-squad`**: Pre-trained `BERT-base-uncased` fine-pruned with soft movement pruning on SQuAD v1.1. We use an additional distillation signal from `BERT-base-uncased` finetuned on SQuAD. The encoder counts 6% of total non-null weights and reaches 83.8 F1 score (95% of `BERT-base-uncased`'s performance). The model can be accessed with: `pruned_bert = BertForQuestionAnswering.from_pretrained(TODO)`
+- **`prunebert-6-finetuned-mnli`**: Pre-trained `BERT-base-uncased` fine-pruned with soft movement pruning on MNLI. We use an additional distillation signal from `BERT-base-uncased` finetuned on MNLI. The encoder counts 6% of total non-null weights and reaches 80.7 (matched) accuracy (95% of `BERT-base-uncased`'s performance). The model can be accessed with: `pruned_bert = BertForSequenceClassification.from_pretrained(TODO)`
 
 ## How to fine-prune?
 
