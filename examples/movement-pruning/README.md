@@ -159,7 +159,7 @@ python examples/movement-pruning/bertarize.py \
 
 For reproducibility purposes, we share the detailed results presented in the paper. This [spreadsheet](TODO) exhaustively describes the individual hyper-parameters used for each data point.
 
-## Remarks
+## Inference speed
 
 Early experiments show that even though models fine-pruned with (soft) movement pruning are extremely sparse, they do not benefit from significant improvement in terms of inference speed when using the standard PyTorch inference.
 We are currently benchmarking and exploring inference setups specifically for sparse architectures.
