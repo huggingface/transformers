@@ -25,6 +25,7 @@ import re
 import warnings
 from collections import UserDict, defaultdict
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 from tokenizers import AddedToken as AddedTokenFast
@@ -1086,7 +1087,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         return tokenizer
 
-    def save_pretrained(self, save_directory):
+    def save_pretrained(self, save_directory: Union[str, Path]):
         """ Save the tokenizer vocabulary files together with:
                 - added tokens,
                 - special-tokens-to-class-attributes-mapping,
@@ -1098,6 +1099,10 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             This method make sure the full tokenizer can then be re-loaded using the
             :func:`~transformers.PreTrainedTokenizer.from_pretrained` class method.
         """
+
+        # Ensure save_directory is a str
+        save_directory = str(save_directory)
+
         if not os.path.isdir(save_directory):
             logger.error("Saving directory ({}) should be a directory".format(save_directory))
             return
@@ -1127,7 +1132,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         return vocab_files + (special_tokens_map_file, added_tokens_file)
 
-    def save_vocabulary(self, save_directory) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: Union[str, Path]) -> Tuple[str]:
         """ Save the tokenizer vocabulary to a directory. This method does *NOT* save added tokens
             and special token mappings.
 
@@ -2661,12 +2666,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         else:
             return text
 
-    def save_vocabulary(self, save_directory: str) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: Union[str, Path]) -> Tuple[str]:
         if os.path.isdir(save_directory):
-            files = self._tokenizer.save(save_directory)
+            files = self._tokenizer.save(str(save_directory))
         else:
             folder, file = os.path.split(os.path.abspath(save_directory))
-            files = self._tokenizer.save(folder, name=file)
+            files = self._tokenizer.save(str(folder), name=file)
 
         return tuple(files)
 
