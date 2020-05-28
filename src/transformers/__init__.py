@@ -326,6 +326,7 @@ if is_torch_available():
         LongformerModel,
         LongformerForMaskedLM,
         LongformerForSequenceClassification,
+        LongformerForMultipleChoice,
         LongformerForTokenClassification,
         LongformerForQuestionAnswering,
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
