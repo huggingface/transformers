@@ -1662,7 +1662,7 @@ class ReformerModel(ReformerPreTrainedModel):
                 padded_position_ids = position_ids.unsqueeze(0).expand(input_shape[0], padding_length)
                 position_ids = torch.cat([position_ids, padded_position_ids], dim=-1)
 
-        # Extend `input_embeds` with padding to match least common multiple chunk_length
+        # Extend `inputs_embeds` with padding to match least common multiple chunk_length
         if inputs_embeds is not None:
             padded_inputs_embeds = self.embeddings(padded_input_ids, position_ids)
             inputs_embeds = torch.cat([inputs_embeds, padded_inputs_embeds], dim=-2)
