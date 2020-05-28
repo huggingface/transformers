@@ -832,3 +832,21 @@ class TokenizerTesterMixin:
             # This should not fail
             model(encoded_sequence_fast)
             model(batch_encoded_sequence_fast)
+
+    def test_np_encode_plus_sent_to_model(self):
+        tokenizer = self.get_tokenizer()
+
+        # Build sequence
+        first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
+        sequence = " ".join(first_ten_tokens)
+        encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="np")
+        batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
+
+        # TODO: add forward through JAX/Flax when PR is merged
+
+        if self.test_rust_tokenizer:
+            fast_tokenizer = self.get_rust_tokenizer()
+            encoded_sequence_fast = fast_tokenizer.encode_plus(sequence, return_tensors="np")
+            batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
+
+            # TODO: add forward through JAX/Flax when PR is merged
