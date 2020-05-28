@@ -24,12 +24,13 @@ import random
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
-from torch.utils.data.distributed import DistributedSampler
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
+from emmental import MaskedBertConfig, MaskedBertForSequenceClassification
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -43,7 +44,6 @@ from transformers import glue_convert_examples_to_features as convert_examples_t
 from transformers import glue_output_modes as output_modes
 from transformers import glue_processors as processors
 
-from emmental import MaskedBertConfig, MaskedBertForSequenceClassification
 
 try:
     from torch.utils.tensorboard import SummaryWriter
