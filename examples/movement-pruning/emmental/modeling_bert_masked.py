@@ -26,13 +26,16 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
+from emmental import MaskedBertConfig, MaskedLinear
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.modeling_bert import (
+    ACT2FN,
+    BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+    BertLayerNorm,
+    load_tf_weights_in_bert,
+)
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
-from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
-from transformers.modeling_bert import load_tf_weights_in_bert, ACT2FN, BertLayerNorm
 
-from emmental import MaskedLinear
-from emmental import MaskedBertConfig
 
 logger = logging.getLogger(__name__)
 
