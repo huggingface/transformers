@@ -92,7 +92,7 @@ class TFTrainer:
         return self.args.strategy.experimental_distribute_dataset(ds)
 
     def get_optimizers(
-        self, num_training_steps: int
+        self
     ) -> Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule]:
         """
         Setup the optimizer and the learning rate scheduler.
