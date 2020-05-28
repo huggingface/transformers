@@ -106,6 +106,7 @@ from .modeling_longformer import (
     LongformerForMaskedLM,
     LongformerForQuestionAnswering,
     LongformerForSequenceClassification,
+    LongformerForTokenClassification,
     LongformerModel,
 )
 from .modeling_marian import MarianMTModel
@@ -282,6 +283,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (CamembertConfig, CamembertForTokenClassification),
         (XLMConfig, XLMForTokenClassification),
         (XLMRobertaConfig, XLMRobertaForTokenClassification),
+        (LongformerConfig, LongformerForTokenClassification),
         (RobertaConfig, RobertaForTokenClassification),
         (BertConfig, BertForTokenClassification),
         (XLNetConfig, XLNetForTokenClassification),
