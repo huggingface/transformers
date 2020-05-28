@@ -838,9 +838,9 @@ def embed_questions_for_retrieval(q_ls, tokenizer, qa_embedder, device='cuda:0')
 
 def make_qa_dense_index(qa_embedder, tokenizer, passages_dset,
                         batch_size=512, max_length=128, index_name='kilt_passages_reps.dat',
-                        device='cuda:0'):
+                        dtype='float32', device='cuda:0'):
     st_time = time()
-    fp = np.memmap(index_name, dtype='float16', mode='w+', shape=(passages_dset.num_rows, 128))
+    fp = np.memmap(index_name, dtype=dtype, mode='w+', shape=(passages_dset.num_rows, 128))
     n_batches = math.ceil(passages_dset.num_rows / batch_size)
     for i in range(n_batches):
         passages = [p for p in passages_dset[i*batch_size:(i+1)*batch_size]['passage_text']]
