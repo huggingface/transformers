@@ -100,7 +100,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--pruning_method",
-        choices=["l0", "magnitude", "topK", "sigmoied_threshold",],
+        choices=["l0", "magnitude", "topK", "sigmoied_threshold"],
         type=str,
         required=True,
         help="Pruning Method (l0 = L0 regularization, magnitude = Magnitude pruning, topK = Movement pruning, sigmoied_threshold = Soft movement pruning)",
