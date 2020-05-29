@@ -74,3 +74,18 @@ LongformerForQuestionAnswering
 
 .. autoclass:: transformers.LongformerForQuestionAnswering
     :members:
+
+
+LongformerForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LongformerForMultipleChoice
+    :members:
+
+
+LongformerForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LongformerForTokenClassification
+    :members:
+
