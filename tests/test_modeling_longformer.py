@@ -184,6 +184,7 @@ class LongformerModelTester(object):
         loss, start_logits, end_logits = model(
             input_ids,
             attention_mask=input_mask,
+            global_attention_mask=input_mask,
             token_type_ids=token_type_ids,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
@@ -239,9 +240,11 @@ class LongformerModelTester(object):
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         loss, logits = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
+            global_attention_mask=multiple_choice_input_mask,
             token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
         )
