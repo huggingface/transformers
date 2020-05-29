@@ -47,7 +47,7 @@ def ensure_valid_input(model, tokens, input_names):
         else:
             break
 
-    return tuple(ordered_input_names), tuple(model_args)
+    return ordered_input_names, tuple(model_args)
 
 
 def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], Dict, BatchEncoding]:
