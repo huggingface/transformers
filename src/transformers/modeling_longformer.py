@@ -58,7 +58,8 @@ def _get_question_end_index(input_ids, sep_token_id):
 def _compute_global_attention_mask(input_ids, sep_token_id, before_sep_token=True):
     """
         Computes global attention mask by putting attention on all tokens
-        after `sep_token_id`.
+        before `sep_token_id` if `before_sep_token is True` else after
+        `sep_token_id`.
     """
 
     question_end_index = _get_question_end_index(input_ids, sep_token_id)
@@ -1166,13 +1167,13 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
 
     Examples::
 
-        from transformers import LongformerTokenizer, LongformerForTokenClassification
+        from transformers import LongformerTokenizer, LongformerForMultipleChoice
         import torch
 
         tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
         model = LongformerForMultipleChoice.from_pretrained('allenai/longformer-base-4096')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-        input_ids = torch.tensor([tokenizer.encode(s, add_special_tokens=True) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
+        choices = [("The dog is cute", "the dog"), ("The dog is cute", "the cat")]
+        input_ids = torch.tensor([tokenizer.encode(s[0], s[1], add_special_tokens=True) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
         labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
         loss, classification_scores = outputs[:2]
