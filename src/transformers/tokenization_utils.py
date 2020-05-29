@@ -1375,6 +1375,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
+        pad_to_next_multiple_of: Optional[int] = None,
         return_tensors: Optional[str] = None,
         **kwargs
     ):
@@ -1432,6 +1433,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             stride=stride,
             truncation_strategy=truncation_strategy,
             pad_to_max_length=pad_to_max_length,
+            pad_to_next_multiple_of=pad_to_next_multiple_of,
             return_tensors=return_tensors,
             **kwargs,
         )
@@ -1447,6 +1449,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
+        pad_to_next_multiple_of: Optional[int] = None,
         is_pretokenized: bool = False,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -1583,6 +1586,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             pair_ids=second_ids,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
+            pad_to_next_multiple_of=pad_to_next_multiple_of,
             add_special_tokens=add_special_tokens,
             stride=stride,
             truncation_strategy=truncation_strategy,
@@ -1608,6 +1612,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
+        pad_to_next_multiple_of: Optional[int] = None,
         is_pretokenized: bool = False,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -1770,6 +1775,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 pair_ids=second_ids,
                 max_length=max_length,
                 pad_to_max_length=pad_to_max_length,
+                pad_to_next_multiple_of=pad_to_next_multiple_of,
                 add_special_tokens=add_special_tokens,
                 stride=stride,
                 truncation_strategy=truncation_strategy,
@@ -1829,6 +1835,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
+        pad_to_next_multiple_of: Optional[int] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1907,6 +1914,22 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         # Truncation: Handle max sequence length
         total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+
+        # Manage padding as multiple of provided integer
+        if pad_to_next_multiple_of is not None:
+            target_length = ((total_len // pad_to_next_multiple_of) + 1) * pad_to_next_multiple_of
+
+            # Warn the user about new max_length value
+            if max_length is not None:
+                logger.info(
+                    "Overriding max_length {} to {} parameter to satisfy constraint pad_to_next_multiple_of {}",
+                    max_length, target_length, pad_to_next_multiple_of
+                )
+
+            # max_length becomes multiple of provided integer
+            max_length = target_length
+            pad_to_max_length = True
+
         if max_length and total_len > max_length:
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(
                 ids,
@@ -2569,6 +2592,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         pad_to_max_length: bool = False,
+        pad_to_next_multiple_of: Optional[int] = None,
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         is_pretokenized: bool = False,
