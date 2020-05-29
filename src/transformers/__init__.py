@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "2.9.1"
+__version__ = "2.10.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -19,19 +19,6 @@ else:
 
 import logging
 
-# Benchmarking
-from .benchmark_utils import (
-    Frame,
-    Memory,
-    MemoryState,
-    MemorySummary,
-    MemoryTrace,
-    UsedMemoryState,
-    bytes_to_human_readable,
-    start_memory_tracing,
-    stop_memory_tracing,
-)
-
 # Configurations
 from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
@@ -44,6 +31,7 @@ from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, Electr
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
+from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from .configuration_marian import MarianConfig
 from .configuration_mmbt import MMBTConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
@@ -138,6 +126,7 @@ from .tokenization_distilbert import DistilBertTokenizer, DistilBertTokenizerFas
 from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
+from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -319,6 +308,7 @@ if is_torch_available():
         ElectraForMaskedLM,
         ElectraForTokenClassification,
         ElectraPreTrainedModel,
+        ElectraForSequenceClassification,
         ElectraModel,
         load_tf_weights_in_electra,
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
@@ -330,6 +320,16 @@ if is_torch_available():
         ReformerModel,
         ReformerModelWithLMHead,
         REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
+    )
+
+    from .modeling_longformer import (
+        LongformerModel,
+        LongformerForMaskedLM,
+        LongformerForSequenceClassification,
+        LongformerForMultipleChoice,
+        LongformerForTokenClassification,
+        LongformerForQuestionAnswering,
+        LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
     )
 
     # Optimization
@@ -346,6 +346,9 @@ if is_torch_available():
     from .trainer import Trainer, set_seed, torch_distributed_zero_first, EvalPrediction
     from .data.data_collator import DefaultDataCollator, DataCollator, DataCollatorForLanguageModeling
     from .data.datasets import GlueDataset, TextDataset, LineByLineTextDataset, GlueDataTrainingArguments
+
+    # Benchmarks
+    from .benchmark import PyTorchBenchmark, PyTorchBenchmarkArguments
 
 # TensorFlow
 if is_tf_available():

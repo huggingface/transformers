@@ -30,6 +30,7 @@ if is_torch_available():
         ElectraForMaskedLM,
         ElectraForTokenClassification,
         ElectraForPreTraining,
+        ElectraForSequenceClassification,
     )
     from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
 
@@ -242,6 +243,31 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length])
             self.check_loss_output(result)
 
+        def create_and_check_electra_for_sequence_classification(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_token_labels,
+        ):
+            config.num_labels = self.num_labels
+            model = ElectraForSequenceClassification(config)
+            model.to(torch_device)
+            model.eval()
+            loss, logits = model(
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
+            )
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
+            self.check_loss_output(result)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -279,6 +305,10 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_pre_training(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_electra_for_pretraining(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_electra_for_sequence_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

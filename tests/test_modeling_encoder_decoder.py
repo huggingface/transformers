@@ -329,5 +329,5 @@ class EncoderDecoderModelTest(unittest.TestCase):
 
     @slow
     def test_real_bert_model_from_pretrained(self):
-        model = EncoderDecoderModel.from_pretrained("bert-base-uncased", "bert-base-uncased")
+        model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
         self.assertIsNotNone(model)

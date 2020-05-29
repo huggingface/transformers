@@ -667,7 +667,7 @@ BERT_START_DOCSTRING = r"""
 
 BERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`transformers.BertTokenizer`.
@@ -675,19 +675,19 @@ BERT_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
 
             `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
@@ -715,7 +715,7 @@ class TFBertModel(TFBertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.bert = TFBertMainLayer(config, name="bert")
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -772,7 +772,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.bert.embeddings
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -828,7 +828,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.bert.embeddings
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -878,7 +878,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name="bert")
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -903,10 +903,13 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        seq_relationship_scores = outputs[0]
 
+        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        encoding = tokenizer.encode_plus(prompt, next_sentence, return_tensors='tf')
+
+        logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
+        assert logits[0][0] < logits[0][1] # the next sentence was random
         """
         outputs = self.bert(inputs, **kwargs)
 
@@ -934,7 +937,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -1000,7 +1003,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
     def call(
         self,
         inputs,
@@ -1036,11 +1039,15 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
 
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         model = TFBertForMultipleChoice.from_pretrained('bert-base-uncased')
-        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
-        input_ids = tf.constant([tokenizer.encode(s) for s in choices])[None, :]  # Batch size 1, 2 choices
-        outputs = model(input_ids)
-        classification_scores = outputs[0]
 
+        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        choice0 = "It is eaten with a fork and a knife."
+        choice1 = "It is eaten while held in the hand."
+        encoding = tokenizer.batch_encode_plus([[prompt, choice0], [prompt, choice1]], return_tensors='tf', pad_to_max_length=True)
+
+        # linear classifier on the output is not yet trained
+        outputs = model(encoding['input_ids'][None, :])
+        logits = outputs[0]
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1111,7 +1118,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -1168,7 +1175,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
     Return:

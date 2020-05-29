@@ -4,18 +4,28 @@ This file is adapted from the AllenNLP library at https://github.com/allenai/all
 Copyright by the AllenNLP authors.
 """
 
+import copy
+import csv
 import linecache
 import logging
 import os
+import platform
 import sys
-from collections import defaultdict
+from abc import ABC, abstractmethod
+from collections import defaultdict, namedtuple
+from datetime import datetime
 from typing import Iterable, List, NamedTuple, Optional, Union
 
-from .file_utils import is_tf_available, is_torch_available
+from transformers import AutoConfig, PretrainedConfig
+from transformers import __version__ as version
+
+from ..file_utils import is_tf_available, is_torch_available
+from .benchmark_args_utils import BenchmarkArguments
 
 
 if is_torch_available():
     from torch.cuda import empty_cache as torch_empty_cache
+
 if is_tf_available():
     from tensorflow.python.eager import context as tf_context
 
@@ -24,6 +34,10 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 
 _is_memory_tracing_enabled = False
+
+BenchmarkOutput = namedtuple(
+    "BenchmarkOutput", ["time_inference_result", "memory_inference_result", "time_train_result", "memory_train_result"]
+)
 
 
 def is_memory_tracing_enabled():
@@ -62,14 +76,14 @@ class UsedMemoryState(NamedTuple):
 
 class Memory(NamedTuple):
     """ `Memory` NamedTuple have a single field `bytes` and
-        you can get a human readable string of the number of bytes by calling `__repr__`
+        you can get a human readable str of the number of mega bytes by calling `__repr__`
             - `byte` (integer): number of bytes,
     """
 
     bytes: int
 
     def __repr__(self) -> str:
-        return bytes_to_human_readable(self.bytes)
+        return str(bytes_to_mega_bytes(self.bytes))
 
 
 class MemoryState(NamedTuple):
@@ -99,6 +113,7 @@ class MemorySummary(NamedTuple):
 
     sequential: List[MemoryState]
     cumulative: List[MemoryState]
+    current: List[MemoryState]
     total: Memory
 
 
@@ -234,10 +249,12 @@ def start_memory_tracing(
 
             # Sum used memory for all GPUs
             py3nvml.nvmlInit()
+
             for i in devices:
                 handle = py3nvml.nvmlDeviceGetHandleByIndex(i)
                 meminfo = py3nvml.nvmlDeviceGetMemoryInfo(handle)
                 gpu_mem += meminfo.used
+
             py3nvml.nvmlShutdown()
 
         mem_state = UsedMemoryState(traced_state, cpu_mem, gpu_mem)
@@ -295,8 +312,11 @@ def stop_memory_tracing(
 
     if memory_trace is not None and len(memory_trace) > 1:
         memory_diff_trace = []
+        memory_curr_trace = []
+
         cumulative_memory_dict = defaultdict(lambda: [0, 0, 0])
-        for (frame, cpu_mem, gpu_mem), (next_frame, next_cpu_mem, next_gpu_mem) in zip(
+
+        for ((frame, cpu_mem, gpu_mem), (next_frame, next_cpu_mem, next_gpu_mem),) in zip(
             memory_trace[:-1], memory_trace[1:]
         ):
             cpu_mem_inc = next_cpu_mem - cpu_mem
@@ -307,6 +327,16 @@ def stop_memory_tracing(
                     frame=frame, cpu=Memory(cpu_mem_inc), gpu=Memory(gpu_mem_inc), cpu_gpu=Memory(cpu_gpu_mem_inc),
                 )
             )
+
+            memory_curr_trace.append(
+                MemoryState(
+                    frame=frame,
+                    cpu=Memory(next_cpu_mem),
+                    gpu=Memory(next_gpu_mem),
+                    cpu_gpu=Memory(next_gpu_mem + next_cpu_mem),
+                )
+            )
+
             cumulative_memory_dict[frame][0] += cpu_mem_inc
             cumulative_memory_dict[frame][1] += gpu_mem_inc
             cumulative_memory_dict[frame][2] += cpu_gpu_mem_inc
@@ -321,21 +351,287 @@ def stop_memory_tracing(
             for frame, (cpu_mem_inc, gpu_mem_inc, cpu_gpu_mem_inc) in cumulative_memory
         )
 
+        memory_curr_trace = sorted(memory_curr_trace, key=lambda x: x.cpu_gpu.bytes, reverse=True)
+
         if ignore_released_memory:
             total_memory = sum(max(0, step_trace.cpu_gpu.bytes) for step_trace in memory_diff_trace)
         else:
             total_memory = sum(step_trace.cpu_gpu.bytes for step_trace in memory_diff_trace)
+
         total_memory = Memory(total_memory)
-        return MemorySummary(sequential=memory_diff_trace, cumulative=cumulative_memory, total=total_memory)
+
+        return MemorySummary(
+            sequential=memory_diff_trace, cumulative=cumulative_memory, current=memory_curr_trace, total=total_memory,
+        )
 
     return None
 
 
-def bytes_to_human_readable(memory_amount: int) -> str:
-    """ Utility to convert a number of bytes (int) in a human readable string (with units)
+def bytes_to_mega_bytes(memory_amount: int) -> int:
+    """ Utility to convert a number of bytes (int) into a number of mega bytes (int)
     """
-    for unit in ["B", "KB", "MB", "GB"]:
-        if memory_amount > -1024.0 and memory_amount < 1024.0:
-            return "{:.3f}{}".format(memory_amount, unit)
-        memory_amount /= 1024.0
-    return "{:.3f}TB".format(memory_amount)
+    return memory_amount >> 20
+
+
+class Benchmark(ABC):
+    """
+    Benchmarks is a simple but feature-complete benchmarking script
+    to compare memory and time performance of models in Transformers.
+    """
+
+    args: BenchmarkArguments
+    configs: PretrainedConfig
+    framework: str
+
+    def __init__(self, args: BenchmarkArguments = None, configs: PretrainedConfig = None):
+        self.args = args
+
+        if configs is None:
+            self.config_dict = {
+                model_name: AutoConfig.from_pretrained(model_name) for model_name in self.args.model_names
+            }
+        else:
+            self.config_dict = {model_name: config for model_name, config in zip(self.args.model_names, configs)}
+
+        self._print_fn = None
+        self._framework_version = None
+        self._environment_info = None
+
+    @property
+    def print_fn(self):
+        if self._print_fn is None:
+            if self.args.log_print:
+                logging.basicConfig(
+                    level=logging.DEBUG,
+                    filename=self.args.log_filename,
+                    filemode="a+",
+                    format="%(asctime)-15s %(levelname)-8s %(message)s",
+                )
+
+                def print_and_log(*args):
+                    logging.info(*args)
+                    print(*args)
+
+                self._print_fn = print_and_log
+            else:
+                self._print_fn = print
+        return self._print_fn
+
+    @property
+    def is_gpu(self):
+        return self.args.n_gpu > 0
+
+    @property
+    @abstractmethod
+    def framework_version(self):
+        pass
+
+    @abstractmethod
+    def train(self, model_name, batch_size, sequence_length):
+        pass
+
+    @abstractmethod
+    def inference(self, model_name, batch_size, sequence_length):
+        pass
+
+    def run(self):
+        result_dict = {model_name: {} for model_name in self.args.model_names}
+        inference_result_time = copy.deepcopy(result_dict)
+        inference_result_memory = copy.deepcopy(result_dict)
+        train_result_time = copy.deepcopy(result_dict)
+        train_result_memory = copy.deepcopy(result_dict)
+
+        for c, model_name in enumerate(self.args.model_names):
+            self.print_fn(f"{c + 1} / {len(self.args.model_names)}")
+
+            model_dict = {
+                "bs": self.args.batch_sizes,
+                "ss": self.args.sequence_lengths,
+                "result": {i: {} for i in self.args.batch_sizes},
+            }
+            inference_result_time[model_name] = copy.deepcopy(model_dict)
+            inference_result_memory[model_name] = copy.deepcopy(model_dict)
+            train_result_time[model_name] = copy.deepcopy(model_dict)
+            train_result_memory[model_name] = copy.deepcopy(model_dict)
+
+            for batch_size in self.args.batch_sizes:
+                for sequence_length in self.args.sequence_lengths:
+                    if not self.args.no_inference:
+                        if not self.args.no_memory:
+                            memory = self.inference(model_name, batch_size, sequence_length, trace_memory=True)
+                            inference_result_memory[model_name]["result"][batch_size][sequence_length] = memory
+                        if not self.args.no_speed:
+                            time = self.inference(model_name, batch_size, sequence_length, trace_memory=False)
+                            inference_result_time[model_name]["result"][batch_size][sequence_length] = time
+
+                    if self.args.training:
+                        if not self.args.no_memory:
+                            memory = self.train(model_name, batch_size, sequence_length, trace_memory=True)
+                            train_result_memory[model_name]["result"][batch_size][sequence_length] = memory
+                        if not self.args.no_speed:
+                            time = self.inference(model_name, batch_size, sequence_length, trace_memory=False)
+                            train_result_time[model_name]["result"][batch_size][sequence_length] = time
+
+        if not self.args.no_inference:
+            if not self.args.no_speed:
+                self.print_fn("======= INFERENCE - SPEED - RESULT =======")
+                self.print_results(inference_result_time)
+                self.save_to_csv(inference_result_time, self.args.inference_time_csv_file)
+
+            if not self.args.no_memory:
+                self.print_fn("======= INFERENCE - MEMORY - RESULT =======")
+                self.print_results(inference_result_memory)
+                self.save_to_csv(inference_result_memory, self.args.inference_memory_csv_file)
+
+        if self.args.training:
+            if not self.args.no_speed:
+                self.print_fn("======= TRAIN - SPEED - RESULT =======")
+                self.print_results(train_result_time)
+                self.save_to_csv(train_result_time, self.args.train_time_csv_file)
+
+            if not self.args.no_memory:
+                self.print_fn("======= TRAIN - MEMORY - RESULT =======")
+                self.print_results(train_result_memory)
+                self.save_to_csv(train_result_memory, self.args.train_memory_csv_file)
+
+        if not self.args.no_env_print:
+            self.print_fn("\n======== ENVIRONMENT - INFORMATION ========")
+            self.print_fn(
+                "\n".join(["- {}: {}".format(prop, val) for prop, val in self.environment_info.items()]) + "\n"
+            )
+
+        if self.args.save_to_csv:
+            with open(self.args.env_info_csv_file, mode="w", newline="") as csv_file:
+                writer = csv.writer(csv_file)
+                for key, value in self.environment_info.items():
+                    writer.writerow([key, value])
+
+        return BenchmarkOutput(inference_result_time, inference_result_memory, train_result_time, train_result_memory)
+
+    @property
+    def environment_info(self):
+        if self._environment_info is None:
+            info = {}
+            info["transformers_version"] = version
+            info["framework"] = self.framework
+            info["framework_version"] = self.framework_version
+            info["python_version"] = platform.python_version()
+            info["system"] = platform.system()
+            info["cpu"] = platform.processor()
+            info["architecture"] = platform.architecture()[0]
+            info["date"] = datetime.date(datetime.now())
+            info["time"] = datetime.time(datetime.now())
+
+            try:
+                import psutil
+            except (ImportError):
+                logger.warning(
+                    "Psutil not installed, we won't log available CPU memory."
+                    "Install psutil (pip install psutil) to log available CPU memory."
+                )
+                info["cpu_ram_mb"] = "N/A"
+            else:
+                info["cpu_ram_mb"] = bytes_to_mega_bytes(psutil.virtual_memory().total)
+
+            info["use_gpu"] = self.is_gpu
+            if self.is_gpu:
+                info["num_gpus"] = self.args.n_gpu
+                try:
+                    from py3nvml import py3nvml
+
+                    py3nvml.nvmlInit()
+                    handle = py3nvml.nvmlDeviceGetHandleByIndex(self.args.device_idx)
+                except ImportError:
+                    logger.warning(
+                        "py3nvml not installed, we won't log GPU memory usage. "
+                        "Install py3nvml (pip install py3nvml) to log information about GPU."
+                    )
+                    info["gpu"] = "N/A"
+                    info["gpu_ram_mb"] = "N/A"
+                    info["gpu_power_watts"] = "N/A"
+                    info["gpu_performance_state"] = "N/A"
+                except (OSError, py3nvml.NVMLError):
+                    logger.warning(
+                        "Error while initializing comunication with GPU. " "We won't log information about GPU."
+                    )
+                    info["gpu"] = "N/A"
+                    info["gpu_ram_mb"] = "N/A"
+                    info["gpu_power_watts"] = "N/A"
+                    info["gpu_performance_state"] = "N/A"
+                    py3nvml.nvmlShutdown()
+                else:
+                    info["gpu"] = py3nvml.nvmlDeviceGetName(handle)
+                    info["gpu_ram_mb"] = bytes_to_mega_bytes(py3nvml.nvmlDeviceGetMemoryInfo(handle).total)
+                    info["gpu_power_watts"] = py3nvml.nvmlDeviceGetPowerManagementLimit(handle) / 1000
+                    info["gpu_performance_state"] = py3nvml.nvmlDeviceGetPerformanceState(handle)
+                    py3nvml.nvmlShutdown()
+
+            self._environment_info = info
+        return self._environment_info
+
+    def print_results(self, result_dict):
+        for model_name in self.args.model_names:
+            self.print_fn("\t" + f"======= MODEL CHECKPOINT: {model_name} =======")
+            for batch_size in result_dict[model_name]["bs"]:
+                for sequence_length in result_dict[model_name]["ss"]:
+                    result = result_dict[model_name]["result"][batch_size][sequence_length]
+                    if isinstance(result, float):
+                        self.print_fn(
+                            f"\t\t{model_name}/{batch_size}/{sequence_length}: " f"{(round(1000 * result) / 1000)}s"
+                        )
+                    else:
+                        self.print_fn(f"\t\t{model_name}/{batch_size}/{sequence_length}: " f"{result} MB")
+
+    def print_memory_trace_statistics(self, summary: MemorySummary):
+        self.print_fn(
+            "\nLine by line memory consumption:\n"
+            + "\n".join(
+                f"{state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+                for state in summary.sequential
+            )
+        )
+        self.print_fn(
+            "\nLines with top memory consumption:\n"
+            + "\n".join(
+                f"=> {state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+                for state in summary.cumulative[:6]
+            )
+        )
+        self.print_fn(
+            "\nLines with lowest memory consumption:\n"
+            + "\n".join(
+                f"=> {state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+                for state in summary.cumulative[-6:]
+            )
+        )
+        self.print_fn(f"\nTotal memory increase: {summary.total}")
+
+    def save_to_csv(self, result_dict, filename):
+        if not self.args.save_to_csv:
+            return
+        self.print_fn("Saving results to csv.")
+        with open(filename, mode="w") as csv_file:
+
+            assert len(self.args.model_names) > 0, "At least 1 model should be defined, but got {}".format(
+                self.model_names
+            )
+
+            fieldnames = ["model", "batch_size", "sequence_length"]
+            writer = csv.DictWriter(csv_file, fieldnames=fieldnames + ["result"])
+            writer.writeheader()
+
+            for model_name in self.args.model_names:
+                result_dict_model = result_dict[model_name]["result"]
+                for bs in result_dict_model:
+                    for ss in result_dict_model[bs]:
+                        result_model = result_dict_model[bs][ss]
+                        writer.writerow(
+                            {
+                                "model": model_name,
+                                "batch_size": bs,
+                                "sequence_length": ss,
+                                "result": ("{}" if not isinstance(result_model, float) else "{:.4f}").format(
+                                    result_model
+                                ),
+                            }
+                        )

@@ -19,7 +19,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from .utils import require_torch, slow, torch_device
+from .utils import require_multigpu, require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -448,9 +448,14 @@ class ReformerTesterMixin:
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model_fp16_generate(*config_and_inputs)
 
+    @require_multigpu
+    def test_multigpu_data_parallel_forward(self):
+        # Opt-out of this test.
+        pass
+
 
 @require_torch
-class ReformerLocalAttnModelTest(ModelTesterMixin, ReformerTesterMixin, unittest.TestCase):
+class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ReformerModel, ReformerModelWithLMHead) if is_torch_available() else ()
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
@@ -504,7 +509,7 @@ class ReformerLocalAttnModelTest(ModelTesterMixin, ReformerTesterMixin, unittest
 
 
 @require_torch
-class ReformerLSHAttnModelTest(ModelTesterMixin, unittest.TestCase, ReformerTesterMixin):
+class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ReformerModel, ReformerModelWithLMHead) if is_torch_available() else ()
     all_generative_model_classes = (ReformerModelWithLMHead,) if is_torch_available() else ()
     test_pruning = False
