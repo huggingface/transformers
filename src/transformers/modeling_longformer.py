@@ -572,8 +572,8 @@ class LongformerModel(RobertaModel):
         import torch
         from transformers import LongformerModel, LongformerTokenizer
 
-        model = LongformerModel.from_pretrained('longformer-base-4096')
-        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
+        model = LongformerModel.from_pretrained('allenai/longformer-base-4096')
+        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
         SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
         input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
@@ -681,8 +681,8 @@ class LongformerForMaskedLM(BertPreTrainedModel):
         import torch
         from transformers import LongformerForMaskedLM, LongformerTokenizer
 
-        model = LongformerForMaskedLM.from_pretrained('longformer-base-4096')
-        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
+        model = LongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096')
+        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
         SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
         input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
@@ -769,8 +769,8 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         from transformers import LongformerTokenizer, LongformerForSequenceClassification
         import torch
 
-        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
-        model = LongformerForSequenceClassification.from_pretrained('longformer-base-4096')
+        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        model = LongformerForSequenceClassification.from_pretrained('allenai/longformer-base-4096')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
@@ -909,8 +909,8 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         from transformers import LongformerTokenizer, LongformerForQuestionAnswering
         import torch
 
-        tokenizer = LongformerTokenizer.from_pretrained("longformer-large-4096-finetuned-triviaqa")
-        model = LongformerForQuestionAnswering.from_pretrained("longformer-large-4096-finetuned-triviaqa")
+        tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
 
         question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         encoding = tokenizer.encode_plus(question, text, return_tensors="pt")
@@ -1031,8 +1031,8 @@ class LongformerForTokenClassification(BertPreTrainedModel):
         from transformers import LongformerTokenizer, LongformerForTokenClassification
         import torch
 
-        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
-        model = LongformerForTokenClassification.from_pretrained('longformer-base-4096')
+        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        model = LongformerForTokenClassification.from_pretrained('allenai/longformer-base-4096')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
