@@ -1,5 +1,4 @@
 import unittest
-from os import sep
 from os.path import dirname, exists
 from shutil import rmtree
 from tempfile import NamedTemporaryFile, TemporaryDirectory
