@@ -405,10 +405,14 @@ class BertEncoder(nn.Module):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if self.config.gradient_checkpointing:
+            if getattr(self.config, "gradient_checkpointing", False):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    layer_module, hidden_states, attention_mask, head_mask[i],
-                    encoder_hidden_states, encoder_attention_mask
+                    layer_module,
+                    hidden_states,
+                    attention_mask,
+                    head_mask[i],
+                    encoder_hidden_states,
+                    encoder_attention_mask,
                 )
             else:
                 layer_outputs = layer_module(
