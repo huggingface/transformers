@@ -70,9 +70,9 @@ def _compute_global_attention_mask(input_ids, sep_token_id, before_sep_token=Tru
         attention_mask = attention_mask.expand_as(input_ids) < question_end_index
     else:
         # last token is separation token and should not be counted and in the middle are two separation tokens
-        attention_mask = (attention_mask.expand_as(input_ids) > (question_end_index + 1)) and (
+        attention_mask = (attention_mask.expand_as(input_ids) > (question_end_index + 1)).long() * (
             attention_mask.expand_as(input_ids) < input_ids.shape[-1]
-        )
+        ).long()
 
     return attention_mask.long()
 
@@ -643,7 +643,12 @@ class LongformerModel(RobertaModel):
             # longformer self attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
             # (global_attention_mask + 1) => 1 for local attention, 2 for global attention
             # => final attention_mask => 0 for no attention, 1 for local attention 2 for global attention
-            attention_mask = attention_mask * (global_attention_mask + 1)
+            if attention_mask is not None:
+                attention_mask = attention_mask * (global_attention_mask + 1)
+            else:
+                # simply use `global_attention_mask` as `attention_mask`
+                # if no `attention_mask` is given
+                attention_mask = global_attention_mask + 1
 
         padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_window_size(
             input_ids=input_ids,
@@ -1172,9 +1177,12 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
 
         tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
         model = LongformerForMultipleChoice.from_pretrained('allenai/longformer-base-4096')
+        # context = "The dog is cute" | choice = "the dog" / "the cat"
         choices = [("The dog is cute", "the dog"), ("The dog is cute", "the cat")]
         input_ids = torch.tensor([tokenizer.encode(s[0], s[1], add_special_tokens=True) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
         labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
+
+        # global attention is automatically put on "the dog" and "the cat"
         outputs = model(input_ids, labels=labels)
         loss, classification_scores = outputs[:2]
 
