@@ -2,6 +2,7 @@ import unittest
 from os import sep
 from os.path import dirname, exists
 from shutil import rmtree
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 from tests.utils import require_tf, require_torch, slow
 from transformers import BertConfig, BertTokenizerFast, FeatureExtractionPipeline
@@ -33,17 +34,34 @@ class OnnxExportTestCase(unittest.TestCase):
         for model in OnnxExportTestCase.MODEL_TO_TEST:
             self._test_export(model, "pt", 11)
 
-    def _test_export(self, model, framework, opset):
+    @require_torch
+    @slow
+    def test_export_custom_bert_model(self):
+        from transformers import BertModel
+
+        vocab = ["[UNK]", "[SEP]", "[CLS]", "[PAD]", "[MASK]", "some", "other", "words"]
+        with NamedTemporaryFile(mode="w+t") as vocab_file:
+            vocab_file.write("\n".join(vocab))
+            vocab_file.flush()
+            tokenizer = BertTokenizerFast(vocab_file.name)
+
+        with TemporaryDirectory() as bert_save_dir:
+            model = BertModel(BertConfig(vocab_size=len(vocab)))
+            model.save_pretrained(bert_save_dir)
+            self._test_export(bert_save_dir, "pt", 11, tokenizer)
+
+    def _test_export(self, model, framework, opset, tokenizer=None):
         try:
             # Compute path
-            path = "onnx" + sep + model + ".onnx"
+            with TemporaryDirectory() as tempdir:
+                path = tempdir + "/model.onnx"
 
             # Remove folder if exists
             if exists(dirname(path)):
                 rmtree(dirname(path))
 
-            # Export
-            convert(framework, model, path, opset)
+                # Export
+                convert(framework, model, path, opset, tokenizer)
         except Exception as e:
             self.fail(e)
 
