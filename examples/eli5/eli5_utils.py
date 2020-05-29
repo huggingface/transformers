@@ -479,14 +479,15 @@ def query_es_index(question, es_client, index_name='english_wiki_kilt_snippets_1
 ###############
 class ELI5DatasetQARetriver(Dataset):
 
-    def __init__(self, examples_array, extra_answer_threshold=3, min_answer_length=64, training=True):
+    def __init__(self, examples_array, extra_answer_threshold=3, min_answer_length=64, training=True, n_samples=None):
         self.data = examples_array
         self.answer_thres = extra_answer_threshold
         self.min_length = min_answer_length
         self.training = training
+        self.n_samples = self.data.num_rows if n_samples is None else n_samples
 
     def __len__(self):
-        return self.data.num_rows
+        return self.n_samples
 
     def make_example(self, idx):
         example = self.data[idx]
@@ -501,7 +502,7 @@ class ELI5DatasetQARetriver(Dataset):
         return (question, answer_span)
 
     def __getitem__(self, idx):
-        return self.make_example(idx)
+        return self.make_example(idx % self.data.num_rows)
 
 class RetrievalQAEmbedder(torch.nn.Module):
     def __init__(self, sent_encoder, dim):
@@ -641,6 +642,52 @@ def train_qa_retriever_epoch(model, dataset, tokenizer, optimizer, scheduler, ar
             )
             loc_loss = 0
             loc_steps = 0
+
+def train_qa_retriever_joint_epoch(model, dataset_list, tokenizer, optimizer, scheduler, args, e=0):
+    model.train()
+    model_collate_fn = functools.partial(
+        make_qa_retriever_batch,
+        tokenizer=tokenizer, max_len=args.max_length, device='cuda:0'
+    )
+    # make iterator
+    train_samplers = [RandomSampler(dataset) for dataset in dataset_list]
+    data_loaders = [DataLoader(
+        dataset, batch_size=args.batch_size,
+        sampler=train_sampler, collate_fn=model_collate_fn
+    ) for dataset, train_sampler in zip(dataset_list, train_samplers)]
+    iterators = [iter(dloader) for dloader in data_loaders]
+    joint_iter = zip(*iterators)
+    # accumulate loss since last print
+    loc_steps = 0
+    loc_loss = 0.0
+    st_time = time()
+    for step, (batches,) in enumerate(zip(joint_iter)):
+        for batch in batches:
+            q_ids, q_mask, a_ids, a_mask = batch
+            loss = model(
+                q_ids, q_mask, a_ids, a_mask,
+                checkpoint_batch_size=args.checkpoint_batch_size
+            )
+            # optimizer
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+            model.zero_grad()
+            # some printing within the epoch
+            loc_loss += loss.item()
+            loc_steps += 1
+        if step % args.print_freq == 0:
+            print(
+                "{:2d} {:5d} of {:5d} \t L: {:.3f} \t -- {:.3f}".format(
+                    e, step,
+                    len(dataset_list[0]) // args.batch_size,
+                    loc_loss / loc_steps,
+                    time() - st_time,
+                )
+            )
+            loc_loss = 0
+            loc_steps = 0
+
 
 def evaluate_qa_retriever(model, dataset, tokenizer, args):
     model.eval()
