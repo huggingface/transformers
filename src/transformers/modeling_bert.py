@@ -23,6 +23,7 @@ import os
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
+import torch.utils.checkpoint
 
 from .activations import gelu, gelu_new, swish
 from .configuration_bert import BertConfig
@@ -385,6 +386,7 @@ class BertLayer(nn.Module):
 class BertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
@@ -403,9 +405,15 @@ class BertEncoder(nn.Module):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(
-                hidden_states, attention_mask, head_mask[i], encoder_hidden_states, encoder_attention_mask
-            )
+            if self.config.gradient_checkpointing:
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    layer_module, hidden_states, attention_mask, head_mask[i],
+                    encoder_hidden_states, encoder_attention_mask
+                )
+            else:
+                layer_outputs = layer_module(
+                    hidden_states, attention_mask, head_mask[i], encoder_hidden_states, encoder_attention_mask
+                )
             hidden_states = layer_outputs[0]
 
             if self.output_attentions:
