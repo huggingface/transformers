@@ -39,6 +39,43 @@ LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {
 }
 
 
+def _get_question_end_index(input_ids, sep_token_id):
+    """
+        Computes the index of the first occurance of `sep_token_id`.
+    """
+
+    sep_token_indices = (input_ids == sep_token_id).nonzero()
+    batch_size = input_ids.shape[0]
+
+    assert sep_token_indices.shape[1] == 2, "`input_ids` should have two dimensions"
+    assert (
+        sep_token_indices.shape[0] == 3 * batch_size
+    ), f"There should be exactly three separator tokens: {sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this error."
+
+    return sep_token_indices.view(batch_size, 3, 2)[:, 0, 1]
+
+
+def _compute_global_attention_mask(input_ids, sep_token_id, before_sep_token=True):
+    """
+        Computes global attention mask by putting attention on all tokens
+        after `sep_token_id`.
+    """
+
+    question_end_index = _get_question_end_index(input_ids, sep_token_id)
+    question_end_index = question_end_index.unsqueeze(dim=1)  # size: batch_size x 1
+    # bool attention mask with True in locations of global attention
+    attention_mask = torch.arange(input_ids.shape[1], device=input_ids.device)
+    if before_sep_token is True:
+        attention_mask = attention_mask.expand_as(input_ids) < question_end_index
+    else:
+        # last token is separation token and should not be counted and in the middle are two separation tokens
+        attention_mask = (attention_mask.expand_as(input_ids) > (question_end_index + 1)) and (
+            attention_mask.expand_as(input_ids) < input_ids.shape[-1]
+        )
+
+    return attention_mask.long()
+
+
 class LongformerSelfAttention(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
@@ -864,26 +901,6 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
 
         self.init_weights()
 
-    def _compute_global_attention_mask(self, input_ids):
-        question_end_index = self._get_question_end_index(input_ids)
-        question_end_index = question_end_index.unsqueeze(dim=1)  # size: batch_size x 1
-        # bool attention mask with True in locations of global attention
-        attention_mask = torch.arange(input_ids.shape[1], device=input_ids.device)
-        attention_mask = attention_mask.expand_as(input_ids) < question_end_index
-
-        return attention_mask.long()
-
-    def _get_question_end_index(self, input_ids):
-        sep_token_indices = (input_ids == self.config.sep_token_id).nonzero()
-        batch_size = input_ids.shape[0]
-
-        assert sep_token_indices.shape[1] == 2, "`input_ids` should have two dimensions"
-        assert (
-            sep_token_indices.shape[0] == 3 * batch_size
-        ), f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for questions answering"
-
-        return sep_token_indices.view(batch_size, 3, 2)[:, 0, 1]
-
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
@@ -951,7 +968,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         if global_attention_mask is None:
             logger.info("Initializing global attention on question tokens...")
             # put global attention on all tokens until `config.sep_token_id` is reached
-            global_attention_mask = self._compute_global_attention_mask(input_ids)
+            global_attention_mask = self._compute_global_attention_mask(input_ids, self.config.sep_token_id)
 
         outputs = self.longformer(
             input_ids,
@@ -1152,8 +1169,8 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         from transformers import LongformerTokenizer, LongformerForTokenClassification
         import torch
 
-        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
-        model = LongformerForMultipleChoice.from_pretrained('longformer-base-4096')
+        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        model = LongformerForMultipleChoice.from_pretrained('allenai/longformer-base-4096')
         choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
         input_ids = torch.tensor([tokenizer.encode(s, add_special_tokens=True) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
         labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
@@ -1162,6 +1179,20 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
 
         """
         num_choices = input_ids.shape[1]
+
+        # set global attention on question tokens
+        if global_attention_mask is None:
+            logger.info("Initializing global attention on question tokens...")
+            # put global attention on all tokens until `config.sep_token_id` is reached
+            global_attention_mask = torch.stack(
+                [
+                    self._compute_global_attention_mask(
+                        input_ids[:, i], self.config.sep_token_id, before_sep_token=False
+                    )
+                    for i in range(num_choices)
+                ],
+                dim=1,
+            )
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1))
         flat_position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
