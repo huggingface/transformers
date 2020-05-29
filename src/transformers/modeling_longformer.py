@@ -968,7 +968,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         if global_attention_mask is None:
             logger.info("Initializing global attention on question tokens...")
             # put global attention on all tokens until `config.sep_token_id` is reached
-            global_attention_mask = self._compute_global_attention_mask(input_ids, self.config.sep_token_id)
+            global_attention_mask = _compute_global_attention_mask(input_ids, self.config.sep_token_id)
 
         outputs = self.longformer(
             input_ids,
@@ -1182,13 +1182,11 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
 
         # set global attention on question tokens
         if global_attention_mask is None:
-            logger.info("Initializing global attention on question tokens...")
-            # put global attention on all tokens until `config.sep_token_id` is reached
+            logger.info("Initializing global attention on multiple choice...")
+            # put global attention on all tokens after `config.sep_token_id`
             global_attention_mask = torch.stack(
                 [
-                    self._compute_global_attention_mask(
-                        input_ids[:, i], self.config.sep_token_id, before_sep_token=False
-                    )
+                    _compute_global_attention_mask(input_ids[:, i], self.config.sep_token_id, before_sep_token=False)
                     for i in range(num_choices)
                 ],
                 dim=1,
