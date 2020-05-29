@@ -35,6 +35,7 @@ class EncoderDecoderModel(PreTrainedModel):
         class method for the encoder and `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
     """
     config_class = EncoderDecoderConfig
+    base_model_prefix = "encoder_decoder"
 
     def __init__(
         self,
