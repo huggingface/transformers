@@ -74,6 +74,13 @@ RobertaForSequenceClassification
     :members:
 
 
+RobertaForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.RobertaForMultipleChoice
+    :members:
+
+
 RobertaForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
