@@ -21,9 +21,9 @@ import math
 import os
 
 import torch
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
-import torch.utils.checkpoint
 
 from .activations import gelu, gelu_new, swish
 from .configuration_bert import BertConfig
