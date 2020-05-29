@@ -420,17 +420,22 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
-            Mask to decide the attention given on each token, local attention, global attenion, or no attention (for padding tokens).
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+
+        global_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+            Mask to decide the attention given on each token, local attention or global attenion.
             Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also have
             global attention. Please refer to the Longformer paper https://arxiv.org/abs/2004.05150 for more details.
-            Mask values selected in ``[0, 1, 2]``:
-            ``0`` for no attention (padding tokens),
-            ``1`` for local attention (a sliding window attention),
-            ``2`` for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
+            Mask values selected in ``[0, 1]``:
+            ``0`` for local attention (a sliding window attention),
+            ``1`` for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
@@ -542,6 +547,7 @@ class LongformerModel(RobertaModel):
         self,
         input_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
@@ -593,6 +599,14 @@ class LongformerModel(RobertaModel):
             if isinstance(self.config.attention_window, int)
             else max(self.config.attention_window)
         )
+
+        # merge `global_attention_mask` and `attention_mask`
+        if global_attention_mask is not None:
+            # longformer self attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
+            # (global_attention_mask + 1) => 1 for local attention, 2 for global attention
+            # => final attention_mask => 0 for no attention, 1 for local attention 2 for global attention
+            attention_mask = attention_mask * (global_attention_mask + 1)
+
         padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_window_size(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -646,6 +660,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
@@ -695,6 +710,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -734,6 +750,7 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
@@ -778,15 +795,16 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
 
         """
 
-        if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
-
-        # global attention on cls token
-        attention_mask[:, 0] = 2
+        if global_attention_mask is None:
+            logger.info("Initializing global attention on CLS token...")
+            global_attention_mask = torch.zeros_like(input_ids)
+            # global attention on cls token
+            global_attention_mask[:, 0] = 1
 
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -853,7 +871,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         attention_mask = torch.arange(input_ids.shape[1], device=input_ids.device)
         attention_mask = attention_mask.expand_as(input_ids) < question_end_index
 
-        return attention_mask.long() + 1  # True => global attention; False => local attention
+        return attention_mask.long()
 
     def _get_question_end_index(self, input_ids):
         sep_token_indices = (input_ids == self.config.sep_token_id).nonzero()
@@ -871,6 +889,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         self,
         input_ids,
         attention_mask=None,
+        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
@@ -929,17 +948,15 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         """
 
         # set global attention on question tokens
-        global_attention_mask = self._compute_global_attention_mask(input_ids)
-        if attention_mask is None:
-            attention_mask = global_attention_mask
-        else:
-            # combine global_attention_mask with attention_mask
-            # global attention on question tokens, no attention on padding tokens
-            attention_mask = global_attention_mask * attention_mask
+        if global_attention_mask is None:
+            logger.info("Initializing global attention on question tokens...")
+            # put global attention on all tokens until `config.sep_token_id` is reached
+            global_attention_mask = self._compute_global_attention_mask(input_ids)
 
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -998,6 +1015,7 @@ class LongformerForTokenClassification(BertPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
@@ -1043,6 +1061,7 @@ class LongformerForTokenClassification(BertPreTrainedModel):
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
@@ -1097,6 +1116,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         input_ids=None,
         token_type_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         labels=None,
         position_ids=None,
         inputs_embeds=None,
@@ -1152,6 +1172,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
             position_ids=flat_position_ids,
             token_type_ids=flat_token_type_ids,
             attention_mask=flat_attention_mask,
+            global_attention_mask=global_attention_mask,
         )
         pooled_output = outputs[1]
 
