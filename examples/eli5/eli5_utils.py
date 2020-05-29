@@ -434,7 +434,7 @@ def make_es_index_snippets(es_client, passages_dset, index_name='english_wiki_ki
       }
     }
     es_client.indices.create(index = index_name, body = index_config)
-    number_of_docs = 23309001
+    number_of_docs = passages_dset.num_rows
     progress = tqdm(unit="docs", total=number_of_docs)
     successes = 0
     def passage_generator():
@@ -471,6 +471,7 @@ def query_es_index(question, es_client, index_name='english_wiki_kilt_snippets_1
     for r, hit in zip(res_list, hits):
         r['passage_id'] = hit['_id']
         r['score'] = hit['_score']
+        r['passage_text'] = hit['_source']['passage_text']
     return support_doc, res_list
 
 ###############
@@ -858,7 +859,7 @@ def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_i
     D, I = wiki_index.search(q_rep, n_results)
     res_passages = [wiki_passages[int(i)] for i in I[0]]
     support_doc = '<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
-    res_list = [dict([(k, p[k]) for k in wiki_passages.column_names if k != 'passage_text']) for p in res_passages]
+    res_list = [dict([(k, p[k]) for k in wiki_passages.column_names]) for p in res_passages]
     for r, sc in zip(res_list, D[0]):
         r['score'] = float(sc)
     return support_doc, res_list
