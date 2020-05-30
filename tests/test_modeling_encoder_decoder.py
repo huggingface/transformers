@@ -265,7 +265,8 @@ class EncoderDecoderModelTest(unittest.TestCase):
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
-            with tempfile.TemporaryDirectory() as encoder_tmp_dirname, tempfile.TemporaryDirectory() as decoder_tmp_dirname:
+            with tempfile.TemporaryDirectory() as encoder_tmp_dirname, \
+                 tempfile.TemporaryDirectory() as decoder_tmp_dirname:
                 enc_dec_model.encoder.save_pretrained(encoder_tmp_dirname)
                 enc_dec_model.decoder.save_pretrained(decoder_tmp_dirname)
                 EncoderDecoderModel.from_encoder_decoder_pretrained(
