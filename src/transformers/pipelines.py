@@ -657,8 +657,6 @@ class TextGenerationPipeline(Pipeline):
                         clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
 
-                    print(text)
-
                     # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
                     if input_ids is None:
                         prompt_length = 0
