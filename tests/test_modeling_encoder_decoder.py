@@ -43,9 +43,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
     def prepare_config_and_inputs_bert(self):
         bert_model_tester = BertModelTester(self)
         encoder_config_and_inputs = bert_model_tester.prepare_config_and_inputs()
-        decoder_config_and_inputs = (
-            bert_model_tester.prepare_config_and_inputs_for_decoder()
-        )
+        decoder_config_and_inputs = bert_model_tester.prepare_config_and_inputs_for_decoder()
         (
             config,
             input_ids,
@@ -95,9 +93,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
     ):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(
-            encoder=encoder_model, decoder=decoder_model
-        )
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -107,12 +103,9 @@ class EncoderDecoderModelTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            outputs_encoder_decoder[0].shape,
-            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
+            outputs_encoder_decoder[0].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(
-            outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,))
-        )
+        self.assertEqual(outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,)))
         encoder_outputs = (encoder_hidden_states,)
         outputs_encoder_decoder = enc_dec_model(
             encoder_outputs=encoder_outputs,
@@ -122,12 +115,9 @@ class EncoderDecoderModelTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            outputs_encoder_decoder[0].shape,
-            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
+            outputs_encoder_decoder[0].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(
-            outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,))
-        )
+        self.assertEqual(outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,)))
 
     def create_and_check_roberta_encoder_decoder_model(
         self,
@@ -142,9 +132,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
     ):
         encoder_model = RobertaModel(config)
         decoder_model = RobertaForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(
-            encoder=encoder_model, decoder=decoder_model
-        )
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -154,12 +142,9 @@ class EncoderDecoderModelTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            outputs_encoder_decoder[0].shape,
-            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
+            outputs_encoder_decoder[0].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(
-            outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,))
-        )
+        self.assertEqual(outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,)))
         encoder_outputs = (encoder_hidden_states,)
         outputs_encoder_decoder = enc_dec_model(
             encoder_outputs=encoder_outputs,
@@ -169,12 +154,9 @@ class EncoderDecoderModelTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            outputs_encoder_decoder[0].shape,
-            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
+            outputs_encoder_decoder[0].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(
-            outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,))
-        )
+        self.assertEqual(outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,)))
 
     def create_and_check_bert_encoder_decoder_model_from_pretrained(
         self,
@@ -200,12 +182,9 @@ class EncoderDecoderModelTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            outputs_encoder_decoder[0].shape,
-            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
+            outputs_encoder_decoder[0].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(
-            outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,))
-        )
+        self.assertEqual(outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,)))
 
     def create_and_check_roberta_encoder_decoder_model_from_pretrained(
         self,
@@ -231,12 +210,9 @@ class EncoderDecoderModelTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            outputs_encoder_decoder[0].shape,
-            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
+            outputs_encoder_decoder[0].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(
-            outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,))
-        )
+        self.assertEqual(outputs_encoder_decoder[1].shape, (input_ids.shape + (config.hidden_size,)))
 
     def create_and_check_save_and_load(
         self,
@@ -251,9 +227,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
     ):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(
-            encoder=encoder_model, decoder=decoder_model
-        )
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         enc_dec_model.eval()
         with torch.no_grad():
@@ -294,9 +268,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
     ):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(
-            encoder=encoder_model, decoder=decoder_model
-        )
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         enc_dec_model.eval()
         with torch.no_grad():
@@ -345,9 +317,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
     ):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(
-            encoder=encoder_model, decoder=decoder_model
-        )
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -363,12 +333,9 @@ class EncoderDecoderModelTest(unittest.TestCase):
         mlm_loss.backward()
 
         self.assertEqual(
-            outputs_encoder_decoder[1].shape,
-            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
+            outputs_encoder_decoder[1].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(
-            outputs_encoder_decoder[2].shape, (input_ids.shape + (config.hidden_size,))
-        )
+        self.assertEqual(outputs_encoder_decoder[2].shape, (input_ids.shape + (config.hidden_size,)))
 
     def create_and_check_roberta_encoder_decoder_model_mlm_labels(
         self,
@@ -384,9 +351,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
     ):
         encoder_model = RobertaModel(config)
         decoder_model = RobertaForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(
-            encoder=encoder_model, decoder=decoder_model
-        )
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -402,12 +367,9 @@ class EncoderDecoderModelTest(unittest.TestCase):
         mlm_loss.backward()
 
         self.assertEqual(
-            outputs_encoder_decoder[1].shape,
-            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
+            outputs_encoder_decoder[1].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(
-            outputs_encoder_decoder[2].shape, (input_ids.shape + (config.hidden_size,))
-        )
+        self.assertEqual(outputs_encoder_decoder[2].shape, (input_ids.shape + (config.hidden_size,)))
 
     def create_and_check_bert_encoder_decoder_model_lm_labels(
         self,
@@ -423,9 +385,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
     ):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(
-            encoder=encoder_model, decoder=decoder_model
-        )
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -441,12 +401,9 @@ class EncoderDecoderModelTest(unittest.TestCase):
         lm_loss.backward()
 
         self.assertEqual(
-            outputs_encoder_decoder[1].shape,
-            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
+            outputs_encoder_decoder[1].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(
-            outputs_encoder_decoder[2].shape, (input_ids.shape + (config.hidden_size,))
-        )
+        self.assertEqual(outputs_encoder_decoder[2].shape, (input_ids.shape + (config.hidden_size,)))
 
     def create_and_check_roberta_encoder_decoder_model_lm_labels(
         self,
@@ -462,9 +419,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
     ):
         encoder_model = RobertaModel(config)
         decoder_model = RobertaForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(
-            encoder=encoder_model, decoder=decoder_model
-        )
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -480,48 +435,33 @@ class EncoderDecoderModelTest(unittest.TestCase):
         lm_loss.backward()
 
         self.assertEqual(
-            outputs_encoder_decoder[1].shape,
-            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
+            outputs_encoder_decoder[1].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
-        self.assertEqual(
-            outputs_encoder_decoder[2].shape, (input_ids.shape + (config.hidden_size,))
-        )
+        self.assertEqual(outputs_encoder_decoder[2].shape, (input_ids.shape + (config.hidden_size,)))
 
-    def create_and_check_bert_encoder_decoder_model_generate(
-        self, input_ids, config, decoder_config, **kwargs
-    ):
+    def create_and_check_bert_encoder_decoder_model_generate(self, input_ids, config, decoder_config, **kwargs):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(
-            encoder=encoder_model, decoder=decoder_model
-        )
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
             input_ids, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id
         )
-        self.assertEqual(
-            generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,)
-        )
+        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
 
-    def create_and_check_roberta_encoder_decoder_model_generate(
-        self, input_ids, config, decoder_config, **kwargs
-    ):
+    def create_and_check_roberta_encoder_decoder_model_generate(self, input_ids, config, decoder_config, **kwargs):
         encoder_model = RobertaModel(config)
         decoder_model = RobertaForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(
-            encoder=encoder_model, decoder=decoder_model
-        )
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
             input_ids, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id
         )
-        self.assertEqual(
-            generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,)
-        )
+        self.assertEqual(generated_output.shape, (input_ids.shape[0],) + (decoder_config.max_length,))
 
     def test_bert_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs_bert()
@@ -533,15 +473,11 @@ class EncoderDecoderModelTest(unittest.TestCase):
 
     def test_bert_encoder_decoder_model_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs_bert()
-        self.create_and_check_bert_encoder_decoder_model_from_pretrained(
-            **input_ids_dict
-        )
+        self.create_and_check_bert_encoder_decoder_model_from_pretrained(**input_ids_dict)
 
     def test_roberta_encoder_decoder_model_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs_bert()
-        self.create_and_check_roberta_encoder_decoder_model_from_pretrained(
-            **input_ids_dict
-        )
+        self.create_and_check_roberta_encoder_decoder_model_from_pretrained(**input_ids_dict)
 
     def test_save_and_load_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs_bert()
@@ -577,47 +513,33 @@ class EncoderDecoderModelTest(unittest.TestCase):
 
     @slow
     def test_real_bert_model_from_pretrained(self):
-        model = EncoderDecoderModel.from_encoder_decoder_pretrained(
-            "bert-base-uncased", "bert-base-uncased"
-        )
+        model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
         self.assertIsNotNone(model)
 
     @slow
     def test_real_roberta_model_from_pretrained(self):
-        model = EncoderDecoderModel.from_encoder_decoder_pretrained(
-            "roberta-base", "roberta-base"
-        )
+        model = EncoderDecoderModel.from_encoder_decoder_pretrained("roberta-base", "roberta-base")
         self.assertIsNotNone(model)
 
     @slow
     def test_real_bert_model_from_pretrained_has_cross_attention(self):
-        model = EncoderDecoderModel.from_encoder_decoder_pretrained(
-            "bert-base-uncased", "bert-base-uncased"
-        )
+        model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
         self.assertTrue(hasattr(model.decoder.bert.encoder.layer[0], "crossattention"))
 
     @slow
     def test_real_roberta_model_from_pretrained_has_cross_attention(self):
-        model = EncoderDecoderModel.from_encoder_decoder_pretrained(
-            "roberta-base", "roberta-base"
-        )
+        model = EncoderDecoderModel.from_encoder_decoder_pretrained("roberta-base", "roberta-base")
         self.assertTrue(hasattr(model.decoder.bert.encoder.layer[0], "crossattention"))
 
     @slow
     def test_real_bert_model_save_load_from_pretrained(self):
-        model_2 = EncoderDecoderModel.from_encoder_decoder_pretrained(
-            "bert-base-uncased", "bert-base-uncased"
-        )
+        model_2 = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
         model_2.to(torch_device)
         input_ids = ids_tensor([13, 5], model_2.config.encoder.vocab_size)
         decoder_input_ids = ids_tensor([13, 1], model_2.config.encoder.vocab_size)
         attention_mask = ids_tensor([13, 5], vocab_size=2)
         with torch.no_grad():
-            outputs = model_2(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-            )
+            outputs = model_2(input_ids=input_ids, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,)
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
@@ -627,9 +549,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
                 model_1.to(torch_device)
 
                 after_outputs = model_1(
-                    input_ids=input_ids,
-                    decoder_input_ids=decoder_input_ids,
-                    attention_mask=attention_mask,
+                    input_ids=input_ids, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,
                 )
                 out_1 = after_outputs[0].cpu().numpy()
                 out_1[np.isnan(out_1)] = 0
@@ -638,19 +558,13 @@ class EncoderDecoderModelTest(unittest.TestCase):
 
     @slow
     def test_real_roberta_model_save_load_from_pretrained(self):
-        model_2 = EncoderDecoderModel.from_encoder_decoder_pretrained(
-            "roberta-base", "roberta-base"
-        )
+        model_2 = EncoderDecoderModel.from_encoder_decoder_pretrained("roberta-base", "roberta-base")
         model_2.to(torch_device)
         input_ids = ids_tensor([13, 5], model_2.config.encoder.vocab_size)
         decoder_input_ids = ids_tensor([13, 1], model_2.config.encoder.vocab_size)
         attention_mask = ids_tensor([13, 5], vocab_size=2)
         with torch.no_grad():
-            outputs = model_2(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
-            )
+            outputs = model_2(input_ids=input_ids, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,)
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
@@ -660,9 +574,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
                 model_1.to(torch_device)
 
                 after_outputs = model_1(
-                    input_ids=input_ids,
-                    decoder_input_ids=decoder_input_ids,
-                    attention_mask=attention_mask,
+                    input_ids=input_ids, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,
                 )
                 out_1 = after_outputs[0].cpu().numpy()
                 out_1[np.isnan(out_1)] = 0
