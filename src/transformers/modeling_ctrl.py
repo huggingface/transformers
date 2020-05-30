@@ -432,6 +432,7 @@ class CTRLModel(CTRLPreTrainedModel):
                 attention_mask=attention_mask,
                 head_mask=head_mask[i],
                 use_cache=use_cache,
+                output_attentions=output_attentions,
             )
             hidden_states, present = outputs[:2]
             if use_cache is True:
@@ -493,6 +494,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         use_cache=True,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -545,6 +547,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         hidden_states = transformer_outputs[0]

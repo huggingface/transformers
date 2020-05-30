@@ -380,6 +380,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -422,7 +423,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
 
         """
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, output_attentions
         )
 
         sequence_output = discriminator_hidden_states[0]
@@ -469,6 +470,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
@@ -512,7 +514,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         """
 
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, output_attentions,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 
@@ -568,6 +570,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         masked_lm_labels=None,
+        output_attentions=False,
     ):
         r"""
         masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -610,7 +613,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         """
 
         generator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, output_attentions,
         )
         generator_sequence_output = generator_hidden_states[0]
 
@@ -656,6 +659,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -697,7 +701,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         """
 
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, output_attentions,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 

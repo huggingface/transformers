@@ -228,13 +228,16 @@ class Block(nn.Module):
         self.ln_2 = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
         self.mlp = MLP(4 * nx, config)
 
-    def forward(self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False):
+    def forward(
+        self, x, layer_past=None, attention_mask=None, head_mask=None, use_cache=False, output_attentions=False,
+    ):
         output_attn = self.attn(
             self.ln_1(x),
             layer_past=layer_past,
             attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         a = output_attn[0]  # output_attn: a, present, (attentions)
 
@@ -487,6 +490,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 attention_mask=attention_mask,
                 head_mask=head_mask[i],
                 use_cache=use_cache,
+                output_attentions=output_attentions,
             )
 
             hidden_states, present = outputs[:2]
@@ -551,6 +555,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         inputs_embeds=None,
         labels=None,
         use_cache=True,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -603,6 +608,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         hidden_states = transformer_outputs[0]
 
@@ -656,6 +662,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         lm_labels=None,
         mc_labels=None,
         use_cache=True,
+        output_attentions=False,
     ):
         r"""
         mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
@@ -730,6 +737,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         hidden_states = transformer_outputs[0]
