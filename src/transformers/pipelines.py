@@ -454,14 +454,17 @@ class Pipeline(_ScikitCompat):
         """
         return {name: tensor.to(self.device) for name, tensor in inputs.items()}
 
-    def _parse_and_tokenize(self, *args, pad_to_max_length=True, **kwargs):
+    def _parse_and_tokenize(self, *args, pad_to_max_length=True, add_special_tokens=True, **kwargs):
         """
         Parse arguments and tokenize
         """
         # Parse arguments
         inputs = self._args_parser(*args, **kwargs)
         inputs = self.tokenizer.batch_encode_plus(
-            inputs, add_special_tokens=True, return_tensors=self.framework, pad_to_max_length=pad_to_max_length,
+            inputs,
+            add_special_tokens=add_special_tokens,
+            return_tensors=self.framework,
+            pad_to_max_length=pad_to_max_length,
         )
 
         return inputs
@@ -617,9 +620,11 @@ class TextGenerationPipeline(Pipeline):
             # Manage correct placement of the tensors
             with self.device_placement():
                 if self.model.__class__.__name__ in ["XLNetLMHeadModel", "TransfoXLLMHeadModel"]:
-                    inputs = self._parse_and_tokenize(self.PADDING_TEXT + prompt_text, pad_to_max_length=False)
+                    inputs = self._parse_and_tokenize(
+                        self.PADDING_TEXT + prompt_text, pad_to_max_length=False, add_special_tokens=False
+                    )
                 else:
-                    inputs = self._parse_and_tokenize(prompt_text, pad_to_max_length=False)
+                    inputs = self._parse_and_tokenize(prompt_text, pad_to_max_length=False, add_special_tokens=False)
 
                 # set input_ids to None to allow empty prompt
                 if inputs["input_ids"].shape[-1] == 0:
@@ -651,6 +656,8 @@ class TextGenerationPipeline(Pipeline):
                         skip_special_tokens=True,
                         clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
+
+                    print(text)
 
                     # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
                     if input_ids is None:
