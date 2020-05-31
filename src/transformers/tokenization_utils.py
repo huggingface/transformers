@@ -103,6 +103,7 @@ def truncate_and_pad(
     stride: int,
     strategy: str,
     pad_to_max_length: bool,
+    pad_to_next_multiple_of: int,
     padding_side: str,
     pad_token_id: int,
     pad_token_type_id: int,
@@ -132,13 +133,14 @@ def truncate_and_pad(
     if max_length is not None:
         tokenizer.enable_truncation(max_length, stride=stride, strategy=strategy)
 
-    if pad_to_max_length and (pad_token and pad_token_id >= 0):
+    if pad_to_next_multiple_of or (pad_to_max_length and (pad_token and pad_token_id >= 0)):
         tokenizer.enable_padding(
             max_length=max_length,
             direction=padding_side,
             pad_id=pad_token_id,
             pad_type_id=pad_token_type_id,
             pad_token=pad_token,
+            pad_to_multiple_of=pad_to_next_multiple_of
         )
     elif pad_to_max_length:
         logger.warning(
@@ -2487,6 +2489,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             stride=stride,
             strategy=truncation_strategy,
             pad_to_max_length=pad_to_max_length,
+            pad_to_next_multiple_of=pad_to_next_multiple_of,
             padding_side=self.padding_side,
             pad_token_id=self.pad_token_id,
             pad_token_type_id=self.pad_token_type_id,
@@ -2663,6 +2666,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
                 pad_to_max_length=pad_to_max_length,
+                pad_to_next_multiple_of=pad_to_next_multiple_of,
                 **kwargs,
             )
 
