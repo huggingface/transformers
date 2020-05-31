@@ -642,6 +642,21 @@ def main(args):
     return model
 
 
+def eval_and_fix(args):
+    Path(args.output_dir).mkdir(exist_ok=True)
+    if args.no_teacher:
+        assert not args.enc_only
+        module_cls = SummarizationTrainer
+    elif args.enc_only:
+        module_cls = EncoderDistiller
+    else:
+        module_cls = SummarizationDistiller
+
+    model: BaseTransformer = module_cls(args)
+    trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
+    trainer.test(model)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())

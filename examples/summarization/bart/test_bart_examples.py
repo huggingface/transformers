@@ -8,13 +8,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+import torch
 from torch.utils.data import DataLoader
 
 from durbango import DEFAULT_DEVICE, pickle_load, pickle_save
 from transformers import BartTokenizer
 
 from .evaluate_cnn import run_generate
-from .finetune import main
+from .finetune import main, eval_and_fix
 from .utils import PSEUDO_ID_SUFFIX, SummarizationDataset, summaries_for_file
 
 
@@ -144,9 +145,19 @@ class TestBartExamples(unittest.TestCase):
         self._bart_distiller_cli(updates)
 
     def test_bdc_enc_only(self):
-        updates = dict(alpha_mlm=0.0, alpha_ce=0.0, student_encoder_layers=1, enc_only=True, student_decoder_layers=2,)
+        updates = dict(alpha_mlm=0.0, alpha_ce=0.0, student_encoder_layers=1, enc_only=True, student_decoder_layers=2,
+                       )
         model = self._bart_distiller_cli(updates)
         self.assertFalse(model.different_decoder)
+        ckpt_path = list(model.output_dir.glob('*.ckpt'))[0]
+
+        ckpt = torch.load(ckpt_path, map_location='cpu')
+        args = argparse.Namespace(**ckpt['hparams'])
+        args.resume_from_checkpoint = str(ckpt_path)
+        args.do_train = False
+        args.output_dir = tempfile.mkdtemp(prefix="output_v2")
+        eval_and_fix(args)
+
 
     def _bart_distiller_cli(self, updates):
         default_updates = dict(
