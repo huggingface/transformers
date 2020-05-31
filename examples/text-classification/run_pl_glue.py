@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-from lightning_base import BaseTransformer, add_generic_args, generic_train
+from lightning_base import BaseTransformer, add_generic_args, build_trainer
 from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
 from transformers import glue_output_modes
@@ -186,7 +186,7 @@ if __name__ == "__main__":
         os.makedirs(args.output_dir)
 
     model = GLUETransformer(args)
-    trainer = generic_train(model, args)
+    trainer = build_trainer(model, args)
 
     # Optionally, predict on dev set and write to output_dir
     if args.do_predict:

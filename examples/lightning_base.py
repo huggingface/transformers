@@ -40,6 +40,13 @@ MODEL_MODES = {
     "language-modeling": AutoModelWithLMHead,
 }
 
+from durbango import remove_prefix
+def try_load_state_dict(model, sd1):
+    sd = {k:v for k,v in sd1.items() if not k.startswith('teacher')}
+    model.load_state_dict(sd, strict=True)
+    return model
+
+
 
 def set_seed(args: argparse.Namespace):
     random.seed(args.seed)
@@ -301,7 +308,7 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--resume_from_checkpoint", type=str, default=None)
 
 
-def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callbacks=[], **extra_train_kwargs):
+def build_trainer(model: BaseTransformer, args: argparse.Namespace, extra_callbacks=[], **extra_train_kwargs):
     # init model
     set_seed(args)
     odir = Path(model.hparams.output_dir)
@@ -319,6 +326,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
 
     checkpoint_callback = ModelCheckpoint(
         filepath=str(model.output_dir / "{epoch}-{val_avg_rouge2:.4f}"), monitor="val_loss", mode="min", save_top_k=1,
+        save_weights_only=True,
     )
 
     train_params = dict(
@@ -335,6 +343,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
         weights_summary=None,
         resume_from_checkpoint=args.resume_from_checkpoint,
         auto_scale_batch_size=args.auto_scale_batch_size,
+
     )
 
     if args.fp16:
