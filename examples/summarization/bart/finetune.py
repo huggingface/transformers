@@ -21,7 +21,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from durbango import lmap, pickle_load, pickle_save
-from lightning_base import BaseTransformer, add_generic_args, build_trainer, get_linear_schedule_with_warmup
+from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
 from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.modeling_bart import invert_mask
 from transformers.optimization import AdamW
@@ -630,7 +630,7 @@ def main(args):
         module_cls = SummarizationDistiller
 
     model: BaseTransformer = module_cls(args)
-    trainer: pl.Trainer = build_trainer(model, args, early_stopping_callback=True)
+    trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
     model.hparams.test_checkpoint = ""
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
 
