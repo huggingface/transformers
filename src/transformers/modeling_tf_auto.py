@@ -238,6 +238,12 @@ class TFAutoModel(object):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
                     - isInstance of `distilbert` configuration class: TFDistilBertModel (DistilBERT model)
@@ -377,6 +383,11 @@ class TFAutoModelForPreTraining(object):
     def from_config(cls, config):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -544,6 +555,12 @@ class TFAutoModelWithLMHead(object):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
@@ -699,6 +716,12 @@ class TFAutoModelForMultipleChoice:
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
                     - isInstance of `albert` configuration class: AlbertModel (Albert model)
@@ -849,6 +872,12 @@ class TFAutoModelForSequenceClassification(object):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
@@ -1006,6 +1035,12 @@ class TFAutoModelForQuestionAnswering(object):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
                     - isInstance of `distilbert` configuration class: DistilBertModel (DistilBERT model)
@@ -1143,6 +1178,12 @@ class TFAutoModelForTokenClassification:
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
+        Args:
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
                 The model class to instantiate is selected based on the configuration class:
                     - isInstance of `bert` configuration class: BertModel (Bert model)

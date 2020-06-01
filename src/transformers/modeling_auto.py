@@ -328,6 +328,11 @@ class AutoModel:
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
         Args:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
@@ -480,6 +485,11 @@ class AutoModelForPreTraining:
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
         Args:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
@@ -624,6 +634,11 @@ class AutoModelWithLMHead:
     def from_config(cls, config):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -770,6 +785,11 @@ class AutoModelForSequenceClassification:
     def from_config(cls, config):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -918,6 +938,11 @@ class AutoModelForQuestionAnswering:
         r""" Instantiates one of the base model classes of the library
         from a configuration.
 
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
+
         Args:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
@@ -1057,6 +1082,11 @@ class AutoModelForTokenClassification:
     def from_config(cls, config):
         r""" Instantiates one of the base model classes of the library
         from a configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights.
+            It only affects the model's configuration. Use :func:`~transformers.AutoModel.from_pretrained` to load
+            the model weights
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
