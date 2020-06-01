@@ -288,7 +288,6 @@ class TFModelTesterMixin:
             inputs_keywords = copy.deepcopy(inputs_dict)
             input_ids = inputs_keywords.pop("input_ids" if not self.is_encoder_decoder else "inputs", None,)
             outputs_keywords = model(input_ids, **inputs_keywords)
-
             output_dict = outputs_dict[0].numpy()
             output_keywords = outputs_keywords[0].numpy()
 

@@ -861,9 +861,25 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    def call(self, inputs, **kwargs):
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        training=False,
+    ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+            If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
+
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`)
@@ -887,20 +903,34 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
         tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
         model = TFAlbertForSequenceClassification.from_pretrained('albert-base-v2')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        logits = outputs[0]
+        labels = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, logits = outputs[:2]
 
         """
-        outputs = self.albert(inputs, **kwargs)
+
+        outputs = self.albert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            training=training,
+        )
 
         pooled_output = outputs[1]
 
-        pooled_output = self.dropout(pooled_output, training=kwargs.get("training", False))
+        pooled_output = self.dropout(pooled_output, training=training)
         logits = self.classifier(pooled_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
 
-        return outputs  # logits, (hidden_states), (attentions)
+        if labels is not None:
+            loss = self.compute_loss(labels, logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
@@ -920,8 +950,22 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
         )
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        training=False,
+    ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the token classification loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
@@ -945,20 +989,33 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
         tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
         model = TFAlbertForTokenClassification.from_pretrained('albert-base-v2')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        scores = outputs[0]
+        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, scores = outputs[:2]
 
         """
-        outputs = self.albert(inputs, **kwargs)
+        outputs = self.albert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            training=training,
+        )
 
         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output, training=kwargs.get("training", False))
+        sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(sequence_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
 
-        return outputs  # scores, (hidden_states), (attentions)
+        if labels is not None:
+            loss = self.compute_loss(labels, logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
@@ -975,9 +1032,29 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    def call(self, inputs, **kwargs):
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        start_positions=None,
+        end_positions=None,
+        training=False,
+    ):
         r"""
+        start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+        end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
         start_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
@@ -1005,14 +1082,23 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
 
         tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
         model = TFAlbertForQuestionAnswering.from_pretrained('albert-base-v2')
-        input_ids = tokenizer.encode("Who was Jim Henson?", "Jim Henson was a nice puppet")
-        start_scores, end_scores = model(tf.constant(input_ids)[None, :]) # Batch size 1
+        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
+        start_scores, end_scores = model(input_dict)
 
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
         answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
 
         """
-        outputs = self.albert(inputs, **kwargs)
+        outputs = self.albert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            training=training,
+        )
 
         sequence_output = outputs[0]
 
@@ -1023,7 +1109,13 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
 
         outputs = (start_logits, end_logits,) + outputs[2:]
 
-        return outputs  # start_logits, end_logits, (hidden_states), (attentions)
+        if start_positions is not None and end_positions is not None:
+            labels = {"start_position": start_positions}
+            labels["end_position"] = end_positions
+            loss = self.compute_loss(labels, outputs[:2])
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
@@ -1059,9 +1151,15 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        labels=None,
         training=False,
     ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the multiple choice classification loss.
+            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
+            of the input tensors. (see `input_ids` above)
+
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         classification_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`:
@@ -1086,12 +1184,13 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
 
         tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
         model = TFAlbertForMultipleChoice.from_pretrained('albert-base-v2')
+        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
 
-        example1 = ["This is a context", "Is it a context? Yes"]
-        example2 = ["This is a context", "Is it a context? No"]
-        encoding = tokenizer.batch_encode_plus([example1, example2], return_tensors='tf', truncation_strategy="only_first", pad_to_max_length=True, max_length=128)
-        outputs = model(encoding["input_ids"][None, :])
-        logits = outputs[0]
+        input_ids = tf.constant([tokenizer.encode(s, add_special_tokens=True) for s in choices])[None, :] # Batch size 1, 2 choices
+        labels = tf.reshape(tf.constant(1), (-1, 1))
+        outputs = model(input_ids, labels=labels)
+
+        loss, classification_scores = outputs[:2]
 
         """
         if isinstance(inputs, (tuple, list)):
@@ -1144,4 +1243,8 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
 
         outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
 
-        return outputs  # reshaped_logits, (hidden_states), (attentions)
+        if labels is not None:
+            loss = self.compute_loss(labels, reshaped_logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)

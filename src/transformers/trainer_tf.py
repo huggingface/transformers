@@ -160,18 +160,18 @@ class TFTrainer:
             loss = tf.reduce_mean(loss)
 
             if not prediction_loss_only:
-                if self.args.n_gpu > 1:
-                    if isinstance(logits, tuple):
-                        logits = logits[0]
+                if isinstance(logits, tuple):
+                    logits = logits[0]
 
+                if isinstance(labels, tuple):
+                    labels = labels[0]
+
+                if self.args.n_gpu > 1:
                     for val in logits.values:
                         if preds is None:
                             preds = val.numpy()
                         else:
                             preds = np.append(preds, val.numpy(), axis=0)
-
-                    if isinstance(labels, tuple):
-                        labels = labels[0]
 
                     for val in labels.values:
                         if label_ids is None:
@@ -378,8 +378,10 @@ class TFTrainer:
           labels: the batched labels.
           training: run the model in training mode or not
         """
-        logits = self.model(features, training=training)
-        loss = self.model.compute_loss(labels, logits)
+        if isinstance(labels, (dict)):
+            loss, logits = self.model(features, training=training, **labels)[:2]
+        else:
+            loss, logits = self.model(features, labels=labels, training=training)[:2]
         loss += sum(self.model.losses) * (1.0 / self.args.n_gpu)
 
         return loss, logits

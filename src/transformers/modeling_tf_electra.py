@@ -570,7 +570,9 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
 
         self.electra = TFElectraMainLayer(config, name="electra")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(config.num_labels, name="classifier")
+        self.classifier = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+        )
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
     def call(
@@ -581,9 +583,14 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        labels=None,
         training=False,
     ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the token classification loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
@@ -606,21 +613,33 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
 
         tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
         model = TFElectraForTokenClassification.from_pretrained('google/electra-small-discriminator')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        scores = outputs[0]
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, scores = outputs[:2]
+
         """
 
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, training=training
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            inputs_embeds,
+            training=training
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
         discriminator_sequence_output = self.dropout(discriminator_sequence_output)
         logits = self.classifier(discriminator_sequence_output)
-        output = (logits,)
-        output += discriminator_hidden_states[1:]
 
-        return output  # (loss), scores, (hidden_states), (attentions)
+        outputs = (logits,) + discriminator_hidden_states[1:]
+
+        if labels is not None:
+            loss = self.compute_loss(labels, logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), scores, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
@@ -647,9 +666,20 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        start_positions=None,
+        end_positions=None,
         training=False,
     ):
         r"""
+        start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+        end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         start_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
@@ -676,17 +706,21 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
         model = TFElectraForQuestionAnswering.from_pretrained('google/electra-small-generator')
 
         question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
-        encoding = tokenizer.encode_plus(question, text)
-        input_ids, token_type_ids = encoding["input_ids"], encoding["token_type_ids"]
-        start_scores, end_scores = model(tf.constant(input_ids)[None, :], token_type_ids=tf.constant(token_type_ids)[None, :])
+        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
+        start_scores, end_scores = model(input_dict)
 
-        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-        answer = ' '.join(all_tokens[tf.math.argmax(tf.squeeze(start_scores)) : tf.math.argmax(tf.squeeze(end_scores))+1])
-        assert answer == "a nice puppet"
+        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
+        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
 
         """
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, training=training
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            inputs_embeds,
+            training=training
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 
@@ -697,4 +731,10 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
 
         outputs = (start_logits, end_logits,) + discriminator_hidden_states[1:]
 
-        return outputs  # start_logits, end_logits, (hidden_states), (attentions)
+        if start_positions is not None and end_positions is not None:
+            labels = {"start_position": start_positions}
+            labels["end_position"] = end_positions
+            loss = self.compute_loss(labels, outputs[:2])
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)

@@ -123,7 +123,7 @@ class TFTokenClassificationLoss:
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
         active_loss = tf.reshape(labels, (-1,)) != -1
-        reduced_logits = tf.boolean_mask(tf.reshape(logits[0], (-1, shape_list(logits[0])[2])), active_loss)
+        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
         labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
 
         return loss_fn(labels, reduced_logits)
@@ -131,14 +131,14 @@ class TFTokenClassificationLoss:
 
 class TFSequenceClassificationLoss:
     def compute_loss(self, labels, logits):
-        if shape_list(logits[0])[2] == 1:
+        if shape_list(logits)[1] == 1:
             loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         else:
             loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
                 from_logits=True, reduction=tf.keras.losses.Reduction.NONE
             )
 
-        return loss_fn(labels, logits[0])
+        return loss_fn(labels, logits)
 
 
 TFMultipleChoiceLoss = TFSequenceClassificationLoss
