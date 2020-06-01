@@ -976,6 +976,9 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        cls_index=None,
+        p_mask=None,
+        is_impossible=None,
         training=False,
     ):
         r"""

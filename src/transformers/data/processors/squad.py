@@ -429,8 +429,8 @@ def squad_convert_examples_to_features(
                 "qas_id": tf.TensorShape([]),
             },
             {
-                "start_position": tf.TensorShape([]),
-                "end_position": tf.TensorShape([]),
+                "start_positions": tf.TensorShape([]),
+                "end_positions": tf.TensorShape([]),
                 "cls_index": tf.TensorShape([]),
                 "p_mask": tf.TensorShape([None]),
                 "is_impossible": tf.TensorShape([]),
