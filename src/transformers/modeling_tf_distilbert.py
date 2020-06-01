@@ -694,13 +694,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
     def call(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        training=False,
+        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -778,13 +772,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
     def call(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        training=False,
+        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -873,13 +861,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
     def call(
-        self,
-        inputs,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        training=False,
+        self, inputs, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):

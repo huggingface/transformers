@@ -621,13 +621,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         """
 
         discriminator_hidden_states = self.electra(
-            input_ids,
-            attention_mask,
-            token_type_ids,
-            position_ids,
-            head_mask,
-            inputs_embeds,
-            training=training
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, training=training
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
         discriminator_sequence_output = self.dropout(discriminator_sequence_output)
@@ -714,13 +708,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
 
         """
         discriminator_hidden_states = self.electra(
-            input_ids,
-            attention_mask,
-            token_type_ids,
-            position_ids,
-            head_mask,
-            inputs_embeds,
-            training=training
+            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, training=training
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 
