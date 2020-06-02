@@ -203,7 +203,7 @@ class BartTranslationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        checkpoint_name = "mbart-large-en-ro"
+        checkpoint_name = "facebook/mbart-large-en-ro"
         cls.tokenizer = MBartTokenizer.from_pretrained(checkpoint_name)
         cls.pad_token_id = 1
         net_input = {
@@ -230,7 +230,7 @@ class BartTranslationTests(unittest.TestCase):
     def model(self):
         """Only load the model if needed."""
         if self._model is None:
-            model = BartForConditionalGeneration.from_pretrained("mbart-large-en-ro")
+            model = BartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
             self._model = model.to(torch_device)
         return self._model
 
