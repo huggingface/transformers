@@ -71,13 +71,13 @@ extras["sklearn"] = ["scikit-learn"]
 # keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
 extras["tf"] = [
     "tensorflow",
-    "onnxconverter-common",
-    "keras2onnx"
+    "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
+    "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx"
 ]
 extras["tf-cpu"] = [
     "tensorflow-cpu",
-    "onnxconverter-common",
-    "keras2onnx"
+    "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
+    "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx"
 ]
 extras["torch"] = ["torch"]
 
@@ -88,7 +88,7 @@ extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator"]
 extras["docs"] = ["recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme"]
 extras["quality"] = [
     "black",
-    "isort",
+    "isort @ git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort",
     "flake8",
 ]
 extras["dev"] = extras["testing"] + extras["quality"] + ["mecab-python3", "scikit-learn", "tensorflow", "torch"]
