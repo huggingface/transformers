@@ -20,7 +20,7 @@ import copy
 import json
 import logging
 import os
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
 
@@ -202,9 +202,7 @@ class PretrainedConfig(object):
         return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
-    def get_config_dict(
-        cls, pretrained_model_name_or_path: str, **kwargs
-    ) -> Tuple[Dict, Dict]:
+    def get_config_dict(cls, pretrained_model_name_or_path: str, **kwargs) -> Tuple[Dict, Dict]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used
         for instantiating a Config using `from_dict`.

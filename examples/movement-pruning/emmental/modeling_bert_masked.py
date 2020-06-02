@@ -29,11 +29,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from emmental import MaskedBertConfig
 from emmental.modules import MaskedLinear
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from transformers.modeling_bert import (
-    ACT2FN,
-    BertLayerNorm,
-    load_tf_weights_in_bert,
-)
+from transformers.modeling_bert import ACT2FN, BertLayerNorm, load_tf_weights_in_bert
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
 
 

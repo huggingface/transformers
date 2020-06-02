@@ -193,9 +193,7 @@ class AutoConfig:
             assert unused_kwargs == {'foo': False}
 
         """
-        config_dict, _ = PretrainedConfig.get_config_dict(
-            pretrained_model_name_or_path, **kwargs
-        )
+        config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         if "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
