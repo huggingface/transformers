@@ -31,14 +31,15 @@ from .tokenization_utils import BatchEncoding
 logger = logging.getLogger(__name__)
 
 
-TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "distilbert-base-uncased": "https://cdn.huggingface.co/distilbert-base-uncased-tf_model.h5",
-    "distilbert-base-uncased-distilled-squad": "https://cdn.huggingface.co/distilbert-base-uncased-distilled-squad-tf_model.h5",
-    "distilbert-base-cased": "https://cdn.huggingface.co/distilbert-base-cased-tf_model.h5",
-    "distilbert-base-cased-distilled-squad": "https://cdn.huggingface.co/distilbert-base-cased-distilled-squad-tf_model.h5",
-    "distilbert-base-multilingual-cased": "https://cdn.huggingface.co/distilbert-base-multilingual-cased-tf_model.h5",
-    "distilbert-base-uncased-finetuned-sst-2-english": "https://cdn.huggingface.co/distilbert-base-uncased-finetuned-sst-2-english-tf_model.h5",
-}
+TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "distilbert-base-uncased",
+    "distilbert-base-uncased-distilled-squad",
+    "distilbert-base-cased",
+    "distilbert-base-cased-distilled-squad",
+    "distilbert-base-multilingual-cased",
+    "distilbert-base-uncased-finetuned-sst-2-english",
+    # See all DistilBERT models at https://huggingface.co/models?filter=distilbert
+]
 
 
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
@@ -467,7 +468,6 @@ class TFDistilBertPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = DistilBertConfig
-    pretrained_model_archive_map = TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "distilbert"
 
 

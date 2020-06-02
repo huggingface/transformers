@@ -33,7 +33,10 @@ from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv
 
 logger = logging.getLogger(__name__)
 
-OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP = {"openai-gpt": "https://cdn.huggingface.co/openai-gpt-pytorch_model.bin"}
+OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "openai-gpt",
+    # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-gpt
+]
 
 
 def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
@@ -252,7 +255,6 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     """
 
     config_class = OpenAIGPTConfig
-    pretrained_model_archive_map = OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
 

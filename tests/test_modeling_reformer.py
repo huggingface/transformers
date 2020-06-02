@@ -29,7 +29,7 @@ if is_torch_available():
         ReformerModelWithLMHead,
         ReformerTokenizer,
         ReformerLayer,
-        REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
+        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     import torch
 
@@ -503,7 +503,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ReformerModelWithLMHead.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

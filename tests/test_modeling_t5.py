@@ -26,7 +26,7 @@ from .utils import require_torch, slow, torch_device
 if is_torch_available():
     import torch
     from transformers import T5Config, T5Model, T5ForConditionalGeneration
-    from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.tokenization_t5 import T5Tokenizer
 
 
@@ -372,7 +372,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(T5_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = T5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

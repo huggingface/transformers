@@ -30,14 +30,15 @@ from .modeling_utils import create_position_ids_from_input_ids
 
 logger = logging.getLogger(__name__)
 
-ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "roberta-base": "https://cdn.huggingface.co/roberta-base-pytorch_model.bin",
-    "roberta-large": "https://cdn.huggingface.co/roberta-large-pytorch_model.bin",
-    "roberta-large-mnli": "https://cdn.huggingface.co/roberta-large-mnli-pytorch_model.bin",
-    "distilroberta-base": "https://cdn.huggingface.co/distilroberta-base-pytorch_model.bin",
-    "roberta-base-openai-detector": "https://cdn.huggingface.co/roberta-base-openai-detector-pytorch_model.bin",
-    "roberta-large-openai-detector": "https://cdn.huggingface.co/roberta-large-openai-detector-pytorch_model.bin",
-}
+ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "roberta-base",
+    "roberta-large",
+    "roberta-large-mnli",
+    "distilroberta-base",
+    "roberta-base-openai-detector",
+    "roberta-large-openai-detector",
+    # See all RoBERTa models at https://huggingface.co/models?filter=roberta
+]
 
 
 class RobertaEmbeddings(BertEmbeddings):
@@ -142,7 +143,6 @@ class RobertaModel(BertModel):
     """
 
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -161,7 +161,6 @@ class RobertaModel(BertModel):
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
 class RobertaForMaskedLM(BertPreTrainedModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -276,7 +275,6 @@ class RobertaLMHead(nn.Module):
 )
 class RobertaForSequenceClassification(BertPreTrainedModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -367,7 +365,6 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
 )
 class RobertaForMultipleChoice(BertPreTrainedModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -466,7 +463,6 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
 )
 class RobertaForTokenClassification(BertPreTrainedModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -586,7 +582,6 @@ class RobertaClassificationHead(nn.Module):
 )
 class RobertaForQuestionAnswering(BertPreTrainedModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):

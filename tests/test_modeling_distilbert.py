@@ -247,6 +247,6 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     # @slow
     # def test_model_from_pretrained(self):
-    #     for model_name in list(DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+    #     for model_name in DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
     #         model = DistilBertModel.from_pretrained(model_name)
     #         self.assertIsNotNone(model)

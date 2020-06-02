@@ -36,13 +36,14 @@ logger = logging.getLogger(__name__)
 # This dict contrains shortcut names and associated url
 # for the pretrained weights provided with the models
 ####################################################
-T5_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "t5-small": "https://cdn.huggingface.co/t5-small-pytorch_model.bin",
-    "t5-base": "https://cdn.huggingface.co/t5-base-pytorch_model.bin",
-    "t5-large": "https://cdn.huggingface.co/t5-large-pytorch_model.bin",
-    "t5-3b": "https://cdn.huggingface.co/t5-3b-pytorch_model.bin",
-    "t5-11b": "https://cdn.huggingface.co/t5-11b-pytorch_model.bin",
-}
+T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "t5-small",
+    "t5-base",
+    "t5-large",
+    "t5-3b",
+    "t5-11b",
+    # See all T5 models at https://huggingface.co/models?filter=t5
+]
 
 
 ####################################################
@@ -555,7 +556,6 @@ class T5PreTrainedModel(PreTrainedModel):
     """
 
     config_class = T5Config
-    pretrained_model_archive_map = T5_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
 

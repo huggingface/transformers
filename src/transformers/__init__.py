@@ -159,7 +159,6 @@ if is_torch_available():
         AutoModelWithLMHead,
         AutoModelForTokenClassification,
         AutoModelForMultipleChoice,
-        ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
         MODEL_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_WITH_LM_HEAD_MAPPING,
@@ -180,7 +179,7 @@ if is_torch_available():
         BertForTokenClassification,
         BertForQuestionAnswering,
         load_tf_weights_in_bert,
-        BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         BertLayer,
     )
     from .modeling_openai import (
@@ -189,7 +188,7 @@ if is_torch_available():
         OpenAIGPTLMHeadModel,
         OpenAIGPTDoubleHeadsModel,
         load_tf_weights_in_openai_gpt,
-        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_transfo_xl import (
         TransfoXLPreTrainedModel,
@@ -197,7 +196,7 @@ if is_torch_available():
         TransfoXLLMHeadModel,
         AdaptiveEmbedding,
         load_tf_weights_in_transfo_xl,
-        TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_gpt2 import (
         GPT2PreTrainedModel,
@@ -205,9 +204,9 @@ if is_torch_available():
         GPT2LMHeadModel,
         GPT2DoubleHeadsModel,
         load_tf_weights_in_gpt2,
-        GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
+        GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    from .modeling_ctrl import CTRLPreTrainedModel, CTRLModel, CTRLLMHeadModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
+    from .modeling_ctrl import CTRLPreTrainedModel, CTRLModel, CTRLLMHeadModel, CTRL_PRETRAINED_MODEL_ARCHIVE_LIST
     from .modeling_xlnet import (
         XLNetPreTrainedModel,
         XLNetModel,
@@ -218,7 +217,7 @@ if is_torch_available():
         XLNetForQuestionAnsweringSimple,
         XLNetForQuestionAnswering,
         load_tf_weights_in_xlnet,
-        XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+        XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_xlm import (
         XLMPreTrainedModel,
@@ -228,13 +227,13 @@ if is_torch_available():
         XLMForTokenClassification,
         XLMForQuestionAnswering,
         XLMForQuestionAnsweringSimple,
-        XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+        XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_bart import (
         BartForSequenceClassification,
         BartModel,
         BartForConditionalGeneration,
-        BART_PRETRAINED_MODEL_ARCHIVE_MAP,
+        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_marian import MarianMTModel
     from .tokenization_marian import MarianTokenizer
@@ -245,7 +244,7 @@ if is_torch_available():
         RobertaForMultipleChoice,
         RobertaForTokenClassification,
         RobertaForQuestionAnswering,
-        ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_distilbert import (
         DistilBertPreTrainedModel,
@@ -254,7 +253,7 @@ if is_torch_available():
         DistilBertForSequenceClassification,
         DistilBertForQuestionAnswering,
         DistilBertForTokenClassification,
-        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_camembert import (
         CamembertForMaskedLM,
@@ -263,7 +262,7 @@ if is_torch_available():
         CamembertForMultipleChoice,
         CamembertForTokenClassification,
         CamembertForQuestionAnswering,
-        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_encoder_decoder import EncoderDecoderModel
     from .modeling_t5 import (
@@ -271,7 +270,7 @@ if is_torch_available():
         T5Model,
         T5ForConditionalGeneration,
         load_tf_weights_in_t5,
-        T5_PRETRAINED_MODEL_ARCHIVE_MAP,
+        T5_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_albert import (
         AlbertPreTrainedModel,
@@ -282,7 +281,7 @@ if is_torch_available():
         AlbertForQuestionAnswering,
         AlbertForTokenClassification,
         load_tf_weights_in_albert,
-        ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_xlm_roberta import (
         XLMRobertaForMaskedLM,
@@ -290,7 +289,7 @@ if is_torch_available():
         XLMRobertaForMultipleChoice,
         XLMRobertaForSequenceClassification,
         XLMRobertaForTokenClassification,
-        XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_mmbt import ModalEmbeddings, MMBTModel, MMBTForClassification
 
@@ -300,7 +299,7 @@ if is_torch_available():
         FlaubertForSequenceClassification,
         FlaubertForQuestionAnswering,
         FlaubertForQuestionAnsweringSimple,
-        FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_electra import (
@@ -311,7 +310,7 @@ if is_torch_available():
         ElectraForSequenceClassification,
         ElectraModel,
         load_tf_weights_in_electra,
-        ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_reformer import (
@@ -319,7 +318,7 @@ if is_torch_available():
         ReformerLayer,
         ReformerModel,
         ReformerModelWithLMHead,
-        REFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
+        REFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_longformer import (
@@ -329,7 +328,7 @@ if is_torch_available():
         LongformerForMultipleChoice,
         LongformerForTokenClassification,
         LongformerForQuestionAnswering,
-        LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP,
+        LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     # Optimization
@@ -367,7 +366,6 @@ if is_tf_available():
         TFAutoModelForQuestionAnswering,
         TFAutoModelWithLMHead,
         TFAutoModelForTokenClassification,
-        TF_ALL_PRETRAINED_MODEL_ARCHIVE_MAP,
         TF_MODEL_MAPPING,
         TF_MODEL_FOR_PRETRAINING_MAPPING,
         TF_MODEL_WITH_LM_HEAD_MAPPING,
@@ -388,7 +386,7 @@ if is_tf_available():
         TFBertForMultipleChoice,
         TFBertForTokenClassification,
         TFBertForQuestionAnswering,
-        TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_gpt2 import (
@@ -397,7 +395,7 @@ if is_tf_available():
         TFGPT2Model,
         TFGPT2LMHeadModel,
         TFGPT2DoubleHeadsModel,
-        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_openai import (
@@ -406,7 +404,7 @@ if is_tf_available():
         TFOpenAIGPTModel,
         TFOpenAIGPTLMHeadModel,
         TFOpenAIGPTDoubleHeadsModel,
-        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_transfo_xl import (
@@ -414,7 +412,7 @@ if is_tf_available():
         TFTransfoXLMainLayer,
         TFTransfoXLModel,
         TFTransfoXLLMHeadModel,
-        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFAdaptiveEmbedding,
     )
 
@@ -426,7 +424,7 @@ if is_tf_available():
         TFXLNetForSequenceClassification,
         TFXLNetForTokenClassification,
         TFXLNetForQuestionAnsweringSimple,
-        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_xlm import (
@@ -436,7 +434,7 @@ if is_tf_available():
         TFXLMWithLMHeadModel,
         TFXLMForSequenceClassification,
         TFXLMForQuestionAnsweringSimple,
-        TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_xlm_roberta import (
@@ -444,7 +442,7 @@ if is_tf_available():
         TFXLMRobertaModel,
         TFXLMRobertaForSequenceClassification,
         TFXLMRobertaForTokenClassification,
-        TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_roberta import (
@@ -455,7 +453,7 @@ if is_tf_available():
         TFRobertaForSequenceClassification,
         TFRobertaForTokenClassification,
         TFRobertaForQuestionAnswering,
-        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_camembert import (
@@ -463,14 +461,14 @@ if is_tf_available():
         TFCamembertForMaskedLM,
         TFCamembertForSequenceClassification,
         TFCamembertForTokenClassification,
-        TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_flaubert import (
         TFFlaubertModel,
         TFFlaubertWithLMHeadModel,
         TFFlaubertForSequenceClassification,
-        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_distilbert import (
@@ -481,14 +479,14 @@ if is_tf_available():
         TFDistilBertForSequenceClassification,
         TFDistilBertForTokenClassification,
         TFDistilBertForQuestionAnswering,
-        TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_ctrl import (
         TFCTRLPreTrainedModel,
         TFCTRLModel,
         TFCTRLLMHeadModel,
-        TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_albert import (
@@ -500,14 +498,14 @@ if is_tf_available():
         TFAlbertForMultipleChoice,
         TFAlbertForSequenceClassification,
         TFAlbertForQuestionAnswering,
-        TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_t5 import (
         TFT5PreTrainedModel,
         TFT5Model,
         TFT5ForConditionalGeneration,
-        TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     from .modeling_tf_electra import (
@@ -516,7 +514,7 @@ if is_tf_available():
         TFElectraForPreTraining,
         TFElectraForMaskedLM,
         TFElectraForTokenClassification,
-        TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
     # Optimization
