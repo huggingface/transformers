@@ -17,6 +17,7 @@
 import logging
 import math
 import os
+import warnings
 
 import torch
 import torch.nn as nn
@@ -600,11 +601,12 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
+        lm_labels=None,
         sentence_order_label=None,
+        **kwargs
     ):
         r"""
-        masked_lm_labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+        lm_labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
@@ -651,6 +653,14 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         prediction_scores, sop_scores = outputs[:2]
 
         """
+        
+        if 'masked_lm_labels' in kwargs:
+            warnings.warn(
+                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                DeprecationWarning
+            )
+            labels = kwargs.pop("masked_lm_labels")
+        assert kwargs == {}, "Unexpected keyword argument."
 
         outputs = self.albert(
             input_ids,
