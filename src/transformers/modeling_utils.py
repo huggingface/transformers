@@ -17,7 +17,7 @@
 import inspect
 import logging
 import os
-from typing import Callable, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 from torch import Tensor, device, dtype, nn
@@ -110,11 +110,39 @@ class ModuleUtilsMixin:
 
     @property
     def device(self) -> device:
-        return next(self.parameters()).device
+        """
+        Get torch.device from module, assuming that the whole module has one device.
+        """
+        try:
+            return next(self.parameters()).device
+        except StopIteration:
+            # For nn.DataParallel compatibility in PyTorch 1.5
+
+            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+                return tuples
+
+            gen = self._named_members(get_members_fn=find_tensor_attributes)
+            first_tuple = next(gen)
+            return first_tuple[1].device
 
     @property
     def dtype(self) -> dtype:
-        return next(self.parameters()).dtype
+        """
+        Get torch.dtype from module, assuming that the whole module has one dtype.
+        """
+        try:
+            return next(self.parameters()).dtype
+        except StopIteration:
+            # For nn.DataParallel compatibility in PyTorch 1.5
+
+            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+                return tuples
+
+            gen = self._named_members(get_members_fn=find_tensor_attributes)
+            first_tuple = next(gen)
+            return first_tuple[1].dtype
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """type: torch.Tensor -> torch.Tensor"""
@@ -128,10 +156,21 @@ class ModuleUtilsMixin:
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+
+        if self.dtype == torch.float16:
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e4
+        elif self.dtype == torch.float32:
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+        else:
+            raise ValueError(
+                "{} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`".format(
+                    self.dtype
+                )
+            )
+
         return encoder_extended_attention_mask
 
-    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: tuple, device: device):
+    def get_extended_attention_mask(self, attention_mask: Tensor, input_shape: Tuple, device: device) -> Tensor:
         """Makes broadcastable attention mask and causal mask so that future and maked tokens are ignored.
 
         Arguments:
@@ -175,7 +214,7 @@ class ModuleUtilsMixin:
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    def get_head_mask(self, head_mask, num_hidden_layers, is_attention_chunked=False):
+    def get_head_mask(self, head_mask: Tensor, num_hidden_layers: int, is_attention_chunked: bool = False) -> Tensor:
         """
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -216,7 +255,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         Class attributes (overridden by derived classes):
             - ``config_class``: a class derived from :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
-            - ``pretrained_model_archive_map``: a python ``dict`` of with `short-cut-names` (string) as keys and `url` (string) of associated pretrained weights as values.
             - ``load_tf_weights``: a python ``method`` for loading a TensorFlow checkpoint in a PyTorch model, taking as arguments:
 
                 - ``model``: an instance of the relevant subclass of :class:`~transformers.PreTrainedModel`,
@@ -226,7 +264,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             - ``base_model_prefix``: a string indicating the attribute associated to the base model in derived classes of the same architecture adding modules on top of the base model.
     """
     config_class = None
-    pretrained_model_archive_map = {}
     base_model_prefix = ""
 
     @property
@@ -269,7 +306,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         else:
             raise NotImplementedError
 
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: nn.Module):
         """
         Set model's input embeddings
 
@@ -321,7 +358,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         if hasattr(output_embeddings, "out_features") and hasattr(input_embeddings, "num_embeddings"):
             output_embeddings.out_features = input_embeddings.num_embeddings
 
-    def resize_token_embeddings(self, new_num_tokens=None):
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None):
         """ Resize input token embeddings matrix of the model if new_num_tokens != config.vocab_size.
         Take care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
 
@@ -354,18 +391,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         self.set_input_embeddings(new_embeddings)
         return self.get_input_embeddings()
 
-    def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
+    def _get_resized_embeddings(
+        self, old_embeddings: torch.nn.Embedding, new_num_tokens: Optional[int] = None
+    ) -> torch.nn.Embedding:
         """ Build a resized Embedding Module from a provided token Embedding Module.
             Increasing the size will add newly initialized vectors at the end
             Reducing the size will remove vectors from the end
 
         Args:
+            old_embeddings: ``torch.nn.Embedding``
+                Old embeddings to be resized.
             new_num_tokens: (`optional`) int
                 New number of tokens in the embedding matrix.
                 Increasing the size will add newly initialized vectors at the end
                 Reducing the size will remove vectors from the end
                 If not provided or None: return the provided token Embedding Module.
-        Return: ``torch.nn.Embeddings``
+        Return: ``torch.nn.Embedding``
             Pointer to the resized Embedding Module or the old Embedding Module if new_num_tokens is None
         """
         if new_num_tokens is None:
@@ -400,7 +441,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         # Tie weights if needed
         self.tie_weights()
 
-    def prune_heads(self, heads_to_prune):
+    def prune_heads(self, heads_to_prune: Dict):
         """ Prunes heads of the base model.
 
             Arguments:
@@ -550,9 +591,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
         # Load model
         if pretrained_model_name_or_path is not None:
-            if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
-            elif os.path.isdir(pretrained_model_name_or_path):
+            if os.path.isdir(pretrained_model_name_or_path):
                 if from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")):
                     # Load from a TF 1.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")
@@ -585,8 +624,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     use_cdn=use_cdn,
                 )
 
-            # redirect to the cache, if necessary
             try:
+                # Load from URL or cache if already cached
                 resolved_archive_file = cached_path(
                     archive_file,
                     cache_dir=cache_dir,
@@ -595,20 +634,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                 )
+                if resolved_archive_file is None:
+                    raise EnvironmentError
             except EnvironmentError:
-                if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                    msg = "Couldn't reach server at '{}' to download pretrained weights.".format(archive_file)
-                else:
-                    msg = (
-                        "Model name '{}' was not found in model name list ({}). "
-                        "We assumed '{}' was a path or url to model weight files named one of {} but "
-                        "couldn't find any such file at this path or url.".format(
-                            pretrained_model_name_or_path,
-                            ", ".join(cls.pretrained_model_archive_map.keys()),
-                            archive_file,
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME],
-                        )
-                    )
+                msg = (
+                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME}.\n\n"
+                )
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
@@ -737,7 +770,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
             import torch_xla.core.xla_model as xm
 
             model = xm.send_cpu_data_to_device(model, xm.xla_device())
-            model = model.to(xm.xla_device())
+            model.to(xm.xla_device())
 
         return model
 
@@ -768,28 +801,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     @torch.no_grad()
     def generate(
         self,
-        input_ids=None,
-        max_length=None,
-        min_length=None,
-        do_sample=None,
-        early_stopping=None,
-        num_beams=None,
-        temperature=None,
-        top_k=None,
-        top_p=None,
-        repetition_penalty=None,
-        bad_words_ids=None,
-        bos_token_id=None,
-        pad_token_id=None,
-        eos_token_id=None,
-        length_penalty=None,
-        no_repeat_ngram_size=None,
-        num_return_sequences=None,
-        attention_mask=None,
-        decoder_start_token_id=None,
-        use_cache=None,
+        input_ids: Optional[torch.LongTensor] = None,
+        max_length: Optional[int] = None,
+        min_length: Optional[int] = None,
+        do_sample: Optional[bool] = None,
+        early_stopping: Optional[bool] = None,
+        num_beams: Optional[int] = None,
+        temperature: Optional[float] = None,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        repetition_penalty: Optional[float] = None,
+        bad_words_ids: Optional[Iterable[int]] = None,
+        bos_token_id: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None,
+        length_penalty: Optional[float] = None,
+        no_repeat_ngram_size: Optional[int] = None,
+        num_return_sequences: Optional[int] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        decoder_start_token_id: Optional[int] = None,
+        use_cache: Optional[bool] = None,
         **model_specific_kwargs
-    ):
+    ) -> torch.LongTensor:
         r""" Generates sequences for models with a LM head. The method currently supports greedy decoding, beam-search decoding, sampling with temperature, sampling with top-k or nucleus sampling.
 
         Adapted in part from `Facebook's XLM beam search code`_.
@@ -1573,7 +1606,7 @@ def calc_banned_ngram_tokens(prev_input_ids: Tensor, num_hypos: int, no_repeat_n
     return banned_tokens
 
 
-def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
+def calc_banned_bad_words_ids(prev_input_ids: Iterable[int], bad_words_ids: Iterable[int]) -> Iterable[int]:
     banned_tokens = []
 
     def _tokens_match(prev_tokens, tokens):
@@ -1609,7 +1642,13 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
     return banned_tokens
 
 
-def top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("Inf"), min_tokens_to_keep=1):
+def top_k_top_p_filtering(
+    logits: Tensor,
+    top_k: int = 0,
+    top_p: float = 1.0,
+    filter_value: float = -float("Inf"),
+    min_tokens_to_keep: int = 1,
+) -> Tensor:
     """ Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
         Args:
             logits: logits distribution shape (batch size, vocabulary size)

@@ -30,7 +30,9 @@ from .modeling_tf_roberta import (
 
 logger = logging.getLogger(__name__)
 
-TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {}
+TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
+]
 
 
 XLM_ROBERTA_START_DOCSTRING = r"""
@@ -72,7 +74,6 @@ class TFXLMRobertaModel(TFRobertaModel):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -85,7 +86,6 @@ class TFXLMRobertaForMaskedLM(TFRobertaForMaskedLM):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -100,7 +100,6 @@ class TFXLMRobertaForSequenceClassification(TFRobertaForSequenceClassification):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -115,4 +114,3 @@ class TFXLMRobertaForTokenClassification(TFRobertaForTokenClassification):
     """
 
     config_class = XLMRobertaConfig
-    pretrained_model_archive_map = TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP

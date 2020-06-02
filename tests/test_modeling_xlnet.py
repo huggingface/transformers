@@ -35,7 +35,7 @@ if is_torch_available():
         XLNetForTokenClassification,
         XLNetForQuestionAnswering,
     )
-    from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -61,7 +61,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         def __init__(
             self,
             parent,
-            batch_size=13,
+            batch_size=14,
             seq_length=7,
             mem_len=10,
             clamp_len=-1,
@@ -508,15 +508,17 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(XLNET_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = XLNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_torch
 class XLNetModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlnet_base_cased(self):
         model = XLNetLMHeadModel.from_pretrained("xlnet-base-cased")
+        model.to(torch_device)
         input_ids = torch.tensor(
             [
                 [

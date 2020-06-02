@@ -32,7 +32,7 @@ if is_tf_available():
         TFRobertaForSequenceClassification,
         TFRobertaForTokenClassification,
         TFRobertaForQuestionAnswering,
-        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -232,11 +232,12 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFRobertaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_tf
 class TFRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):

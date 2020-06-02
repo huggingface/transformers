@@ -31,16 +31,17 @@ from .modeling_utils import PreTrainedModel
 logger = logging.getLogger(__name__)
 
 
-ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "albert-base-v1": "https://cdn.huggingface.co/albert-base-v1-pytorch_model.bin",
-    "albert-large-v1": "https://cdn.huggingface.co/albert-large-v1-pytorch_model.bin",
-    "albert-xlarge-v1": "https://cdn.huggingface.co/albert-xlarge-v1-pytorch_model.bin",
-    "albert-xxlarge-v1": "https://cdn.huggingface.co/albert-xxlarge-v1-pytorch_model.bin",
-    "albert-base-v2": "https://cdn.huggingface.co/albert-base-v2-pytorch_model.bin",
-    "albert-large-v2": "https://cdn.huggingface.co/albert-large-v2-pytorch_model.bin",
-    "albert-xlarge-v2": "https://cdn.huggingface.co/albert-xlarge-v2-pytorch_model.bin",
-    "albert-xxlarge-v2": "https://cdn.huggingface.co/albert-xxlarge-v2-pytorch_model.bin",
-}
+ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "albert-base-v1",
+    "albert-large-v1",
+    "albert-xlarge-v1",
+    "albert-xxlarge-v1",
+    "albert-base-v2",
+    "albert-large-v2",
+    "albert-xlarge-v2",
+    "albert-xxlarge-v2",
+    # See all ALBERT models at https://huggingface.co/models?filter=albert
+]
 
 
 def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
@@ -365,7 +366,6 @@ class AlbertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = AlbertConfig
-    pretrained_model_archive_map = ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "albert"
 
     def _init_weights(self, module):
@@ -425,7 +425,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -439,7 +439,6 @@ ALBERT_INPUTS_DOCSTRING = r"""
 class AlbertModel(AlbertPreTrainedModel):
 
     config_class = AlbertConfig
-    pretrained_model_archive_map = ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_albert
     base_model_prefix = "albert"
 
@@ -550,7 +549,7 @@ class AlbertModel(AlbertPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 

@@ -36,9 +36,6 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = AlbertTokenizer(SAMPLE_VOCAB)
         tokenizer.save_pretrained(self.tmpdirname)
 
-    def get_tokenizer(self, **kwargs):
-        return AlbertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
     def get_input_output_texts(self):
         input_text = "this is a test"
         output_text = "this is a test"

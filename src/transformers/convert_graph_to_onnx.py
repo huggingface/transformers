@@ -1,5 +1,4 @@
 from argparse import ArgumentParser
-from itertools import takewhile
 from os import listdir, makedirs
 from os.path import abspath, dirname, exists
 from typing import Dict, List, Optional, Tuple
@@ -22,6 +21,7 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument("--framework", type=str, choices=["pt", "tf"], help="Framework for loading the model")
         self.add_argument("--opset", type=int, default=11, help="ONNX opset to use")
         self.add_argument("--check-loading", action="store_true", help="Check ONNX is able to load the model")
+        self.add_argument("--use-external-format", action="store_true", help="Allow exporting model >= than 2Gb")
         self.add_argument("output")
 
 
@@ -37,14 +37,17 @@ def ensure_valid_input(model, tokens, input_names):
 
     """
     model_args_name = model.forward.__code__.co_varnames
-    model_args_pos = [(model_args_name.index(name) - 1, name) for name in input_names]
-    model_args = [None] * (max(map(lambda x: x[0], model_args_pos)) + 1)
 
-    for arg_pos, arg_name in model_args_pos:
-        model_args[arg_pos] = tokens[arg_name]
+    ordered_input_names = []
+    model_args = []
+    for arg_name in model_args_name[1:]:  # start at index 1 to skip "self" argument
+        if arg_name in input_names:
+            ordered_input_names.append(arg_name)
+            model_args.append(tokens[arg_name])
+        else:
+            break
 
-    model_args = tuple(model_args)  # Need to be ordered
-    return tuple(takewhile(lambda arg: arg is not None, model_args))
+    return ordered_input_names, tuple(model_args)
 
 
 def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], Dict, BatchEncoding]:
@@ -102,10 +105,10 @@ def load_graph_from_args(framework: str, model: str, tokenizer: Optional[str] = 
     print("Loading pipeline (model: {}, tokenizer: {})".format(model, tokenizer))
 
     # Allocate tokenizer and model
-    return pipeline("feature-extraction", model=model, framework=framework)
+    return pipeline("feature-extraction", model=model, tokenizer=tokenizer, framework=framework)
 
 
-def convert_pytorch(nlp: Pipeline, opset: int, output: str):
+def convert_pytorch(nlp: Pipeline, opset: int, output: str, use_external_format: bool):
     if not is_torch_available():
         raise Exception("Cannot convert because PyTorch is not installed. Please install torch first.")
 
@@ -116,17 +119,17 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: str):
 
     with torch.no_grad():
         input_names, output_names, dynamic_axes, tokens = infer_shapes(nlp, "pt")
-        model_args = ensure_valid_input(nlp.model, tokens, input_names)
+        ordered_input_names, model_args = ensure_valid_input(nlp.model, tokens, input_names)
 
         export(
             nlp.model,
             model_args,
             f=output,
-            input_names=input_names,
+            input_names=ordered_input_names,
             output_names=output_names,
             dynamic_axes=dynamic_axes,
             do_constant_folding=True,
-            use_external_data_format=True,
+            use_external_data_format=use_external_format,
             enable_onnx_checker=True,
             opset_version=opset,
         )
@@ -160,7 +163,14 @@ def convert_tensorflow(nlp: Pipeline, opset: int, output: str):
         )
 
 
-def convert(framework: str, model: str, output: str, opset: int, tokenizer: Optional[str] = None):
+def convert(
+    framework: str,
+    model: str,
+    output: str,
+    opset: int,
+    tokenizer: Optional[str] = None,
+    use_external_format: bool = False,
+):
     print("ONNX opset version set to: {}".format(opset))
 
     # Load the pipeline
@@ -175,7 +185,7 @@ def convert(framework: str, model: str, output: str, opset: int, tokenizer: Opti
 
     # Export the graph
     if framework == "pt":
-        convert_pytorch(nlp, opset, output)
+        convert_pytorch(nlp, opset, output, use_external_format)
     else:
         convert_tensorflow(nlp, opset, output)
 
@@ -202,7 +212,7 @@ if __name__ == "__main__":
 
     try:
         # Convert
-        convert(args.framework, args.model, args.output, args.opset, args.tokenizer)
+        convert(args.framework, args.model, args.output, args.opset, args.tokenizer, args.use_external_format)
 
         # And verify
         if args.check_loading:

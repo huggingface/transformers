@@ -73,10 +73,10 @@ class DistilBertConfig(PretrainedConfig):
                 The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
             qa_dropout (:obj:`float`, optional, defaults to 0.1):
                 The dropout probabilities used in the question answering model
-                :class:`~tranformers.DistilBertForQuestionAnswering`.
+                :class:`~transformers.DistilBertForQuestionAnswering`.
             seq_classif_dropout (:obj:`float`, optional, defaults to 0.2):
                 The dropout probabilities used in the sequence classification model
-                :class:`~tranformers.DistilBertForSequenceClassification`.
+                :class:`~transformers.DistilBertForSequenceClassification`.
 
         Example::
 
@@ -90,12 +90,7 @@ class DistilBertConfig(PretrainedConfig):
 
             # Accessing the model configuration
             configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
     """
-    pretrained_config_archive_map = DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "distilbert"
 
     def __init__(

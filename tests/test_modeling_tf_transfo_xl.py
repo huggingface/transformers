@@ -29,7 +29,7 @@ if is_tf_available():
     from transformers import (
         TFTransfoXLModel,
         TFTransfoXLLMHeadModel,
-        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -209,11 +209,12 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFTransfoXLModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_tf
 class TFTransfoXLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_transfo_xl_wt103(self):

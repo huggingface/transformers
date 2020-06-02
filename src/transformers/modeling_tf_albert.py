@@ -29,16 +29,17 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
-TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "albert-base-v1": "https://cdn.huggingface.co/albert-base-v1-with-prefix-tf_model.h5",
-    "albert-large-v1": "https://cdn.huggingface.co/albert-large-v1-with-prefix-tf_model.h5",
-    "albert-xlarge-v1": "https://cdn.huggingface.co/albert-xlarge-v1-with-prefix-tf_model.h5",
-    "albert-xxlarge-v1": "https://cdn.huggingface.co/albert-xxlarge-v1-with-prefix-tf_model.h5",
-    "albert-base-v2": "https://cdn.huggingface.co/albert-base-v2-with-prefix-tf_model.h5",
-    "albert-large-v2": "https://cdn.huggingface.co/albert-large-v2-with-prefix-tf_model.h5",
-    "albert-xlarge-v2": "https://cdn.huggingface.co/albert-xlarge-v2-with-prefix-tf_model.h5",
-    "albert-xxlarge-v2": "https://cdn.huggingface.co/albert-xxlarge-v2-with-prefix-tf_model.h5",
-}
+TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "albert-base-v1",
+    "albert-large-v1",
+    "albert-xlarge-v1",
+    "albert-xxlarge-v1",
+    "albert-base-v2",
+    "albert-large-v2",
+    "albert-xlarge-v2",
+    "albert-xxlarge-v2",
+    # See all ALBERT models at https://huggingface.co/models?filter=albert
+]
 
 
 class TFAlbertEmbeddings(tf.keras.layers.Layer):
@@ -440,7 +441,6 @@ class TFAlbertPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = AlbertConfig
-    pretrained_model_archive_map = TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "albert"
 
 
@@ -628,7 +628,7 @@ ALBERT_START_DOCSTRING = r"""
 
 ALBERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`transformers.AlbertTokenizer`.
@@ -636,19 +636,19 @@ ALBERT_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional, defaults to :obj:`None`):
+        attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
@@ -657,7 +657,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             ``1`` indicates the head is **not masked**, ``0`` indicates the head is **masked**.
-        input_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -676,7 +676,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.albert = TFAlbertMainLayer(config, name="albert")
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
         Returns:
@@ -734,7 +734,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
     def get_output_embeddings(self):
         return self.albert.embeddings
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -795,7 +795,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel):
     def get_output_embeddings(self):
         return self.albert.embeddings
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -852,7 +852,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel):
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
     Returns:
@@ -908,7 +908,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel):
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):
         r"""
     Return:
@@ -983,7 +983,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
     def call(
         self,
         inputs,

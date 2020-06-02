@@ -31,13 +31,14 @@ from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv
 
 logger = logging.getLogger(__name__)
 
-GPT2_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "gpt2": "https://cdn.huggingface.co/gpt2-pytorch_model.bin",
-    "gpt2-medium": "https://cdn.huggingface.co/gpt2-medium-pytorch_model.bin",
-    "gpt2-large": "https://cdn.huggingface.co/gpt2-large-pytorch_model.bin",
-    "gpt2-xl": "https://cdn.huggingface.co/gpt2-xl-pytorch_model.bin",
-    "distilgpt2": "https://cdn.huggingface.co/distilgpt2-pytorch_model.bin",
-}
+GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "gpt2",
+    "gpt2-medium",
+    "gpt2-large",
+    "gpt2-xl",
+    "distilgpt2",
+    # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
+]
 
 
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
@@ -251,7 +252,6 @@ class GPT2PreTrainedModel(PreTrainedModel):
     """
 
     config_class = GPT2Config
-    pretrained_model_archive_map = GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
 
@@ -286,9 +286,11 @@ GPT2_START_DOCSTRING = r"""
 
 GPT2_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`):
+            :obj:`input_ids_length` = ``sequence_length`` if ``past`` is ``None`` else ``past[0].shape[-2]`` (``sequence_length`` of input past key value states).
             Indices of input sequence tokens in the vocabulary.
-            If `past` is used, optionally only the last `input_ids` have to be input (see `past`).
+
+            If `past` is used, only `input_ids` that do not have their past calculated should be passed as `input_ids`.
 
             Indices can be obtained using :class:`transformers.GPT2Tokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
@@ -299,7 +301,7 @@ GPT2_INPUTS_DOCSTRING = r"""
         past (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `past` output below). Can be used to speed up sequential decoding.
-            If `past` is used, the user can optionally input only the last `input_ids` (those that don't have their past given to this model) of shape :obj:`(batch_size, 1)` instead of all `input_ids` of shape :obj:`(batch_size, sequence_length)`.
+            The `input_ids` which have their past given to this model should not be passed as `input_ids` as they have already been computed.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -311,8 +313,6 @@ GPT2_INPUTS_DOCSTRING = r"""
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
-            If `past` is used, optionally only the last `token_type_ids` have to be input (see `past`).
-
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
@@ -323,11 +323,10 @@ GPT2_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-            If `past` is used, optionally only the last `input_embeds` have to be input (see `past`).
+            If `past` is used, optionally only the last `inputs_embeds` have to be input (see `past`).
         use_cache (:obj:`bool`):
             If `use_cache` is True, `past` key value states are returned and can be used to speed up decoding (see `past`). Defaults to `True`.
 """
@@ -409,16 +408,6 @@ class GPT2Model(GPT2PreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
-
-        # If using past key value states, only the last tokens
-        # should be given as an input
-        if past is not None:
-            if input_ids is not None:
-                input_ids = input_ids[:, -1:]
-            if inputs_embeds is not None:
-                inputs_embeds = inputs_embeds[:, -1:]
-            if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1:]
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -565,7 +554,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
+            Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
             Indices are selected in ``[-100, 0, ..., config.vocab_size]``
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``

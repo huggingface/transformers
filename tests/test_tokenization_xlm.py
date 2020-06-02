@@ -65,9 +65,6 @@ class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.merges_file, "w") as fp:
             fp.write("\n".join(merges))
 
-    def get_tokenizer(self, **kwargs):
-        return XLMTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
     def get_input_output_texts(self):
         input_text = "lower newer"
         output_text = "lower newer"

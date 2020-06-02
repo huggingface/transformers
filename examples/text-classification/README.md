@@ -68,7 +68,7 @@ python run_glue.py \
   --do_eval \
   --data_dir $GLUE_DIR/$TASK_NAME \
   --max_seq_length 128 \
-  --per_gpu_train_batch_size 32 \
+  --per_device_train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \
   --output_dir /tmp/$TASK_NAME/
@@ -141,7 +141,7 @@ python run_glue.py \
   --do_eval \
   --data_dir $GLUE_DIR/MRPC/ \
   --max_seq_length 128 \
-  --per_gpu_train_batch_size 32 \
+  --per_device_train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \
   --output_dir /tmp/mrpc_output/
@@ -166,7 +166,7 @@ python run_glue.py \
   --do_eval \
   --data_dir $GLUE_DIR/MRPC/ \
   --max_seq_length 128 \
-  --per_gpu_train_batch_size 32 \
+  --per_device_train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3.0 \
   --output_dir /tmp/mrpc_output/ \
@@ -189,7 +189,7 @@ python -m torch.distributed.launch \
     --do_eval \
     --data_dir $GLUE_DIR/MRPC/ \
     --max_seq_length 128 \
-    --per_gpu_train_batch_size 8 \
+    --per_device_train_batch_size 8 \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
     --output_dir /tmp/mrpc_output/
@@ -221,7 +221,7 @@ python -m torch.distributed.launch \
     --do_eval \
     --data_dir $GLUE_DIR/MNLI/ \
     --max_seq_length 128 \
-    --per_gpu_train_batch_size 8 \
+    --per_device_train_batch_size 8 \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
     --output_dir output_dir \
@@ -258,7 +258,7 @@ TEST RESULTS {'val_loss': tensor(0.0707), 'precision': 0.852427800698191, 'recal
 
 Based on the script [`run_xnli.py`](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_xnli.py).
 
-[XNLI](https://www.nyu.edu/projects/bowman/xnli/) is crowd-sourced dataset based on [MultiNLI](http://www.nyu.edu/projects/bowman/multinli/). It is an evaluation benchmark for cross-lingual text representations. Pairs of text are labeled with textual entailment annotations for 15 different languages (including both high-resource language such as English and low-resource languages such as Swahili).
+[XNLI](https://www.nyu.edu/projects/bowman/xnli/) is a crowd-sourced dataset based on [MultiNLI](http://www.nyu.edu/projects/bowman/multinli/). It is an evaluation benchmark for cross-lingual text representations. Pairs of text are labeled with textual entailment annotations for 15 different languages (including both high-resource language such as English and low-resource languages such as Swahili).
 
 #### Fine-tuning on XNLI
 
@@ -273,14 +273,13 @@ on a single tesla V100 16GB. The data for XNLI can be downloaded with the follow
 export XNLI_DIR=/path/to/XNLI
 
 python run_xnli.py \
-  --model_type bert \
   --model_name_or_path bert-base-multilingual-cased \
   --language de \
   --train_language en \
   --do_train \
   --do_eval \
   --data_dir $XNLI_DIR \
-  --per_gpu_train_batch_size 32 \
+  --per_device_train_batch_size 32 \
   --learning_rate 5e-5 \
   --num_train_epochs 2.0 \
   --max_seq_length 128 \

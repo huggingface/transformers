@@ -162,7 +162,7 @@ class AdamW(Optimizer):
                     bias_correction2 = 1.0 - beta2 ** state["step"]
                     step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
 
-                p.data.addcdiv_(-step_size, exp_avg, denom)
+                p.data.addcdiv_(exp_avg, denom, value=-step_size)
 
                 # Just adding the square of the weights to the loss function is *not*
                 # the correct way of using L2 regularization/weight decay with Adam,

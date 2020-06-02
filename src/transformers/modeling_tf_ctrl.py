@@ -29,7 +29,10 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
-TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP = {"ctrl": "https://cdn.huggingface.co/ctrl-tf_model.h5"}
+TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "ctrl"
+    # See all CTRL models at https://huggingface.co/models?filter=ctrl
+]
 
 
 def angle_defn(pos, i, d_model_size):
@@ -379,7 +382,6 @@ class TFCTRLPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = CTRLConfig
-    pretrained_model_archive_map = TF_CTRL_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
 
 
@@ -411,9 +413,12 @@ CTRL_START_DOCSTRING = r"""
 
 CTRL_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, input_ids_length)`):
+            :obj:`input_ids_length` = ``sequence_length`` if ``past`` is ``None`` else ``past[0].shape[-2]`` (``sequence_length`` of input past key value states).
+
             Indices of input sequence tokens in the vocabulary.
-            If `past` is used, optionally only the last `input_ids` have to be input (see `past`).
+
+            If `past` is used, only input_ids that do not have their past calculated should be passed as input_ids (see `past`).
 
             Indices can be obtained using :class:`transformers.CTRLTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
@@ -423,9 +428,8 @@ CTRL_INPUTS_DOCSTRING = r"""
         past (:obj:`List[tf.Tensor]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `past` output below). Can be used to speed up sequential decoding.
-            If `past` is used, the user can optionally input only the last `input_ids`
-            (those that don't have their past given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all `input_ids` of shape :obj:`(batch_size, sequence_length)`.
+            The token ids which have their past given to this model
+            should not be passed as input ids as they have already been computed.
         attention_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
@@ -436,7 +440,6 @@ CTRL_INPUTS_DOCSTRING = r"""
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
-            If `past` is used, optionally only the last `token_type_ids` have to be input (see `past`).
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -448,11 +451,10 @@ CTRL_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-            If `past` is used, optionally only the last `input_embeds` have to be input (see `past`).
         use_cache (:obj:`bool`):
             If `use_cache` is True, `past` key value states are returned and
             can be used to speed up decoding (see `past`). Defaults to `True`.

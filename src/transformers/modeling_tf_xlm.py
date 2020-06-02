@@ -31,18 +31,19 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
-TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xlm-mlm-en-2048": "https://cdn.huggingface.co/xlm-mlm-en-2048-tf_model.h5",
-    "xlm-mlm-ende-1024": "https://cdn.huggingface.co/xlm-mlm-ende-1024-tf_model.h5",
-    "xlm-mlm-enfr-1024": "https://cdn.huggingface.co/xlm-mlm-enfr-1024-tf_model.h5",
-    "xlm-mlm-enro-1024": "https://cdn.huggingface.co/xlm-mlm-enro-1024-tf_model.h5",
-    "xlm-mlm-tlm-xnli15-1024": "https://cdn.huggingface.co/xlm-mlm-tlm-xnli15-1024-tf_model.h5",
-    "xlm-mlm-xnli15-1024": "https://cdn.huggingface.co/xlm-mlm-xnli15-1024-tf_model.h5",
-    "xlm-clm-enfr-1024": "https://cdn.huggingface.co/xlm-clm-enfr-1024-tf_model.h5",
-    "xlm-clm-ende-1024": "https://cdn.huggingface.co/xlm-clm-ende-1024-tf_model.h5",
-    "xlm-mlm-17-1280": "https://cdn.huggingface.co/xlm-mlm-17-1280-tf_model.h5",
-    "xlm-mlm-100-1280": "https://cdn.huggingface.co/xlm-mlm-100-1280-tf_model.h5",
-}
+TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xlm-mlm-en-2048",
+    "xlm-mlm-ende-1024",
+    "xlm-mlm-enfr-1024",
+    "xlm-mlm-enro-1024",
+    "xlm-mlm-tlm-xnli15-1024",
+    "xlm-mlm-xnli15-1024",
+    "xlm-clm-enfr-1024",
+    "xlm-clm-ende-1024",
+    "xlm-mlm-17-1280",
+    "xlm-mlm-100-1280",
+    # See all XLM models at https://huggingface.co/models?filter=xlm
+]
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -470,7 +471,6 @@ class TFXLMPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = XLMConfig
-    pretrained_model_archive_map = TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
 
     @property
@@ -560,7 +560,7 @@ XLM_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.

@@ -28,6 +28,7 @@ from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, Electr
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
+from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from .configuration_marian import MarianConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_reformer import ReformerConfig
@@ -62,6 +63,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -77,6 +79,7 @@ CONFIG_MAPPING = OrderedDict(
         ("marian", MarianConfig,),
         ("bart", BartConfig,),
         ("reformer", ReformerConfig,),
+        ("longformer", LongformerConfig,),
         ("roberta", RobertaConfig,),
         ("flaubert", FlaubertConfig,),
         ("bert", BertConfig,),
@@ -110,12 +113,12 @@ class AutoConfig:
         )
 
     @classmethod
-    def for_model(cls, model_type, *args, **kwargs):
-        for pattern, config_class in CONFIG_MAPPING.items():
-            if pattern in model_type:
-                return config_class(*args, **kwargs)
+    def for_model(cls, model_type: str, *args, **kwargs):
+        if model_type in CONFIG_MAPPING:
+            config_class = CONFIG_MAPPING[model_type]
+            return config_class(*args, **kwargs)
         raise ValueError(
-            "Unrecognized model identifier in {}. Should contain one of {}".format(
+            "Unrecognized model identifier: {}. Should contain one of {}".format(
                 model_type, ", ".join(CONFIG_MAPPING.keys())
             )
         )
@@ -127,24 +130,24 @@ class AutoConfig:
 
         The configuration class to instantiate is selected
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
-            - contains `t5`: :class:`~transformers.T5Config` (T5 model)
-            - contains `distilbert`: :class:`~transformers.DistilBertConfig` (DistilBERT model)
-            - contains `albert`: :class:`~transformers.AlbertConfig` (ALBERT model)
-            - contains `camembert`: :class:`~transformers.CamembertConfig` (CamemBERT model)
-            - contains `xlm-roberta`: :class:`~transformers.XLMRobertaConfig` (XLM-RoBERTa model)
-            - contains `roberta`: :class:`~transformers.RobertaConfig` (RoBERTa model)
-            - contains `reformer`: :class:`~transformers.ReformerConfig` (Reformer model)
-            - contains `bert`: :class:`~transformers.BertConfig` (Bert model)
-            - contains `openai-gpt`: :class:`~transformers.OpenAIGPTConfig` (OpenAI GPT model)
-            - contains `gpt2`: :class:`~transformers.GPT2Config` (OpenAI GPT-2 model)
-            - contains `transfo-xl`: :class:`~transformers.TransfoXLConfig` (Transformer-XL model)
-            - contains `xlnet`: :class:`~transformers.XLNetConfig` (XLNet model)
-            - contains `xlm`: :class:`~transformers.XLMConfig` (XLM model)
-            - contains `ctrl` : :class:`~transformers.CTRLConfig` (CTRL model)
-            - contains `flaubert` : :class:`~transformers.FlaubertConfig` (Flaubert model)
-            - contains `electra` : :class:`~transformers.ElectraConfig` (ELECTRA model)
-
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+            - `t5`: :class:`~transformers.T5Config` (T5 model)
+            - `distilbert`: :class:`~transformers.DistilBertConfig` (DistilBERT model)
+            - `albert`: :class:`~transformers.AlbertConfig` (ALBERT model)
+            - `camembert`: :class:`~transformers.CamembertConfig` (CamemBERT model)
+            - `xlm-roberta`: :class:`~transformers.XLMRobertaConfig` (XLM-RoBERTa model)
+            - `longformer`: :class:`~transformers.LongformerConfig` (Longformer model)
+            - `roberta`: :class:`~transformers.RobertaConfig` (RoBERTa model)
+            - `reformer`: :class:`~transformers.ReformerConfig` (Reformer model)
+            - `bert`: :class:`~transformers.BertConfig` (Bert model)
+            - `openai-gpt`: :class:`~transformers.OpenAIGPTConfig` (OpenAI GPT model)
+            - `gpt2`: :class:`~transformers.GPT2Config` (OpenAI GPT-2 model)
+            - `transfo-xl`: :class:`~transformers.TransfoXLConfig` (Transformer-XL model)
+            - `xlnet`: :class:`~transformers.XLNetConfig` (XLNet model)
+            - `xlm`: :class:`~transformers.XLMConfig` (XLM model)
+            - `ctrl` : :class:`~transformers.CTRLConfig` (CTRL model)
+            - `flaubert` : :class:`~transformers.FlaubertConfig` (Flaubert model)
+            - `electra` : :class:`~transformers.ElectraConfig` (ELECTRA model)
 
         Args:
             pretrained_model_name_or_path (:obj:`string`):
@@ -190,9 +193,7 @@ class AutoConfig:
             assert unused_kwargs == {'foo': False}
 
         """
-        config_dict, _ = PretrainedConfig.get_config_dict(
-            pretrained_model_name_or_path, pretrained_config_archive_map=ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, **kwargs
-        )
+        config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         if "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]

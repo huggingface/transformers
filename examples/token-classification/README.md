@@ -69,7 +69,7 @@ python3 run_ner.py --data_dir ./ \
 --output_dir $OUTPUT_DIR \
 --max_seq_length  $MAX_LENGTH \
 --num_train_epochs $NUM_EPOCHS \
---per_gpu_train_batch_size $BATCH_SIZE \
+--per_device_train_batch_size $BATCH_SIZE \
 --save_steps $SAVE_STEPS \
 --seed $SEED \
 --do_train \
@@ -91,7 +91,7 @@ Instead of passing all parameters via commandline arguments, the `run_ner.py` sc
     "output_dir": "germeval-model",
     "max_seq_length": 128,
     "num_train_epochs": 3,
-    "per_gpu_train_batch_size": 32,
+    "per_device_train_batch_size": 32,
     "save_steps": 750,
     "seed": 1,
     "do_train": true,
