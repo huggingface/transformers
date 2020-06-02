@@ -340,7 +340,6 @@ class TFFlaubertForSequenceClassification(TFXLMForSequenceClassification):
 )
 class TFFlaubertForQuestionAnsweringSimple(TFXLMForQuestionAnsweringSimple):
     config_class = FlaubertConfig
-    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)

@@ -415,7 +415,7 @@ if is_tf_available():
 
     from .modeling_tf_ctrl import (
         TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFCTRLWithLMHeadModel,
+        TFCTRLLMHeadModel,
         TFCTRLModel,
         TFCTRLPreTrainedModel,
     )
