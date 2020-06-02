@@ -2368,6 +2368,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def _convert_id_to_token(self, index: int) -> Optional[str]:
         return self._tokenizer.id_to_token(int(index))
 
+    def get_vocab(self):
+        return self._tokenizer.get_vocab(True)
+
     def convert_tokens_to_string(self, tokens: List[int], skip_special_tokens: bool = False) -> str:
         return self._tokenizer.decode(tokens, skip_special_tokens)
 
