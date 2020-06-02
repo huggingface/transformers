@@ -261,7 +261,7 @@ class BartTranslationTests(unittest.TestCase):
         self.assertEqual(expected_translation_romanian, decoded[0])
 
     def test_mbart_enro_config(self):
-        mbart_models = ["mbart-large-en-ro"]
+        mbart_models = ["facebook/mbart-large-en-ro"]
         expected = {"scale_embedding": True, "output_past": True}
         for name in mbart_models:
             config = BartConfig.from_pretrained(name)
@@ -593,7 +593,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
-        config = BartConfig.from_pretrained("bart-large-xsum")
+        config = BartConfig.from_pretrained("facebook/bart-large-xsum")
         expected_params = dict(num_beams=6, do_sample=False, early_stopping=True, length_penalty=1.0)
         config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
