@@ -175,7 +175,8 @@ class TrainingArguments:
             device = torch.device("cuda", self.local_rank)
             n_gpu = 1
 
-        torch.cuda.set_device(device)
+        if device.type == "cuda":
+            torch.cuda.set_device(device)
 
         return device, n_gpu
 
