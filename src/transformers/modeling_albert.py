@@ -601,12 +601,12 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        lm_labels=None,
+        labels=None,
         sentence_order_label=None,
         **kwargs
     ):
         r"""
-        lm_labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+        labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
@@ -678,9 +678,9 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
 
         outputs = (prediction_scores, sop_scores,) + outputs[2:]  # add hidden states and attention if they are here
 
-        if masked_lm_labels is not None and sentence_order_label is not None:
+        if labels is not None and sentence_order_label is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             sentence_order_loss = loss_fct(sop_scores.view(-1, 2), sentence_order_label.view(-1))
             total_loss = masked_lm_loss + sentence_order_loss
             outputs = (total_loss,) + outputs
