@@ -367,7 +367,7 @@ class BasicTokenizer(object):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
-        self.never_split = never_split
+        self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
 
     def tokenize(self, text, never_split=None):
@@ -380,7 +380,7 @@ class BasicTokenizer(object):
                 Now implemented directly at the base class level (see :func:`PreTrainedTokenizer.tokenize`)
                 List of token not to split.
         """
-        never_split = self.never_split + (never_split if never_split is not None else [])
+        never_split = self.never_split + (never_split if never_split is not None else {})
         text = self._clean_text(text)
         # This was added on November 1st, 2018 for the multilingual and Chinese
         # models. This is also applied to the English models now, but it doesn't
