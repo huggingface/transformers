@@ -461,7 +461,7 @@ class Trainer:
                 train_dataloader.sampler.set_epoch(epoch)
 
             if t_total - self.global_step < self.num_examples(train_dataloader):
-                total_epoch_steps = t_total - self.global_step
+                total_epoch_steps = min(t_total - self.global_step, len(train_dataloader))
             else:
                 total_epoch_steps = None
 
@@ -805,7 +805,7 @@ class Trainer:
 
             evaluation_total_steps += 1
 
-            if evaluation_total_steps > self.args.max_eval_steps:
+            if evaluation_total_steps > self.args.max_eval_steps > 0:
                 evaluation_iterator.close()
                 break
 
