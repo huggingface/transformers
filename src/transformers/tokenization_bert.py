@@ -380,8 +380,8 @@ class BasicTokenizer(object):
                 Now implemented directly at the base class level (see :func:`PreTrainedTokenizer.tokenize`)
                 List of token not to split.
         """
-        never_split = self.never_split.union(set(never_split) if never_split is not None else {})
-        text = self._clean_text(text)
+        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+
         # This was added on November 1st, 2018 for the multilingual and Chinese
         # models. This is also applied to the English models now, but it doesn't
         # matter since the English models were not trained on any Chinese data
