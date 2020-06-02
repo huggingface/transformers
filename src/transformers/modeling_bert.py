@@ -309,9 +309,10 @@ class BertAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        output_attentions=False,
     ):
         self_outputs = self.self(
-            hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask
+            hidden_states, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask, output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -364,14 +365,22 @@ class BertLayer(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        output_attentions=False,
     ):
-        self_attention_outputs = self.attention(hidden_states, attention_mask, head_mask)
+        self_attention_outputs = self.attention(
+            hidden_states, attention_mask, head_mask, output_attentions=output_attentions,
+        )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         if self.is_decoder and encoder_hidden_states is not None:
             cross_attention_outputs = self.crossattention(
-                attention_output, attention_mask, head_mask, encoder_hidden_states, encoder_attention_mask
+                attention_output,
+                attention_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                output_attentions,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
@@ -404,7 +413,12 @@ class BertEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states, attention_mask, head_mask[i], encoder_hidden_states, encoder_attention_mask
+                hidden_states,
+                attention_mask,
+                head_mask[i],
+                encoder_hidden_states,
+                encoder_attention_mask,
+                output_attentions,
             )
             hidden_states = layer_outputs[0]
 
@@ -772,6 +786,7 @@ class BertForPreTraining(BertPreTrainedModel):
         inputs_embeds=None,
         masked_lm_labels=None,
         next_sentence_label=None,
+        output_attentions=False,
     ):
         r"""
         masked_lm_labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
@@ -829,6 +844,7 @@ class BertForPreTraining(BertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         sequence_output, pooled_output = outputs[:2]
@@ -874,6 +890,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         lm_labels=None,
+        output_attentions=False,
     ):
         r"""
         masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -931,6 +948,7 @@ class BertForMaskedLM(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -1004,6 +1022,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         next_sentence_label=None,
+        output_attentions=False,
     ):
         r"""
         next_sentence_label (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1052,6 +1071,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         pooled_output = outputs[1]
@@ -1093,6 +1113,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1142,6 +1163,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         pooled_output = outputs[1]
@@ -1189,6 +1211,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1246,6 +1269,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         pooled_output = outputs[1]
@@ -1290,6 +1314,7 @@ class BertForTokenClassification(BertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -1337,6 +1362,7 @@ class BertForTokenClassification(BertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -1388,6 +1414,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        output_attentions=False,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1446,6 +1473,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
