@@ -786,6 +786,7 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def test_lsh_layer_forward(self):
         config = self._get_basic_config_and_input()
+        config["lsh_num_chunks_before"] = 0
         config["attn_layers"] = ["lsh"]
         config["is_decoder"] = False
         hidden_states = self._get_hidden_states()
@@ -801,6 +802,7 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def test_lsh_layer_forward_complex(self):
         config = self._get_basic_config_and_input()
+        config["lsh_num_chunks_before"] = 0
         config["attn_layers"] = ["lsh"]
         config["num_buckets"] = [2, 4]
         attn_mask = self._get_attn_mask()
@@ -819,6 +821,7 @@ class ReformerIntegrationTests(unittest.TestCase):
 
     def test_local_layer_forward(self):
         config = self._get_basic_config_and_input()
+        config["local_num_chunks_before"] = 0
         config["attn_layers"] = ["local"]
         config["is_decoder"] = False
         hidden_states = self._get_hidden_states()
