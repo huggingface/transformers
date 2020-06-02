@@ -1066,7 +1066,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
                 DeprecationWarning,
             )
             labels = kwargs.pop("lm_labels")
-        assert kwargs == {}, "Unexpected keyword argument."
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:

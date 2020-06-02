@@ -540,7 +540,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
                 DeprecationWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
-        assert kwargs == {}, "Unexpected keyword argument."
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         dlbrt_output = self.distilbert(
             input_ids=input_ids, attention_mask=attention_mask, head_mask=head_mask, inputs_embeds=inputs_embeds

@@ -658,7 +658,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
                 DeprecationWarning,
             )
             labels = kwargs.pop("lm_labels")
-        assert kwargs == {}, "Unexpected keyword argument."
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         transformer_outputs = self.transformer(
             input_ids,

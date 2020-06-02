@@ -662,7 +662,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
                 DeprecationWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
-        assert kwargs == {}, "Unexpected keyword argument."
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         outputs = self.albert(
             input_ids,
@@ -803,7 +803,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
                 DeprecationWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
-        assert kwargs == {}, "Unexpected keyword argument."
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         outputs = self.albert(
             input_ids=input_ids,

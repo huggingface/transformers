@@ -612,7 +612,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
                 DeprecationWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
-        assert kwargs == {}, "Unexpected keyword argument."
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         generator_hidden_states = self.electra(
             input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds

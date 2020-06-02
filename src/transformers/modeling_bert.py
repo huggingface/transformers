@@ -829,7 +829,7 @@ class BertForPreTraining(BertPreTrainedModel):
                 DeprecationWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
-        assert kwargs == {}, "Unexpected keyword argument."
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         outputs = self.bert(
             input_ids,
@@ -940,7 +940,7 @@ class BertForMaskedLM(BertPreTrainedModel):
                 DeprecationWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
-        assert kwargs == {}, "Unexpected keyword argument."
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         outputs = self.bert(
             input_ids,
