@@ -24,7 +24,7 @@ from .utils import require_torch, slow, torch_device
 
 if is_torch_available():
     import torch
-    from transformers import CTRLConfig, CTRLModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, CTRLLMHeadModel
+    from transformers import CTRLConfig, CTRLModel, CTRL_PRETRAINED_MODEL_ARCHIVE_LIST, CTRLLMHeadModel
 
 
 @require_torch
@@ -210,7 +210,7 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(CTRL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in CTRL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = CTRLModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

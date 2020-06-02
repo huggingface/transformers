@@ -35,7 +35,9 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
-TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {}
+TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    # See all Flaubert models at https://huggingface.co/models?filter=flaubert
+]
 
 FLAUBERT_START_DOCSTRING = r"""
 
@@ -104,7 +106,6 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
 )
 class TFFlaubertModel(TFXLMModel):
     config_class = FlaubertConfig
-    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -309,7 +310,6 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
 )
 class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
     config_class = FlaubertConfig
-    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -323,7 +323,6 @@ class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
 )
 class TFFlaubertForSequenceClassification(TFXLMForSequenceClassification):
     config_class = FlaubertConfig
-    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)

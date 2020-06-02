@@ -32,13 +32,15 @@ from .modeling_utils import PreTrainedModel, create_position_ids_from_input_ids
 logger = logging.getLogger(__name__)
 
 
-BART_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "bart-large": "https://cdn.huggingface.co/facebook/bart-large/pytorch_model.bin",
-    "bart-large-mnli": "https://cdn.huggingface.co/facebook/bart-large-mnli/pytorch_model.bin",
-    "bart-large-cnn": "https://cdn.huggingface.co/facebook/bart-large-cnn/pytorch_model.bin",
-    "bart-large-xsum": "https://cdn.huggingface.co/facebook/bart-large-xsum/pytorch_model.bin",
-    "mbart-large-en-ro": "https://cdn.huggingface.co/facebook/mbart-large-en-ro/pytorch_model.bin",
-}
+BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/bart-large",
+    "facebook/bart-large-mnli",
+    "facebook/bart-large-cnn",
+    "facebook/bart-large-xsum",
+    "facebook/mbart-large-en-ro",
+    # See all BART models at https://huggingface.co/models?filter=bart
+]
+
 
 BART_START_DOCSTRING = r"""
 
@@ -118,7 +120,6 @@ def _prepare_bart_decoder_inputs(
 class PretrainedBartModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
-    pretrained_model_archive_map = BART_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def _init_weights(self, module):
         std = self.config.init_std

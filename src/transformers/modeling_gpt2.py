@@ -31,13 +31,14 @@ from .modeling_utils import Conv1D, PreTrainedModel, SequenceSummary, prune_conv
 
 logger = logging.getLogger(__name__)
 
-GPT2_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "gpt2": "https://cdn.huggingface.co/gpt2-pytorch_model.bin",
-    "gpt2-medium": "https://cdn.huggingface.co/gpt2-medium-pytorch_model.bin",
-    "gpt2-large": "https://cdn.huggingface.co/gpt2-large-pytorch_model.bin",
-    "gpt2-xl": "https://cdn.huggingface.co/gpt2-xl-pytorch_model.bin",
-    "distilgpt2": "https://cdn.huggingface.co/distilgpt2-pytorch_model.bin",
-}
+GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "gpt2",
+    "gpt2-medium",
+    "gpt2-large",
+    "gpt2-xl",
+    "distilgpt2",
+    # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
+]
 
 
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
@@ -251,7 +252,6 @@ class GPT2PreTrainedModel(PreTrainedModel):
     """
 
     config_class = GPT2Config
-    pretrained_model_archive_map = GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
 

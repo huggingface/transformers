@@ -39,7 +39,7 @@ if is_torch_available():
         MBartTokenizer,
     )
     from transformers.modeling_bart import (
-        BART_PRETRAINED_MODEL_ARCHIVE_MAP,
+        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
         shift_tokens_right,
         invert_mask,
         _prepare_bart_decoder_inputs,
@@ -261,7 +261,7 @@ class BartTranslationTests(unittest.TestCase):
         self.assertEqual(expected_translation_romanian, decoded[0])
 
     def test_mbart_enro_config(self):
-        mbart_models = ["mbart-large-en-ro"]
+        mbart_models = ["facebook/mbart-large-en-ro"]
         expected = {"scale_embedding": True, "output_past": True}
         for name in mbart_models:
             config = BartConfig.from_pretrained(name)
@@ -561,7 +561,7 @@ class BartModelIntegrationTests(unittest.TestCase):
     @unittest.skip("This is just too slow")
     def test_model_from_pretrained(self):
         # Forces 1.6GB download from S3 for each model
-        for model_name in list(BART_PRETRAINED_MODEL_ARCHIVE_MAP.keys()):
+        for model_name in BART_PRETRAINED_MODEL_ARCHIVE_LIST:
             model = BartModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -593,7 +593,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
-        config = BartConfig.from_pretrained("bart-large-xsum")
+        config = BartConfig.from_pretrained("facebook/bart-large-xsum")
         expected_params = dict(num_beams=6, do_sample=False, early_stopping=True, length_penalty=1.0)
         config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)

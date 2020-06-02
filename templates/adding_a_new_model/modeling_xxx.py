@@ -34,13 +34,13 @@ from .modeling_utils import PreTrainedModel
 logger = logging.getLogger(__name__)
 
 ####################################################
-# This dict contrains shortcut names and associated url
-# for the pretrained weights provided with the models
+# This list contrains shortcut names for some of
+# the pretrained weights provided with the models
 ####################################################
-XXX_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xxx-base-uncased": "https://cdn.huggingface.co/xxx-base-uncased-pytorch_model.bin",
-    "xxx-large-uncased": "https://cdn.huggingface.co/xxx-large-uncased-pytorch_model.bin",
-}
+XXX_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xxx-base-uncased",
+    "xxx-large-uncased",
+]
 
 
 ####################################################
@@ -180,7 +180,6 @@ class XxxPreTrainedModel(PreTrainedModel):
     """
 
     config_class = XxxConfig
-    pretrained_model_archive_map = XXX_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_xxx
     base_model_prefix = "transformer"
 

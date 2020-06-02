@@ -36,15 +36,16 @@ from .modeling_utils import PreTrainedModel, prune_linear_layer
 logger = logging.getLogger(__name__)
 
 
-DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "distilbert-base-uncased": "https://cdn.huggingface.co/distilbert-base-uncased-pytorch_model.bin",
-    "distilbert-base-uncased-distilled-squad": "https://cdn.huggingface.co/distilbert-base-uncased-distilled-squad-pytorch_model.bin",
-    "distilbert-base-cased": "https://cdn.huggingface.co/distilbert-base-cased-pytorch_model.bin",
-    "distilbert-base-cased-distilled-squad": "https://cdn.huggingface.co/distilbert-base-cased-distilled-squad-pytorch_model.bin",
-    "distilbert-base-german-cased": "https://cdn.huggingface.co/distilbert-base-german-cased-pytorch_model.bin",
-    "distilbert-base-multilingual-cased": "https://cdn.huggingface.co/distilbert-base-multilingual-cased-pytorch_model.bin",
-    "distilbert-base-uncased-finetuned-sst-2-english": "https://cdn.huggingface.co/distilbert-base-uncased-finetuned-sst-2-english-pytorch_model.bin",
-}
+DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "distilbert-base-uncased",
+    "distilbert-base-uncased-distilled-squad",
+    "distilbert-base-cased",
+    "distilbert-base-cased-distilled-squad",
+    "distilbert-base-german-cased",
+    "distilbert-base-multilingual-cased",
+    "distilbert-base-uncased-finetuned-sst-2-english",
+    # See all DistilBERT models at https://huggingface.co/models?filter=distilbert
+]
 
 
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
@@ -327,7 +328,6 @@ class DistilBertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = DistilBertConfig
-    pretrained_model_archive_map = DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = None
     base_model_prefix = "distilbert"
 

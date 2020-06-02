@@ -942,13 +942,11 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 if len(cls.vocab_files_names) > 1:
                     raise ValueError(
-                        "Calling {}.from_pretrained() with the path to a single file or url is not supported."
-                        "Use a model identifier or the path to a directory instead.".format(cls.__name__)
+                        f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not supported."
+                        "Use a model identifier or the path to a directory instead."
                     )
                 logger.warning(
-                    "Calling {}.from_pretrained() with the path to a single file or url is deprecated".format(
-                        cls.__name__
-                    )
+                    f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is deprecated"
                 )
                 file_id = list(cls.vocab_files_names.keys())[0]
                 vocab_files[file_id] = pretrained_model_name_or_path
