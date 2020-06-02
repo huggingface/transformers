@@ -332,29 +332,26 @@ class AutoModel:
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+            - `t5`: :class:`~transformers.T5Model` (T5 model)
+            - `distilbert`: :class:`~transformers.DistilBertModel` (DistilBERT model)
+            - `albert`: :class:`~transformers.AlbertModel` (ALBERT model)
+            - `camembert`: :class:`~transformers.CamembertModel` (CamemBERT model)
+            - `xlm-roberta`: :class:`~transformers.XLMRobertaModel` (XLM-RoBERTa model)
+            - `longformer` :class:`~transformers.LongformerModel` (Longformer model)
+            - `roberta`: :class:`~transformers.RobertaModel` (RoBERTa model)
+            - `bert`: :class:`~transformers.BertModel` (Bert model)
+            - `openai-gpt`: :class:`~transformers.OpenAIGPTModel` (OpenAI GPT model)
+            - `gpt2`: :class:`~transformers.GPT2Model` (OpenAI GPT-2 model)
+            - `transfo-xl`: :class:`~transformers.TransfoXLModel` (Transformer-XL model)
+            - `xlnet`: :class:`~transformers.XLNetModel` (XLNet model)
+            - `xlm`: :class:`~transformers.XLMModel` (XLM model)
+            - `ctrl`: :class:`~transformers.CTRLModel` (Salesforce CTRL  model)
+            - `flaubert`: :class:`~transformers.FlaubertModel` (Flaubert  model)
+            - `electra`: :class:`~transformers.ElectraModel` (Electra  model)
 
-        The base model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: :class:`~transformers.T5Model` (T5 model)
-            - contains `distilbert`: :class:`~transformers.DistilBertModel` (DistilBERT model)
-            - contains `albert`: :class:`~transformers.AlbertModel` (ALBERT model)
-            - contains `camembert`: :class:`~transformers.CamembertModel` (CamemBERT model)
-            - contains `xlm-roberta`: :class:`~transformers.XLMRobertaModel` (XLM-RoBERTa model)
-            - contains `longformer` :class:`~transformers.LongformerModel` (Longformer model)
-            - contains `roberta`: :class:`~transformers.RobertaModel` (RoBERTa model)
-            - contains `bert`: :class:`~transformers.BertModel` (Bert model)
-            - contains `openai-gpt`: :class:`~transformers.OpenAIGPTModel` (OpenAI GPT model)
-            - contains `gpt2`: :class:`~transformers.GPT2Model` (OpenAI GPT-2 model)
-            - contains `transfo-xl`: :class:`~transformers.TransfoXLModel` (Transformer-XL model)
-            - contains `xlnet`: :class:`~transformers.XLNetModel` (XLNet model)
-            - contains `xlm`: :class:`~transformers.XLMModel` (XLM model)
-            - contains `ctrl`: :class:`~transformers.CTRLModel` (Salesforce CTRL  model)
-            - contains `flaubert`: :class:`~transformers.FlaubertModel` (Flaubert  model)
-            - contains `electra`: :class:`~transformers.ElectraModel` (Electra  model)
-
-            The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
-            To train the model, you should first set it back in training mode with `model.train()`
+        The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
+        To train the model, you should first set it back in training mode with `model.train()`
 
         Args:
             pretrained_model_name_or_path: either:
@@ -488,26 +485,23 @@ class AutoModelForPreTraining:
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
-
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: :class:`~transformers.T5ModelWithLMHead` (T5 model)
-            - contains `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
-            - contains `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
-            - contains `camembert`: :class:`~transformers.CamembertForMaskedLM` (CamemBERT model)
-            - contains `xlm-roberta`: :class:`~transformers.XLMRobertaForMaskedLM` (XLM-RoBERTa model)
-            - contains `longformer`: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
-            - contains `roberta`: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
-            - contains `bert`: :class:`~transformers.BertForPreTraining` (Bert model)
-            - contains `openai-gpt`: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
-            - contains `gpt2`: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
-            - contains `transfo-xl`: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
-            - contains `xlnet`: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
-            - contains `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
-            - contains `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
-            - contains `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
-            - contains `electra`: :class:`~transformers.ElectraForPreTraining` (Electra model)
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+            - `t5`: :class:`~transformers.T5ModelWithLMHead` (T5 model)
+            - `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
+            - `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
+            - `camembert`: :class:`~transformers.CamembertForMaskedLM` (CamemBERT model)
+            - `xlm-roberta`: :class:`~transformers.XLMRobertaForMaskedLM` (XLM-RoBERTa model)
+            - `longformer`: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
+            - `roberta`: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
+            - `bert`: :class:`~transformers.BertForPreTraining` (Bert model)
+            - `openai-gpt`: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
+            - `gpt2`: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
+            - `transfo-xl`: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
+            - `xlnet`: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
+            - `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
+            - `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
+            - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
+            - `electra`: :class:`~transformers.ElectraForPreTraining` (Electra model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -639,26 +633,23 @@ class AutoModelWithLMHead:
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
-
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: :class:`~transformers.T5ModelWithLMHead` (T5 model)
-            - contains `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
-            - contains `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
-            - contains `camembert`: :class:`~transformers.CamembertForMaskedLM` (CamemBERT model)
-            - contains `xlm-roberta`: :class:`~transformers.XLMRobertaForMaskedLM` (XLM-RoBERTa model)
-            - contains `longformer`: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
-            - contains `roberta`: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
-            - contains `bert`: :class:`~transformers.BertForMaskedLM` (Bert model)
-            - contains `openai-gpt`: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
-            - contains `gpt2`: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
-            - contains `transfo-xl`: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
-            - contains `xlnet`: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
-            - contains `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
-            - contains `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
-            - contains `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
-            - contains `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+            - `t5`: :class:`~transformers.T5ModelWithLMHead` (T5 model)
+            - `distilbert`: :class:`~transformers.DistilBertForMaskedLM` (DistilBERT model)
+            - `albert`: :class:`~transformers.AlbertForMaskedLM` (ALBERT model)
+            - `camembert`: :class:`~transformers.CamembertForMaskedLM` (CamemBERT model)
+            - `xlm-roberta`: :class:`~transformers.XLMRobertaForMaskedLM` (XLM-RoBERTa model)
+            - `longformer`: :class:`~transformers.LongformerForMaskedLM` (Longformer model)
+            - `roberta`: :class:`~transformers.RobertaForMaskedLM` (RoBERTa model)
+            - `bert`: :class:`~transformers.BertForMaskedLM` (Bert model)
+            - `openai-gpt`: :class:`~transformers.OpenAIGPTLMHeadModel` (OpenAI GPT model)
+            - `gpt2`: :class:`~transformers.GPT2LMHeadModel` (OpenAI GPT-2 model)
+            - `transfo-xl`: :class:`~transformers.TransfoXLLMHeadModel` (Transformer-XL model)
+            - `xlnet`: :class:`~transformers.XLNetLMHeadModel` (XLNet model)
+            - `xlm`: :class:`~transformers.XLMWithLMHeadModel` (XLM model)
+            - `ctrl`: :class:`~transformers.CTRLLMHeadModel` (Salesforce CTRL model)
+            - `flaubert`: :class:`~transformers.FlaubertWithLMHeadModel` (Flaubert model)
+            - `electra`: :class:`~transformers.ElectraForMaskedLM` (Electra model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -790,18 +781,15 @@ class AutoModelForSequenceClassification:
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
-
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: :class:`~transformers.DistilBertForSequenceClassification` (DistilBERT model)
-            - contains `albert`: :class:`~transformers.AlbertForSequenceClassification` (ALBERT model)
-            - contains `camembert`: :class:`~transformers.CamembertForSequenceClassification` (CamemBERT model)
-            - contains `xlm-roberta`: :class:`~transformers.XLMRobertaForSequenceClassification` (XLM-RoBERTa model)
-            - contains `roberta`: :class:`~transformers.RobertaForSequenceClassification` (RoBERTa model)
-            - contains `bert`: :class:`~transformers.BertForSequenceClassification` (Bert model)
-            - contains `xlnet`: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
-            - contains `flaubert`: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+            - `distilbert`: :class:`~transformers.DistilBertForSequenceClassification` (DistilBERT model)
+            - `albert`: :class:`~transformers.AlbertForSequenceClassification` (ALBERT model)
+            - `camembert`: :class:`~transformers.CamembertForSequenceClassification` (CamemBERT model)
+            - `xlm-roberta`: :class:`~transformers.XLMRobertaForSequenceClassification` (XLM-RoBERTa model)
+            - `roberta`: :class:`~transformers.RobertaForSequenceClassification` (RoBERTa model)
+            - `bert`: :class:`~transformers.BertForSequenceClassification` (Bert model)
+            - `xlnet`: :class:`~transformers.XLNetForSequenceClassification` (XLNet model)
+            - `flaubert`: :class:`~transformers.FlaubertForSequenceClassification` (Flaubert model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -939,16 +927,13 @@ class AutoModelForQuestionAnswering:
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
-
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: :class:`~transformers.DistilBertForQuestionAnswering` (DistilBERT model)
-            - contains `albert`: :class:`~transformers.AlbertForQuestionAnswering` (ALBERT model)
-            - contains `bert`: :class:`~transformers.BertForQuestionAnswering` (Bert model)
-            - contains `xlnet`: :class:`~transformers.XLNetForQuestionAnswering` (XLNet model)
-            - contains `xlm`: :class:`~transformers.XLMForQuestionAnswering` (XLM model)
-            - contains `flaubert`: :class:`~transformers.FlaubertForQuestionAnswering` (XLM model)
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+            - `distilbert`: :class:`~transformers.DistilBertForQuestionAnswering` (DistilBERT model)
+            - `albert`: :class:`~transformers.AlbertForQuestionAnswering` (ALBERT model)
+            - `bert`: :class:`~transformers.BertForQuestionAnswering` (Bert model)
+            - `xlnet`: :class:`~transformers.XLNetForQuestionAnswering` (XLNet model)
+            - `xlm`: :class:`~transformers.XLMForQuestionAnswering` (XLM model)
+            - `flaubert`: :class:`~transformers.FlaubertForQuestionAnswering` (XLM model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`
@@ -1087,18 +1072,15 @@ class AutoModelForTokenClassification:
 
         The `from_pretrained()` method takes care of returning the correct model class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
-
-        The model class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `distilbert`: :class:`~transformers.DistilBertForTokenClassification` (DistilBERT model)
-            - contains `xlm`: :class:`~transformers.XLMForTokenClassification` (XLM model)
-            - contains `xlm-roberta`: :class:`~transformers.XLMRobertaForTokenClassification` (XLM-RoBERTa?Para model)
-            - contains `camembert`: :class:`~transformers.CamembertForTokenClassification` (Camembert model)
-            - contains `bert`: :class:`~transformers.BertForTokenClassification` (Bert model)
-            - contains `xlnet`: :class:`~transformers.XLNetForTokenClassification` (XLNet model)
-            - contains `roberta`: :class:`~transformers.RobertaForTokenClassification` (Roberta model)
-            - contains `electra`: :class:`~transformers.ElectraForTokenClassification` (Electra model)
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+            - `distilbert`: :class:`~transformers.DistilBertForTokenClassification` (DistilBERT model)
+            - `xlm`: :class:`~transformers.XLMForTokenClassification` (XLM model)
+            - `xlm-roberta`: :class:`~transformers.XLMRobertaForTokenClassification` (XLM-RoBERTa?Para model)
+            - `camembert`: :class:`~transformers.CamembertForTokenClassification` (Camembert model)
+            - `bert`: :class:`~transformers.BertForTokenClassification` (Bert model)
+            - `xlnet`: :class:`~transformers.XLNetForTokenClassification` (XLNet model)
+            - `roberta`: :class:`~transformers.RobertaForTokenClassification` (Roberta model)
+            - `electra`: :class:`~transformers.ElectraForTokenClassification` (Electra model)
 
         The model is set in evaluation mode by default using `model.eval()` (Dropout modules are deactivated)
         To train the model, you should first set it back in training mode with `model.train()`

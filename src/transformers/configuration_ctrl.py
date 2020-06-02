@@ -27,7 +27,7 @@ CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {"ctrl": "https://storage.googleapis.com/sf
 
 class CTRLConfig(PretrainedConfig):
     """
-        This is the configuration class to store the configuration of an :class:`~transformers.CTRLModel`.
+        This is the configuration class to store the configuration of a :class:`~transformers.CTRLModel`.
         It is used to instantiate an CTRL model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
         the `ctrl <https://huggingface.co/ctrl>`__ architecture from SalesForce.
@@ -76,13 +76,8 @@ class CTRLConfig(PretrainedConfig):
 
             # Accessing the model configuration
             configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
     """
 
-    pretrained_config_archive_map = CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "ctrl"
 
     def __init__(

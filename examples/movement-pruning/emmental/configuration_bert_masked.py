@@ -19,7 +19,6 @@ and adapts it to the specificities of MaskedBert (`pruning_method`, `mask_init` 
 
 import logging
 
-from transformers.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
 from transformers.configuration_utils import PretrainedConfig
 
 
@@ -31,7 +30,6 @@ class MaskedBertConfig(PretrainedConfig):
     A class replicating the `~transformers.BertConfig` with additional parameters for pruning/masking configuration.
     """
 
-    pretrained_config_archive_map = BERT_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "masked_bert"
 
     def __init__(
