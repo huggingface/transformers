@@ -2188,7 +2188,7 @@ def apply_chunking_to_forward(
         assert (
             input_tensors[0].shape[chunk_dim] % chunk_size == 0
         ), "The dimension to be chunked {} has to be a multiple of the chunk size {}".format(
-            input_tensors[0][chunk_dim], chunk_size
+            input_tensors[0].shape[chunk_dim], chunk_size
         )
 
         num_chunks = input_tensors[0].shape[chunk_dim] // chunk_size
