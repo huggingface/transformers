@@ -21,7 +21,7 @@ def generate_summaries(
 ):
     fout = Path(out_file).open("w")
     model = BartForConditionalGeneration.from_pretrained(model_name).to(device)
-    tokenizer = BartTokenizer.from_pretrained("bart-large")
+    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
 
     max_length = 140
     min_length = 55
@@ -54,7 +54,7 @@ def run_generate():
         "output_path", type=str, help="where to save summaries",
     )
     parser.add_argument(
-        "model_name", type=str, default="bart-large-cnn", help="like bart-large-cnn",
+        "model_name", type=str, default="facebook/bart-large-cnn", help="like bart-large-cnn",
     )
     parser.add_argument(
         "--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.",
