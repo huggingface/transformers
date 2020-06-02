@@ -619,7 +619,7 @@ class EncoderDistiller(SummarizationDistiller):
 
 def main(args):
     Path(args.output_dir).mkdir(exist_ok=True)
-    if os.listdir(args.output_dir):
+    if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if args.no_teacher:
         assert not args.enc_only
