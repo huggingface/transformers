@@ -77,7 +77,7 @@ class SummarizationTrainer(BaseTransformer):
     loss_names = ["loss"]
 
     def __init__(self, hparams, **kwargs):
-        tokenizer = BartTokenizer.from_pretrained("bart-large")
+        tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
         super().__init__(hparams, num_labels=None, mode=self.mode, tokenizer=tokenizer, **kwargs)
         save_git_info(self.hparams.output_dir)
         self.model: BartForConditionalGeneration
@@ -570,7 +570,7 @@ class SummarizationDistiller(SummarizationTrainer):
     def add_model_specific_args(parser, root_dir):
         SummarizationTrainer.add_model_specific_args(parser, root_dir)
         parser.add_argument(
-            "--teacher", default="bart-large-cnn", type=str,
+            "--teacher", default="facebook/bart-large-cnn", type=str,
         )
         parser.add_argument("--alpha_ce", default=0.8, type=float)
         parser.add_argument("--alpha_mlm", default=0.2, type=float)

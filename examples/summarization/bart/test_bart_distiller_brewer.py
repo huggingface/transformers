@@ -27,7 +27,7 @@ teacher_cfg_kwargs = dict(
 class TestDistiller(unittest.TestCase):
     @cached_property
     def tok(self):
-        return BartTokenizer.from_pretrained("bart-large")
+        return BartTokenizer.from_pretrained("facebook/bart-large")
 
     @property
     def loader(self):

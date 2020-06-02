@@ -54,7 +54,7 @@ def summaries_for_file(
     if torch.cuda.is_available():
         model = model.to(device).half()
 
-    tokenizer = BartTokenizer.from_pretrained("bart-large")
+    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
     ds = SummarizationDataset(tokenizer, type_path=type_path, data_dir=data_dir, **ds_kwargs)
     dataloader = DataLoader(ds, batch_size=bs, collate_fn=ds.collate_fn, shuffle=False, num_workers=num_workers)
     save_path = data_dir / f"{type_path}_pseudo_ids.pkl"

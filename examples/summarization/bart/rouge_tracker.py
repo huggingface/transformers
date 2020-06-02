@@ -50,7 +50,7 @@ class RougeTracker:
         test_gt = lmap(str.strip, Path(data_dir / "test.target").open().readlines())
         test_gt = lmap(str.strip, test_gt)
         self.gt = test_gt  # {'test': test_gt}
-        self.tokenizer = BartTokenizer.from_pretrained("bart-large-cnn")
+        self.tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
         self.csv_path = csv_path
 
     @property

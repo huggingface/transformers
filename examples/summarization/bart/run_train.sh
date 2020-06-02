@@ -10,7 +10,7 @@ export PYTHONPATH="../../":"${PYTHONPATH}"
 
 python finetune.py \
 --data_dir=./cnn-dailymail/cnn_dm \
---model_name_or_path=bart-large \
+--model_name_or_path=facebook/bart-large \
 --learning_rate=3e-5 \
 --train_batch_size=4 \
 --eval_batch_size=4 \

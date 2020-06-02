@@ -45,10 +45,10 @@ def generate_summaries(
             fout.flush()
 
 
-def generate_example_ds(examples, out_file, device="cuda:1"):
+def generate_example_ds(examples, out_file, device="cuda:1", batch_size=32):
     fout = Path(out_file).open("w")
-    model = BartForConditionalGeneration.from_pretrained("bart-large-cnn").to(device).half()
-    tokenizer = BartTokenizer.from_pretrained("bart-large")
+    model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn").to(device).half()
+    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
 
     max_length = 140
     min_length = 55
