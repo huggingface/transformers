@@ -616,6 +616,8 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             Indices should be in ``[0, 1]``.
             ``0`` indicates original order (sequence A, then sequence B),
             ``1`` indicates switched order (sequence B, then sequence A).
+        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Used to hide legacy arguments that have been deprecated.
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
