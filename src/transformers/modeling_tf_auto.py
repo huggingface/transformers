@@ -63,11 +63,7 @@ from .modeling_tf_camembert import (
     TFCamembertForTokenClassification,
     TFCamembertModel,
 )
-from .modeling_tf_ctrl import (
-    TFCTRLWithLMHeadModel,
-    TFCTRLLMHeadModel,
-    TFCTRLModel
-)
+from .modeling_tf_ctrl import TFCTRLLMHeadModel, TFCTRLModel
 from .modeling_tf_distilbert import (
     TFDistilBertForMaskedLM,
     TFDistilBertForMultipleChoice,
@@ -91,16 +87,8 @@ from .modeling_tf_flaubert import (
     TFFlaubertModel,
     TFFlaubertWithLMHeadModel,
 )
-from .modeling_tf_gpt2 import (
-    TFGPT2WithLMHeadModel,
-    TFGPT2Model
-)
-from .modeling_tf_openai import (
-    TFOpenAIGPTWithLMHeadModel,
-    TFOpenAIGPTModel
-)
-from .modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP, TFGPT2LMHeadModel, TFGPT2Model
-from .modeling_tf_openai import TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
+from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
+from .modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from .modeling_tf_roberta import (
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
@@ -109,14 +97,8 @@ from .modeling_tf_roberta import (
     TFRobertaForTokenClassification,
     TFRobertaModel,
 )
-from .modeling_tf_t5 import (
-    TFT5ForConditionalGeneration,
-    TFT5Model
-)
-from .modeling_tf_transfo_xl import (
-    TFTransfoXLWithLMHeadModel,
-    TFTransfoXLModel,
-)
+from .modeling_tf_t5 import TFT5ForConditionalGeneration, TFT5Model
+from .modeling_tf_transfo_xl import TFTransfoXLLMHeadModel, TFTransfoXLModel
 from .modeling_tf_xlm import (
     TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
@@ -126,7 +108,6 @@ from .modeling_tf_xlm import (
     TFXLMWithLMHeadModel,
 )
 from .modeling_tf_xlm_roberta import (
-    TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP,
     TFXLMRobertaForMaskedLM,
     TFXLMRobertaForMultipleChoice,
     TFXLMRobertaForQuestionAnswering,
