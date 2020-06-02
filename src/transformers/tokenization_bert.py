@@ -130,8 +130,8 @@ class BertTokenizer(PreTrainedTokenizer):
             Whether to lowercase the input when tokenizing.
         do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to do basic tokenization before WordPiece.
-        never_split (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            List of tokens which will never be split during tokenization. Only has an effect when
+        never_split (:obj:`Optional[Iterable]`, `optional`, defaults to :obj:`None`):
+            Collection of tokens which will never be split during tokenization. Only has an effect when
             :obj:`do_basic_tokenize=True`
         unk_token (:obj:`string`, `optional`, defaults to "[UNK]"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
