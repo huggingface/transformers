@@ -174,6 +174,9 @@ class TrainingArguments:
             torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             n_gpu = 1
+
+        torch.cuda.set_device(device)
+
         return device, n_gpu
 
     @property
