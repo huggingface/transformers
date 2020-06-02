@@ -31,7 +31,6 @@ from emmental.modules import MaskedLinear
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from transformers.modeling_bert import (
     ACT2FN,
-    BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
     BertLayerNorm,
     load_tf_weights_in_bert,
 )
@@ -395,7 +394,6 @@ class MaskedBertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = MaskedBertConfig
-    pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
 
