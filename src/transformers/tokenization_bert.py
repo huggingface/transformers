@@ -380,6 +380,7 @@ class BasicTokenizer(object):
                 Now implemented directly at the base class level (see :func:`PreTrainedTokenizer.tokenize`)
                 List of token not to split.
         """
+        # union() returns a new set by concatenating the two sets.
         never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
 
         # This was added on November 1st, 2018 for the multilingual and Chinese
