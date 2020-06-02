@@ -83,12 +83,13 @@ class RougeTracker:
             if len(gens) != len(self.gt):
                 continue
             records.append(self.score(gens, exp_name))
+        if not records:
+            return self.df
         new_df = (
             pd.DataFrame(records)
             .rename(columns=lambda x: x.replace("rouge", "R"))
             .set_index("exp_name")
             .astype(float)
-            .dsort("R2")
         )
-        self.df = pd.concat([self.df, new_df])
+        self.df = pd.concat([self.df, new_df]).dsort('R2')
         return self.df
