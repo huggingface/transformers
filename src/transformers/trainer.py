@@ -22,7 +22,7 @@ from tqdm.auto import tqdm, trange
 from .data.data_collator import DataCollator, DefaultDataCollator
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, is_wandb_available, setup_wandb
 from .training_args import TrainingArguments, is_tpu_available
 
 
@@ -58,23 +58,6 @@ except ImportError:
 
 def is_tensorboard_available():
     return _has_tensorboard
-
-
-try:
-    import wandb
-
-    wandb.ensure_configured()
-    if wandb.api.api_key is None:
-        _has_wandb = False
-        wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
-    else:
-        _has_wandb = False if os.getenv("WANDB_DISABLED") else True
-except ImportError:
-    _has_wandb = False
-
-
-def is_wandb_available():
-    return _has_wandb
 
 
 logger = logging.getLogger(__name__)
@@ -208,12 +191,7 @@ class Trainer:
                 "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
             )
         if is_wandb_available():
-            self._setup_wandb()
-        else:
-            logger.info(
-                "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
-                "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
-            )
+            setup_wandb(self)
         set_seed(self.args.seed)
         # Create output directory if needed
         if self.is_world_master():
@@ -317,30 +295,6 @@ class Trainer:
             optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
         )
         return optimizer, scheduler
-
-    def _setup_wandb(self):
-        """
-        Setup the optional Weights & Biases (`wandb`) integration.
-
-        One can override this method to customize the setup if needed.  Find more information at https://docs.wandb.com/huggingface
-        You can also override the following environment variables:
-
-        Environment:
-            WANDB_WATCH:
-                (Optional, ["gradients", "all", "false"]) "gradients" by default, set to "false" to disable gradient logging
-                or "all" to log gradients and parameters
-            WANDB_PROJECT:
-                (Optional): str - "huggingface" by default, set this to a custom string to store results in a different project
-            WANDB_DISABLED:
-                (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
-        """
-        logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
-        wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
-        # keep track of model topology and gradients
-        if os.getenv("WANDB_WATCH") != "false":
-            wandb.watch(
-                self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
-            )
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
@@ -555,7 +509,7 @@ class Trainer:
                 self.tb_writer.add_scalar(k, v, self.global_step)
             self.tb_writer.flush()
         if is_wandb_available():
-            wandb.log(logs, step=self.global_step)
+            self._wandb.log(logs, step=self.global_step)
         output = json.dumps({**logs, **{"step": self.global_step}})
         if iterator is not None:
             iterator.write(output)
