@@ -833,6 +833,8 @@ class TokenizerTesterMixin:
             model(encoded_sequence_fast)
             model(batch_encoded_sequence_fast)
 
+    # TODO: Check if require_torch is the best to test for numpy here ... Maybe move to require_flax when available
+    @require_torch
     def test_np_encode_plus_sent_to_model(self):
         from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
