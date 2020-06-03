@@ -23,7 +23,7 @@ import tensorflow as tf
 from .configuration_albert import AlbertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import ACT2FN, TFBertSelfAttention
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFLayerUtilsMixin, get_initializer, keras_serializable, shape_list
 from .tokenization_utils import BatchEncoding
 
 
@@ -479,12 +479,13 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFAlbertMainLayer(tf.keras.layers.Layer):
+class TFAlbertMainLayer(tf.keras.layers.Layer, TFLayerUtilsMixin):
     config_class = AlbertConfig
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
+        self.config = config
 
         self.embeddings = TFAlbertEmbeddings(config, name="embeddings")
         self.encoder = TFAlbertTransformer(config, name="encoder")
@@ -495,11 +496,14 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             name="pooler",
         )
 
+    def _resize_token_embeddings(self, new_num_tokens):
+        old_embeddings = self.embeddings.word_embeddings
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        self.embeddings.word_embeddings = new_embeddings
+        return self.embeddings.word_embeddings
+
     def get_input_embeddings(self):
         return self.embeddings
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
@@ -674,6 +678,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
 class TFAlbertModel(TFAlbertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
+        self.config = config
         self.albert = TFAlbertMainLayer(config, name="albert")
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
@@ -715,7 +720,6 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         """
         outputs = self.albert(inputs, **kwargs)
         return outputs
-
 
 @add_start_docstrings(
     """Albert Model with two heads on top for pre-training:

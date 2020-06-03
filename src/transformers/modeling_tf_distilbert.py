@@ -24,7 +24,7 @@ import tensorflow as tf
 
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFLayerUtilsMixin, get_initializer, shape_list
 from .tokenization_utils import BatchEncoding
 
 
@@ -399,10 +399,11 @@ class TFTransformer(tf.keras.layers.Layer):
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 
-class TFDistilBertMainLayer(tf.keras.layers.Layer):
+class TFDistilBertMainLayer(tf.keras.layers.Layer, TFLayerUtilsMixin):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
+        self.config = config
 
         self.embeddings = TFEmbeddings(config, name="embeddings")  # Embeddings
         self.transformer = TFTransformer(config, name="transformer")  # Encoder
@@ -411,7 +412,10 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         return self.embeddings
 
     def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        old_embeddings = self.embeddings.word_embeddings
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        self.embeddings.word_embeddings = new_embeddings
+        return self.embeddings.word_embeddings
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError

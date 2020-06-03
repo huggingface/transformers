@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from .configuration_bert import BertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFLayerUtilsMixin, get_initializer, keras_serializable, shape_list
 from .tokenization_utils import BatchEncoding
 
 
@@ -474,12 +474,13 @@ class TFBertNSPHead(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFBertMainLayer(tf.keras.layers.Layer):
+class TFBertMainLayer(tf.keras.layers.Layer, TFLayerUtilsMixin):
     config_class = BertConfig
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
+        self.config = config
 
         self.embeddings = TFBertEmbeddings(config, name="embeddings")
         self.encoder = TFBertEncoder(config, name="encoder")
@@ -489,7 +490,10 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         return self.embeddings
 
     def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        old_embeddings = self.embeddings.word_embeddings
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        self.embeddings.word_embeddings = new_embeddings
+        return self.embeddings.word_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.

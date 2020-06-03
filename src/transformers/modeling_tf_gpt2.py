@@ -28,6 +28,7 @@ from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceSummary,
     TFSharedEmbeddings,
+    TFLayerUtilsMixin,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -214,7 +215,7 @@ class TFBlock(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFGPT2MainLayer(tf.keras.layers.Layer):
+class TFGPT2MainLayer(tf.keras.layers.Layer, TFLayerUtilsMixin):
     config_class = GPT2Config
 
     def __init__(self, config, *inputs, **kwargs):
@@ -224,6 +225,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.num_hidden_layers = config.n_layer
         self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
+        self.config = config
 
         self.wte = TFSharedEmbeddings(
             config.vocab_size, config.hidden_size, initializer_range=config.initializer_range, name="wte"
@@ -242,7 +244,11 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         return self.wte
 
     def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        old_embeddings = self.wte
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+        self.wte.weight = new_embeddings
+        self.wte.vocab_size = new_num_tokens
+        return self.wte
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.
