@@ -200,6 +200,8 @@ class Trainer:
             # Set an xla_device flag on the model's config.
             # We'll find a more elegant and not need to do this in the future.
             self.model.config.xla_device = True
+        # Define global_step (required when logging evaluation metrics with no training)
+        self.global_step = 0
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
