@@ -181,7 +181,9 @@ def truncate_and_pad(
         tokenizer.no_padding()
 
 
-def convert_to_tensors(batch_outputs: MutableMapping, return_tensors: Union[str, TensorType], prepend_batch_axis: bool = False) -> MutableMapping:
+def convert_to_tensors(
+    batch_outputs: MutableMapping, return_tensors: Union[str, TensorType], prepend_batch_axis: bool = False
+) -> MutableMapping:
     # Convert to TensorType
     if not isinstance(return_tensors, TensorType):
         return_tensors = TensorType(return_tensors)
@@ -1642,7 +1644,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             return_token_type_ids=return_token_type_ids,
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
-            prepend_batch_axis=return_tensors is not None
+            prepend_batch_axis=return_tensors is not None,
         )
 
     def batch_encode_plus(
@@ -1855,7 +1857,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_lengths: bool = False,
-        prepend_batch_axis: bool = False
+        prepend_batch_axis: bool = False,
     ) -> BatchEncoding:
         """ Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
         It adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
