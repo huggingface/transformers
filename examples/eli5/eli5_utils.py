@@ -548,7 +548,7 @@ def query_qa_dense_index_nn(passage, qa_embedder, tokenizer, wiki_passages, wiki
     D, I = wiki_index.search(a_rep, n_results)
     res_passages = [wiki_passages[int(i)] for i in I[0]]
     support_doc = '<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
-    res_list = [dict([(k, p[k]) for k in wiki_passages.column_names if k != 'passage_text']) for p in res_passages]
+    res_list = [dict([(k, p[k]) for k in wiki_passages.column_names) for p in res_passages]
     for r, sc, i in zip(res_list, D[0], I[0]):
         r['passage_id'] = int(i)
         r['score'] = float(sc)
