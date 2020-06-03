@@ -4,9 +4,9 @@
 export PYTHONPATH="../../":"${PYTHONPATH}"
 
 python finetune.py \
---learning_rate=3e-5 \
+--learning_rate=3e-4 \
 --do_train \
 --do_predict \
 --fp16 \
---val_check_interval 0.25 \
+--val_check_interval 0.1 \
 $@
