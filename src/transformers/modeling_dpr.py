@@ -21,12 +21,12 @@
 
 import collections
 import logging
-from dataclasses import dataclass
 from typing import Tuple
 
 import torch
 from torch import Tensor as T
 from torch import nn
+from torch.serialization import default_restore_location
 
 from .configuration_dpr import DprConfig
 from .file_utils import add_start_docstrings
@@ -64,7 +64,7 @@ class DprBertEncoder(BertModel):
         self.init_weights()
 
     @classmethod
-    def init_encoder(cls, cfg_name: str, projection_dim: int = 0, dropout: float = 0.1, **kwargs) -> BertModel:
+    def init_encoder(cls, cfg_name: str, projection_dim: int = 0, dropout: float = 0., **kwargs) -> BertModel:
         cfg = BertConfig.from_pretrained(cfg_name)
         if dropout != 0:
             cfg.attention_probs_dropout_prob = dropout
@@ -81,7 +81,6 @@ class DprBertEncoder(BertModel):
             sequence_output, pooled_output = super().forward(
                 input_ids=input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask
             )
-
         pooled_output = sequence_output[:, 0, :]
         if self.encode_proj:
             pooled_output = self.encode_proj(pooled_output)
@@ -97,6 +96,7 @@ class DprBertEncoder(BertModel):
 # BiEncoder
 ###########
 
+# Keep this class for now as it can be used to directly load the weights from the official code
 
 BiEncoderBatch = collections.namedtuple(
     "BiENcoderInput",
@@ -105,21 +105,16 @@ BiEncoderBatch = collections.namedtuple(
 
 
 class DprBiEncoder(nn.Module):
-    """ Bi-Encoder model component. Encapsulates query/question and context/passage encoders.
+    """
+    Bi-Encoder model component. Encapsulates query/question and context/passage encoders.
     """
 
     def __init__(
-        self,
-        question_model: nn.Module,
-        ctx_model: nn.Module,
-        fix_q_encoder: bool = False,
-        fix_ctx_encoder: bool = False,
+        self, question_model: nn.Module, ctx_model: nn.Module,
     ):
         super(DprBiEncoder, self).__init__()
         self.question_model = question_model
         self.ctx_model = ctx_model
-        self.fix_q_encoder = fix_q_encoder
-        self.fix_ctx_encoder = fix_ctx_encoder
 
     @staticmethod
     def get_representation(
@@ -129,36 +124,9 @@ class DprBiEncoder(nn.Module):
         pooled_output = None
         hidden_states = None
         if ids is not None:
-            if fix_encoder:
-                with torch.no_grad():
-                    sequence_output, pooled_output, hidden_states = sub_model(ids, segments, attn_mask)
-
-                if sub_model.training:
-                    sequence_output.requires_grad_(requires_grad=True)
-                    pooled_output.requires_grad_(requires_grad=True)
-            else:
+            with torch.no_grad():
                 sequence_output, pooled_output, hidden_states = sub_model(ids, segments, attn_mask)
-
         return sequence_output, pooled_output, hidden_states
-
-    def forward(
-        self,
-        question_ids: T,
-        question_segments: T,
-        question_attn_mask: T,
-        context_ids: T,
-        ctx_segments: T,
-        ctx_attn_mask: T,
-    ) -> Tuple[T, T]:
-
-        _q_seq, q_pooled_out, _q_hidden = self.get_representation(
-            self.question_model, question_ids, question_segments, question_attn_mask, self.fix_q_encoder
-        )
-        _ctx_seq, ctx_pooled_out, _ctx_hidden = self.get_representation(
-            self.ctx_model, context_ids, ctx_segments, ctx_attn_mask, self.fix_ctx_encoder
-        )
-
-        return q_pooled_out, ctx_pooled_out
 
 
 ###########
@@ -175,7 +143,6 @@ class Reader(nn.Module):
         self.encoder = encoder
         self.qa_outputs = nn.Linear(hidden_size, 2)
         self.qa_classifier = nn.Linear(hidden_size, 1)
-        init_weights([self.qa_outputs, self.qa_classifier])
 
     def forward(self, input_ids: T, attention_mask: T, start_positions=None, end_positions=None, answer_mask=None):
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
@@ -183,15 +150,9 @@ class Reader(nn.Module):
         start_logits, end_logits, relevance_logits = self._forward(
             input_ids.view(N * M, L), attention_mask.view(N * M, L)
         )
-        if self.training:
-            return compute_loss(
-                start_positions, end_positions, answer_mask, start_logits, end_logits, relevance_logits, N, M
-            )
-
         return start_logits.view(N, M, L), end_logits.view(N, M, L), relevance_logits.view(N, M)
 
     def _forward(self, input_ids, attention_mask):
-        # TODO: provide segment values
         sequence_output, _pooled_output, _hidden_states = self.encoder(input_ids, None, attention_mask)
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
@@ -206,35 +167,21 @@ class Reader(nn.Module):
 ##############
 
 
-@dataclass
-class DprEncoderConfig:
-    pretrained_model_cfg: str = "bert-base-uncased"
-    projection_dim: int = 0
-    dropout: float = 0.0
-    do_lower_case: bool = False
-    sequence_length: int = 512
-
-
-def get_bert_biencoder_components(config, inference_only: bool = False, **kwargs):
-    dropout = config.dropout if hasattr(config, "dropout") else 0.0
+def get_bert_biencoder_components(config: DprConfig, **kwargs):
     question_encoder = DprBertEncoder.init_encoder(
-        config.pretrained_model_cfg, projection_dim=config.projection_dim, dropout=dropout, **kwargs
+        config.pretrained_model_cfg, projection_dim=config.projection_dim, **kwargs
     )
     ctx_encoder = DprBertEncoder.init_encoder(
-        config.pretrained_model_cfg, projection_dim=config.projection_dim, dropout=dropout, **kwargs
+        config.pretrained_model_cfg, projection_dim=config.projection_dim, **kwargs
     )
-
-    fix_ctx_encoder = config.fix_ctx_encoder if hasattr(config, "fix_ctx_encoder") else False
-    biencoder = DprBiEncoder(question_encoder, ctx_encoder, fix_ctx_encoder=fix_ctx_encoder)
+    biencoder = DprBiEncoder(question_encoder, ctx_encoder)
     return biencoder
 
 
-def get_bert_reader_components(config, inference_only: bool = False, **kwargs):
-    dropout = config.dropout if hasattr(config, "dropout") else 0.0
+def get_bert_reader_components(config: DprConfig, **kwargs):
     encoder = DprBertEncoder.init_encoder(
-        config.pretrained_model_cfg, projection_dim=config.projection_dim, dropout=dropout
+        config.pretrained_model_cfg, projection_dim=config.projection_dim, **kwargs
     )
-
     hidden_size = encoder.config.hidden_size
     reader = Reader(encoder, hidden_size)
     return reader
@@ -263,9 +210,7 @@ class DprPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """ Initialize the weights """
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=0.02)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -341,6 +286,18 @@ DPR_INPUTS_DOCSTRING = r"""
 """
 
 
+CheckpointState = collections.namedtuple("CheckpointState",
+                                         ['model_dict', 'optimizer_dict', 'scheduler_dict', 'offset', 'epoch',
+                                          'encoder_params'])
+
+
+def load_states_from_checkpoint(model_file: str) -> CheckpointState:
+    logger.info('Reading saved model from %s', model_file)
+    state_dict = torch.load(model_file, map_location=lambda s, l: default_restore_location(s, 'cpu'))
+    logger.info('model_state_dict keys %s', state_dict.keys())
+    return CheckpointState(**state_dict)
+
+
 @add_start_docstrings(
     "The bare Dpr Model transformer outputting raw hidden-states without any specific head on top.",
     DPR_START_DOCSTRING,
@@ -376,12 +333,21 @@ class DprModel(DprPreTrainedModel):
 
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DprConfig):
         super().__init__(config)
         self.config = config
-        self.bidencoder = DprBiEncoder(config)
-        self.reader = Reader(config)
+        self.biencoder = get_bert_biencoder_components(config)
+        self.reader = get_bert_reader_components(config)
         self.init_weights()
+    
+    def init_weights(self):
+        super().init_weights()
+        if self.config.biencoder_model_file is not None:
+            saved_state = load_states_from_checkpoint(self.config.biencoder_model_file)
+            self.biencoder.load_state_dict(saved_state.model_dict)
+        if self.config.reader_model_file is not None:
+            saved_state = load_states_from_checkpoint(self.config.reader_model_file)
+            self.reader.load_state_dict(saved_state.model_dict)
 
     def forward(self, index, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None and inputs_embeds is not None:
