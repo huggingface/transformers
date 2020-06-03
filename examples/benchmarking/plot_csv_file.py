@@ -3,9 +3,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Optional
 
-import matplotlib.pyplot as plt
 import numpy as np
 
+import matplotlib.pyplot as plt
 from transformers import HfArgumentParser
 
 
