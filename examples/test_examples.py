@@ -61,8 +61,8 @@ class ExamplesTests(unittest.TestCase):
             --do_train
             --do_eval
             --output_dir ./tests/fixtures/tests_samples/temp_dir
-            --per_gpu_train_batch_size=2
-            --per_gpu_eval_batch_size=1
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
             --learning_rate=1e-4
             --max_steps=10
             --warmup_steps=2

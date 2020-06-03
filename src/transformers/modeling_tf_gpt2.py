@@ -37,13 +37,14 @@ from .tokenization_utils import BatchEncoding
 
 logger = logging.getLogger(__name__)
 
-TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "gpt2": "https://cdn.huggingface.co/gpt2-tf_model.h5",
-    "gpt2-medium": "https://cdn.huggingface.co/gpt2-medium-tf_model.h5",
-    "gpt2-large": "https://cdn.huggingface.co/gpt2-large-tf_model.h5",
-    "gpt2-xl": "https://cdn.huggingface.co/gpt2-xl-tf_model.h5",
-    "distilgpt2": "https://cdn.huggingface.co/distilgpt2-tf_model.h5",
-}
+TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "gpt2",
+    "gpt2-medium",
+    "gpt2-large",
+    "gpt2-xl",
+    "distilgpt2",
+    # See all GPT-2 models at https://huggingface.co/models?filter=gpt2
+]
 
 
 def gelu(x):
@@ -390,7 +391,6 @@ class TFGPT2PreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = GPT2Config
-    pretrained_model_archive_map = TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
 
 
@@ -459,7 +459,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.

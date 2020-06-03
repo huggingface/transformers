@@ -221,6 +221,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assertEqual(len(tokenizer_r), vocab_size + 3)
 
         self.assertEqual(tokenizer_r.add_special_tokens({}), 0)
+        self.assertEqual(tokenizer_r.add_special_tokens({"bos_token": "[BOS]", "eos_token": "[EOS]"}), 2)
         self.assertRaises(
             AssertionError, tokenizer_r.add_special_tokens, {"additional_special_tokens": "<testtoken1>"}
         )
@@ -228,7 +229,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assertEqual(
             tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
         )
-        self.assertEqual(len(tokenizer_r), vocab_size + 6)
+        self.assertEqual(len(tokenizer_r), vocab_size + 8)
 
     def assert_offsets_mapping(self, tokenizer_r):
         text = "Wonderful no inspiration example with subtoken"

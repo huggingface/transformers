@@ -13,14 +13,15 @@ from .tokenization_utils import BatchEncoding
 logger = logging.getLogger(__name__)
 
 
-TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "google/electra-small-generator": "https://cdn.huggingface.co/google/electra-small-generator/tf_model.h5",
-    "google/electra-base-generator": "https://cdn.huggingface.co/google/electra-base-generator/tf_model.h5",
-    "google/electra-large-generator": "https://cdn.huggingface.co/google/electra-large-generator/tf_model.h5",
-    "google/electra-small-discriminator": "https://cdn.huggingface.co/google/electra-small-discriminator/tf_model.h5",
-    "google/electra-base-discriminator": "https://cdn.huggingface.co/google/electra-base-discriminator/tf_model.h5",
-    "google/electra-large-discriminator": "https://cdn.huggingface.co/google/electra-large-discriminator/tf_model.h5",
-}
+TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "google/electra-small-generator",
+    "google/electra-base-generator",
+    "google/electra-large-generator",
+    "google/electra-small-discriminator",
+    "google/electra-base-discriminator",
+    "google/electra-large-discriminator",
+    # See all ELECTRA models at https://huggingface.co/models?filter=electra
+]
 
 
 class TFElectraEmbeddings(tf.keras.layers.Layer):
@@ -160,7 +161,6 @@ class TFElectraGeneratorPredictions(tf.keras.layers.Layer):
 class TFElectraPreTrainedModel(TFBertPreTrainedModel):
 
     config_class = ElectraConfig
-    pretrained_model_archive_map = TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "electra"
 
     def get_extended_attention_mask(self, attention_mask, input_shape):

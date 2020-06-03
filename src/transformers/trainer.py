@@ -416,7 +416,7 @@ class Trainer:
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", self.num_examples(train_dataloader))
         logger.info("  Num Epochs = %d", num_train_epochs)
-        logger.info("  Instantaneous batch size per device = %d", self.args.per_gpu_train_batch_size)
+        logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
         logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", total_train_batch_size)
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", t_total)
@@ -553,6 +553,7 @@ class Trainer:
         if self.tb_writer:
             for k, v in logs.items():
                 self.tb_writer.add_scalar(k, v, self.global_step)
+            self.tb_writer.flush()
         if is_wandb_available():
             wandb.log(logs, step=self.global_step)
         output = json.dumps({**logs, **{"step": self.global_step}})

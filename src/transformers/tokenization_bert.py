@@ -47,9 +47,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "bert-base-cased-finetuned-mrpc": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-vocab.txt",
         "bert-base-german-dbmdz-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-vocab.txt",
         "bert-base-german-dbmdz-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-vocab.txt",
-        "bert-base-finnish-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-cased-v1/vocab.txt",
-        "bert-base-finnish-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-uncased-v1/vocab.txt",
-        "bert-base-dutch-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/wietsedv/bert-base-dutch-cased/vocab.txt",
+        "TurkuNLP/bert-base-finnish-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-cased-v1/vocab.txt",
+        "TurkuNLP/bert-base-finnish-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-uncased-v1/vocab.txt",
+        "wietsedv/bert-base-dutch-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/wietsedv/bert-base-dutch-cased/vocab.txt",
     }
 }
 
@@ -69,9 +69,9 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "bert-base-cased-finetuned-mrpc": 512,
     "bert-base-german-dbmdz-cased": 512,
     "bert-base-german-dbmdz-uncased": 512,
-    "bert-base-finnish-cased-v1": 512,
-    "bert-base-finnish-uncased-v1": 512,
-    "bert-base-dutch-cased": 512,
+    "TurkuNLP/bert-base-finnish-cased-v1": 512,
+    "TurkuNLP/bert-base-finnish-uncased-v1": 512,
+    "wietsedv/bert-base-dutch-cased": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
@@ -90,9 +90,9 @@ PRETRAINED_INIT_CONFIGURATION = {
     "bert-base-cased-finetuned-mrpc": {"do_lower_case": False},
     "bert-base-german-dbmdz-cased": {"do_lower_case": False},
     "bert-base-german-dbmdz-uncased": {"do_lower_case": True},
-    "bert-base-finnish-cased-v1": {"do_lower_case": False},
-    "bert-base-finnish-uncased-v1": {"do_lower_case": True},
-    "bert-base-dutch-cased": {"do_lower_case": False},
+    "TurkuNLP/bert-base-finnish-cased-v1": {"do_lower_case": False},
+    "TurkuNLP/bert-base-finnish-uncased-v1": {"do_lower_case": True},
+    "wietsedv/bert-base-dutch-cased": {"do_lower_case": False},
 }
 
 
