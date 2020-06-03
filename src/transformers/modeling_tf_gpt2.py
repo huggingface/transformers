@@ -25,10 +25,10 @@ from .configuration_gpt2 import GPT2Config
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
     TFConv1D,
+    TFLayerUtilsMixin,
     TFPreTrainedModel,
     TFSequenceSummary,
     TFSharedEmbeddings,
-    TFLayerUtilsMixin,
     get_initializer,
     keras_serializable,
     shape_list,

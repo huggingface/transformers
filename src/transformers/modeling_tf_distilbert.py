@@ -24,7 +24,7 @@ import tensorflow as tf
 
 from .configuration_distilbert import DistilBertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, TFLayerUtilsMixin, get_initializer, shape_list
+from .modeling_tf_utils import TFLayerUtilsMixin, TFPreTrainedModel, TFSharedEmbeddings, get_initializer, shape_list
 from .tokenization_utils import BatchEncoding
 
 
