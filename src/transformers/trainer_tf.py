@@ -10,7 +10,7 @@ import tensorflow as tf
 
 from .modeling_tf_utils import TFPreTrainedModel, shape_list
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, is_wandb_available, setup_wandb
 from .training_args_tf import TFTrainingArguments
 
 
@@ -44,7 +44,8 @@ class TFTrainer:
         self.compute_metrics = compute_metrics
         self.prediction_loss_only = prediction_loss_only
         self.gradient_accumulator = GradientAccumulator()
-
+        if is_wandb_available():
+            setup_wandb(self)
         self._setup_training()
 
     def _setup_training(self) -> None:
@@ -303,9 +304,23 @@ class TFTrainer:
                     with self.writer.as_default():
                         for k, v in logs.items():
                             tf.summary.scalar(k, v, step=step)
+                    if is_wandb_available():
+                        self._wandb.log(logs, step=step)
 
                 if step % self.args.logging_steps == 0:
-                    logger.info("Epoch {} Step {} Train Loss {:.4f}".format(epoch, step, training_loss.numpy()))
+                    logs = {}
+                    logs['loss'] = training_loss.numpy()
+
+                    if callable(self.optimizer.learning_rate):
+                        logs["learning_rate"] = self.optimizer.learning_rate(step).numpy()
+                    else:
+                        logs["learning_rate"] = self.optimizer.learning_rate.numpy()
+
+                    logs['epoch'] = epoch + step / self.train_steps
+
+                    logger.info("Epoch {} Step {} Train Loss {:.4f}".format(epoch, step, logs['loss']))
+                    if is_wandb_available():
+                        self._wandb.log(logs, step=step)
 
                 if step % self.args.save_steps == 0:
                     ckpt_save_path = self.model.ckpt_manager.save()
