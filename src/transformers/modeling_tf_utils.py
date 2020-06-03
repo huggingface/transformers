@@ -1227,7 +1227,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 continue
             # test that beam scores match previously calculated scores if not eos and batch_idx not done
             if eos_token_id is not None and all(
-                (token_id % vocab_size).numpy().item() is not eos_token_id for token_id in next_tokens[batch_idx]
+                (token_id % vocab_size).numpy().item() != eos_token_id for token_id in next_tokens[batch_idx]
             ):
                 assert tf.reduce_all(
                     next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
