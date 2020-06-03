@@ -35,7 +35,7 @@ TokenClassificationPipeline
 
 .. autoclass:: transformers.TokenClassificationPipeline
 
-TokenClassificationPipeline
+NerPipeline
 ==========================================
 
 This class is an alias of the :class:`~transformers.TokenClassificationPipeline` defined above. Please refer to that pipeline for
