@@ -876,4 +876,3 @@ class TokenizerTesterMixin:
 
             if batch_encoded_sequence_fast is None:
                 raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus() (fast)")
-
