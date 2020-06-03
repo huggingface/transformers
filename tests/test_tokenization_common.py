@@ -857,6 +857,12 @@ class TokenizerTesterMixin:
         batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
 
         # TODO: add forward through JAX/Flax when PR is merged
+        # This is currently here to make flake8 happy !
+        if encoded_sequence is None:
+            raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
+
+        if batch_encoded_sequence is None:
+            raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus()")
 
         if self.test_rust_tokenizer:
             fast_tokenizer = self.get_rust_tokenizer()
@@ -864,3 +870,10 @@ class TokenizerTesterMixin:
             batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
 
             # TODO: add forward through JAX/Flax when PR is merged
+            # This is currently here to make flake8 happy !
+            if encoded_sequence_fast is None:
+                raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
+
+            if batch_encoded_sequence_fast is None:
+                raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus() (fast)")
+
