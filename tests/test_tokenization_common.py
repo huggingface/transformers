@@ -834,7 +834,19 @@ class TokenizerTesterMixin:
             model(batch_encoded_sequence_fast)
 
     def test_np_encode_plus_sent_to_model(self):
+        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
+
+        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
+
         tokenizer = self.get_tokenizer()
+        if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
+            return
+
+        config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
+        config = config_class()
+
+        if config.is_encoder_decoder or config.pad_token_id is None:
+            return
 
         # Build sequence
         first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
