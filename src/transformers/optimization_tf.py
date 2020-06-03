@@ -90,7 +90,8 @@ def create_optimizer(
         )
     else:
         optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=adam_epsilon)
-
+    # We return the optimizer and the LR scheduler in order to better track the
+    # evolution of the LR independently of the optimizer.
     return optimizer, lr_schedule
 
 
