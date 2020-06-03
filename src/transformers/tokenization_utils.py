@@ -1377,9 +1377,10 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         **kwargs
     ):
         """
-        Converts a string in a sequence of ids (integer), using the tokenizer and vocabulary.
+        Converts a string in a sequence of ids (integer), using the tokenizer and vocabulary. Adds the model-specific
+        special tokens (such as beginning of sequence, end of sequence, sequence separator).
 
-        Same as doing ``self.convert_tokens_to_ids(self.tokenize(text))``.
+        If specifying ``add_special_tokens=False``, same as doing ``self.convert_tokens_to_ids(self.tokenize(text))``.
 
         Args:
             text (:obj:`str`, :obj:`List[str]` or :obj:`List[int]`):
