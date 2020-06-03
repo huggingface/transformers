@@ -721,6 +721,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         outputs = self.albert(inputs, **kwargs)
         return outputs
 
+
 @add_start_docstrings(
     """Albert Model with two heads on top for pre-training:
     a `masked language modeling` head and a `sentence order prediction` (classification) head. """,

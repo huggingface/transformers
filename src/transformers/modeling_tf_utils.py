@@ -135,6 +135,7 @@ def keras_serializable(cls):
     if not hasattr(cls, "get_config"):
         raise TypeError("Only use @keras_serializable on tf.keras.layers.Layer subclasses")
     if hasattr(cls.get_config, "_is_default"):
+
         def get_config(self):
             cfg = super(cls, self).get_config()
             cfg["transformers_config"] = self._transformers_config.to_dict()
@@ -499,27 +500,27 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         return True
 
     def generate(
-            self,
-            input_ids=None,
-            max_length=None,
-            min_length=None,
-            do_sample=None,
-            early_stopping=None,
-            num_beams=None,
-            temperature=None,
-            top_k=None,
-            top_p=None,
-            repetition_penalty=None,
-            bad_words_ids=None,
-            bos_token_id=None,
-            pad_token_id=None,
-            eos_token_id=None,
-            length_penalty=None,
-            no_repeat_ngram_size=None,
-            num_return_sequences=None,
-            attention_mask=None,
-            decoder_start_token_id=None,
-            use_cache=None,
+        self,
+        input_ids=None,
+        max_length=None,
+        min_length=None,
+        do_sample=None,
+        early_stopping=None,
+        num_beams=None,
+        temperature=None,
+        top_k=None,
+        top_p=None,
+        repetition_penalty=None,
+        bad_words_ids=None,
+        bos_token_id=None,
+        pad_token_id=None,
+        eos_token_id=None,
+        length_penalty=None,
+        no_repeat_ngram_size=None,
+        num_return_sequences=None,
+        attention_mask=None,
+        decoder_start_token_id=None,
+        use_cache=None,
     ):
         r""" Generates sequences for models with a LM head. The method currently supports greedy or penalized greedy decoding, sampling with top-k or nucleus sampling
         and beam-search.
@@ -689,20 +690,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         assert 0 <= top_p <= 1, "`top_p` should be between 0 and 1."
         assert repetition_penalty >= 1.0, "`repetition_penalty` should be >= 1."
         assert input_ids is not None or (
-                isinstance(bos_token_id, int) and bos_token_id >= 0
+            isinstance(bos_token_id, int) and bos_token_id >= 0
         ), "If input_ids is not defined, `bos_token_id` should be a positive integer."
         assert pad_token_id is None or (
-                isinstance(pad_token_id, int) and (pad_token_id >= 0)
+            isinstance(pad_token_id, int) and (pad_token_id >= 0)
         ), "`pad_token_id` should be a positive integer."
         assert (eos_token_id is None) or (
-                isinstance(eos_token_id, int) and (eos_token_id >= 0)
+            isinstance(eos_token_id, int) and (eos_token_id >= 0)
         ), "`eos_token_id` should be a positive integer."
         assert length_penalty > 0, "`length_penalty` should be strictely positive."
         assert (
-                isinstance(num_return_sequences, int) and num_return_sequences > 0
+            isinstance(num_return_sequences, int) and num_return_sequences > 0
         ), "`num_return_sequences` should be a strictely positive integer."
         assert (
-                bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
+            bad_words_ids is None or isinstance(bad_words_ids, list) and isinstance(bad_words_ids[0], list)
         ), "`bad_words_ids` is either `None` or a list of lists of tokens that should not be generated"
 
         if input_ids is None:
@@ -719,13 +720,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             if num_beams == 1:
                 # no_beam_search greedy generation conditions
                 assert (
-                        num_return_sequences == 1
+                    num_return_sequences == 1
                 ), "Greedy decoding will always produce the same output for num_beams == 1 and num_return_sequences > 1. Please set num_return_sequences = 1"
 
             else:
                 # beam_search greedy generation conditions
                 assert (
-                        num_beams >= num_return_sequences
+                    num_beams >= num_return_sequences
                 ), "Greedy beam search decoding cannot return more sequences than it has beams. Please set num_beams >= num_return_sequences"
 
         # create attention mask if necessary
@@ -758,7 +759,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 decoder_start_token_id = bos_token_id
 
             assert (
-                    decoder_start_token_id is not None
+                decoder_start_token_id is not None
             ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
             assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
             assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
@@ -787,11 +788,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         if self.config.is_encoder_decoder:
 
             # create empty decoder_input_ids
-            input_ids = tf.ones((effective_batch_size * num_beams, 1), dtype=tf.int32, ) * decoder_start_token_id
+            input_ids = tf.ones((effective_batch_size * num_beams, 1), dtype=tf.int32,) * decoder_start_token_id
             cur_len = 1
 
             assert (
-                    batch_size == encoder_outputs[0].shape[0]
+                batch_size == encoder_outputs[0].shape[0]
             ), f"expected encoder_outputs[0] to have 1st dimension bs={batch_size}, got {encoder_outputs[0].shape[0]} "
 
             # expand batch_idx to assign correct encoder output for expanded input_ids (due to num_beams > 1 and num_return_sequences > 1)
@@ -860,27 +861,27 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         return output
 
     def _generate_no_beam_search(
-            self,
-            input_ids,
-            cur_len,
-            max_length,
-            min_length,
-            do_sample,
-            temperature,
-            top_k,
-            top_p,
-            repetition_penalty,
-            no_repeat_ngram_size,
-            bad_words_ids,
-            bos_token_id,
-            pad_token_id,
-            eos_token_id,
-            decoder_start_token_id,
-            batch_size,
-            vocab_size,
-            encoder_outputs,
-            attention_mask,
-            use_cache,
+        self,
+        input_ids,
+        cur_len,
+        max_length,
+        min_length,
+        do_sample,
+        temperature,
+        top_k,
+        top_p,
+        repetition_penalty,
+        no_repeat_ngram_size,
+        bad_words_ids,
+        bos_token_id,
+        pad_token_id,
+        eos_token_id,
+        decoder_start_token_id,
+        batch_size,
+        vocab_size,
+        encoder_outputs,
+        attention_mask,
+        use_cache,
     ):
         """ Generate sequences for each example without beam search (num_beams == 1).
             All returned sequence are generated independantly.
@@ -983,8 +984,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     unfinished_sents, tf.cast(eos_in_sents, tf.int32)
                 )
                 sent_lengths = (
-                        sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
-                        + cur_len * is_sents_unfinished_and_token_to_add_is_eos
+                    sent_lengths * (1 - is_sents_unfinished_and_token_to_add_is_eos)
+                    + cur_len * is_sents_unfinished_and_token_to_add_is_eos
                 )
 
                 # unfinished_sents is set to zero if eos in sentence
@@ -1023,31 +1024,31 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         return decoded
 
     def _generate_beam_search(
-            self,
-            input_ids,
-            cur_len,
-            max_length,
-            min_length,
-            do_sample,
-            early_stopping,
-            temperature,
-            top_k,
-            top_p,
-            repetition_penalty,
-            no_repeat_ngram_size,
-            bad_words_ids,
-            bos_token_id,
-            pad_token_id,
-            decoder_start_token_id,
-            eos_token_id,
-            batch_size,
-            num_return_sequences,
-            length_penalty,
-            num_beams,
-            vocab_size,
-            encoder_outputs,
-            attention_mask,
-            use_cache,
+        self,
+        input_ids,
+        cur_len,
+        max_length,
+        min_length,
+        do_sample,
+        early_stopping,
+        temperature,
+        top_k,
+        top_p,
+        repetition_penalty,
+        no_repeat_ngram_size,
+        bad_words_ids,
+        bos_token_id,
+        pad_token_id,
+        decoder_start_token_id,
+        eos_token_id,
+        batch_size,
+        num_return_sequences,
+        length_penalty,
+        num_beams,
+        vocab_size,
+        encoder_outputs,
+        attention_mask,
+        use_cache,
     ):
         """ Generate sequences for each example with beam search.
         """
@@ -1191,10 +1192,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 # if we are done with this sentence
                 if done[batch_idx]:
                     assert (
-                            len(generated_hyps[batch_idx]) >= num_beams
+                        len(generated_hyps[batch_idx]) >= num_beams
                     ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
                     assert (
-                            eos_token_id is not None and pad_token_id is not None
+                        eos_token_id is not None and pad_token_id is not None
                     ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
                     next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
                     continue
@@ -1204,7 +1205,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
                 # next tokens for this sentence
                 for beam_token_rank, (beam_token_id, beam_token_score) in enumerate(
-                        zip(next_tokens[batch_idx], next_scores[batch_idx])
+                    zip(next_tokens[batch_idx], next_scores[batch_idx])
                 ):
                     # get beam and token IDs
                     beam_id = beam_token_id // vocab_size
@@ -1270,7 +1271,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 continue
             # test that beam scores match previously calculated scores if not eos and batch_idx not done
             if eos_token_id is not None and all(
-                    (token_id % vocab_size).numpy().item() is not eos_token_id for token_id in next_tokens[batch_idx]
+                (token_id % vocab_size).numpy().item() is not eos_token_id for token_id in next_tokens[batch_idx]
             ):
                 assert tf.reduce_all(
                     next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
@@ -1395,7 +1396,7 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
             # if bad word tokens are longer then prev input_ids they can't be equal
             return False
 
-        if prev_tokens[-len(tokens):] == tokens:
+        if prev_tokens[-len(tokens) :] == tokens:
             # if tokens match
             return True
         else:
