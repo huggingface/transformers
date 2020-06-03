@@ -181,7 +181,7 @@ def truncate_and_pad(
         tokenizer.no_padding()
 
 
-def convert_to_tensors(batch_outputs: MutableMapping, return_tensors: Union[str, TensorType]) -> MutableMapping:
+def convert_to_tensors(batch_outputs: MutableMapping, return_tensors: Union[str, TensorType], prepend_batch_axis: bool = False) -> MutableMapping:
     # Convert to TensorType
     if not isinstance(return_tensors, TensorType):
         return_tensors = TensorType(return_tensors)
@@ -192,7 +192,7 @@ def convert_to_tensors(batch_outputs: MutableMapping, return_tensors: Union[str,
     elif return_tensors == TensorType.PYTORCH and is_torch_available():
         as_tensor = torch.tensor
     elif return_tensors == TensorType.NUMPY:
-        as_tensor = np.ndarray
+        as_tensor = np.asarray
     else:
         raise ImportError(
             "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
@@ -203,6 +203,9 @@ def convert_to_tensors(batch_outputs: MutableMapping, return_tensors: Union[str,
     # Do the tensor conversion in batch
     for key, value in batch_outputs.items():
         try:
+            if prepend_batch_axis:
+                value = [value]
+
             tensor = as_tensor(value)
 
             # at-least2d
@@ -1639,6 +1642,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             return_token_type_ids=return_token_type_ids,
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
+            prepend_batch_axis=return_tensors is not None
         )
 
     def batch_encode_plus(
@@ -1851,6 +1855,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_lengths: bool = False,
+        prepend_batch_axis: bool = False
     ) -> BatchEncoding:
         """ Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
         It adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
@@ -1886,6 +1891,9 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             return_special_tokens_mask: (optional) Set to True to return special tokens mask information (default False).
             return_lengths (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 If set the resulting dictionary will include the length of each encoded inputs
+            prepend_batch_axis (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                If set the resulting object will feature an extra dim at position 0.
+                This can be seen as an unsqueezing operator.
 
         Return:
             A Dictionary of shape::
@@ -2011,7 +2019,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
 
         # Prepare model inputs as tensors if asked
         if return_tensors is not None:
-            convert_to_tensors(encoded_inputs, return_tensors)
+            convert_to_tensors(encoded_inputs, return_tensors, prepend_batch_axis)
 
         return BatchEncoding(encoded_inputs)
 
