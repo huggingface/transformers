@@ -22,7 +22,6 @@ from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 from .utils import require_tf, slow
 
-
 if is_tf_available():
     from transformers.modeling_tf_albert import (
         TFAlbertModel,
@@ -36,7 +35,6 @@ if is_tf_available():
 
 @require_tf
 class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             TFAlbertModel,
@@ -51,30 +49,30 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     class TFAlbertModelTester(object):
         def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            embedding_size=16,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+                self,
+                parent,
+                batch_size=13,
+                seq_length=7,
+                is_training=True,
+                use_input_mask=True,
+                use_token_type_ids=True,
+                use_labels=True,
+                vocab_size=99,
+                embedding_size=16,
+                hidden_size=32,
+                num_hidden_layers=5,
+                num_attention_heads=4,
+                intermediate_size=37,
+                hidden_act="gelu",
+                hidden_dropout_prob=0.1,
+                attention_probs_dropout_prob=0.1,
+                max_position_embeddings=512,
+                type_vocab_size=16,
+                type_sequence_label_size=2,
+                initializer_range=0.02,
+                num_labels=3,
+                num_choices=4,
+                scope=None,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -136,7 +134,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
         def create_and_check_albert_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+                self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = TFAlbertModel(config=config)
             # inputs = {'input_ids': input_ids,
@@ -161,7 +159,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["pooled_output"].shape), [self.batch_size, self.hidden_size])
 
         def create_and_check_albert_for_pretraining(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+                self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             config.num_labels = self.num_labels
             model = TFAlbertForPreTraining(config=config)
@@ -177,7 +175,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["sop_scores"].shape), [self.batch_size, self.num_labels])
 
         def create_and_check_albert_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+                self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = TFAlbertForMaskedLM(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
@@ -190,7 +188,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
             )
 
         def create_and_check_albert_for_sequence_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+                self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             config.num_labels = self.num_labels
             model = TFAlbertForSequenceClassification(config=config)
@@ -202,7 +200,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["logits"].shape), [self.batch_size, self.num_labels])
 
         def create_and_check_albert_for_question_answering(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+                self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
             model = TFAlbertForQuestionAnswering(config=config)
             inputs = {"input_ids": input_ids, "attention_mask": input_mask, "token_type_ids": token_type_ids}
