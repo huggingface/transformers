@@ -28,7 +28,7 @@ if is_torch_available():
     from transformers import (
         GPT2Config,
         GPT2Model,
-        GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
+        GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2LMHeadModel,
         GPT2DoubleHeadsModel,
     )
@@ -334,7 +334,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(GPT2_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = GPT2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

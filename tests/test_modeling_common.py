@@ -36,7 +36,7 @@ if is_torch_available():
         PreTrainedModel,
         BertModel,
         BertConfig,
-        BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         top_k_top_p_filtering,
     )
 
@@ -824,7 +824,7 @@ class ModelUtilsTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = BertConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, PretrainedConfig)

@@ -28,29 +28,29 @@ The following table summarizes the F1 score obtained by ParsBERT as compared to 
 
 ### Sentiment Analysis (SA) task
 
-|           Dataset          |  ParsBERT | Multilingual BERT | DeepSentiPers |
-|:--------------------------:|:---------:|:-----------------:|:-------------:|
-|   Digikala User Comments   |   81.74*  |       80.74       |       -       |
-|   SnappFood User Comments  |   88.12*  |       87.87       |       -       |
-|   SentiPers (Multi Class)  |   71.11*  |         -         |     69.33     |
-|  SentiPers (Binary Class)  |   92.13*  |         -         |     91.98     |
+|           Dataset          |  ParsBERT | mBERT | DeepSentiPers |
+|:--------------------------:|:---------:|:-----:|:-------------:|
+|   Digikala User Comments   |   81.74*  | 80.74 |       -       |
+|   SnappFood User Comments  |   88.12*  | 87.87 |       -       |
+|   SentiPers (Multi Class)  |   71.11*  |   -   |     69.33     |
+|  SentiPers (Binary Class)  |   92.13*  |   -   |     91.98     |
 
 
 
 ### Text Classification (TC) task
 
-|      Dataset      | ParsBERT | Multilingual BERT |
-|:-----------------:|:--------:|:-----------------:|
-| Digikala Magazine |   93.59* |       90.72       |
-|    Persian News   |   97.19* |       95.79       |
+|      Dataset      | ParsBERT | mBERT |
+|:-----------------:|:--------:|:-----:|
+| Digikala Magazine |   93.59* | 90.72 |
+|    Persian News   |   97.19* | 95.79 |
 
 
 ### Named Entity Recognition (NER) task
 
-| Dataset | ParsBERT | MorphoBERT |  Beheshti-NER  |  LSTM-CRF  |  Rule-Based CRF  |  BiLSTM-CRF  |
-|:-------:|:--------:|:----------:|:--------------:|:----------:|:----------------:|:------------:|
-|  PEYMA  |   98.79* |      -     |      90.59     |      -     |       84.00      |       -      |
-|  ARMAN  |   93.10* |    89.9    |      84.03     |    86.55   |         -        |     77.45    |
+| Dataset | ParsBERT |  mBERT   | MorphoBERT |  Beheshti-NER  |  LSTM-CRF  |  Rule-Based CRF  |  BiLSTM-CRF  |
+|:-------:|:--------:|:--------:|:----------:|:--------------:|:----------:|:----------------:|:------------:|
+|  PEYMA  |   93.10* |   86.64  |      -     |      90.59     |      -     |       84.00      |       -      |
+|  ARMAN  |   98.79* |   95.89  |    89.9    |      84.03     |    86.55   |         -        |     77.45    |
 
 
 **If you tested ParsBERT on a public dataset and you want to add your results to the table above, open a pull request or contact us. Also make sure to have your code available online so we can add it as a reference**
@@ -66,10 +66,10 @@ config = AutoConfig.from_pretrained("HooshvareLab/bert-base-parsbert-uncased")
 tokenizer = AutoTokenizer.from_pretrained("HooshvareLab/bert-base-parsbert-uncased")
 model = AutoModel.from_pretrained("HooshvareLab/bert-base-parsbert-uncased")
 
-text = "ما در هوشواره معتقدیم با انتقال صحیح دانش و آگاهی، همه‌ی افراد می‌توانند از ابزارهای هوشمند استفاده کنند. شعار ما هوش مصنوعی برای همه است."
+text = "ما در هوشواره معتقدیم با انتقال صحیح دانش و آگاهی، همه افراد می‌توانند از ابزارهای هوشمند استفاده کنند. شعار ما هوش مصنوعی برای همه است."
 tokenizer.tokenize(text)
 
->>> ['ما', 'در', 'هوش', '##واره', 'معتقدیم', 'با', 'انتقال', 'صحیح', 'دانش', 'و', 'اگاهی', '،', 'همهی', 'افراد', 'میتوانند', 'از', 'ابزارهای', 'هوشمند', 'استفاده', 'کنند', '.', 'شعار', 'ما', 'هوش', 'مصنوعی', 'برای', 'همه', 'است', '.']
+>>> ['ما', 'در', 'هوش', '##واره', 'معتقدیم', 'با', 'انتقال', 'صحیح', 'دانش', 'و', 'اگاهی', '،', 'همه', 'افراد', 'میتوانند', 'از', 'ابزارهای', 'هوشمند', 'استفاده', 'کنند', '.', 'شعار', 'ما', 'هوش', 'مصنوعی', 'برای', 'همه', 'است', '.']
 
 ```
 

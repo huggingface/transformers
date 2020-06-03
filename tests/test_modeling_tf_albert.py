@@ -30,7 +30,7 @@ if is_tf_available():
         TFAlbertForMaskedLM,
         TFAlbertForSequenceClassification,
         TFAlbertForQuestionAnswering,
-        TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -257,6 +257,6 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFAlbertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
