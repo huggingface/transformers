@@ -1222,7 +1222,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
-            import ipdb; ipdb.set_trace()
 
             # if model has past, then set the past variable to speed up decoding
             if self._use_cache(outputs, use_cache):

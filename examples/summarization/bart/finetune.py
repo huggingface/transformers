@@ -492,7 +492,8 @@ class SummarizationDistiller(SummarizationTrainer):
                 decoder_input_ids=y_ids,
                 lm_labels=lm_labels,
             )
-        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(self.model.model.last_padding_mask, slogits, tlogits)
+        dec_mask = invert_mask(self.model.model.last_padding_mask)
+        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
         blended_loss = (
             loss_ce * self.alpha_ce + self.alpha_mlm * sloss + self.hparams.alpha_encoder_loss * loss_encoder
         )
@@ -511,8 +512,7 @@ class SummarizationDistiller(SummarizationTrainer):
 
     def calc_ce_loss(self, mask, s_logits, t_logits):
         if mask is not None:
-            # mask has True at padding_idx
-            mask = invert_mask(mask)
+            # mask has False at padding_idx
             sel_mask = mask[:, :, None].expand_as(s_logits)
             s_logits_slct = torch.masked_select(
                 s_logits, sel_mask
@@ -627,50 +627,54 @@ class BrewerDistiller(SummarizationDistiller):
     teacher_kwargs = {'output_hidden_states': True}
 
     def _step(self, batch):
-        import ipdb;  ipdb.set_trace()
+
         # assert is_frozen(self.teacher)
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
-        y_ids = y[:, :-1].contiguous()
+        decoder_input_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
         # noinspection PyCallingNonCallable
-        sloss, slogits, enc_outputs, enc_hidden_state = self(
-            source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
+
+        sloss, slogits, dec_hidden, enc_outputs, enc_hidden_state = self(
+            source_ids, attention_mask=source_mask, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,
         )
-        loss_encoder = torch.tensor(0.0).type_as(sloss)
+        def zero_tensor():
+            return torch.tensor(0.0).type_as(sloss)
+        loss_encoder, hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor(), zero_tensor()
         if self.different_encoder:
             with torch.no_grad():
                 teacher_enc_outputs, teacher_enc_hid = self.teacher.model.encoder(source_ids, attention_mask=source_mask)
             if self.hparams.alpha_encoder_loss > 0:
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, source_mask)
+            hid_loss_enc = self.calc_hidden_loss(source_mask, enc_hidden_state, teacher_enc_hid,
+                                                 self.hparams.e_layer_to_copy)
         else:
             teacher_enc_outputs = (enc_outputs,)
+
         with torch.no_grad():
-            tloss, tlogits, _, thidden = self.teacher(
-                source_ids,
-                attention_mask=source_mask,
-                encoder_outputs=teacher_enc_outputs,
-                decoder_input_ids=y_ids,
-                lm_labels=lm_labels,
-            )
-        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(self.model.model.last_padding_mask, slogits, tlogits)
-        hid_loss_enc = self.calc_hidden_loss(source_mask, enc_hidden_state, teacher_enc_outputs, self.hparams.e_layer_to_copy)
-        hid_loss_dec = self.calc_hidden_loss(source_mask, enc_hidden_state, teacher_enc_outputs, self.hparams.layer_to_copy)
+            tloss, tlogits, tdec_hidden, _ = self.teacher(source_ids, attention_mask=source_mask,
+                                                          encoder_outputs=teacher_enc_outputs, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,)
+        dec_mask = invert_mask(self.model.model.last_padding_mask)
+        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
+        if not self.hparams.freeze_decoder:
+            hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.layer_to_copy)
 
         blended_loss = (
-            loss_ce * self.alpha_ce + self.alpha_mlm * sloss + self.hparams.alpha_encoder_loss * loss_encoder + self.alpha_hid * (hid_loss_enc + hid_loss_dec)
+            loss_ce * self.alpha_ce + self.alpha_mlm * sloss + self.hparams.alpha_encoder_loss * loss_encoder + self.hparams.alpha_hid * (hid_loss_enc + hid_loss_dec)
         )
-        return blended_loss, loss_ce, sloss, loss_encoder
+        return blended_loss, loss_ce, sloss, loss_encoder, hid_loss_enc, hid_loss_dec
 
     def calc_hidden_loss(self, attention_mask, hidden_states, hidden_states_T, matches):
+        assert not isinstance(hidden_states, torch.Tensor), f'expected list or tuple for hidden_states, got tensor of shape {hidden_states.shape}'
+        assert not isinstance(hidden_states_T, torch.Tensor), f'expected list or tuple for hidden_states_T, got tensor of shape {hidden_states_T.shape}'
         mask = attention_mask.to(hidden_states[0])
         valid_count = mask.sum() * hidden_states[0].size(-1)
-        hidden_loss = torch.sum([
+        hidden_losses = [
             (F.mse_loss(hidden_states[i], hidden_states_T[j], reduction='none') * mask.unsqueeze(-1)).sum() / valid_count
             for i, j in enumerate(matches)
-        ])
-        return hidden_loss
+        ]
+        return sum(hidden_losses)
 
 
 def main(args):

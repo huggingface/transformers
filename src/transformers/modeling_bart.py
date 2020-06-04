@@ -93,7 +93,7 @@ BART_INPUTS_DOCSTRING = r"""
 
 def invert_mask(attention_mask):
     assert attention_mask.dim() == 2
-    return attention_mask.eq(0)
+    return torch.logical_not(attention_mask)
 
 
 def _prepare_bart_decoder_inputs(
@@ -170,8 +170,6 @@ def shift_tokens_right(input_ids, pad_token_id):
 def make_padding_mask(input_ids, padding_idx=1):
     """True for pad tokens"""
     padding_mask = input_ids.eq(padding_idx)
-    if not padding_mask.any():
-        padding_mask = None
     return padding_mask
 
 
@@ -969,14 +967,12 @@ class BartForConditionalGeneration(PretrainedBartModel):
         assert past is not None, "past has to be defined for encoder_outputs"
 
         # first step, decoder_cached_states are empty
-        if not past[1]:
+        if not past[-1]:
             encoder_outputs, decoder_cached_states = past, None
-        elif len(past) == 3:
-            encoder_outputs, decoder_cached_states = past[:-1], past[-1]
         else:
             encoder_outputs, decoder_cached_states = past
-        if not( decoder_cached_states is None or len(decoder_cached_states)):
-            import ipdb; ipdb.set_trace()
+        assert decoder_cached_states is None or len(decoder_cached_states)
+
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
