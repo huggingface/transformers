@@ -734,7 +734,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         return outputs
 
 
-class TFTransfoXLLMHead(tf.keras.layers.Layer):
+class TFTransfoXLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = config.vocab_size

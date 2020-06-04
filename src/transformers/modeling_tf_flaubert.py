@@ -22,13 +22,16 @@ import tensorflow as tf
 
 from .configuration_flaubert import FlaubertConfig
 from .file_utils import add_start_docstrings
+from .modeling_tf_utils import keras_serializable, shape_list
 from .modeling_tf_xlm import (
+    TFXLMForMultipleChoice,
+    TFXLMForQuestionAnsweringSimple,
     TFXLMForSequenceClassification,
+    TFXLMForTokenClassification,
     TFXLMMainLayer,
     TFXLMModel,
     TFXLMWithLMHeadModel,
     get_masks,
-    shape_list,
 )
 from .tokenization_utils import BatchEncoding
 
@@ -112,6 +115,7 @@ class TFFlaubertModel(TFXLMModel):
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
 
 
+@keras_serializable
 class TFFlaubertMainLayer(TFXLMMainLayer):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -324,6 +328,41 @@ class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
 class TFFlaubertForSequenceClassification(TFXLMForSequenceClassification):
     config_class = FlaubertConfig
 
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.transformer = TFFlaubertMainLayer(config, name="transformer")
+
+
+@add_start_docstrings(
+    """Flaubert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    FLAUBERT_START_DOCSTRING,
+)
+class TFFlaubertForQuestionAnsweringSimple(TFXLMForQuestionAnsweringSimple):
+    config_class = FlaubertConfig
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.transformer = TFFlaubertMainLayer(config, name="transformer")
+
+
+@add_start_docstrings(
+    """Flaubert Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    FLAUBERT_START_DOCSTRING,
+)
+class TFFlaubertForTokenClassification(TFXLMForTokenClassification):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.transformer = TFFlaubertMainLayer(config, name="transformer")
+
+
+@add_start_docstrings(
+    """Flaubert Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    FLAUBERT_START_DOCSTRING,
+)
+class TFFlaubertForMultipleChoice(TFXLMForMultipleChoice):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")

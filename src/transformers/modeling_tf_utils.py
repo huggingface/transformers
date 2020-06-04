@@ -84,6 +84,7 @@ def keras_serializable(cls):
         else:
             raise ValueError("Must pass either `config` (PretrainedConfig) or `transformers_config` (dict)")
         self._transformers_config = config
+        self._kwargs = kwargs
 
     cls.__init__ = wrapped_init
 
@@ -94,6 +95,7 @@ def keras_serializable(cls):
         def get_config(self):
             cfg = super(cls, self).get_config()
             cfg["transformers_config"] = self._transformers_config.to_dict()
+            cfg.update(self._kwargs)
             return cfg
 
         cls.get_config = get_config
@@ -102,6 +104,44 @@ def keras_serializable(cls):
     if hasattr(tf.keras.utils, "register_keras_serializable"):
         cls = tf.keras.utils.register_keras_serializable()(cls)
     return cls
+
+
+class TFQuestionAnsweringLoss:
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        start_loss = loss_fn(labels["start_position"], logits[0])
+        end_loss = loss_fn(labels["end_position"], logits[1])
+
+        return (start_loss + end_loss) / 2.0
+
+
+class TFTokenClassificationLoss:
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        active_loss = tf.reshape(labels, (-1,)) != -1
+        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+        labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
+
+        return loss_fn(labels, reduced_logits)
+
+
+class TFSequenceClassificationLoss:
+    def compute_loss(self, labels, logits):
+        if shape_list(logits)[1] == 1:
+            loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
+        else:
+            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+                from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+            )
+
+        return loss_fn(labels, logits)
+
+
+TFMultipleChoiceLoss = TFSequenceClassificationLoss
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
@@ -1530,6 +1570,16 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
             "weight", shape=[self.vocab_size, self.hidden_size], initializer=get_initializer(self.initializer_range)
         )
         super().build(input_shape)
+
+    def get_config(self):
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
 
     def call(self, inputs, mode="embedding"):
         """Get token embeddings of inputs.
