@@ -1,4 +1,3 @@
-import json
 import logging
 import math
 import os
@@ -22,7 +21,9 @@ from tqdm.auto import tqdm, trange
 from .data.data_collator import DataCollator, DefaultDataCollator
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, is_wandb_available, setup_wandb
+from .trainer_utils import (
+    PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, is_wandb_available, setup_wandb, log_metrics
+)
 from .training_args import TrainingArguments, is_tpu_available
 
 
@@ -459,7 +460,7 @@ class Trainer:
                         )
                         logging_loss = tr_loss
 
-                        self._log(logs)
+                        log_metrics(self, logs)
 
                         if self.args.evaluate_during_training:
                             self.evaluate()
@@ -502,21 +503,6 @@ class Trainer:
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         return TrainOutput(self.global_step, tr_loss / self.global_step)
-
-    def _log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
-        if self.epoch is not None:
-            logs["epoch"] = self.epoch
-        if self.tb_writer:
-            for k, v in logs.items():
-                self.tb_writer.add_scalar(k, v, self.global_step)
-            self.tb_writer.flush()
-        if is_wandb_available():
-            self._wandb.log(logs, step=self.global_step)
-        output = json.dumps({**logs, **{"step": self.global_step}})
-        if iterator is not None:
-            iterator.write(output)
-        else:
-            print(output)
 
     def _training_step(
         self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer
@@ -652,7 +638,7 @@ class Trainer:
 
         output = self._prediction_loop(eval_dataloader, description="Evaluation")
 
-        self._log(output.metrics)
+        log_metrics(self, output.metrics)
 
         if self.args.tpu_metrics_debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)

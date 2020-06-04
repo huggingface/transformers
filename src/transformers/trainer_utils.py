@@ -2,6 +2,7 @@ from typing import Dict, NamedTuple, Optional
 import numpy as np
 import logging
 import os
+from tqdm.auto import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -45,12 +46,33 @@ def setup_wandb(trainer):
     
     wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(trainer.args))
     # keep track of model topology and gradients (only with Pytorch)
-    if os.getenv("WANDB_WATCH") != "false" and trainer.__class__.__name__ == 'Trainer'::
+    if os.getenv("WANDB_WATCH") != "false" and trainer.__class__.__name__ == 'Trainer':
         wandb.watch(
             trainer.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, trainer.args.logging_steps)
         )
     # give access to wandb module
     trainer._wandb = wandb
+
+def log_metrics(trainer, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
+    if trainer.epoch is not None:
+        logs["epoch"] = trainer.epoch
+    if trainer.tb_writer:
+        if trainer.__class__.__name__ == 'Trainer':
+            for k, v in logs.items():
+                trainer.tb_writer.add_scalar(k, v, trainer.global_step)
+        elif trainer.__class__.__name__ == 'TFTrainer':
+            import tensorflow as tf
+            with trainer.tb_writer.as_default():
+                for k, v in logs.items():
+                    tf.summary.scalar(k, v, step=trainer.global_step)
+        trainer.tb_writer.flush()
+    if is_wandb_available():
+        trainer._wandb.log(logs, step=trainer.global_step)
+    output = {**logs, **{"step": trainer.global_step}}
+    if iterator is not None:
+        iterator.write(output)
+    else:
+        print(output)
 
 class EvalPrediction(NamedTuple):
     """
