@@ -518,7 +518,7 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
                 New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at the end. Reducing the size will remove vectors from the end.
                 If not provided or None: does nothing and just returns a pointer to the input tokens ``torch.nn.Embeddings`` Module of the model.
             layer: (`optional`) int:
-                Layer of the `AdaptiveEmbedding` where the resizing should be done.
+                Layer of the `AdaptiveEmbedding` where the resizing should be done. Per default the last layer will be resized.
                 Be aware that when resizing other than the last layer, you have to ensure that the new token(s) in the tokenizer are at the corresponding position.
 
         Return: ``torch.nn.Embeddings``
