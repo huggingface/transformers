@@ -1694,3 +1694,24 @@ def get_initializer(initializer_range=0.02):
         TruncatedNormal initializer with stddev = `initializer_range`.
     """
     return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)
+
+
+def cast_bool_to_primitive(bool_variable, default_tensor_to_true=False):
+    """Function arguments can be inserted as boolean tensor
+        and bool variables to cope with keras serialization
+        we need to cast `output_attentions` to correct bool
+        if it is a tensor
+
+    Args:
+        default_tensor_to_true: bool, if tensor should default to True
+        in case tensor has no numpy attribute
+    """
+    # if bool variable is tensor and has numpy value
+    if tf.is_tensor(bool_variable):
+        if hasattr(bool_variable, "numpy"):
+            return bool(bool_variable.numpy())
+        elif default_tensor_to_true:
+            return True
+
+    # else variable is bool
+    return bool_variable
