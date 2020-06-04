@@ -94,43 +94,6 @@ class DprBertEncoder(BertModel):
 
 
 ###########
-# BiEncoder
-###########
-
-# Keep this class for now as it can be used to directly load the weights from the official code
-
-BiEncoderBatch = collections.namedtuple(
-    "BiENcoderInput",
-    ["question_ids", "question_segments", "context_ids", "ctx_segments", "is_positive", "hard_negatives"],
-)
-
-
-class DprBiEncoder(nn.Module):
-    """
-    Bi-Encoder model component. Encapsulates query/question and context/passage encoders.
-    """
-
-    def __init__(
-        self, question_model: nn.Module, ctx_model: nn.Module,
-    ):
-        super(DprBiEncoder, self).__init__()
-        self.question_model = question_model
-        self.ctx_model = ctx_model
-
-    @staticmethod
-    def get_representation(
-        sub_model: nn.Module, ids: T, segments: T, attn_mask: T, fix_encoder: bool = False
-    ) -> (T, T, T):
-        sequence_output = None
-        pooled_output = None
-        hidden_states = None
-        if ids is not None:
-            with torch.no_grad():
-                sequence_output, pooled_output, hidden_states = sub_model(ids, segments, attn_mask)
-        return sequence_output, pooled_output, hidden_states
-
-
-###########
 # Reader
 ###########
 
@@ -274,15 +237,18 @@ def create_reader_sample_ids(
 ##############
 
 
-def get_bert_biencoder_components(config: DprConfig, **kwargs):
+def get_bert_question_encoder_components(config: DprConfig, **kwargs):
     question_encoder = DprBertEncoder.init_encoder(
         config.pretrained_model_cfg, projection_dim=config.projection_dim, **kwargs
     )
+    return question_encoder
+
+
+def get_bert_ctx_encoder_components(config: DprConfig, **kwargs):
     ctx_encoder = DprBertEncoder.init_encoder(
         config.pretrained_model_cfg, projection_dim=config.projection_dim, **kwargs
     )
-    biencoder = DprBiEncoder(question_encoder, ctx_encoder)
-    return biencoder
+    return ctx_encoder
 
 
 def get_bert_reader_components(config: DprConfig, **kwargs):
@@ -572,17 +538,26 @@ class DprModel(DprPreTrainedModel):
     def __init__(self, config: DprConfig):
         super().__init__(config)
         self.config = config
-        self.biencoder = get_bert_biencoder_components(config)
+        self.question_encoder = get_bert_question_encoder_components(config)
+        self.ctx_encoder = get_bert_ctx_encoder_components(config)
         self.reader = get_bert_reader_components(config)
         self.tensorizer = get_bert_tensorizer(config)
         self.init_weights()
 
     def init_weights(self):
-        super().init_weights()
         if self.config.biencoder_model_file is not None:
+            logger.info("Loading DPR biencoder from {}".format(self.config.biencoder_model_file))
             saved_state = load_states_from_checkpoint(self.config.biencoder_model_file)
-            self.biencoder.load_state_dict(saved_state.model_dict)
+            for encoder, prefix in zip([self.question_encoder, self.ctx_encoder], ["question_model.", "ctx_model."]):
+                prefix_len = len(prefix)
+                ctx_state = {
+                    key[prefix_len:]: value
+                    for (key, value) in saved_state.model_dict.items()
+                    if key.startswith(prefix)
+                }
+                encoder.load_state_dict(ctx_state)
         if self.config.reader_model_file is not None:
+            logger.info("Loading DPR reader from {}".format(self.config.reader_model_file))
             saved_state = load_states_from_checkpoint(self.config.reader_model_file)
             self.reader.load_state_dict(saved_state.model_dict)
 
@@ -612,7 +587,7 @@ class DprModel(DprPreTrainedModel):
         token_tensors = [self.tensorizer.text_to_tensor(q) for q in questions]
         input_ids = torch.stack(token_tensors, dim=0).cuda()
         attention_mask = self.tensorizer.get_attn_mask(input_ids)
-        _q_seq, q_pooled_out, _q_hidden = self.bidencoder.question_model(input_ids, None, attention_mask)
+        _q_seq, q_pooled_out, _q_hidden = self.question_encoder(input_ids, None, attention_mask)
         query_tensor = q_pooled_out.cpu().split(1, dim=0)
         # Dense Retriever
         top_ids_and_scores = index.query(query_tensor.numpy(), self.config.k)
