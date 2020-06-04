@@ -7,6 +7,14 @@ you can install them with the following command, at the root of the code reposit
 pip install -e ".[docs]"
 ```
 
+---
+**NOTE**
+
+You only need to generate the documentation to inspect it locally (if you're planning changes and want to 
+check how they look like before committing for instance). You don't have to commit the built documentation.
+
+---
+
 ## Packages installed
 
 Here's an overview of all the packages installed. If you ran the previous command installing all packages from
