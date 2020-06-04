@@ -2467,7 +2467,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             strategy=truncation_strategy,
             pad_to_max_length=pad_to_max_length,
             padding_side=self.padding_side,
-            pad_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id if self._pad_token is not None else None,
             pad_token_type_id=self.pad_token_type_id,
             pad_token=self._pad_token,
         ):
