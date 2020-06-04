@@ -238,7 +238,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            _, _, attentions = model(input_ids_1, target_mapping=target_mapping)
+            _, _, attentions = model(input_ids_1, target_mapping=target_mapping, output_attentions=True)
 
             self.parent.assertEqual(len(attentions), config.n_layer)
             self.parent.assertIsInstance(attentions[0], tuple)
