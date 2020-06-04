@@ -23,11 +23,11 @@ from .configuration_utils import PretrainedConfig
 logger = logging.getLogger(__name__)
 
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json",
-    "bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",
-    "bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
-    "bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
-    "mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
+    "facebook/bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json",
+    "facebook/bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",
+    "facebook/bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
+    "facebook/bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
+    "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
 }
 
 
@@ -36,7 +36,6 @@ class BartConfig(PretrainedConfig):
         Configuration class for Bart. Parameters are renamed from the fairseq implementation
     """
     model_type = "bart"
-    pretrained_config_archive_map = BART_PRETRAINED_CONFIG_ARCHIVE_MAP
 
     def __init__(
         self,
@@ -65,6 +64,9 @@ class BartConfig(PretrainedConfig):
         normalize_before=False,
         add_final_layer_norm=False,
         scale_embedding=False,
+        normalize_embedding=True,
+        static_position_embeddings=False,
+        add_bias_logits=False,
         **common_kwargs
     ):
         r"""
@@ -73,6 +75,8 @@ class BartConfig(PretrainedConfig):
                 config = BartConfig.from_pretrained('bart-large')
                 model = BartModel(config)
         """
+        if "hidden_size" in common_kwargs:
+            raise ValueError("hidden size is called d_model")
         super().__init__(
             num_labels=num_labels,
             pad_token_id=pad_token_id,
@@ -94,11 +98,16 @@ class BartConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
-        # True for mbart, False otherwise
+        # Params introduced for Mbart
+        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.normalize_embedding = normalize_embedding  # True for mbart, False otherwise
         self.normalize_before = normalize_before  # combo of fairseq's encoder_ and decoder_normalize_before
         self.add_final_layer_norm = add_final_layer_norm
+
+        # Params introduced for Marian
+        self.add_bias_logits = add_bias_logits
+        self.static_position_embeddings = static_position_embeddings
 
         # 3 Types of Dropout
         self.attention_dropout = attention_dropout

@@ -1,5 +1,5 @@
 ### Model
-**[`albert-xlarge-v2`](https://huggingface.co/albert-xlarge-v2)** fine-tuned on **[`SQuAD V2`](https://rajpurkar.github.io/SQuAD-explorer/)** using **[`run_squad.py`](https://github.com/huggingface/transformers/blob/master/examples/run_squad.py)**
+**[`albert-xlarge-v2`](https://huggingface.co/albert-xlarge-v2)** fine-tuned on **[`SQuAD V2`](https://rajpurkar.github.io/SQuAD-explorer/)** using **[`run_squad.py`](https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_squad.py)**
 
 ### Training Parameters
 Trained on 4 NVIDIA GeForce RTX 2080 Ti 11Gb

@@ -44,8 +44,15 @@ Did not find it? :( So we can act quickly on it, please follow these steps:
 To get the OS and software versions automatically, you can run the following command:
 
 ```bash
-python transformers-cli env
+transformers-cli env
 ```
+
+or from the root of the repository the following command:
+
+```bash
+python src/transformers/commands/transformers_cli.py env
+```
+
 
 ### Do you want to implement a new model?
 
@@ -130,7 +137,6 @@ Follow these steps to start contributing:
    ```bash
    $ pip install -U git+git://github.com/timothycrosley/isort.git@e63ae06ec7d70b06df9e528357650281a3d3ec22#egg=isort
    ```
-
 5. Develop the features on your branch.
 
    As you work on the features, you should make sure that the test suite
@@ -199,11 +205,12 @@ Follow these steps to start contributing:
    are useful to avoid duplicated work, and to differentiate it from PRs ready
    to be merged;
 4. Make sure existing tests pass;
-5. Add high-coverage tests. No quality test, no merge. 
+5. Add high-coverage tests. No quality testing = no merge. 
  - If you are adding a new model, make sure that you use `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)`, which triggers the common tests.
  - If you are adding new `@slow` tests, make sure they pass using `RUN_SLOW=1 python -m pytest tests/test_my_new_model.py`. 
+ - If you are adding a new tokenizer, write tests, and make sure `RUN_SLOW=1 python -m pytest tests/test_tokenization_{your_model_name}.py` passes.
 CircleCI does not run them. 
-6. All public methods must have informative docstrings;
+6. All public methods must have informative docstrings that work nicely with sphinx. See `modeling_ctrl.py` for an example.
 
 ### Tests
 

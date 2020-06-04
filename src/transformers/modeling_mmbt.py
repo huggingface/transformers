@@ -149,7 +149,7 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
     MMBT_START_DOCSTRING,
     MMBT_INPUTS_DOCSTRING,
 )
-class MMBTModel(ModuleUtilsMixin):
+class MMBTModel(nn.Module, ModuleUtilsMixin):
     r"""
         Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
             **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``

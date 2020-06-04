@@ -1,5 +1,5 @@
 ### Model
-**[`monologg/biobert_v1.1_pubmed`](https://huggingface.co/monologg/biobert_v1.1_pubmed)** fine-tuned on **[`SQuAD V2`](https://rajpurkar.github.io/SQuAD-explorer/)** using **[`run_squad.py`](https://github.com/huggingface/transformers/blob/master/examples/run_squad.py)**
+**[`monologg/biobert_v1.1_pubmed`](https://huggingface.co/monologg/biobert_v1.1_pubmed)** fine-tuned on **[`SQuAD V2`](https://rajpurkar.github.io/SQuAD-explorer/)** using **[`run_squad.py`](https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_squad.py)**
 
 This model is cased.
 

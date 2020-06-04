@@ -112,7 +112,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         Class attributes (overridden by derived classes):
             - ``config_class``: a class derived from :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
-            - ``pretrained_model_archive_map``: a python ``dict`` of with `short-cut-names` (string) as keys and `url` (string) of associated pretrained weights as values.
             - ``load_tf_weights``: a python ``method`` for loading a TensorFlow checkpoint in a PyTorch model, taking as arguments:
 
                 - ``model``: an instance of the relevant subclass of :class:`~transformers.PreTrainedModel`,
@@ -122,7 +121,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             - ``base_model_prefix``: a string indicating the attribute associated to the base model in derived classes of the same architecture adding modules on top of the base model.
     """
     config_class = None
-    pretrained_model_archive_map = {}
     base_model_prefix = ""
 
     @property
@@ -319,6 +317,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
+        use_cdn = kwargs.pop("use_cdn", True)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -337,9 +336,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         # Load model
         if pretrained_model_name_or_path is not None:
-            if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                archive_file = cls.pretrained_model_archive_map[pretrained_model_name_or_path]
-            elif os.path.isdir(pretrained_model_name_or_path):
+            if os.path.isdir(pretrained_model_name_or_path):
                 if os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
                     # Load from a TF 2.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
@@ -358,11 +355,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path, postfix=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME)
+                    pretrained_model_name_or_path,
+                    filename=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME),
+                    use_cdn=use_cdn,
                 )
 
-            # redirect to the cache, if necessary
             try:
+                # Load from URL or cache if already cached
                 resolved_archive_file = cached_path(
                     archive_file,
                     cache_dir=cache_dir,
@@ -370,20 +369,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     resume_download=resume_download,
                     proxies=proxies,
                 )
-            except EnvironmentError as e:
-                if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                    logger.error("Couldn't reach server at '{}' to download pretrained weights.".format(archive_file))
-                else:
-                    logger.error(
-                        "Model name '{}' was not found in model name list ({}). "
-                        "We assumed '{}' was a path or url but couldn't find any file "
-                        "associated to this path or url.".format(
-                            pretrained_model_name_or_path,
-                            ", ".join(cls.pretrained_model_archive_map.keys()),
-                            archive_file,
-                        )
-                    )
-                raise e
+                if resolved_archive_file is None:
+                    raise EnvironmentError
+            except EnvironmentError:
+                msg = (
+                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named one of {TF2_WEIGHTS_NAME}, {WEIGHTS_NAME}.\n\n"
+                )
+                raise EnvironmentError(msg)
             if resolved_archive_file == archive_file:
                 logger.info("loading weights file {}".format(archive_file))
             else:
@@ -488,7 +482,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
             input_ids: (`optional`) `tf.Tensor` of `dtype=tf.int32` of shape `(batch_size, sequence_length)`
                 The sequence used as a prompt for the generation. If `None` the method initializes
-                it as an empty `torch.LongTensor` of shape `(1,)`.
+                it as an empty `tf.Tensor` of shape `(1,)`.
 
             max_length: (`optional`) int
                 The max length of the sequence to be generated.  Between 1 and infinity. Default to 20.
@@ -926,7 +920,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             else:
                 tokens_to_add = next_token
 
+            # add token and increase length by one
             input_ids = tf.concat([input_ids, tf.expand_dims(tokens_to_add, -1)], 1)
+            cur_len = cur_len + 1
 
             if eos_token_id is not None:
                 eos_in_sents = tokens_to_add == eos_token_id
@@ -952,8 +948,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
                 )
 
-            cur_len = cur_len + 1
-
         # if there are different sentences lengths in the batch, some batches have to be padded
         min_sent_length = tf.math.reduce_min(sent_lengths)
         max_sent_length = tf.math.reduce_max(sent_lengths)
@@ -967,7 +961,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 tf.expand_dims(sent_lengths, -1), [batch_size, max_sent_length]
             )
             broad_casted_range = tf.transpose(
-                tf.broadcast_to(tf.expand_dims(tf.range(max_length), -1), [max_length, batch_size])
+                tf.broadcast_to(tf.expand_dims(tf.range(max_sent_length), -1), [max_sent_length, batch_size])
             )
 
             decoded = tf.where(broad_casted_range < broad_casted_sent_lengths, input_ids, padding)
@@ -1202,9 +1196,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             beam_tokens = tf.convert_to_tensor([x[1] for x in next_batch_beam], dtype=tf.int32)
             beam_idx = tf.convert_to_tensor([x[2] for x in next_batch_beam], dtype=tf.int32)
 
-            # re-order batch
+            # re-order batch and update current length
             input_ids = tf.stack([tf.identity(input_ids[x, :]) for x in beam_idx])
             input_ids = tf.concat([input_ids, tf.expand_dims(beam_tokens, 1)], axis=-1)
+            cur_len = cur_len + 1
+
             # re-order internal states
             if past is not None:
                 past = self._reorder_cache(past, beam_idx)
@@ -1215,9 +1211,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                     [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
                 )
 
-            # update current length
-            cur_len = cur_len + 1
-
         # finalize all open beam hypotheses and end to generated hypotheses
         for batch_idx in range(batch_size):
             # Add all open beam hypothesis to generated_hyps
@@ -1225,7 +1218,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 continue
             # test that beam scores match previously calculated scores if not eos and batch_idx not done
             if eos_token_id is not None and all(
-                (token_id % vocab_size).numpy().item() is not eos_token_id for token_id in next_tokens[batch_idx]
+                (token_id % vocab_size).numpy().item() != eos_token_id for token_id in next_tokens[batch_idx]
             ):
                 assert tf.reduce_all(
                     next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]

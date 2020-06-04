@@ -1,14 +1,16 @@
 ---
 language: french
+
+license: mit
 ---
 
 # CamemBERT: a Tasty French Language Model
 
 ## Introduction
 
-[CamemBERT](https://arxiv.org/abs/1911.03894) is a state-of-the-art language model for French based on the RoBERTa architecture. 
+[CamemBERT](https://arxiv.org/abs/1911.03894) is a state-of-the-art language model for French based on the RoBERTa model.
 
-It is now available on Hugging Face in 6 different versions varying the number of parameters, the amount of pretraining data and the pretraining data source domains. 
+It is now available on Hugging Face in 6 different versions with varying number of parameters, amount of pretraining data and pretraining data source domains.
 
 For further information or requests, please go to [Camembert Website](https://camembert-model.fr/)
 
@@ -17,11 +19,11 @@ For further information or requests, please go to [Camembert Website](https://ca
 | Model                          | #params                        | Arch. | Training data                     |
 |--------------------------------|--------------------------------|-------|-----------------------------------|
 | `camembert-base` | 110M   | Base  | OSCAR (138 GB of text)            |
-| `camembert` / `camembert-large`              | 335M    | Large | CCNet (135 GB of text)            |
-| `camembert` / `camembert-base-ccnet`         | 110M    | Base  | CCNet (135 GB of text)            |
-| `camembert` / `camembert-base-wikipedia-4gb` | 110M    | Base  | Wikipedia (4 GB of text)          |
-| `camembert` / `camembert-base-oscar-4gb`     | 110M    | Base  | Subsample of OSCAR (4 GB of text) |
-| `camembert` / `camembert-base-ccnet-4gb`     | 110M    | Base  | Subsample of CCNet (4 GB of text) |
+| `camembert/camembert-large`              | 335M    | Large | CCNet (135 GB of text)            |
+| `camembert/camembert-base-ccnet`         | 110M    | Base  | CCNet (135 GB of text)            |
+| `camembert/camembert-base-wikipedia-4gb` | 110M    | Base  | Wikipedia (4 GB of text)          |
+| `camembert/camembert-base-oscar-4gb`     | 110M    | Base  | Subsample of OSCAR (4 GB of text) |
+| `camembert/camembert-base-ccnet-4gb`     | 110M    | Base  | Subsample of CCNet (4 GB of text) |
 
 ## How to use CamemBERT with HuggingFace
 
@@ -29,6 +31,7 @@ For further information or requests, please go to [Camembert Website](https://ca
 ```python
 from transformers import CamembertModel, CamembertTokenizer
 
+# You can replace "camembert-base" with any other model from the table, e.g. "camembert/camembert-large".
 tokenizer = CamembertTokenizer.from_pretrained("camembert-base")
 camembert = CamembertModel.from_pretrained("camembert-base")
 
@@ -40,7 +43,7 @@ camembert.eval()  # disable dropout (or leave in train mode to finetune)
 ```python
 from transformers import pipeline 
 
-camembert_fill_mask  = pipeline("fill-mask",model="camembert-base",tokenizer="camembert-base")
+camembert_fill_mask  = pipeline("fill-mask", model="camembert-base", tokenizer="camembert-base")
 results = camembert_fill_mask("Le camembert est <mask> :)")
 # results
 #[{'sequence': '<s> Le camembert est délicieux :)</s>', 'score': 0.4909103214740753, 'token': 7200},
@@ -61,9 +64,9 @@ tokenized_sentence = tokenizer.tokenize("J'aime le camembert !")
 # 1-hot encode and add special starting and end tokens 
 encoded_sentence = tokenizer.encode(tokenized_sentence)
 # [5, 121, 11, 660, 16, 730, 25543, 110, 83, 6] 
-# NB: can do in one step : tokenize.encode("J'aime le camembert !")
+# NB: Can be done in one step : tokenize.encode("J'aime le camembert !")
 
-# Feed to Camembert as a torch tensor (batch dim 1)
+# Feed tokens to Camembert as a torch tensor (batch dim 1)
 encoded_sentence = torch.tensor(encoded_sentence).unsqueeze(0)
 embeddings, _ = camembert(encoded_sentence)
 # embeddings.detach()
@@ -79,7 +82,7 @@ embeddings, _ = camembert(encoded_sentence)
 from transformers import CamembertConfig
 # (Need to reload the model with new config)
 config = CamembertConfig.from_pretrained("camembert-base", output_hidden_states=True)
-camembert = CamembertModel.from_pretrained("camembert-base",config=config)
+camembert = CamembertModel.from_pretrained("camembert-base", config=config)
 
 embeddings, _, all_layer_embeddings = camembert(encoded_sentence)
 #  all_layer_embeddings list of len(all_layer_embeddings) == 13 (input embedding layer + 12 self attention layers)

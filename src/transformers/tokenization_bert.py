@@ -47,9 +47,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "bert-base-cased-finetuned-mrpc": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-finetuned-mrpc-vocab.txt",
         "bert-base-german-dbmdz-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-cased-vocab.txt",
         "bert-base-german-dbmdz-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-german-dbmdz-uncased-vocab.txt",
-        "bert-base-finnish-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-cased-v1/vocab.txt",
-        "bert-base-finnish-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-uncased-v1/vocab.txt",
-        "bert-base-dutch-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/wietsedv/bert-base-dutch-cased/vocab.txt",
+        "TurkuNLP/bert-base-finnish-cased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-cased-v1/vocab.txt",
+        "TurkuNLP/bert-base-finnish-uncased-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/TurkuNLP/bert-base-finnish-uncased-v1/vocab.txt",
+        "wietsedv/bert-base-dutch-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/wietsedv/bert-base-dutch-cased/vocab.txt",
     }
 }
 
@@ -69,9 +69,9 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "bert-base-cased-finetuned-mrpc": 512,
     "bert-base-german-dbmdz-cased": 512,
     "bert-base-german-dbmdz-uncased": 512,
-    "bert-base-finnish-cased-v1": 512,
-    "bert-base-finnish-uncased-v1": 512,
-    "bert-base-dutch-cased": 512,
+    "TurkuNLP/bert-base-finnish-cased-v1": 512,
+    "TurkuNLP/bert-base-finnish-uncased-v1": 512,
+    "wietsedv/bert-base-dutch-cased": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
@@ -90,9 +90,9 @@ PRETRAINED_INIT_CONFIGURATION = {
     "bert-base-cased-finetuned-mrpc": {"do_lower_case": False},
     "bert-base-german-dbmdz-cased": {"do_lower_case": False},
     "bert-base-german-dbmdz-uncased": {"do_lower_case": True},
-    "bert-base-finnish-cased-v1": {"do_lower_case": False},
-    "bert-base-finnish-uncased-v1": {"do_lower_case": True},
-    "bert-base-dutch-cased": {"do_lower_case": False},
+    "TurkuNLP/bert-base-finnish-cased-v1": {"do_lower_case": False},
+    "TurkuNLP/bert-base-finnish-uncased-v1": {"do_lower_case": True},
+    "wietsedv/bert-base-dutch-cased": {"do_lower_case": False},
 }
 
 
@@ -130,8 +130,8 @@ class BertTokenizer(PreTrainedTokenizer):
             Whether to lowercase the input when tokenizing.
         do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to do basic tokenization before WordPiece.
-        never_split (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            List of tokens which will never be split during tokenization. Only has an effect when
+        never_split (:obj:`Iterable`, `optional`, defaults to :obj:`None`):
+            Collection of tokens which will never be split during tokenization. Only has an effect when
             :obj:`do_basic_tokenize=True`
         unk_token (:obj:`string`, `optional`, defaults to "[UNK]"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
@@ -208,8 +208,12 @@ class BertTokenizer(PreTrainedTokenizer):
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-                for sub_token in self.wordpiece_tokenizer.tokenize(token):
-                    split_tokens.append(sub_token)
+
+                # If the token is part of the never_split set
+                if token in self.basic_tokenizer.never_split:
+                    split_tokens.append(token)
+                else:
+                    split_tokens += self.wordpiece_tokenizer.tokenize(token)
         else:
             split_tokens = self.wordpiece_tokenizer.tokenize(text)
         return split_tokens
@@ -269,7 +273,7 @@ class BertTokenizer(PreTrainedTokenizer):
                 Set to True if the token list is already formatted with special tokens for the model
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
@@ -363,7 +367,7 @@ class BasicTokenizer(object):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
-        self.never_split = never_split
+        self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
 
     def tokenize(self, text, never_split=None):
@@ -376,8 +380,9 @@ class BasicTokenizer(object):
                 Now implemented directly at the base class level (see :func:`PreTrainedTokenizer.tokenize`)
                 List of token not to split.
         """
-        never_split = self.never_split + (never_split if never_split is not None else [])
-        text = self._clean_text(text)
+        # union() returns a new set by concatenating the two sets.
+        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+
         # This was added on November 1st, 2018 for the multilingual and Chinese
         # models. This is also applied to the English models now, but it doesn't
         # matter since the English models were not trained on any Chinese data
@@ -672,3 +677,33 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
             output += token_ids_1 + [self.sep_token_id]
 
         return output
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        A BERT sequence pair mask has the following format:
+
+        ::
+
+            0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+            | first sequence    | second sequence |
+
+        if token_ids_1 is None, only returns the first portion of the mask (0's).
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of ids.
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
+            sequence(s).
+        """
+        sep = [self.sep_token_id]
+        cls = [self.cls_token_id]
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]

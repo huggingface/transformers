@@ -30,37 +30,37 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "bert-base-japanese": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-vocab.txt",
-        "bert-base-japanese-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking-vocab.txt",
-        "bert-base-japanese-char": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-vocab.txt",
-        "bert-base-japanese-char-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking-vocab.txt",
+        "cl-tohoku/bert-base-japanese": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese/vocab.txt",
+        "cl-tohoku/bert-base-japanese-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-whole-word-masking/vocab.txt",
+        "cl-tohoku/bert-base-japanese-char": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char/vocab.txt",
+        "cl-tohoku/bert-base-japanese-char-whole-word-masking": "https://s3.amazonaws.com/models.huggingface.co/bert/cl-tohoku/bert-base-japanese-char-whole-word-masking/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "bert-base-japanese": 512,
-    "bert-base-japanese-whole-word-masking": 512,
-    "bert-base-japanese-char": 512,
-    "bert-base-japanese-char-whole-word-masking": 512,
+    "cl-tohoku/bert-base-japanese": 512,
+    "cl-tohoku/bert-base-japanese-whole-word-masking": 512,
+    "cl-tohoku/bert-base-japanese-char": 512,
+    "cl-tohoku/bert-base-japanese-char-whole-word-masking": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "bert-base-japanese": {
+    "cl-tohoku/bert-base-japanese": {
         "do_lower_case": False,
         "word_tokenizer_type": "mecab",
         "subword_tokenizer_type": "wordpiece",
     },
-    "bert-base-japanese-whole-word-masking": {
+    "cl-tohoku/bert-base-japanese-whole-word-masking": {
         "do_lower_case": False,
         "word_tokenizer_type": "mecab",
         "subword_tokenizer_type": "wordpiece",
     },
-    "bert-base-japanese-char": {
+    "cl-tohoku/bert-base-japanese-char": {
         "do_lower_case": False,
         "word_tokenizer_type": "mecab",
         "subword_tokenizer_type": "character",
     },
-    "bert-base-japanese-char-whole-word-masking": {
+    "cl-tohoku/bert-base-japanese-char-whole-word-masking": {
         "do_lower_case": False,
         "word_tokenizer_type": "mecab",
         "subword_tokenizer_type": "character",

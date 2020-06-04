@@ -19,9 +19,19 @@ import pickle
 import shutil
 import tempfile
 from collections import OrderedDict
-from typing import Dict, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Tuple, Union
 
 from tests.utils import require_tf, require_torch
+from transformers import PreTrainedTokenizer
+
+
+if TYPE_CHECKING:
+    from transformers import (
+        PretrainedConfig,
+        PreTrainedTokenizerFast,
+        PreTrainedModel,
+        TFPreTrainedModel,
+    )
 
 
 def merge_model_tokenizer_mappings(
@@ -57,19 +67,24 @@ class TokenizerTesterMixin:
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def get_tokenizer(self, **kwargs):
-        raise NotImplementedError
+    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
+        return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs):
         raise NotImplementedError
 
-    def get_input_output_texts(self):
-        raise NotImplementedError
+    def get_input_output_texts(self) -> Tuple[str, str]:
+        """Feel free to overwrite"""
+        # TODO: @property
+        return (
+            "This is a test",
+            "This is a test",
+        )
 
     @staticmethod
     def convert_batch_encode_plus_format_to_encode_plus(batch_encode_plus_sequences):
         # Switch from batch_encode_plus format:   {'input_ids': [[...], [...]], ...}
-        # to the concatenated encode_plus format: [{'input_ids': [...], ...}, {'input_ids': [...], ...}]
+        # to the list of examples/ encode_plus format: [{'input_ids': [...], ...}, {'input_ids': [...], ...}]
         return [
             {value: batch_encode_plus_sequences[value][i] for value in batch_encode_plus_sequences.keys()}
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
@@ -104,35 +119,33 @@ class TokenizerTesterMixin:
 
         # Now let's start the test
         tokenizer = self.get_tokenizer(max_len=42)
+        sample_text = "He is very happy, UNwant\u00E9d,running"
+        before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
 
-        before_tokens = tokenizer.encode("He is very happy, UNwant\u00E9d,running", add_special_tokens=False)
+        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            tokenizer.save_pretrained(tmpdirname)
-            tokenizer = self.tokenizer_class.from_pretrained(tmpdirname)
+        after_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
+        self.assertListEqual(before_tokens, after_tokens)
 
-            after_tokens = tokenizer.encode("He is very happy, UNwant\u00E9d,running", add_special_tokens=False)
-            self.assertListEqual(before_tokens, after_tokens)
-
-            self.assertEqual(tokenizer.max_len, 42)
-            tokenizer = self.tokenizer_class.from_pretrained(tmpdirname, max_len=43)
-            self.assertEqual(tokenizer.max_len, 43)
+        self.assertEqual(tokenizer.max_len, 42)
+        tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname, max_len=43)
+        self.assertEqual(tokenizer.max_len, 43)
 
     def test_pickle_tokenizer(self):
+        """Google pickle __getstate__ __setstate__ if you are struggling with this."""
         tokenizer = self.get_tokenizer()
         self.assertIsNotNone(tokenizer)
 
         text = "Munich and Berlin are nice cities"
         subwords = tokenizer.tokenize(text)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
+        filename = os.path.join(self.tmpdirname, "tokenizer.bin")
+        with open(filename, "wb") as handle:
+            pickle.dump(tokenizer, handle)
 
-            filename = os.path.join(tmpdirname, "tokenizer.bin")
-            with open(filename, "wb") as handle:
-                pickle.dump(tokenizer, handle)
-
-            with open(filename, "rb") as handle:
-                tokenizer_new = pickle.load(handle)
+        with open(filename, "rb") as handle:
+            tokenizer_new = pickle.load(handle)
 
         subwords_loaded = tokenizer_new.tokenize(text)
 
@@ -246,7 +259,7 @@ class TokenizerTesterMixin:
         decoded = tokenizer.decode(encoded, skip_special_tokens=True)
         assert special_token not in decoded
 
-    def test_required_methods_tokenizer(self):
+    def test_internal_consistency(self):
         tokenizer = self.get_tokenizer()
         input_text, output_text = self.get_input_output_texts()
 
@@ -256,12 +269,11 @@ class TokenizerTesterMixin:
         self.assertListEqual(ids, ids_2)
 
         tokens_2 = tokenizer.convert_ids_to_tokens(ids)
+        self.assertNotEqual(len(tokens_2), 0)
         text_2 = tokenizer.decode(ids)
+        self.assertIsInstance(text_2, str)
 
         self.assertEqual(text_2, output_text)
-
-        self.assertNotEqual(len(tokens_2), 0)
-        self.assertIsInstance(text_2, str)
 
     def test_encode_decode_with_spaces(self):
         tokenizer = self.get_tokenizer()
@@ -422,10 +434,7 @@ class TokenizerTesterMixin:
 
     def test_special_tokens_mask(self):
         tokenizer = self.get_tokenizer()
-
         sequence_0 = "Encode this."
-        sequence_1 = "This one too please."
-
         # Testing single inputs
         encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
         encoded_sequence_dict = tokenizer.encode_plus(
@@ -435,13 +444,13 @@ class TokenizerTesterMixin:
         special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
         self.assertEqual(len(special_tokens_mask), len(encoded_sequence_w_special))
 
-        filtered_sequence = [
-            (x if not special_tokens_mask[i] else None) for i, x in enumerate(encoded_sequence_w_special)
-        ]
-        filtered_sequence = [x for x in filtered_sequence if x is not None]
+        filtered_sequence = [x for i, x in enumerate(encoded_sequence_w_special) if not special_tokens_mask[i]]
         self.assertEqual(encoded_sequence, filtered_sequence)
 
-        # Testing inputs pairs
+    def test_special_tokens_mask_input_pairs(self):
+        tokenizer = self.get_tokenizer()
+        sequence_0 = "Encode this."
+        sequence_1 = "This one too please."
         encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
         encoded_sequence += tokenizer.encode(sequence_1, add_special_tokens=False)
         encoded_sequence_dict = tokenizer.encode_plus(
@@ -457,7 +466,9 @@ class TokenizerTesterMixin:
         filtered_sequence = [x for x in filtered_sequence if x is not None]
         self.assertEqual(encoded_sequence, filtered_sequence)
 
-        # Testing with already existing special tokens
+    def test_special_tokens_mask_already_has_special_tokens(self):
+        tokenizer = self.get_tokenizer()
+        sequence_0 = "Encode this."
         if tokenizer.cls_token_id == tokenizer.unk_token_id and tokenizer.cls_token_id == tokenizer.unk_token_id:
             tokenizer.add_special_tokens({"cls_token": "</s>", "sep_token": "<s>"})
         encoded_sequence_dict = tokenizer.encode_plus(
@@ -507,13 +518,12 @@ class TokenizerTesterMixin:
         tokenizer.padding_side = "right"
         padded_sequence_right = tokenizer.encode(sequence, pad_to_max_length=True)
         padded_sequence_right_length = len(padded_sequence_right)
+        assert sequence_length == padded_sequence_right_length
+        assert encoded_sequence == padded_sequence_right
 
         tokenizer.padding_side = "left"
         padded_sequence_left = tokenizer.encode(sequence, pad_to_max_length=True)
         padded_sequence_left_length = len(padded_sequence_left)
-
-        assert sequence_length == padded_sequence_right_length
-        assert encoded_sequence == padded_sequence_right
         assert sequence_length == padded_sequence_left_length
         assert encoded_sequence == padded_sequence_left
 
@@ -610,6 +620,9 @@ class TokenizerTesterMixin:
         self.assertIsInstance(vocab, dict)
         self.assertEqual(len(vocab), len(tokenizer))
 
+    def test_conversion_reversible(self):
+        tokenizer = self.get_tokenizer()
+        vocab = tokenizer.get_vocab()
         for word, ind in vocab.items():
             self.assertEqual(tokenizer.convert_tokens_to_ids(word), ind)
             self.assertEqual(tokenizer.convert_ids_to_tokens(ind), word)
@@ -739,6 +752,7 @@ class TokenizerTesterMixin:
 
     @require_torch
     def test_torch_encode_plus_sent_to_model(self):
+        import torch
         from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
 
         MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
@@ -766,8 +780,10 @@ class TokenizerTesterMixin:
         encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="pt")
         batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="pt")
         # This should not fail
-        model(**encoded_sequence)
-        model(**batch_encoded_sequence)
+
+        with torch.no_grad():  # saves some time
+            model(**encoded_sequence)
+            model(**batch_encoded_sequence)
 
         if self.test_rust_tokenizer:
             fast_tokenizer = self.get_rust_tokenizer()
@@ -816,3 +832,47 @@ class TokenizerTesterMixin:
             # This should not fail
             model(encoded_sequence_fast)
             model(batch_encoded_sequence_fast)
+
+    # TODO: Check if require_torch is the best to test for numpy here ... Maybe move to require_flax when available
+    @require_torch
+    def test_np_encode_plus_sent_to_model(self):
+        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
+
+        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
+
+        tokenizer = self.get_tokenizer()
+        if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
+            return
+
+        config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
+        config = config_class()
+
+        if config.is_encoder_decoder or config.pad_token_id is None:
+            return
+
+        # Build sequence
+        first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
+        sequence = " ".join(first_ten_tokens)
+        encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="np")
+        batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
+
+        # TODO: add forward through JAX/Flax when PR is merged
+        # This is currently here to make flake8 happy !
+        if encoded_sequence is None:
+            raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
+
+        if batch_encoded_sequence is None:
+            raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus()")
+
+        if self.test_rust_tokenizer:
+            fast_tokenizer = self.get_rust_tokenizer()
+            encoded_sequence_fast = fast_tokenizer.encode_plus(sequence, return_tensors="np")
+            batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus([sequence, sequence], return_tensors="np")
+
+            # TODO: add forward through JAX/Flax when PR is merged
+            # This is currently here to make flake8 happy !
+            if encoded_sequence_fast is None:
+                raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
+
+            if batch_encoded_sequence_fast is None:
+                raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus() (fast)")

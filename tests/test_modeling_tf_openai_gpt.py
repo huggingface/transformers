@@ -20,7 +20,7 @@ from transformers import OpenAIGPTConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -29,7 +29,7 @@ if is_tf_available():
         TFOpenAIGPTModel,
         TFOpenAIGPTLMHeadModel,
         TFOpenAIGPTDoubleHeadsModel,
-        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -235,11 +235,12 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFOpenAIGPTModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFOpenAIGPTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_tf
 class TFOPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_openai_gpt(self):

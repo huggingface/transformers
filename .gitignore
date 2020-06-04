@@ -131,7 +131,9 @@ proc_data
 # examples
 runs
 /runs_old
-examples/runs
+/wandb
+/examples/runs
+/examples/**/*.args
 
 # data
 /data
