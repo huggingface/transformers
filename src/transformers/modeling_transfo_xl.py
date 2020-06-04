@@ -33,9 +33,10 @@ from .modeling_utils import PreTrainedModel
 
 logger = logging.getLogger(__name__)
 
-TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-pytorch_model.bin",
-}
+TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "transfo-xl-wt103",
+    # See all Transformer XL models at https://huggingface.co/models?filter=transfo-xl
+]
 
 
 def build_tf_to_pytorch_map(model, config):
@@ -136,7 +137,7 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
         if "kernel" in name or "proj" in name:
             array = np.transpose(array)
         if ("r_r_bias" in name or "r_w_bias" in name) and len(pointer) > 1:
-            # Here we will split the TF weigths
+            # Here we will split the TF weights
             assert len(pointer) == array.shape[0]
             for i, p_i in enumerate(pointer):
                 arr_i = array[i, ...]
@@ -453,7 +454,6 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
     """
 
     config_class = TransfoXLConfig
-    pretrained_model_archive_map = TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_transfo_xl
     base_model_prefix = "transformer"
 
@@ -538,7 +538,7 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -852,14 +852,14 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
+            Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
             Indices are selected in ``[-100, 0, ..., config.vocab_size]``
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
 
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor` of shape `(1,)`, `optional`, returned when ``labels`` is provided)
+        loss (:obj:`torch.FloatTensor` of shape `(batch_size, sequence_length-1)`, `optional`, returned when ``labels`` is provided)
             Language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -904,12 +904,12 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         pred_hid = last_hidden[:, -tgt_len:]
         outputs = transformer_outputs[1:]
 
-        softmax_output = self.crit(pred_hid.view(-1, pred_hid.size(-1)), labels)
+        softmax_output = self.crit(pred_hid, labels)
         if labels is None:
             softmax_output = softmax_output.view(bsz, tgt_len, -1)
             outputs = [softmax_output] + outputs
         else:
-            softmax_output = softmax_output.view(bsz, tgt_len)
+            softmax_output = softmax_output.view(bsz, tgt_len - 1)
             outputs = [softmax_output, None] + outputs
 
         return outputs  # (loss), logits or None if labels is not None (speed up adaptive softmax), new_mems, (all hidden states), (all attentions)

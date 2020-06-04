@@ -20,7 +20,7 @@ from transformers import is_tf_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -31,7 +31,7 @@ if is_tf_available():
         TFXLMWithLMHeadModel,
         TFXLMForSequenceClassification,
         TFXLMForQuestionAnsweringSimple,
-        TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -308,11 +308,12 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFXLMModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFXLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_tf
 class TFXLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):

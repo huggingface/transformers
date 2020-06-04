@@ -44,8 +44,8 @@ Sequence Classification
 Sequence classification is the task of classifying sequences according to a given number of classes. An example
 of sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune
 a model on a GLUE sequence classification task, you may leverage the
-`run_glue.py <https://github.com/huggingface/transformers/tree/master/examples/run_glue.py>`_ or
-`run_tf_glue.py <https://github.com/huggingface/transformers/tree/master/examples/run_tf_glue.py>`_ scripts.
+`run_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_glue.py>`_ or
+`run_tf_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_tf_glue.py>`_ scripts.
 
 Here is an example using the pipelines do to sentiment analysis: identifying if a sequence is positive or negative.
 It leverages a fine-tuned model on sst2, which is a GLUE task.
@@ -404,52 +404,150 @@ Causal language modeling is the task of predicting the token following a sequenc
 model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
 for generation tasks.
 
-There is currently no pipeline to do causal language modeling/generation.
+Usually, the next token is predicted by sampling from the logits of the last hidden state the model produces from the input sequence.
 
-Here is an example using the tokenizer and model. leveraging the :func:`~transformers.PreTrainedModel.generate` method
-to generate the tokens following the initial sequence in PyTorch, and creating a simple loop in TensorFlow.
+Here is an example using the tokenizer and model and leveraging the :func:`~transformers.PreTrainedModel.top_k_top_p_filtering` method to sample the next token following an input sequence of tokens.
+
+::
+
+    ## PYTORCH CODE
+    from transformers import AutoModelWithLMHead, AutoTokenizer, top_k_top_p_filtering
+    import torch
+    from torch.nn import functional as F
+
+
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    model = AutoModelWithLMHead.from_pretrained("gpt2")
+
+    sequence = f"Hugging Face is based in DUMBO, New York City, and "
+
+    input_ids = tokenizer.encode(sequence, return_tensors="pt")
+
+    # get logits of last hidden state
+    next_token_logits = model(input_ids)[0][:, -1, :]
+
+    # filter
+    filtered_next_token_logits = top_k_top_p_filtering(next_token_logits, top_k=50, top_p=1.0)
+
+    # sample
+    probs = F.softmax(filtered_next_token_logits, dim=-1)
+    next_token = torch.multinomial(probs, num_samples=1)
+
+    generated = torch.cat([input_ids, next_token], dim=-1)
+
+    resulting_string = tokenizer.decode(generated.tolist()[0])
+    print(resulting_string)
+    ## TENSORFLOW CODE
+    from transformers import TFAutoModelWithLMHead, AutoTokenizer, tf_top_k_top_p_filtering
+    import tensorflow as tf
+
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    model = TFAutoModelWithLMHead.from_pretrained("gpt2")
+
+    sequence = f"Hugging Face is based in DUMBO, New York City, and "
+
+    input_ids = tokenizer.encode(sequence, return_tensors="tf")
+
+    # get logits of last hidden state
+    next_token_logits = model(input_ids)[0][:, -1, :]
+
+    # filter
+    filtered_next_token_logits = tf_top_k_top_p_filtering(next_token_logits, top_k=50, top_p=1.0)
+
+    # sample
+    next_token = tf.random.categorical(filtered_next_token_logits, dtype=tf.int32, num_samples=1)
+
+    generated = tf.concat([input_ids, next_token], axis=1)
+
+    resulting_string = tokenizer.decode(generated.numpy().tolist()[0])
+    print(resulting_string)
+
+
+This outputs a (hopefully) coherent next token following the original sequence, which is in our case is the word *has*:
+
+::
+
+    Hugging Face is based in DUMBO, New York City, and has
+
+In the next section, we show how this functionality is leveraged in :func:`~transformers.PreTrainedModel.generate` to generate multiple tokens up to a user-defined length.
+
+Text Generation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a continuation from the given context. As an example, is it shown how *GPT-2* can be used in pipelines to generate text. As a default all models apply *Top-K* sampling when used in pipelines as configured in their respective configurations (see `gpt-2 config <https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json>`_ for example).
+
+::
+
+    from transformers import pipeline
+
+    text_generator = pipeline("text-generation")
+    print(text_generator("As far as I am concerned, I will", max_length=50))
+
+
+Here the model generates a random text with a total maximal length of *50* tokens from context *"As far as I am concerned, I will"*.
+The default arguments of ``PreTrainedModel.generate()`` can directly be overriden in the pipeline as is shown above for the argument ``max_length``.
+
+Here is an example for text generation using XLNet and its tokenzier. 
 
 ::
 
     ## PYTORCH CODE
     from transformers import AutoModelWithLMHead, AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    model = AutoModelWithLMHead.from_pretrained("gpt2")
+    model = AutoModelWithLMHead.from_pretrained("xlnet-base-cased")
+    tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
 
-    sequence = f"Hugging Face is based in DUMBO, New York City, and is"
+    # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
+    PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+    (except for Alexei and Maria) are discovered.
+    The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+    remainder of the story. 1883 Western Siberia,
+    a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+    Rasputin has a vision and denounces one of the men as a horse thief. Although his
+    father initially slaps him for making such an accusation, Rasputin watches as the
+    man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+    the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+    with people, even a bishop, begging for his blessing. <eod> </s> <eos>""" 
 
-    input = tokenizer.encode(sequence, return_tensors="pt")
-    generated = model.generate(input, max_length=50)
+    prompt = "Today the weather is really nice and I am planning on "
+    inputs = tokenizer.encode(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="pt")
+    
+    prompt_length = len(tokenizer.decode(inputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
+    outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
+    generated = prompt + tokenizer.decode(outputs[0])[prompt_length:]
 
-    resulting_string = tokenizer.decode(generated.tolist()[0])
-    print(resulting_string)
+    print(generated)
     ## TENSORFLOW CODE
     from transformers import TFAutoModelWithLMHead, AutoTokenizer
-    import tensorflow as tf
 
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    model = TFAutoModelWithLMHead.from_pretrained("gpt2")
+    model = TFAutoModelWithLMHead.from_pretrained("xlnet-base-cased")
+    tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
 
-    sequence = f"Hugging Face is based in DUMBO, New York City, and is"
-    generated = tokenizer.encode(sequence)
+    # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
+    PADDING_TEXT = """In 1991, the remains of Russian Tsar Nicholas II and his family
+    (except for Alexei and Maria) are discovered.
+    The voice of Nicholas's young son, Tsarevich Alexei Nikolaevich, narrates the
+    remainder of the story. 1883 Western Siberia,
+    a young Grigori Rasputin is asked by his father and a group of men to perform magic.
+    Rasputin has a vision and denounces one of the men as a horse thief. Although his
+    father initially slaps him for making such an accusation, Rasputin watches as the
+    man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
+    the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
+    with people, even a bishop, begging for his blessing. <eod> </s> <eos>""" 
 
-    for i in range(50):
-        predictions = model(tf.constant([generated]))[0]
-        token = tf.argmax(predictions[0], axis=1)[-1].numpy()
-        generated += [token]
+    prompt = "Today the weather is really nice and I am planning on "
+    inputs = tokenizer.encode(PADDING_TEXT + prompt, add_special_tokens=False, return_tensors="tf")
 
-    resulting_string = tokenizer.decode(generated)
-    print(resulting_string)
+    prompt_length = len(tokenizer.decode(inputs[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
+    outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
+    generated = prompt + tokenizer.decode(outputs[0])[prompt_length:]
 
+    print(generated)
 
-This outputs a (hopefully) coherent string from the original sequence, as the
-:func:`~transformers.PreTrainedModel.generate` samples from a top_p/tok_k distribution:
+Text generation is currently possible with *GPT-2*, *OpenAi-GPT*, *CTRL*, *XLNet*, *Transfo-XL* and *Reformer* in PyTorch and for most models in Tensorflow as well. As can be seen in the example above *XLNet* and *Transfo-xl* often need to be padded to work well.
+GPT-2 is usually a good choice for *open-ended text generation* because it was trained on millions on webpages with a causal language modeling objective.
 
-::
-
-    Hugging Face is based in DUMBO, New York City, and is a live-action TV series based on the novel by John
-    Carpenter, and its producers, David Kustlin and Steve Pichar. The film is directed by!
+For more information on how to apply different decoding strategies for text generation, please also refer to our generation blog post `here <https://huggingface.co/blog/how-to-generate>`_.
 
 
 Named Entity Recognition
@@ -594,4 +692,138 @@ following array should be the output:
 
 ::
 
-    [('[CLS]', 'O'), ('Hu', 'I-ORG'), ('##gging', 'I-ORG'), ('Face', 'I-ORG'), ('Inc', 'I-ORG'), ('.', 'O'), ('is', 'O'), ('a', 'O'), ('company', 'O'), ('based', 'O'), ('in', 'O'), ('New', 'I-LOC'), ('York', 'I-LOC'), ('City', 'I-LOC'), ('.', 'O'), ('Its', 'O'), ('headquarters', 'O'), ('are', 'O'), ('in', 'O'), ('D', 'I-LOC'), ('##UM', 'I-LOC'), ('##BO', 'I-LOC'), (',', 'O'), ('therefore', 'O'), ('very', 'O'), ('##c', 'O'), ('##lose', 'O'), ('to', 'O'), ('the', 'O'), ('Manhattan', 'I-LOC'), ('Bridge', 'I-LOC'), ('.', 'O'), ('[SEP]', 'O')]
+    [('[CLS]', 'O'), ('Hu', 'I-ORG'), ('##gging', 'I-ORG'), ('Face', 'I-ORG'), ('Inc', 'I-ORG'), ('.', 'O'), ('is', 'O'), ('a', 'O'), ('company', 'O'), ('based', 'O'), ('in', 'O'), ('New', 'I-LOC'), ('York', 'I-LOC'), ('City', 'I-LOC'), ('.', 'O'), ('Its', 'O'), ('headquarters', 'O'), ('are', 'O'), ('in', 'O'), ('D', 'I-LOC'), ('##UM', 'I-LOC'), ('##BO', 'I-LOC'), (',', 'O'), ('therefore', 'O'), ('very', 'O'), ('##c', 'O'), ('##lose', 'O'), ('to', 'O'), ('the', 'O'), ('Manhattan', 'I-LOC'), ('Bridge', 'I-LOC'), ('.', 'O'), ('[SEP]', 'O')]   
+Summarization
+----------------------------------------------------
+
+Summarization is the task of summarizing a text / an article into a shorter text.
+
+An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was created for the task of summarization.
+If you would like to fine-tune a model on a summarization task, you may leverage the ``examples/summarization/bart/run_train.sh`` (leveraging pytorch-lightning) script.
+
+Here is an example using the pipelines do to summarization. 
+It leverages a Bart model that was fine-tuned on the CNN / Daily Mail data set.
+
+::
+
+    from transformers import pipeline
+
+    summarizer = pipeline("summarization")
+
+    ARTICLE = """ New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. 
+    A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband. 
+    Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other. 
+    In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage. 
+    Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the 
+    2010 marriage license application, according to court documents. 
+    Prosecutors said the marriages were part of an immigration scam. 
+    On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further. 
+    After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective 
+    Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002. 
+    All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say. 
+    Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages. 
+    Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted. 
+    The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s 
+    Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali. 
+    Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force. 
+    If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.
+    """
+    
+    print(summarizer(ARTICLE, max_length=130, min_length=30))
+
+Because the summarization pipeline depends on the ``PretrainedModel.generate()`` method, we can override the default arguments 
+of ``PretrainedModel.generate()`` directly in the pipeline as is shown for ``max_length`` and ``min_length`` above.
+This outputs the following summary:
+
+::
+
+  Liana Barrientos has been married 10 times, sometimes within two weeks of each other. Prosecutors say the marriages were part of an immigration scam. She pleaded not guilty at State Supreme Court in the Bronx on Friday.
+  
+Here is an example doing summarization using a model and a tokenizer. The process is the following:
+
+- Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder model, such as ``Bart`` or ``T5``.
+- Define the article that should be summarizaed.
+- Leverage the ``PretrainedModel.generate()`` method.
+- Add the T5 specific prefix "summarize: ".
+
+Here Google`s T5 model is used that was only pre-trained on a multi-task mixed data set (including CNN / Daily Mail), but nevertheless yields very good results.
+::
+
+    ## PYTORCH CODE
+    from transformers import AutoModelWithLMHead, AutoTokenizer
+
+    model = AutoModelWithLMHead.from_pretrained("t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+
+    # T5 uses a max_length of 512 so we cut the article to 512 tokens.
+    inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="pt", max_length=512)
+    outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
+    print(outputs)
+    
+    ## TENSORFLOW CODE
+    from transformers import TFAutoModelWithLMHead, AutoTokenizer
+
+    model = TFAutoModelWithLMHead.from_pretrained("t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+
+    # T5 uses a max_length of 512 so we cut the article to 512 tokens.
+    inputs = tokenizer.encode("summarize: " + ARTICLE, return_tensors="tf", max_length=512)
+    outputs = model.generate(inputs, max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True)
+    print(outputs)  
+Translation
+----------------------------------------------------
+
+Translation is the task of translating a text from one language to another.
+
+An example of a translation dataset is the WMT English to German dataset, which has English sentences as the input data 
+and German sentences as the target data.
+
+Here is an example using the pipelines do to translation. 
+It leverages a T5 model that was only pre-trained on a multi-task mixture dataset (including WMT), but yields impressive 
+translation results nevertheless.
+
+::
+
+    from transformers import pipeline
+
+    translator = pipeline("translation_en_to_de")
+    print(translator("Hugging Face is a technology company based in New York and Paris", max_length=40))
+
+Because the translation pipeline depends on the ``PretrainedModel.generate()`` method, we can override the default arguments 
+of ``PretrainedModel.generate()`` directly in the pipeline as is shown for ``max_length`` above.
+This outputs the following translation into German:
+
+::
+
+  Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
+  
+Here is an example doing translation using a model and a tokenizer. The process is the following:
+
+- Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder model, such as ``Bart`` or ``T5``.
+- Define the article that should be summarizaed.
+- Leverage the ``PretrainedModel.generate()`` method.
+- Add the T5 specific prefix "translate English to German: "
+
+::
+
+    ## PYTORCH CODE
+    from transformers import AutoModelWithLMHead, AutoTokenizer
+
+    model = AutoModelWithLMHead.from_pretrained("t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+
+    inputs = tokenizer.encode("translate English to German: Hugging Face is a technology company based in New York and Paris", return_tensors="pt")
+    outputs = model.generate(inputs, max_length=40, num_beams=4, early_stopping=True)
+
+    print(outputs)
+    
+    ## TENSORFLOW CODE
+    from transformers import TFAutoModelWithLMHead, AutoTokenizer
+
+    model = TFAutoModelWithLMHead.from_pretrained("t5-base")
+    tokenizer = AutoTokenizer.from_pretrained("t5-base")
+
+    inputs = tokenizer.encode("translate English to German: Hugging Face is a technology company based in New York and Paris", return_tensors="tf")
+    outputs = model.generate(inputs, max_length=40, num_beams=4, early_stopping=True)
+
+    print(outputs)

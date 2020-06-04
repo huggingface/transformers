@@ -28,6 +28,9 @@ Tips:
 - This implementation is the same as RoBERTa. Refer to the `documentation of RoBERTa <./roberta.html>`__ for usage
   examples as well as the information relative to the inputs and outputs.
 
+The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/xlmr>`_.
+
+
 XLMRobertaConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

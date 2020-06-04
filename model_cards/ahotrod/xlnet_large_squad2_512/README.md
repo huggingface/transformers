@@ -56,22 +56,8 @@ PyTorch: 1.4.0
 TensorFlow: 2.1.0
 Python: 3.7.6
 ```
-### Inferencing / prediction works with Transformers v2.4.1, the latest version tested
-
 ### Utilize this xlnet_large_squad2_512 fine-tuned model with:
 ```python
-config_class, model_class, tokenizer_class = \
-        XLNetConfig, XLNetforQuestionAnswering, XLNetTokenizer
-model_name_or_path = "ahotrod/xlnet_large_squad2_512"
-config = config_class.from_pretrained(model_name_or_path)
-tokenizer = tokenizer_class.from_pretrained(model_name_or_path, do_lower_case=True)
-model = model_class.from_pretrained(model_name_or_path, config=config)
-```
-### or the AutoModels (AutoConfig, AutoTokenizer & AutoModel) should also work, however I have yet to use them in my apps & confirm:
-```python
-from transformers import AutoConfig, AutoTokenizer, AutoModel
-model_name_or_path = "ahotrod/xlnet_large_squad2_512"
-config = AutoConfig.from_pretrained(model_name_or_path)
-tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, do_lower_case=True)
-model = AutoModel.from_pretrained(model_name_or_path, config=config)
+tokenizer = AutoTokenizer.from_pretrained("ahotrod/xlnet_large_squad2_512")
+model = AutoModelForQuestionAnswering.from_pretrained("ahotrod/xlnet_large_squad2_512")
 ```

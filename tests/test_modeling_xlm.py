@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -29,11 +29,12 @@ if is_torch_available():
         XLMConfig,
         XLMModel,
         XLMWithLMHeadModel,
+        XLMForTokenClassification,
         XLMForQuestionAnswering,
         XLMForSequenceClassification,
         XLMForQuestionAnsweringSimple,
     )
-    from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -350,6 +351,32 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
                 list(result["logits"].size()), [self.batch_size, self.type_sequence_label_size]
             )
 
+        def create_and_check_xlm_for_token_classification(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_lengths,
+            sequence_labels,
+            token_labels,
+            is_impossible_labels,
+            input_mask,
+        ):
+            config.num_labels = self.num_labels
+            model = XLMForTokenClassification(config)
+            model.to(torch_device)
+            model.eval()
+
+            loss, logits = model(input_ids, attention_mask=input_mask, labels=token_labels)
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(
+                list(result["logits"].size()), [self.batch_size, self.seq_length, self.num_labels]
+            )
+            self.check_loss_output(result)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -392,17 +419,23 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_sequence_classif(*config_and_inputs)
 
+    def test_xlm_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_xlm_for_token_classification(*config_and_inputs)
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = XLMModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in XLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = XLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_torch
 class XLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):
         model = XLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
+        model.to(torch_device)
         input_ids = torch.tensor([[14, 447]], dtype=torch.long, device=torch_device)  # the president
         expected_output_ids = [
             14,
@@ -428,4 +461,4 @@ class XLMModelLanguageGenerationTest(unittest.TestCase):
         ]  # the president the president the president the president the president the president the president the president the president the president
         # TODO(PVP): this and other input_ids I tried for generation give pretty bad results. Not sure why. Model might just not be made for auto-regressive inference
         output_ids = model.generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].numpy().tolist(), expected_output_ids)
+        self.assertListEqual(output_ids[0].cpu().numpy().tolist(), expected_output_ids)

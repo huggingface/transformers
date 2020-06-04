@@ -629,9 +629,6 @@ class XLMTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 3  # take into account special tokens
-
         # cache of sm.MosesPunctNormalizer instance
         self.cache_moses_punct_normalizer = dict()
         # cache of sm.MosesTokenizer instance
@@ -873,11 +870,12 @@ class XLMTokenizer(PreTrainedTokenizer):
             :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
 
         """
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+        bos = [self.bos_token_id]
         sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-        return cls + token_ids_0 + sep + token_ids_1 + sep
+
+        if token_ids_1 is None:
+            return bos + token_ids_0 + sep
+        return bos + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -895,7 +893,7 @@ class XLMTokenizer(PreTrainedTokenizer):
                 Set to True if the token list is already formatted with special tokens for the model
 
         Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 0 for a special token, 1 for a sequence token.
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:

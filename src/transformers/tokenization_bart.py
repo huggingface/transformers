@@ -13,13 +13,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+
 from .tokenization_roberta import RobertaTokenizer
+from .tokenization_xlm_roberta import XLMRobertaTokenizer
+
+
+logger = logging.getLogger(__name__)
 
 
 # vocab and merges same as roberta
 vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json"
 merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
-_all_bart_models = ["bart-large", "bart-large-mnli", "bart-large-cnn"]
+_all_bart_models = [
+    "facebook/bart-large",
+    "facebook/bart-large-mnli",
+    "facebook/bart-large-cnn",
+    "facebook/bart-large-xsum",
+]
 
 
 class BartTokenizer(RobertaTokenizer):
@@ -29,3 +40,13 @@ class BartTokenizer(RobertaTokenizer):
         "vocab_file": {m: vocab_url for m in _all_bart_models},
         "merges_file": {m: merges_url for m in _all_bart_models},
     }
+
+
+_all_mbart_models = ["facebook/mbart-large-en-ro"]
+SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
+
+
+class MBartTokenizer(XLMRobertaTokenizer):
+    vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
+    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
+    pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}

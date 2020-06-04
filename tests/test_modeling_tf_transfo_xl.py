@@ -21,7 +21,7 @@ from transformers import TransfoXLConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -29,7 +29,7 @@ if is_tf_available():
     from transformers import (
         TFTransfoXLModel,
         TFTransfoXLLMHeadModel,
-        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -209,11 +209,12 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFTransfoXLModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFTransfoXLModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_tf
 class TFTransfoXLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_transfo_xl_wt103(self):

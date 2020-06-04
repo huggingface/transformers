@@ -24,13 +24,13 @@ import os
 import pickle
 import re
 from collections import Counter, OrderedDict
-from typing import List, Optional, Tuple, Union
+from typing import Optional
 
 import numpy as np
-from tokenizers import Encoding, Tokenizer
+from tokenizers import Tokenizer
 from tokenizers.implementations import BaseTokenizer
 from tokenizers.models import WordLevel
-from tokenizers.normalizers import Lowercase, Sequence, unicode_normalizer_from_str
+from tokenizers.normalizers import Lowercase, Sequence, Strip, unicode_normalizer_from_str
 from tokenizers.pre_tokenizers import CharDelimiterSplit, WhitespaceSplit
 from tokenizers.processors import BertProcessing
 
@@ -80,6 +80,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = []
 
     def __init__(
         self,
@@ -99,13 +100,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         super().__init__(
             unk_token=unk_token, eos_token=eos_token, additional_special_tokens=additional_special_tokens, **kwargs
         )
-
-        self.max_len_single_sentence = (
-            self.max_len
-        )  # no default special tokens - you can update this value if you add special tokens
-        self.max_len_sentences_pair = (
-            self.max_len
-        )  # no default special tokens - you can update this value if you add special tokens
 
         if never_split is None:
             never_split = self.all_special_tokens
@@ -361,7 +355,7 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
     ):
 
         try:
-            tokenizer = WordLevel.from_files(vocab_file, unk_token=unk_token)
+            tokenizer = WordLevel(vocab_file, unk_token=unk_token)
             tokenizer = Tokenizer(tokenizer)
         except Exception:
             raise ValueError(
@@ -380,6 +374,9 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
         # Include case normalization
         if lowercase:
             normalizer += [Lowercase()]
+
+        # Strip normalizer at the end
+        normalizer += [Strip(left=True, right=True)]
 
         if len(normalizer) > 0:
             tokenizer.normalizer = Sequence(normalizer) if len(normalizer) > 1 else normalizer[0]
@@ -404,20 +401,23 @@ class _TransfoXLDelimiterLookupTokenizer(BaseTokenizer):
 
         super().__init__(tokenizer, parameters)
 
-    def encode_batch(self, sequences: List[Union[str, Tuple[str, str]]]) -> List[Encoding]:
-        return super().encode_batch(
-            [seq.strip() if isinstance(seq, str) else (seq[0].strip(), seq[1].strip()) for seq in sequences]
-        )
-
-    def encode(self, sequence: str, pair: Optional[str] = None) -> Encoding:
-        return super().encode(sequence.strip(), pair.strip() if pair else pair)
-
 
 class TransfoXLTokenizerFast(PreTrainedTokenizerFast):
+    """
+    Construct a "Fast" Transformer-XL tokenizer (backed by HuggingFace's `tokenizers` library).
+
+    The Transformer-XL tokenizer is a word-level tokenizer (no sub-word tokenization).
+
+    Adapted from Vocab class in https://github.com/kimiyoung/transformer-xl
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
+    """
 
     vocab_files_names = VOCAB_FILES_NAMES_FAST
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP_FAST
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = []
 
     def __init__(
         self,

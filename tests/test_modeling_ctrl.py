@@ -19,12 +19,12 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
     import torch
-    from transformers import CTRLConfig, CTRLModel, CTRL_PRETRAINED_MODEL_ARCHIVE_MAP, CTRLLMHeadModel
+    from transformers import CTRLConfig, CTRLModel, CTRL_PRETRAINED_MODEL_ARCHIVE_LIST, CTRLLMHeadModel
 
 
 @require_torch
@@ -41,7 +41,7 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
         def __init__(
             self,
             parent,
-            batch_size=13,
+            batch_size=14,
             seq_length=7,
             is_training=True,
             use_token_type_ids=True,
@@ -210,15 +210,17 @@ class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(CTRL_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = CTRLModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in CTRL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = CTRLModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_torch
 class CTRLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_ctrl(self):
         model = CTRLLMHeadModel.from_pretrained("ctrl")
+        model.to(torch_device)
         input_ids = torch.tensor(
             [[11859, 0, 1611, 8]], dtype=torch.long, device=torch_device
         )  # Legal the president is

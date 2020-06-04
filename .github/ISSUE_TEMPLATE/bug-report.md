@@ -40,7 +40,7 @@ Steps to reproduce the behavior:
 <!-- A clear and concise description of what you would expect to happen. -->
 
 ## Environment info
-<!-- You can run the command `python transformers-cli env` and copy-and-paste its output below.
+<!-- You can run the command `transformers-cli env` and copy-and-paste its output below.
      Don't forget to fill out the missing fields in that output! -->
      
 - `transformers` version:

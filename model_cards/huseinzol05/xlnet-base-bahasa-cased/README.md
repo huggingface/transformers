@@ -50,7 +50,7 @@ tokenizer = XLNetTokenizer.from_pretrained(
     'huseinzol05/xlnet-base-bahasa-cased', do_lower_case = False
 )
 fill_mask = pipeline('fill-mask', model = model, tokenizer = tokenizer)
-print(fill_mask('makan ayam dengan [MASK]'))
+print(fill_mask('makan ayam dengan <mask>'))
 ```
 
 ## Results

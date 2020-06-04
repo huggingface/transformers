@@ -1,13 +1,15 @@
-### Get the CNN Data
+### Get Preprocessed CNN Data
 To be able to reproduce the authors' results on the CNN/Daily Mail dataset you first need to download both CNN and Daily Mail datasets [from Kyunghyun Cho's website](https://cs.nyu.edu/~kcho/DMQA/) (the links next to "Stories") in the same folder. Then uncompress the archives by running:
 
 ```bash
-tar -xvf cnn_stories.tgz && tar -xvf dailymail_stories.tgz
+wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm.tgz
+tar -xzvf cnn_dm.tgz
 ```
+
 this should make a directory called cnn_dm/ with files like `test.source`. 
 To use your own data, copy that files format. Each article to be summarized is on its own line.
 
-### Usage
+### Evaluation
 To create summaries for each article in dataset, run:
 ```bash
 python evaluate_cnn.py <path_to_test.source> cnn_test_summaries.txt
@@ -16,21 +18,12 @@ the default batch size, 8, fits in 16GB GPU memory, but may need to be adjusted 
 
 
 ### Training
-
-
-
-After downloading the CNN and Daily Mail datasets, preprocess the dataset:
-```commandline
-git clone https://github.com/artmatsak/cnn-dailymail
-cd cnn-dailymail && python make_datafiles.py ../cnn/stories/ ../dailymail/stories/
-```
-
-Run the training script: `run_train.sh`
-
+Run/modify `run_train.sh`
+    
 ### Where is the code?
 The core model is in `src/transformers/modeling_bart.py`. This directory only contains examples.
 
-### (WIP) Rouge Scores
+## (WIP) Rouge Scores
 
 ### Stanford CoreNLP Setup
 ```

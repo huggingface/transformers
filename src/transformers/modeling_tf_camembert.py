@@ -30,7 +30,9 @@ from .modeling_tf_roberta import (
 
 logger = logging.getLogger(__name__)
 
-TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {}
+TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    # See all CamemBERT models at https://huggingface.co/models?filter=camembert
+]
 
 
 CAMEMBERT_START_DOCSTRING = r"""
@@ -72,7 +74,6 @@ class TFCamembertModel(TFRobertaModel):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -85,7 +86,6 @@ class TFCamembertForMaskedLM(TFRobertaForMaskedLM):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -100,7 +100,6 @@ class TFCamembertForSequenceClassification(TFRobertaForSequenceClassification):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
 
 @add_start_docstrings(
@@ -115,4 +114,3 @@ class TFCamembertForTokenClassification(TFRobertaForTokenClassification):
     """
 
     config_class = CamembertConfig
-    pretrained_model_archive_map = TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_MAP

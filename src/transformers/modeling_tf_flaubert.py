@@ -30,11 +30,14 @@ from .modeling_tf_xlm import (
     get_masks,
     shape_list,
 )
+from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
 
-TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {}
+TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    # See all Flaubert models at https://huggingface.co/models?filter=flaubert
+]
 
 FLAUBERT_START_DOCSTRING = r"""
 
@@ -90,7 +93,7 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -103,16 +106,15 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
 )
 class TFFlaubertModel(TFXLMModel):
     config_class = FlaubertConfig
-    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFFlaubertModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
 
 
 class TFFlaubertMainLayer(TFXLMMainLayer):
     def __init__(self, config, *inputs, **kwargs):
-        super(TFFlaubertMainLayer, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
 
@@ -141,7 +143,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
             assert len(inputs) <= 9, "Too many inputs."
-        elif isinstance(inputs, dict):
+        elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             langs = inputs.get("langs", langs)
@@ -308,10 +310,9 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
 )
 class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
     config_class = FlaubertConfig
-    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFFlaubertWithLMHeadModel, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
 
 
@@ -322,8 +323,7 @@ class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
 )
 class TFFlaubertForSequenceClassification(TFXLMForSequenceClassification):
     config_class = FlaubertConfig
-    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
-        super(TFFlaubertForSequenceClassification, self).__init__(config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")

@@ -19,10 +19,11 @@ import os.path
 import random
 import tempfile
 import unittest
+from typing import List
 
 from transformers import is_torch_available
 
-from .utils import require_torch, slow, torch_device
+from .utils import require_multigpu, require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -35,7 +36,7 @@ if is_torch_available():
         PreTrainedModel,
         BertModel,
         BertConfig,
-        BERT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         top_k_top_p_filtering,
     )
 
@@ -44,7 +45,7 @@ def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__.keys():
         if "_range" in key or "_std" in key or "initializer_factor" in key:
-            setattr(configs_no_init, key, 0.0)
+            setattr(configs_no_init, key, 1e-10)
     return configs_no_init
 
 
@@ -58,6 +59,7 @@ class ModelTesterMixin:
     test_pruning = True
     test_resize_embeddings = True
     test_head_masking = True
+    test_missing_keys = True
     is_encoder_decoder = False
 
     def test_save_load(self):
@@ -94,7 +96,7 @@ class ModelTesterMixin:
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     self.assertIn(
-                        param.data.mean().item(),
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
                         msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
                     )
@@ -123,6 +125,9 @@ class ModelTesterMixin:
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        chunk_length = getattr(self.model_tester, "chunk_length", None)
+        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
+            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
             config.output_attentions = True
@@ -136,17 +141,23 @@ class ModelTesterMixin:
             self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
+
+            if chunk_length is not None:
+                self.assertListEqual(
+                    list(attentions[0].shape[-4:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                )
+            else:
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                )
             out_len = len(outputs)
 
             if self.is_encoder_decoder:
-                correct_outlen = (
-                    4  # decoder_features_or_logits, decoder_attentions, encoder_features, encoder_attentions
-                )
+                correct_outlen = 4
                 decoder_attention_idx = 1
+
                 if "lm_labels" in inputs_dict:  # loss will come first
                     correct_outlen += 1  # compute loss
                     decoder_attention_idx += 1
@@ -174,10 +185,16 @@ class ModelTesterMixin:
 
             self_attentions = outputs[-1]
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
+            if chunk_length is not None:
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-4:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                )
+            else:
+                self.assertListEqual(
+                    list(self_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                )
 
     def test_torchscript(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -464,14 +481,16 @@ class ModelTesterMixin:
             self.assertEqual(model.config.output_attentions, False)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
+
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                    seq_length = seq_length * self.model_tester.chunk_length
+            else:
+                seq_length = self.model_tester.seq_length
+
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [
-                    self.model_tester.encoder_seq_length
-                    if hasattr(self.model_tester, "encoder_seq_length")
-                    else self.model_tester.seq_length,
-                    self.model_tester.hidden_size,
-                ],
+                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
 
     def test_resize_tokens_embeddings(self):
@@ -483,6 +502,9 @@ class ModelTesterMixin:
             config = copy.deepcopy(original_config)
             model = model_class(config)
             model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
 
             model_vocab_size = config.vocab_size
             # Retrieve the embeddings and clone theme
@@ -527,6 +549,8 @@ class ModelTesterMixin:
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
 
     def test_correct_missing_keys(self):
+        if not self.test_missing_keys:
+            return
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -621,59 +645,143 @@ class ModelTesterMixin:
             with torch.no_grad():
                 model(**inputs_dict)
 
-    def test_lm_head_model_random_generate(self):
-
+    def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict.get("input_ids")
+        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
 
-        if self.is_encoder_decoder:
-            config.output_past = True  # needed for Bart TODO: might have to update for other encoder-decoder models
+        # make sure that input_ids is at most of size 15
+        input_ids = input_ids[..., :15]
 
+        # iterate over all generative models
         for model_class in self.all_generative_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
+            model = model_class(config).to(torch_device)
             model.eval()
 
             if config.bos_token_id is None:
+                # if bos token id is not defined, model needs input_ids
                 with self.assertRaises(AssertionError):
                     model.generate(do_sample=True, max_length=5)
-                # batch_size = 1
-                self._check_generated_tokens(model.generate(input_ids, do_sample=True))
-                # batch_size = 1, num_beams > 1
-                self._check_generated_tokens(model.generate(input_ids, do_sample=True, num_beams=3))
+                # num_return_sequences = 1
+                self._check_generated_ids(model.generate(input_ids, do_sample=True))
             else:
-                # batch_size = 1
-                self._check_generated_tokens(model.generate(do_sample=True, max_length=5))
-                # batch_size = 1, num_beams > 1
-                self._check_generated_tokens(model.generate(do_sample=True, max_length=5, num_beams=3))
+                # num_return_sequences = 1
+                self._check_generated_ids(model.generate(do_sample=True, max_length=5))
 
             with self.assertRaises(AssertionError):
-                # generating multiple sequences when greedy no beam generation
+                # generating multiple sequences when no beam search generation
                 # is not allowed as it would always generate the same sequences
                 model.generate(input_ids, do_sample=False, num_return_sequences=2)
+
+            # num_return_sequences > 1, sample
+            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_return_sequences=2))
+
+            # check bad words tokens language generation
+            # create list of 1-seq bad token and list of 2-seq of bad tokens
+            bad_words_ids = [
+                self._generate_random_bad_tokens(1, model.config),
+                self._generate_random_bad_tokens(2, model.config),
+            ]
+            output_tokens = model.generate(
+                input_ids, do_sample=True, bad_words_ids=bad_words_ids, num_return_sequences=2
+            )
+            # only count generated tokens
+            generated_ids = output_tokens[:, input_ids.shape[-1] :]
+            self.assertFalse(self._check_match_tokens(generated_ids.tolist(), bad_words_ids))
+
+    def test_lm_head_model_random_beam_search_generate(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = (inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]).to(
+            torch_device
+        )
+
+        # make sure that input_ids is at most of size 15
+        input_ids = input_ids[..., :15]
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+
+            if config.bos_token_id is None:
+                # if bos token id is not defined mobel needs input_ids, num_return_sequences = 1
+                self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2))
+            else:
+                # num_return_sequences = 1
+                self._check_generated_ids(model.generate(do_sample=True, max_length=5, num_beams=2))
 
             with self.assertRaises(AssertionError):
                 # generating more sequences than having beams leads is not possible
                 model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 
-            # batch_size > 1, sample
-            self._check_generated_tokens(model.generate(input_ids, do_sample=True, num_return_sequences=3))
-            # batch_size > 1, greedy
-            self._check_generated_tokens(model.generate(input_ids, do_sample=False))
+            # num_return_sequences > 1, sample
+            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2, num_return_sequences=2,))
+            # num_return_sequences > 1, greedy
+            self._check_generated_ids(model.generate(input_ids, do_sample=False, num_beams=2, num_return_sequences=2))
 
-            # batch_size > 1, num_beams > 1, sample
-            self._check_generated_tokens(
-                model.generate(input_ids, do_sample=True, num_beams=3, num_return_sequences=3,)
+            # check bad words tokens language generation
+            # create list of 1-seq bad token and list of 2-seq of bad tokens
+            bad_words_ids = [
+                self._generate_random_bad_tokens(1, model.config),
+                self._generate_random_bad_tokens(2, model.config),
+            ]
+            output_tokens = model.generate(
+                input_ids, do_sample=False, bad_words_ids=bad_words_ids, num_beams=2, num_return_sequences=2
             )
-            # batch_size > 1, num_beams > 1, greedy
-            self._check_generated_tokens(
-                model.generate(input_ids, do_sample=False, num_beams=3, num_return_sequences=3)
-            )
+            # only count generated tokens
+            generated_ids = output_tokens[:, input_ids.shape[-1] :]
+            self.assertFalse(self._check_match_tokens(generated_ids.tolist(), bad_words_ids))
 
-    def _check_generated_tokens(self, output_ids):
+    def _generate_random_bad_tokens(self, num_bad_tokens: int, config) -> List[int]:
+        # special tokens cannot be bad tokens
+        special_tokens = [x for x in [config.bos_token_id, config.eos_token_id, config.pad_token_id] if x is not None]
+        # create random bad tokens that are not special tokens
+        bad_tokens = []
+        while len(bad_tokens) < num_bad_tokens:
+            token = ids_tensor((1, 1), self.model_tester.vocab_size).squeeze(0).cpu().numpy()[0]
+            if token not in special_tokens:
+                bad_tokens.append(token)
+        return bad_tokens
+
+    def _check_generated_ids(self, output_ids):
         for token_id in output_ids[0].tolist():
             self.assertGreaterEqual(token_id, 0)
             self.assertLess(token_id, self.model_tester.vocab_size)
+
+    def _check_match_tokens(self, generated_ids, bad_words_ids):
+        # for all bad word tokens
+        for bad_word_ids in bad_words_ids:
+            # for all slices in batch
+            for generated_ids_slice in generated_ids:
+                # for all word idx
+                for i in range(len(bad_word_ids), len(generated_ids_slice)):
+                    # if tokens match
+                    if generated_ids_slice[i - len(bad_word_ids) : i] == bad_word_ids:
+                        return True
+        return False
+
+    @require_multigpu
+    def test_multigpu_data_parallel_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # some params shouldn't be scattered by nn.DataParallel
+        # so just remove them if they are present.
+        blacklist_non_batched_params = ["head_mask"]
+        for k in blacklist_non_batched_params:
+            inputs_dict.pop(k, None)
+
+        # move input tensors to cuda:O
+        for k, v in inputs_dict.items():
+            if torch.is_tensor(v):
+                inputs_dict[k] = v.to(0)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            model.to(0)
+            model.eval()
+
+            # Wrap model in nn.DataParallel
+            model = torch.nn.DataParallel(model)
+            with torch.no_grad():
+                _ = model(**inputs_dict)
 
 
 global_rng = random.Random()
@@ -696,7 +804,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
 
 
 def floats_tensor(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor of the shape within the vocab size."""
+    """Creates a random float32 tensor"""
     if rng is None:
         rng = global_rng
 
@@ -716,7 +824,7 @@ class ModelUtilsTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = BertConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, PretrainedConfig)

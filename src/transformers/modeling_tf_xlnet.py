@@ -32,14 +32,16 @@ from .modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
+from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
 
-TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-tf_model.h5",
-    "xlnet-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-tf_model.h5",
-}
+TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xlnet-base-cased",
+    "xlnet-large-cased",
+    # See all XLNet models at https://huggingface.co/models?filter=xlnet
+]
 
 
 def gelu(x):
@@ -357,7 +359,6 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.output_past = config.output_past
 
         self.mem_len = config.mem_len
         self.reuse_len = config.reuse_len
@@ -502,6 +503,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        use_cache=True,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -514,8 +516,9 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             input_mask = inputs[6] if len(inputs) > 6 else input_mask
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
-            assert len(inputs) <= 9, "Too many inputs."
-        elif isinstance(inputs, dict):
+            use_cache = inputs[9] if len(inputs) > 9 else use_cache
+            assert len(inputs) <= 10, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             mems = inputs.get("mems", mems)
@@ -525,7 +528,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             input_mask = inputs.get("input_mask", input_mask)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 9, "Too many inputs."
+            use_cache = inputs.get("use_cache", use_cache)
+            assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -583,8 +587,9 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
         if data_mask is not None:
             # all mems can be attended to
-            mems_mask = tf.zeros([shape_list(data_mask)[0], mlen, bsz], dtype=dtype_float)
-            data_mask = tf.concat([mems_mask, data_mask], axis=1)
+            if mlen > 0:
+                mems_mask = tf.zeros([shape_list(data_mask)[0], mlen, bsz], dtype=dtype_float)
+                data_mask = tf.concat([mems_mask, data_mask], axis=1)
             if attn_mask is None:
                 attn_mask = data_mask[:, :, :, None]
             else:
@@ -595,7 +600,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
         if attn_mask is not None:
             non_tgt_mask = -tf.eye(qlen, dtype=dtype_float)
-            non_tgt_mask = tf.concat([tf.zeros([qlen, mlen], dtype=dtype_float), non_tgt_mask], axis=-1)
+            if mlen > 0:
+                non_tgt_mask = tf.concat([tf.zeros([qlen, mlen], dtype=dtype_float), non_tgt_mask], axis=-1)
             non_tgt_mask = tf.cast((attn_mask + non_tgt_mask[:, :, None, None]) > 0, dtype=dtype_float)
         else:
             non_tgt_mask = None
@@ -618,8 +624,11 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # Segment embedding
         if token_type_ids is not None:
             # Convert `token_type_ids` to one-hot `seg_mat`
-            mem_pad = tf.zeros([mlen, bsz], dtype=tf.int32)
-            cat_ids = tf.concat([mem_pad, token_type_ids], 0)
+            if mlen > 0:
+                mem_pad = tf.zeros([mlen, bsz], dtype=tf.int32)
+                cat_ids = tf.concat([mem_pad, token_type_ids], 0)
+            else:
+                cat_ids = token_type_ids
 
             # `1` indicates not in the same segment [qlen x klen x bsz]
             seg_mat = tf.cast(tf.logical_not(tf.equal(token_type_ids[:, None], cat_ids[None, :])), tf.int32)
@@ -637,14 +646,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads] (a head_mask for each layer)
         # and head_mask is converted to shape [num_hidden_layers x qlen x klen x bsz x n_head]
         if head_mask is not None:
-            if head_mask.dim() == 1:
-                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0)
-                head_mask = head_mask.expand(self.n_layer, -1, -1, -1, -1)
-            elif head_mask.dim() == 2:
-                head_mask = head_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1)
-            head_mask = head_mask.to(
-                dtype=next(self.parameters()).dtype
-            )  # switch to fload if need + fp16 compatibility
+            raise NotImplementedError
         else:
             head_mask = [None] * self.n_layer
 
@@ -656,7 +658,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         hidden_states = []
         for i, layer_module in enumerate(self.layer):
             # cache new mems
-            if self.mem_len is not None and self.mem_len > 0 and self.output_past:
+            if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
                 new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
             if self.output_hidden_states:
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
@@ -678,7 +680,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         outputs = (tf.transpose(output, perm=(1, 0, 2)),)
 
-        if self.mem_len is not None and self.mem_len > 0 and self.output_past:
+        if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
             outputs = outputs + (new_mems,)
 
         if self.output_hidden_states:
@@ -700,7 +702,6 @@ class TFXLNetPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = XLNetConfig
-    pretrained_model_archive_map = TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
 
 
@@ -778,10 +779,12 @@ XLNET_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        use_cache (:obj:`bool`):
+            If `use_cache` is True, `mems` are returned and can be used to speed up decoding (see `mems`). Defaults to `True`.
 """
 
 
@@ -847,7 +850,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_loss.input_embeddings
 
-    def prepare_inputs_for_generation(self, inputs, past, **model_kwargs):
+    def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = inputs.shape[0]
@@ -865,7 +868,12 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
         target_mapping_seq_end = tf.ones((effective_batch_size, 1, 1), dtype=tf.float32)
         target_mapping = tf.concat([target_mapping, target_mapping_seq_end], axis=-1)
 
-        inputs = {"inputs": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping}
+        inputs = {
+            "inputs": inputs,
+            "perm_mask": perm_mask,
+            "target_mapping": target_mapping,
+            "use_cache": kwargs["use_cache"],
+        }
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:
