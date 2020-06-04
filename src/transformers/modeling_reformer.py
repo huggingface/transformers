@@ -318,7 +318,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         attention_mask=None,
         head_mask=None,
         num_hashes=None,
-        do_output_attentions=False,
+        output_attentions=False,
         buckets=None,
         **kwargs
     ):
@@ -444,7 +444,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         out_vectors = self._merge_hidden_size_dims(out_vectors, self.num_attention_heads, self.attention_head_size)
 
-        if do_output_attentions is False:
+        if output_attentions is False:
             attention_probs = ()
 
         return LSHSelfAttentionOutput(hidden_states=out_vectors, attention_probs=attention_probs, buckets=buckets)
@@ -801,7 +801,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         self.register_buffer("mask_value_float16", torch.tensor(-1e4))
         self.register_buffer("mask_value_float32", torch.tensor(-1e9))
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None, do_output_attentions=False, **kwargs):
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, **kwargs):
         sequence_length = hidden_states.shape[1]
         batch_size = hidden_states.shape[0]
 
@@ -921,7 +921,7 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
 
         out_vectors = self._merge_hidden_size_dims(out_vectors, self.num_attention_heads, self.attention_head_size)
 
-        if do_output_attentions is False:
+        if output_attentions is False:
             attention_probs = ()
 
         return LocalSelfAttentionOutput(hidden_states=out_vectors, attention_probs=attention_probs)
@@ -1001,7 +1001,7 @@ class ReformerAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
         num_hashes=None,
-        do_output_attentions=False,
+        output_attentions=False,
         buckets=None,
     ):
         hidden_states = self.layer_norm(hidden_states)
@@ -1012,7 +1012,7 @@ class ReformerAttention(nn.Module):
             head_mask=head_mask,
             attention_mask=attention_mask,
             num_hashes=num_hashes,
-            do_output_attentions=do_output_attentions,
+            output_attentions=output_attentions,
             buckets=buckets,
         )
         attention_output = self.output(self_attention_outputs.hidden_states)
@@ -1139,7 +1139,7 @@ class ReformerLayer(nn.Module):
         attention_mask=None,
         head_mask=None,
         num_hashes=None,
-        do_output_attentions=False,
+        output_attentions=False,
     ):
         with torch.no_grad():
             # every forward pass we sample a different seed
@@ -1151,7 +1151,7 @@ class ReformerLayer(nn.Module):
                 head_mask=head_mask,
                 attention_mask=attention_mask,
                 num_hashes=num_hashes,
-                do_output_attentions=do_output_attentions,
+                output_attentions=output_attentions,
             )
             attn_output = attn_outputs.hidden_states
 
@@ -1257,7 +1257,7 @@ class _ReversibleFunction(Function):
         all_hidden_states,
         all_attentions,
         do_output_hidden_states,
-        do_output_attentions,
+        output_attentions,
     ):
         all_buckets = ()
 
@@ -1274,13 +1274,13 @@ class _ReversibleFunction(Function):
                 attention_mask=attention_mask,
                 head_mask=layer_head_mask,
                 num_hashes=num_hashes,
-                do_output_attentions=do_output_attentions,
+                output_attentions=output_attentions,
             )
             attn_output = layer_outputs.attn_output
             hidden_states = layer_outputs.hidden_states
             all_buckets = all_buckets + (layer_outputs.buckets,)
 
-            if do_output_attentions:
+            if output_attentions:
                 all_attentions.append(layer_outputs.attention_probs)
 
         # Add last layer
@@ -1361,7 +1361,7 @@ class ReformerEncoder(nn.Module):
         head_mask=None,
         num_hashes=None,
         do_output_hidden_states=False,
-        do_output_attentions=False,
+        output_attentions=False,
     ):
         # hidden_states and attention lists to be filled if wished
         all_hidden_states = []
@@ -1378,7 +1378,7 @@ class ReformerEncoder(nn.Module):
             all_hidden_states,
             all_attentions,
             do_output_hidden_states,
-            do_output_attentions,
+            output_attentions,
         )
 
         # Apply layer norm to concatenated hidden states
@@ -1549,7 +1549,7 @@ class ReformerModel(ReformerPreTrainedModel):
         inputs_embeds=None,
         num_hashes=None,
         do_output_hidden_states=False,
-        do_output_attentions=False,
+        output_attentions=False,
     ):
         r"""
     Return:
@@ -1561,7 +1561,7 @@ class ReformerModel(ReformerPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``do_output_attentions=True``):
+        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1641,7 +1641,7 @@ class ReformerModel(ReformerPreTrainedModel):
             attention_mask=attention_mask,
             num_hashes=num_hashes,
             do_output_hidden_states=do_output_hidden_states,
-            do_output_attentions=do_output_attentions,
+            output_attentions=output_attentions,
         )
         sequence_output = encoder_outputs.hidden_states
 
@@ -1653,7 +1653,7 @@ class ReformerModel(ReformerPreTrainedModel):
         # TODO(PVP): Replace by named tuple after namedtuples are introduced in the library.
         if do_output_hidden_states is True:
             outputs = outputs + (encoder_outputs.all_hidden_states,)
-        if do_output_attentions is True:
+        if output_attentions is True:
             outputs = outputs + (encoder_outputs.all_attentions,)
         return outputs
 
@@ -1742,7 +1742,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         num_hashes=None,
         labels=None,
         do_output_hidden_states=False,
-        do_output_attentions=False,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1762,7 +1762,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``do_output_attentions=True``):
+        all_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1791,7 +1791,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
             do_output_hidden_states=do_output_hidden_states,
-            do_output_attentions=do_output_attentions,
+            output_attentions=output_attentions,
         )
 
         sequence_output = reformer_outputs[0]
