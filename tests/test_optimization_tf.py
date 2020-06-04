@@ -47,7 +47,7 @@ class OptimizationFTest(unittest.TestCase):
         with strategy.scope():
             accumulator = GradientAccumulator()
             variable = tf.Variable([4.0, 3.0])
-            optimizer = create_optimizer(5e-5, 10, 5)
+            optimizer, _ = create_optimizer(5e-5, 10, 5)
             gradient_placeholder = tf.Variable([0.0, 0.0], trainable=False)
 
         def accumulate_on_replica(gradient):

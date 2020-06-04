@@ -14,27 +14,8 @@ if is_tf_available():
 
 @dataclass
 class TFTrainingArguments(TrainingArguments):
-    optimizer_name: str = field(
-        default="adam",
-        metadata={
-            "help": 'Name of a Tensorflow optimizer among "adadelta, adagrad, adam, adamax, ftrl, nadam, rmsprop, sgd, adamw"'
-        },
-    )
-    mode: str = field(
-        default="text-classification",
-        metadata={"help": 'Type of task, one of "text-classification", "token-classification", "question-answering"'},
-    )
-    loss_name: str = field(
-        default="SparseCategoricalCrossentropy",
-        metadata={
-            "help": "Name of a Tensorflow loss. For the list see: https://www.tensorflow.org/api_docs/python/tf/keras/losses"
-        },
-    )
     tpu_name: str = field(
         default=None, metadata={"help": "Name of TPU"},
-    )
-    end_lr: float = field(
-        default=0, metadata={"help": "End learning rate for optimizer"},
     )
     eval_steps: int = field(default=1000, metadata={"help": "Run an evaluation every X steps."})
     debug: bool = field(

@@ -352,173 +352,193 @@ if is_torch_available():
 # TensorFlow
 if is_tf_available():
     from .modeling_tf_utils import (
-        TFPreTrainedModel,
-        TFSharedEmbeddings,
-        TFSequenceSummary,
         shape_list,
         tf_top_k_top_p_filtering,
+        TFPreTrainedModel,
+        TFSequenceSummary,
+        TFSharedEmbeddings,
     )
     from .modeling_tf_auto import (
-        TFAutoModel,
-        TFAutoModelForPreTraining,
-        TFAutoModelForMultipleChoice,
-        TFAutoModelForSequenceClassification,
-        TFAutoModelForQuestionAnswering,
-        TFAutoModelWithLMHead,
-        TFAutoModelForTokenClassification,
         TF_MODEL_MAPPING,
+        TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         TF_MODEL_FOR_PRETRAINING_MAPPING,
-        TF_MODEL_WITH_LM_HEAD_MAPPING,
-        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-    )
-
-    from .modeling_tf_bert import (
-        TFBertPreTrainedModel,
-        TFBertMainLayer,
-        TFBertEmbeddings,
-        TFBertModel,
-        TFBertForPreTraining,
-        TFBertForMaskedLM,
-        TFBertForNextSentencePrediction,
-        TFBertForSequenceClassification,
-        TFBertForMultipleChoice,
-        TFBertForTokenClassification,
-        TFBertForQuestionAnswering,
-        TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_tf_gpt2 import (
-        TFGPT2PreTrainedModel,
-        TFGPT2MainLayer,
-        TFGPT2Model,
-        TFGPT2LMHeadModel,
-        TFGPT2DoubleHeadsModel,
-        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_tf_openai import (
-        TFOpenAIGPTPreTrainedModel,
-        TFOpenAIGPTMainLayer,
-        TFOpenAIGPTModel,
-        TFOpenAIGPTLMHeadModel,
-        TFOpenAIGPTDoubleHeadsModel,
-        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_tf_transfo_xl import (
-        TFTransfoXLPreTrainedModel,
-        TFTransfoXLMainLayer,
-        TFTransfoXLModel,
-        TFTransfoXLLMHeadModel,
-        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFAdaptiveEmbedding,
-    )
-
-    from .modeling_tf_xlnet import (
-        TFXLNetPreTrainedModel,
-        TFXLNetMainLayer,
-        TFXLNetModel,
-        TFXLNetLMHeadModel,
-        TFXLNetForSequenceClassification,
-        TFXLNetForTokenClassification,
-        TFXLNetForQuestionAnsweringSimple,
-        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_tf_xlm import (
-        TFXLMPreTrainedModel,
-        TFXLMMainLayer,
-        TFXLMModel,
-        TFXLMWithLMHeadModel,
-        TFXLMForSequenceClassification,
-        TFXLMForQuestionAnsweringSimple,
-        TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_tf_xlm_roberta import (
-        TFXLMRobertaForMaskedLM,
-        TFXLMRobertaModel,
-        TFXLMRobertaForSequenceClassification,
-        TFXLMRobertaForTokenClassification,
-        TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_tf_roberta import (
-        TFRobertaPreTrainedModel,
-        TFRobertaMainLayer,
-        TFRobertaModel,
-        TFRobertaForMaskedLM,
-        TFRobertaForSequenceClassification,
-        TFRobertaForTokenClassification,
-        TFRobertaForQuestionAnswering,
-        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_tf_camembert import (
-        TFCamembertModel,
-        TFCamembertForMaskedLM,
-        TFCamembertForSequenceClassification,
-        TFCamembertForTokenClassification,
-        TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_tf_flaubert import (
-        TFFlaubertModel,
-        TFFlaubertWithLMHeadModel,
-        TFFlaubertForSequenceClassification,
-        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_tf_distilbert import (
-        TFDistilBertPreTrainedModel,
-        TFDistilBertMainLayer,
-        TFDistilBertModel,
-        TFDistilBertForMaskedLM,
-        TFDistilBertForSequenceClassification,
-        TFDistilBertForTokenClassification,
-        TFDistilBertForQuestionAnswering,
-        TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
-
-    from .modeling_tf_ctrl import (
-        TFCTRLPreTrainedModel,
-        TFCTRLModel,
-        TFCTRLLMHeadModel,
-        TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TFAutoModel,
+        TFAutoModelForMultipleChoice,
+        TFAutoModelForPreTraining,
+        TFAutoModelForQuestionAnswering,
+        TFAutoModelForSequenceClassification,
+        TFAutoModelForTokenClassification,
+        TFAutoModelWithLMHead,
     )
 
     from .modeling_tf_albert import (
-        TFAlbertPreTrainedModel,
-        TFAlbertMainLayer,
-        TFAlbertModel,
-        TFAlbertForPreTraining,
+        TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFAlbertForMaskedLM,
         TFAlbertForMultipleChoice,
-        TFAlbertForSequenceClassification,
+        TFAlbertForPreTraining,
         TFAlbertForQuestionAnswering,
-        TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFAlbertForSequenceClassification,
+        TFAlbertForTokenClassification,
+        TFAlbertMainLayer,
+        TFAlbertModel,
+        TFAlbertPreTrainedModel,
     )
 
-    from .modeling_tf_t5 import (
-        TFT5PreTrainedModel,
-        TFT5Model,
-        TFT5ForConditionalGeneration,
-        TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+    from .modeling_tf_bert import (
+        TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFBertEmbeddings,
+        TFBertForMaskedLM,
+        TFBertForMultipleChoice,
+        TFBertForNextSentencePrediction,
+        TFBertForPreTraining,
+        TFBertForQuestionAnswering,
+        TFBertForSequenceClassification,
+        TFBertForTokenClassification,
+        TFBertMainLayer,
+        TFBertModel,
+        TFBertPreTrainedModel,
+    )
+
+    from .modeling_tf_camembert import (
+        TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFCamembertForMaskedLM,
+        TFCamembertModel,
+        TFCamembertForMultipleChoice,
+        TFCamembertForQuestionAnswering,
+        TFCamembertForSequenceClassification,
+        TFCamembertForTokenClassification,
+    )
+
+    from .modeling_tf_ctrl import (
+        TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFCTRLLMHeadModel,
+        TFCTRLModel,
+        TFCTRLPreTrainedModel,
+    )
+
+    from .modeling_tf_distilbert import (
+        TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFDistilBertForMaskedLM,
+        TFDistilBertForMultipleChoice,
+        TFDistilBertForQuestionAnswering,
+        TFDistilBertForSequenceClassification,
+        TFDistilBertForTokenClassification,
+        TFDistilBertMainLayer,
+        TFDistilBertModel,
+        TFDistilBertPreTrainedModel,
     )
 
     from .modeling_tf_electra import (
-        TFElectraPreTrainedModel,
-        TFElectraModel,
-        TFElectraForPreTraining,
-        TFElectraForMaskedLM,
-        TFElectraForTokenClassification,
         TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFElectraForMaskedLM,
+        TFElectraForPreTraining,
+        TFElectraForQuestionAnswering,
+        TFElectraForTokenClassification,
+        TFElectraModel,
+        TFElectraPreTrainedModel,
+    )
+
+    from .modeling_tf_flaubert import (
+        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFFlaubertForMultipleChoice,
+        TFFlaubertForQuestionAnsweringSimple,
+        TFFlaubertForSequenceClassification,
+        TFFlaubertForTokenClassification,
+        TFFlaubertWithLMHeadModel,
+        TFFlaubertModel,
+    )
+
+    from .modeling_tf_gpt2 import (
+        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFGPT2DoubleHeadsModel,
+        TFGPT2LMHeadModel,
+        TFGPT2MainLayer,
+        TFGPT2Model,
+        TFGPT2PreTrainedModel,
+    )
+
+    from .modeling_tf_openai import (
+        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFOpenAIGPTDoubleHeadsModel,
+        TFOpenAIGPTLMHeadModel,
+        TFOpenAIGPTMainLayer,
+        TFOpenAIGPTModel,
+        TFOpenAIGPTPreTrainedModel,
+    )
+
+    from .modeling_tf_roberta import (
+        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFRobertaForMaskedLM,
+        TFRobertaForMultipleChoice,
+        TFRobertaForQuestionAnswering,
+        TFRobertaForSequenceClassification,
+        TFRobertaForTokenClassification,
+        TFRobertaMainLayer,
+        TFRobertaModel,
+        TFRobertaPreTrainedModel,
+    )
+
+    from .modeling_tf_t5 import (
+        TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFT5ForConditionalGeneration,
+        TFT5Model,
+        TFT5PreTrainedModel,
+    )
+
+    from .modeling_tf_transfo_xl import (
+        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFAdaptiveEmbedding,
+        TFTransfoXLLMHeadModel,
+        TFTransfoXLMainLayer,
+        TFTransfoXLModel,
+        TFTransfoXLPreTrainedModel,
+    )
+
+    from .modeling_tf_xlm import (
+        TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFXLMForMultipleChoice,
+        TFXLMForQuestionAnsweringSimple,
+        TFXLMForSequenceClassification,
+        TFXLMForTokenClassification,
+        TFXLMWithLMHeadModel,
+        TFXLMMainLayer,
+        TFXLMModel,
+        TFXLMPreTrainedModel,
+    )
+
+    from .modeling_tf_xlm_roberta import (
+        TF_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFXLMRobertaForMaskedLM,
+        TFXLMRobertaForMultipleChoice,
+        TFXLMRobertaForQuestionAnswering,
+        TFXLMRobertaForSequenceClassification,
+        TFXLMRobertaForTokenClassification,
+        TFXLMRobertaModel,
+    )
+
+    from .modeling_tf_xlnet import (
+        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFXLNetForMultipleChoice,
+        TFXLNetForQuestionAnsweringSimple,
+        TFXLNetForSequenceClassification,
+        TFXLNetForTokenClassification,
+        TFXLNetLMHeadModel,
+        TFXLNetMainLayer,
+        TFXLNetModel,
+        TFXLNetPreTrainedModel,
     )
 
     # Optimization
-    from .optimization_tf import WarmUp, create_optimizer, AdamWeightDecay, GradientAccumulator
+    from .optimization_tf import (
+        AdamWeightDecay,
+        create_optimizer,
+        GradientAccumulator,
+        WarmUp,
+    )
 
     # Trainer
     from .trainer_tf import TFTrainer
