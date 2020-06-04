@@ -81,6 +81,8 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["type"] = field.type
                 if field.default is not dataclasses.MISSING:
                     kwargs["default"] = field.default
+                elif field.default_factory is not dataclasses.MISSING:
+                    kwargs["default"] = field.default_factory()
                 else:
                     kwargs["required"] = True
             self.add_argument(field_name, **kwargs)
