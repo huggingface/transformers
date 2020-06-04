@@ -24,6 +24,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 CHEAP_ARGS = {
+    "alpha_hid": 0,
     "enc_only": False,
     "tgt_suffix": "",
     "resume_from_checkpoint": None,
@@ -144,6 +145,11 @@ class TestBartExamples(unittest.TestCase):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1,)
         self._bart_distiller_cli(updates)
 
+    def test_bdc_brewer(self):
+        updates = dict(student_encoder_layers=2, student_decoder_layers=1, alpha_hid=2.)
+        self._bart_distiller_cli(updates)
+
+
     def test_bdc_enc_only(self):
         updates = dict(alpha_mlm=0.0, alpha_ce=0.0, student_encoder_layers=1, enc_only=True, student_decoder_layers=2,
                        )
@@ -157,7 +163,6 @@ class TestBartExamples(unittest.TestCase):
         args.do_train = False
         args.output_dir = tempfile.mkdtemp(prefix="output_v2")
         eval_and_fix(args)
-
 
     def _bart_distiller_cli(self, updates):
         default_updates = dict(

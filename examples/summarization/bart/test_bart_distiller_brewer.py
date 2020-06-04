@@ -32,7 +32,7 @@ class TestDistiller(unittest.TestCase):
     @property
     def loader(self):
         DATA_DIR = "/Users/shleifer/Dropbox/cnn_tiny/"
-        dataset = SummarizationDataset(self.tok, data_dir=DATA_DIR, max_source_length=12, max_target_length=6)
+        dataset = SummarizationDataset.from_raw_data(self.tok, data_dir=DATA_DIR, max_source_length=12, max_target_length=6)
         dataloader = DataLoader(dataset, batch_size=2, collate_fn=dataset.collate_fn, shuffle=False)
         return dataloader
 
@@ -49,12 +49,12 @@ class TestDistiller(unittest.TestCase):
 
     def test_bdistiller_tiny(self):
         Path("distil_tiny_log_dir").mkdir(exist_ok=True)
-        teacher_model, student_model = make_teacher_and_student(teacher_cfg_kwargs, d_model=64)
+        teacher_model, student_model = make_teacher_and_student(teacher_cfg_kwargs, encoder_layers=1)
         train_config = TrainingConfig(device=DEFAULT_DEVICE, log_dir="distil_tiny_log_dir")
         # Matching different layers of the student and the teacher
         distill_config = DistillationConfig(
             intermediate_matches=[
-                # {'layer_T':0, 'layer_S':0, 'feature':'hidden', 'loss': 'hidden_mse','weight' : 1},
+                {'layer_T':0, 'layer_S':0, 'feature':'hidden', 'loss': 'hidden_mse','weight' : 1},
                 # {'layer_T':8, 'layer_S':2, 'feature':'hidden', 'loss': 'hidden_mse','weight' : 1}
             ]
         )

@@ -397,17 +397,19 @@ BART_LARGE_N_LAYERS = 12
 
 class SummarizationDistiller(SummarizationTrainer):
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss"]
+    teacher_kwargs = {}
 
     def __init__(self, hparams):
         assert Path(hparams.data_dir).exists()
 
         # Dump empty student model at a path, then call from_pretrained on it
-        teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher).eval()
+        teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher, **self.teacher_kwargs).eval()
 
         student_updates = {
             "decoder_layers": hparams.student_decoder_layers,
             "encoder_layers": hparams.student_encoder_layers,
         }
+        student_updates.update(self.teacher_kwargs)
         d_layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
         e_layers_to_copy: List = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
         hparams.layer_to_copy = d_layers_to_copy
@@ -575,8 +577,9 @@ class SummarizationDistiller(SummarizationTrainer):
         parser.add_argument("--alpha_ce", default=0.8, type=float)
         parser.add_argument("--alpha_mlm", default=0.2, type=float)
         parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
+        parser.add_argument("--alpha_hid", default=0., type=float, required=False, )
         parser.add_argument(
-            "--student_decoder_layers", default=6, type=int, required=False,
+            "--student_decoder_layers", default=12, type=int, required=False,
         )
         parser.add_argument(
             "--student_encoder_layers", default=12, type=int, required=False,
@@ -587,6 +590,8 @@ class SummarizationDistiller(SummarizationTrainer):
         parser.add_argument(
             "--enc_only", action="store_true", default=False,
         )
+
+
         parser.add_argument('--auto_scale_batch_size', default=False, action='store_true')
 
 
@@ -617,6 +622,57 @@ class EncoderDistiller(SummarizationDistiller):
         return (loss_encoder,)
 
 
+class BrewerDistiller(SummarizationDistiller):
+    loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
+    teacher_kwargs = {'output_hidden_states': True}
+
+    def _step(self, batch):
+        import ipdb;  ipdb.set_trace()
+        # assert is_frozen(self.teacher)
+        pad_token_id = self.tokenizer.pad_token_id
+        source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
+        y_ids = y[:, :-1].contiguous()
+        lm_labels = y[:, 1:].clone()
+        lm_labels[y[:, 1:] == pad_token_id] = -100
+        # noinspection PyCallingNonCallable
+        sloss, slogits, enc_outputs, enc_hidden_state = self(
+            source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
+        )
+        loss_encoder = torch.tensor(0.0).type_as(sloss)
+        if self.different_encoder:
+            with torch.no_grad():
+                teacher_enc_outputs, teacher_enc_hid = self.teacher.model.encoder(source_ids, attention_mask=source_mask)
+            if self.hparams.alpha_encoder_loss > 0:
+                loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, source_mask)
+        else:
+            teacher_enc_outputs = (enc_outputs,)
+        with torch.no_grad():
+            tloss, tlogits, _, thidden = self.teacher(
+                source_ids,
+                attention_mask=source_mask,
+                encoder_outputs=teacher_enc_outputs,
+                decoder_input_ids=y_ids,
+                lm_labels=lm_labels,
+            )
+        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(self.model.model.last_padding_mask, slogits, tlogits)
+        hid_loss_enc = self.calc_hidden_loss(source_mask, enc_hidden_state, teacher_enc_outputs, self.hparams.e_layer_to_copy)
+        hid_loss_dec = self.calc_hidden_loss(source_mask, enc_hidden_state, teacher_enc_outputs, self.hparams.layer_to_copy)
+
+        blended_loss = (
+            loss_ce * self.alpha_ce + self.alpha_mlm * sloss + self.hparams.alpha_encoder_loss * loss_encoder + self.alpha_hid * (hid_loss_enc + hid_loss_dec)
+        )
+        return blended_loss, loss_ce, sloss, loss_encoder
+
+    def calc_hidden_loss(self, attention_mask, hidden_states, hidden_states_T, matches):
+        mask = attention_mask.to(hidden_states[0])
+        valid_count = mask.sum() * hidden_states[0].size(-1)
+        hidden_loss = torch.sum([
+            (F.mse_loss(hidden_states[i], hidden_states_T[j], reduction='none') * mask.unsqueeze(-1)).sum() / valid_count
+            for i, j in enumerate(matches)
+        ])
+        return hidden_loss
+
+
 def main(args):
     Path(args.output_dir).mkdir(exist_ok=True)
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
@@ -626,8 +682,11 @@ def main(args):
         module_cls = SummarizationTrainer
     elif args.enc_only:
         module_cls = EncoderDistiller
+    elif args.alpha_hid > 0:
+        module_cls = BrewerDistiller
     else:
         module_cls = SummarizationDistiller
+    args.setup_cls: str = module_cls.__name__
 
     model: BaseTransformer = module_cls(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
@@ -649,6 +708,8 @@ def eval_and_fix(args):
         module_cls = SummarizationTrainer
     elif args.enc_only:
         module_cls = EncoderDistiller
+    elif args.alpha_hid > 0:
+        module_cls = BrewerDistiller
     else:
         module_cls = SummarizationDistiller
 
