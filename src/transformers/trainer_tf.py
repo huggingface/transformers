@@ -11,7 +11,12 @@ import tensorflow as tf
 from .modeling_tf_utils import TFPreTrainedModel, shape_list
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import (
-    PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, is_wandb_available, setup_wandb, log_metrics
+    PREFIX_CHECKPOINT_DIR,
+    EvalPrediction,
+    PredictionOutput,
+    is_wandb_available,
+    log_metrics,
+    setup_wandb,
 )
 from .training_args_tf import TFTrainingArguments
 
@@ -237,7 +242,7 @@ class TFTrainer:
                 metrics[f"eval_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
-        
+
     def evaluate(
         self, eval_dataset: Optional[tf.data.Dataset] = None, prediction_loss_only: Optional[bool] = None
     ) -> Dict[str, float]:
@@ -293,16 +298,17 @@ class TFTrainer:
 
                 if self.global_step == 1 and self.args.debug:
                     with self.tb_writer.as_default():
-                        tf.summary.trace_export(name="training", step=self.global_step, profiler_outdir=self.args.logging_dir)
+                        tf.summary.trace_export(
+                            name="training", step=self.global_step, profiler_outdir=self.args.logging_dir
+                        )
 
                 if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
-                    logs = {}
-                    results = self.evaluate()
+                    self.evaluate()
                     logger.info("Epoch {} Step {} Validation Metrics {}".format(epoch, self.global_step, logs))
 
                 if self.global_step % self.args.logging_steps == 0:
                     logs = {}
-                    logs['loss'] = training_loss.numpy()
+                    logs["loss"] = training_loss.numpy()
 
                     if callable(self.optimizer.learning_rate):
                         logs["learning_rate"] = self.optimizer.learning_rate(self.global_step).numpy()

@@ -22,7 +22,13 @@ from .data.data_collator import DataCollator, DefaultDataCollator
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .trainer_utils import (
-    PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, TrainOutput, is_wandb_available, setup_wandb, log_metrics
+    PREFIX_CHECKPOINT_DIR,
+    EvalPrediction,
+    PredictionOutput,
+    TrainOutput,
+    is_wandb_available,
+    log_metrics,
+    setup_wandb,
 )
 from .training_args import TrainingArguments, is_tpu_available
 
