@@ -539,6 +539,7 @@ class T5Block(nn.Module):
                 past_key_value_state=cross_attn_past_key_value_state,
                 query_length=query_length,
                 use_cache=use_cache,
+                output_attentions=output_attentions,
             )
             hidden_states = cross_attention_outputs[0]
             # Combine self attn and cross attn key value states
@@ -966,6 +967,7 @@ class T5Model(T5PreTrainedModel):
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         if use_cache is True:
@@ -1117,6 +1119,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         # insert decoder past at right place

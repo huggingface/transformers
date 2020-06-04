@@ -374,7 +374,14 @@ class XLNetRelativeAttention(nn.Module):
             if target_mapping is not None:
                 q_head_g = torch.einsum("mbnd,mlb->lbnd", q_head_g, target_mapping)
                 attn_vec_g = self.rel_attn_core(
-                    q_head_g, k_head_h, v_head_h, k_head_r, seg_mat=seg_mat, attn_mask=attn_mask_g, head_mask=head_mask
+                    q_head_g,
+                    k_head_h,
+                    v_head_h,
+                    k_head_r,
+                    seg_mat=seg_mat,
+                    attn_mask=attn_mask_g,
+                    head_mask=head_mask,
+                    output_attentions=output_attentions,
                 )
 
                 if output_attentions:
