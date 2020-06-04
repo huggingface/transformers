@@ -133,6 +133,10 @@ class TrainingArguments:
     )
     tpu_metrics_debug: bool = field(default=False, metadata={"help": "TPU: Whether to print debug metrics"})
 
+    dataloader_drop_last: bool = field(
+        default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
+    )
+
     @property
     def train_batch_size(self) -> int:
         if self.per_gpu_train_batch_size:
