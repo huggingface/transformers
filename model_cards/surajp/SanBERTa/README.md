@@ -9,7 +9,7 @@ language: sanskrit
 ### Dataset:
 
 [Wikipedia articles](https://www.kaggle.com/disisbig/sanskrit-wikipedia-articles) (used in [iNLTK](https://github.com/goru001/nlp-for-sanskrit)).
-Evaluation set from this.
+It contains evaluation set.
 
 [Sanskrit scraps from CLTK](http://cltk.org/)
 
