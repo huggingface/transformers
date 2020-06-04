@@ -45,6 +45,8 @@ class DprConfig(PretrainedConfig):
         k: int = 100,
         pretrained_model_cfg: str = "bert-base-uncased",
         projection_dim: int = 0,
+        sequence_length: int = 512,
+        do_lower_case: bool = True,
         biencoder_model_file: Optional[str] = None,
         reader_model_file: Optional[str] = None,
         **kwargs
@@ -53,6 +55,7 @@ class DprConfig(PretrainedConfig):
         self.k = k
         self.pretrained_model_cfg = pretrained_model_cfg
         self.projection_dim = projection_dim
+        self.sequence_length = sequence_length
+        self.do_lower_case = do_lower_case
         self.biencoder_model_file = biencoder_model_file
         self.reader_model_file = reader_model_file
-

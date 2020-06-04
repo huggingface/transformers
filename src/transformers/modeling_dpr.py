@@ -21,7 +21,7 @@
 
 import collections
 import logging
-from typing import Tuple
+from typing import List, Tuple
 
 import torch
 from torch import Tensor as T
@@ -32,6 +32,7 @@ from .configuration_dpr import DprConfig
 from .file_utils import add_start_docstrings
 from .modeling_bert import BertConfig, BertModel
 from .modeling_utils import PreTrainedModel
+from .tokenization_bert import BertTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -64,7 +65,7 @@ class DprBertEncoder(BertModel):
         self.init_weights()
 
     @classmethod
-    def init_encoder(cls, cfg_name: str, projection_dim: int = 0, dropout: float = 0., **kwargs) -> BertModel:
+    def init_encoder(cls, cfg_name: str, projection_dim: int = 0, dropout: float = 0.0, **kwargs) -> BertModel:
         cfg = BertConfig.from_pretrained(cfg_name)
         if dropout != 0:
             cfg.attention_probs_dropout_prob = dropout
@@ -137,6 +138,25 @@ class DprBiEncoder(nn.Module):
 ReaderBatch = collections.namedtuple("ReaderBatch", ["input_ids", "start_positions", "end_positions", "answers_mask"])
 
 
+class ReaderPassage(object):
+    """
+    Container to collect and cache all Q&A passages related attributes before generating the reader input
+    """
+
+    def __init__(self, id=None, text: str = None, title: str = None, score=None, has_answer: bool = None):
+        self.id = id
+        # string passage representations
+        self.passage_text = text
+        self.title = title
+        self.score = score
+        self.passage_token_ids = None
+        # offset of the actual passage (i.e. not a question or may be title) in the sequence_ids
+        self.passage_offset = None
+        self.answers_spans = None
+        # passage token ids
+        self.sequence_ids: T = None
+
+
 class Reader(nn.Module):
     def __init__(self, encoder: nn.Module, hidden_size):
         super(Reader, self).__init__()
@@ -144,7 +164,7 @@ class Reader(nn.Module):
         self.qa_outputs = nn.Linear(hidden_size, 2)
         self.qa_classifier = nn.Linear(hidden_size, 1)
 
-    def forward(self, input_ids: T, attention_mask: T, start_positions=None, end_positions=None, answer_mask=None):
+    def forward(self, input_ids: T, attention_mask: T):
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         N, M, L = input_ids.size()
         start_logits, end_logits, relevance_logits = self._forward(
@@ -160,6 +180,93 @@ class Reader(nn.Module):
         end_logits = end_logits.squeeze(-1)
         rank_logits = self.qa_classifier(sequence_output[:, 0, :])
         return start_logits, end_logits, rank_logits
+
+
+#############
+# Tensorizer
+#############
+
+
+class DprBertTensorizer:
+    def __init__(self, tokenizer: BertTokenizer, max_length: int):
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+
+    def text_to_tensor(
+        self, text: str, title: str = None, add_special_tokens: bool = True, pad_to_max_length: bool = True
+    ):
+        text = text.strip()
+
+        # tokenizer automatic padding is explicitly disabled since its inconsistent behavior
+        if title:
+            token_ids = self.tokenizer.encode(
+                title,
+                text_pair=text,
+                add_special_tokens=add_special_tokens,
+                max_length=self.max_length,
+                pad_to_max_length=False,
+            )
+        else:
+            token_ids = self.tokenizer.encode(
+                text, add_special_tokens=add_special_tokens, max_length=self.max_length, pad_to_max_length=False
+            )
+
+        seq_len = self.max_length
+        if pad_to_max_length and len(token_ids) < seq_len:
+            token_ids = token_ids + [self.tokenizer.pad_token_id] * (seq_len - len(token_ids))
+        if len(token_ids) > seq_len:
+            token_ids = token_ids[0:seq_len]
+            token_ids[-1] = self.tokenizer.sep_token_id
+
+        return torch.tensor(token_ids)
+
+    def get_pair_separator_ids(self) -> T:
+        return torch.tensor([self.tokenizer.sep_token_id])
+
+    def get_pad_id(self) -> int:
+        return self.tokenizer.pad_token_type_id
+
+    def get_attn_mask(self, tokens_tensor: T) -> T:
+        return tokens_tensor != self.get_pad_id()
+
+    def is_sub_word_id(self, token_id: int):
+        token = self.tokenizer.convert_ids_to_tokens([token_id])[0]
+        return token.startswith("##") or token.startswith(" ##")
+
+    def to_string(self, token_ids, skip_special_tokens=True):
+        return self.tokenizer.decode(token_ids, skip_special_tokens=True)
+
+    def set_pad_to_max(self, do_pad: bool):
+        self.pad_to_max = do_pad
+
+
+def create_reader_sample_ids(
+    sample: ReaderPassage, question: str, tensorizer: DprBertTensorizer, pad_to_max_length=True
+):
+    def _concat_pair(t1: T, t2: T, middle_sep: T = None, tailing_sep: T = None):
+        middle = [middle_sep] if middle_sep else []
+        r = [t1] + middle + [t2] + ([tailing_sep] if tailing_sep else [])
+        return torch.cat(r, dim=0), t1.size(0) + len(middle)
+
+    def _pad_to_len(seq: T, pad_id: int, max_len: int):
+        s_len = seq.size(0)
+        if s_len > max_len:
+            return seq[0:max_len]
+        return torch.cat([seq, torch.Tensor().new_full((max_len - s_len,), pad_id, dtype=torch.long)], dim=0)
+
+    question_and_title = tensorizer.text_to_tensor(
+        sample.title, title=question, add_special_tokens=True, pad_to_max_length=False
+    )
+    sample.passage_token_ids = tensorizer.text_to_tensor(
+        sample.passage_text, add_special_tokens=False, pad_to_max_length=False
+    )
+    all_concatenated, shift = _concat_pair(question_and_title, sample.passage_token_ids, None)
+    sample.sequence_ids = all_concatenated
+    if pad_to_max_length:
+        sample.sequence_ids = _pad_to_len(sample.sequence_ids, tensorizer.get_pad_id(), tensorizer.max_length)
+    sample.passage_offset = shift
+    assert shift > 1
+    return sample
 
 
 ##############
@@ -179,12 +286,141 @@ def get_bert_biencoder_components(config: DprConfig, **kwargs):
 
 
 def get_bert_reader_components(config: DprConfig, **kwargs):
-    encoder = DprBertEncoder.init_encoder(
-        config.pretrained_model_cfg, projection_dim=config.projection_dim, **kwargs
-    )
+    encoder = DprBertEncoder.init_encoder(config.pretrained_model_cfg, projection_dim=config.projection_dim, **kwargs)
     hidden_size = encoder.config.hidden_size
     reader = Reader(encoder, hidden_size)
     return reader
+
+
+def get_bert_tensorizer(config: DprConfig, tokenizer=None):
+    if not tokenizer:
+        tokenizer = BertTokenizer.from_pretrained(config.pretrained_model_cfg, do_lower_case=config.do_lower_case)
+    return DprBertTensorizer(tokenizer, config.sequence_length)
+
+
+####################
+# Predictions utils
+####################
+
+
+SpanPrediction = collections.namedtuple(
+    "SpanPrediction", ["prediction_text", "span_score", "relevance_score", "passage_index", "passage_token_ids"]
+)
+
+
+def get_best_spans(
+    tensorizer: DprBertTensorizer,
+    start_logits: List,
+    end_logits: List,
+    ctx_ids: List,
+    max_answer_length: int,
+    passage_idx: int,
+    relevance_score: float,
+    top_spans: int = 1,
+) -> List[SpanPrediction]:
+    """
+    Finds the best answer span for the extractive Q&A model
+    """
+    scores = []
+    for (i, s) in enumerate(start_logits):
+        for (j, e) in enumerate(end_logits[i : i + max_answer_length]):
+            scores.append(((i, i + j), s + e))
+
+    scores = sorted(scores, key=lambda x: x[1], reverse=True)
+
+    chosen_span_intervals = []
+    best_spans = []
+
+    for (start_index, end_index), score in scores:
+        assert start_index <= end_index
+        length = end_index - start_index + 1
+        assert length <= max_answer_length
+
+        if any(
+            [
+                start_index <= prev_start_index <= prev_end_index <= end_index
+                or prev_start_index <= start_index <= end_index <= prev_end_index
+                for (prev_start_index, prev_end_index) in chosen_span_intervals
+            ]
+        ):
+            continue
+
+        # extend bpe subtokens to full tokens
+        start_index, end_index = _extend_span_to_full_words(tensorizer, ctx_ids, (start_index, end_index))
+
+        predicted_answer = tensorizer.to_string(ctx_ids[start_index : end_index + 1])
+        best_spans.append(SpanPrediction(predicted_answer, score, relevance_score, passage_idx, ctx_ids))
+        chosen_span_intervals.append((start_index, end_index))
+
+        if len(chosen_span_intervals) == top_spans:
+            break
+    return best_spans
+
+
+def _extend_span_to_full_words(
+    tensorizer: DprBertTensorizer, tokens: List[int], span: Tuple[int, int]
+) -> Tuple[int, int]:
+    start_index, end_index = span
+    max_len = len(tokens)
+    while start_index > 0 and tensorizer.is_sub_word_id(tokens[start_index]):
+        start_index -= 1
+
+    while end_index < max_len - 1 and tensorizer.is_sub_word_id(tokens[end_index + 1]):
+        end_index += 1
+
+    return start_index, end_index
+
+
+def _get_sorted_prediction(
+    start_logits,
+    end_logits,
+    relevance_logits,
+    all_reader_passages: List[List[ReaderPassage]],
+    tensorizer: DprBertTensorizer,
+    max_answer_length: int,
+) -> List[List[SpanPrediction]]:
+
+    questions_num, passages_per_question = relevance_logits.size()
+
+    _, idxs = torch.sort(relevance_logits, dim=1, descending=True,)
+
+    batch_results = []
+    for q in range(questions_num):
+        reader_passages = all_reader_passages[q]
+        non_empty_passages_num = len(reader_passages)
+        nbest = []
+        for p in range(passages_per_question):
+            passage_idx = idxs[q, p].item()
+            if passage_idx >= non_empty_passages_num:  # empty passage selected, skip
+                continue
+            reader_passage = reader_passages[passage_idx]
+            sequence_ids = reader_passage.sequence_ids
+            sequence_len = sequence_ids.size(0)
+            # assuming question & title information is at the beginning of the sequence
+            passage_offset = reader_passage.passage_offset
+
+            p_start_logits = start_logits[q, passage_idx].tolist()[passage_offset:sequence_len]
+            p_end_logits = end_logits[q, passage_idx].tolist()[passage_offset:sequence_len]
+
+            ctx_ids = sequence_ids.tolist()[passage_offset:]
+            best_spans = get_best_spans(
+                tensorizer,
+                p_start_logits,
+                p_end_logits,
+                ctx_ids,
+                max_answer_length,
+                passage_idx,
+                relevance_logits[q, passage_idx].item(),
+                top_spans=10,
+            )
+            nbest.extend(best_spans)
+
+        if len(nbest) == 0:
+            predictions = [SpanPrediction("", -1, -1, -1, "")]
+        else:
+            predictions = nbest
+        batch_results.append(predictions)
+    return batch_results
 
 
 ####################################################
@@ -286,15 +522,15 @@ DPR_INPUTS_DOCSTRING = r"""
 """
 
 
-CheckpointState = collections.namedtuple("CheckpointState",
-                                         ['model_dict', 'optimizer_dict', 'scheduler_dict', 'offset', 'epoch',
-                                          'encoder_params'])
+CheckpointState = collections.namedtuple(
+    "CheckpointState", ["model_dict", "optimizer_dict", "scheduler_dict", "offset", "epoch", "encoder_params"]
+)
 
 
 def load_states_from_checkpoint(model_file: str) -> CheckpointState:
-    logger.info('Reading saved model from %s', model_file)
-    state_dict = torch.load(model_file, map_location=lambda s, l: default_restore_location(s, 'cpu'))
-    logger.info('model_state_dict keys %s', state_dict.keys())
+    logger.info("Reading saved model from %s", model_file)
+    state_dict = torch.load(model_file, map_location=lambda s, l: default_restore_location(s, "cpu"))
+    logger.info("model_state_dict keys %s", state_dict.keys())
     return CheckpointState(**state_dict)
 
 
@@ -338,8 +574,9 @@ class DprModel(DprPreTrainedModel):
         self.config = config
         self.biencoder = get_bert_biencoder_components(config)
         self.reader = get_bert_reader_components(config)
+        self.tensorizer = get_bert_tensorizer(config)
         self.init_weights()
-    
+
     def init_weights(self):
         super().init_weights()
         if self.config.biencoder_model_file is not None:
@@ -349,30 +586,50 @@ class DprModel(DprPreTrainedModel):
             saved_state = load_states_from_checkpoint(self.config.reader_model_file)
             self.reader.load_state_dict(saved_state.model_dict)
 
-    def forward(self, index, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+    def _extract_reader_passages(self, index, top_ids_and_scores, questions) -> List[List[ReaderPassage]]:
+        all_reader_passages: List[List[ReaderPassage]] = []
+        for results_and_scores in top_ids_and_scores:
+            reader_passages: List[ReaderPassage] = []
+            ctxs_num = len(results_and_scores[0])
+            docs = [index[doc_id] for doc_id in results_and_scores[0]]
+            for c in range(ctxs_num):
+                reader_passages.append(
+                    ReaderPassage(
+                        id=results_and_scores[0][c],
+                        title=docs[c]["title"],
+                        text=docs[c]["text"],
+                        score=results_and_scores[1][c],
+                    )
+                )
+            all_reader_passages.append(reader_passages)
+        for question, reader_passages in zip(questions, all_reader_passages):
+            for passage in reader_passages:
+                create_reader_sample_ids(passage, question, self.tensorizer)
+        return all_reader_passages
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
-        ##################################
-        # Replace this with your model code
-        outputs = self.bidencoder.question_model(
-            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+    def forward(self, index, questions: List[str]):
+        # Question Encoder
+        token_tensors = [self.tensorizer.text_to_tensor(q) for q in questions]
+        input_ids = torch.stack(token_tensors, dim=0).cuda()
+        attention_mask = self.tensorizer.get_attn_mask(input_ids)
+        _q_seq, q_pooled_out, _q_hidden = self.bidencoder.question_model(input_ids, None, attention_mask)
+        query_tensor = q_pooled_out.cpu().split(1, dim=0)
+        # Dense Retriever
+        top_ids_and_scores = index.query(query_tensor.numpy(), self.config.k)
+        all_reader_passages = self._extract_reader_passages(index, top_ids_and_scores, questions)
+        # Reader
+        input_ids = torch.stack(
+            [
+                torch.stack([passage.sequence_ids for passage in reader_passages], dim=0)
+                for reader_passages in all_reader_passages
+            ],
+            dim=0,
         )
-        # _q_seq, q_pooled_out, _q_hidden = self.biencoder.get_representation(self.biencoder.question_model, question_ids, question_segments,
-        #                                                           question_attn_mask, self.config.fix_q_encoder)
-
-        # TODO(dpr): query index and get top 100
-        # TODO(dpr): build reader input and do passage selection
-        # TODO(dpr): return sequence_output, hidden_states, attention, retrieved passages and scores
-        return outputs  # sequence_output, (hidden_states), (attentions)
+        attention_mask = self.tensorizer.get_attn_mask(input_ids)
+        reader_output = self.reader(input_ids, attention_mask)
+        start_logits, end_logits, relevance_logits = reader_output
+        sorted_results = _get_sorted_prediction(
+            start_logits, end_logits, relevance_logits, all_reader_passages, self.tensorizer, self.config.max_length
+        )
+        best_results = [results[0] for results in sorted_results]
+        return best_results, sorted_results, all_reader_passages, reader_output
