@@ -834,7 +834,8 @@ class BartModel(PretrainedBartModel):
         assert decoder_input_ids is not None
         if encoder_outputs is None:
             encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-        assert isinstance(encoder_outputs, tuple)
+        if isinstance(encoder_outputs, torch.Tensor):
+            encoder_outputs = (encoder_outputs,)
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             decoder_input_ids,
@@ -970,8 +971,12 @@ class BartForConditionalGeneration(PretrainedBartModel):
         # first step, decoder_cached_states are empty
         if not past[1]:
             encoder_outputs, decoder_cached_states = past, None
+        elif len(past) == 3:
+            encoder_outputs, decoder_cached_states = past[:-1], past[-1]
         else:
             encoder_outputs, decoder_cached_states = past
+        if not( decoder_cached_states is None or len(decoder_cached_states)):
+            import ipdb; ipdb.set_trace()
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
