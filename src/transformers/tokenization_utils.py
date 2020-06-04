@@ -103,7 +103,7 @@ def truncate_and_pad(
     stride: int,
     strategy: str,
     pad_to_max_length: bool,
-    pad_to_next_multiple_of: int,
+    pad_to_multiple_of: int,
     padding_side: str,
     pad_token_id: int,
     pad_token_type_id: int,
@@ -133,14 +133,14 @@ def truncate_and_pad(
     if max_length is not None:
         tokenizer.enable_truncation(max_length, stride=stride, strategy=strategy)
 
-    if pad_to_next_multiple_of or (pad_to_max_length and (pad_token and pad_token_id >= 0)):
+    if pad_to_multiple_of or (pad_to_max_length and (pad_token and pad_token_id >= 0)):
         tokenizer.enable_padding(
             max_length=max_length,
             direction=padding_side,
             pad_id=pad_token_id,
             pad_type_id=pad_token_type_id,
             pad_token=pad_token,
-            pad_to_multiple_of=pad_to_next_multiple_of
+            pad_to_multiple_of=pad_to_multiple_of,
         )
     elif pad_to_max_length:
         logger.warning(
@@ -1377,7 +1377,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
-        pad_to_next_multiple_of: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[str] = None,
         **kwargs
     ):
@@ -1422,6 +1422,10 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 - 'left': pads on the left of the sequences
                 - 'right': pads on the right of the sequences
                 Defaults to False: no padding.
+            pad_to_multiple_of: (:obj:`int`, `optional` defaults to :obj:`None`):
+                Integer if set will pad the sequence to a multiple of the provided value.
+                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
+                >= 7.5 (Volta).
             return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
                 Can be set to 'tf' or 'pt' to return respectively TensorFlow :obj:`tf.constant`
                 or PyTorch :obj:`torch.Tensor` instead of a list of python integers.
@@ -1435,7 +1439,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             stride=stride,
             truncation_strategy=truncation_strategy,
             pad_to_max_length=pad_to_max_length,
-            pad_to_next_multiple_of=pad_to_next_multiple_of,
+            pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
             **kwargs,
         )
@@ -1451,7 +1455,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
-        pad_to_next_multiple_of: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
         is_pretokenized: bool = False,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -1588,7 +1592,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
             pair_ids=second_ids,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
-            pad_to_next_multiple_of=pad_to_next_multiple_of,
+            pad_to_multiple_of=pad_to_multiple_of,
             add_special_tokens=add_special_tokens,
             stride=stride,
             truncation_strategy=truncation_strategy,
@@ -1614,7 +1618,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
-        pad_to_next_multiple_of: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
         is_pretokenized: bool = False,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -1663,7 +1667,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 - 'left': pads on the left of the sequences
                 - 'right': pads on the right of the sequences
                 Defaults to False: no padding.
-            pad_to_next_multiple_of (:obj: `int`, `optional`, defaults to :obj:`None`):
+            pad_to_multiple_of (:obj: `int`, `optional`, defaults to :obj:`None`):
                 If set to a positive integer, the sequence will be padded so that (seq_len % multiple) = 0.
                 This is especially useful when working on TPU and/or Tensor Cores.
             is_pretokenized (:obj:`bool`, defaults to :obj:`False`):
@@ -1777,7 +1781,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 pair_ids=second_ids,
                 max_length=max_length,
                 pad_to_max_length=pad_to_max_length,
-                pad_to_next_multiple_of=pad_to_next_multiple_of,
+                pad_to_multiple_of=pad_to_multiple_of,
                 add_special_tokens=add_special_tokens,
                 stride=stride,
                 truncation_strategy=truncation_strategy,
@@ -1837,7 +1841,7 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
-        pad_to_next_multiple_of: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1871,6 +1875,9 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 - 'left': pads on the left of the sequences
                 - 'right': pads on the right of the sequences
                 Defaults to False: no padding.
+            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
+                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
+                >= 7.5 (Volta).
             return_tensors: (optional) can be set to 'tf' or 'pt' to return respectively TensorFlow tf.constant
                 or PyTorch torch.Tensor instead of a list of python integers.
             return_token_type_ids: (optional) Set to False to avoid returning token_type_ids (default: set to model specifics).
@@ -1918,14 +1925,16 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
 
         # Manage padding as multiple of provided integer
-        if pad_to_next_multiple_of is not None:
-            target_length = ((total_len // pad_to_next_multiple_of) + 1) * pad_to_next_multiple_of
+        if pad_to_multiple_of is not None:
+            target_length = ((total_len // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
             # Warn the user about new max_length value
             if max_length is not None:
                 logger.info(
-                    "Overriding max_length {} to {} parameter to satisfy constraint pad_to_next_multiple_of {}",
-                    max_length, target_length, pad_to_next_multiple_of
+                    "Overriding max_length {} to {} parameter to satisfy constraint pad_to_multiple_of {}",
+                    max_length,
+                    target_length,
+                    pad_to_multiple_of,
                 )
 
             # max_length becomes multiple of provided integer
@@ -2458,7 +2467,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         pad_to_max_length: bool = False,
-        pad_to_next_multiple_of: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
         is_pretokenized: bool = False,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -2489,7 +2498,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             stride=stride,
             strategy=truncation_strategy,
             pad_to_max_length=pad_to_max_length,
-            pad_to_next_multiple_of=pad_to_next_multiple_of,
+            pad_to_multiple_of=pad_to_multiple_of,
             padding_side=self.padding_side,
             pad_token_id=self.pad_token_id,
             pad_token_type_id=self.pad_token_type_id,
@@ -2595,7 +2604,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         add_special_tokens: bool = True,
         max_length: Optional[int] = None,
         pad_to_max_length: bool = False,
-        pad_to_next_multiple_of: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
         stride: int = 0,
         truncation_strategy: str = "longest_first",
         is_pretokenized: bool = False,
@@ -2666,7 +2675,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
                 pad_to_max_length=pad_to_max_length,
-                pad_to_next_multiple_of=pad_to_next_multiple_of,
+                pad_to_multiple_of=pad_to_multiple_of,
                 **kwargs,
             )
 
