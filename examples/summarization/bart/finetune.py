@@ -644,7 +644,7 @@ class BrewerDistiller(SummarizationDistiller):
         loss_encoder, hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor(), zero_tensor()
         if self.different_encoder:
             with torch.no_grad():
-                teacher_enc_outputs, teacher_enc_hid = self.teacher.model.encoder(source_ids, attention_mask=source_mask)
+                teacher_enc_outputs, teacher_enc_hid, _ = self.teacher.model.encoder(source_ids, attention_mask=source_mask)
             if self.hparams.alpha_encoder_loss > 0:
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, source_mask)
             hid_loss_enc = self.calc_hidden_loss(source_mask, enc_hidden_state, teacher_enc_hid,
