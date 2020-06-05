@@ -454,6 +454,8 @@ class SummarizationDistiller(SummarizationTrainer):
         self.temperature = 2.0
         self.alpha_mlm = hparams.alpha_mlm
         self.alpha_ce = hparams.alpha_ce
+        self.alpha_hid = hparams.alpha_hid
+        #self.alpha_cos = hparams.alpha_cos
         self.alpha_encoder_loss = self.hparams.alpha_encoder_loss
         gc.collect()
         torch.cuda.empty_cache()
@@ -477,6 +479,8 @@ class SummarizationDistiller(SummarizationTrainer):
             source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
         )
         loss_encoder = torch.tensor(0.0).type_as(sloss)
+        loss_ce = torch.tensor(0.0).type_as(sloss)
+
         if self.different_encoder:
             with torch.no_grad():
                 teacher_enc_outputs = self.teacher.model.encoder(source_ids, attention_mask=source_mask)
@@ -493,7 +497,8 @@ class SummarizationDistiller(SummarizationTrainer):
                 lm_labels=lm_labels,
             )
         dec_mask = invert_mask(self.model.model.last_padding_mask)
-        loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
+        if self.alpha_ce > 0:
+            loss_ce, *_ = self.calc_ce_loss(dec_mask, slogits, tlogits)
         blended_loss = (
             loss_ce * self.alpha_ce + self.alpha_mlm * sloss + self.hparams.alpha_encoder_loss * loss_encoder
         )
@@ -535,20 +540,6 @@ class SummarizationDistiller(SummarizationTrainer):
         )
         return loss_ce, s_logits_slct, t_logits_slct
 
-    def calc_cos_loss(self, attention_mask, s_hidden_states, t_hidden_states):
-        s_hidden_states = s_hidden_states[-1]  # (bs, seq_length, dim)
-        t_hidden_states = t_hidden_states[-1]  # (bs, seq_length, dim)
-        mask = attention_mask.unsqueeze(-1).expand_as(s_hidden_states)  # (bs, seq_length, dim)
-        assert s_hidden_states.size() == t_hidden_states.size()
-        dim = s_hidden_states.size(-1)
-        s_hidden_states_slct = torch.masked_select(s_hidden_states, mask)  # (bs * seq_length * dim)
-        s_hidden_states_slct = s_hidden_states_slct.view(-1, dim)  # (bs * seq_length, dim)
-        t_hidden_states_slct = torch.masked_select(t_hidden_states, mask)  # (bs * seq_length * dim)
-        t_hidden_states_slct = t_hidden_states_slct.view(-1, dim)  # (bs * seq_length, dim)
-        target = s_hidden_states_slct.new(s_hidden_states_slct.size(0)).fill_(1)  # (bs * seq_length,)
-        loss_cos = self.cosine_loss_fct(s_hidden_states_slct, t_hidden_states_slct, target)
-        return loss_cos
-
     def configure_optimizers(self):
         "Prepare optimizer and schedule (linear warmup and decay)"
 
@@ -576,6 +567,7 @@ class SummarizationDistiller(SummarizationTrainer):
         )
         parser.add_argument("--alpha_ce", default=0.8, type=float)
         parser.add_argument("--alpha_mlm", default=0.2, type=float)
+        # parser.add_argument("--alpha_cos", default=0.0, type=float)
         parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
         parser.add_argument("--alpha_hid", default=0., type=float, required=False, )
         parser.add_argument(
@@ -627,7 +619,6 @@ class BrewerDistiller(SummarizationDistiller):
     teacher_kwargs = {'output_hidden_states': True}
 
     def _step(self, batch):
-
         # assert is_frozen(self.teacher)
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
@@ -657,7 +648,7 @@ class BrewerDistiller(SummarizationDistiller):
                                                           encoder_outputs=teacher_enc_outputs, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,)
         dec_mask = invert_mask(self.model.model.last_padding_mask)
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
-        if not self.hparams.freeze_decoder:
+        if not self.hparams.freeze_decoder and self.alpha_hid > 0:
             hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.layer_to_copy)
 
         blended_loss = (
