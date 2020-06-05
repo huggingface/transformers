@@ -307,6 +307,53 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
     parser.add_argument("--resume_from_checkpoint", type=str, default=None)
 
+class MyCheckpointer(ModelCheckpoint):
+    @rank_zero_only
+    def on_validation_end(self, trainer, pl_module):
+        # only run on main process
+        if trainer.proc_rank != 0:
+            return
+
+        metrics = trainer.callback_metrics
+        epoch = trainer.current_epoch
+        if self.save_top_k == 0:
+            # no models are saved
+            return
+        if self.epoch_last_check is not None and (epoch - self.epoch_last_check) < self.period:
+            # skipping in this term
+            return
+
+        self.epoch_last_check = epoch
+
+        filepath = self.format_checkpoint_name(epoch, metrics)
+        version_cnt = 0
+        while os.path.isfile(filepath):
+            filepath = self.format_checkpoint_name(epoch, metrics, ver=version_cnt)
+            # this epoch called before
+            version_cnt += 1
+
+        if self.save_top_k != -1:
+            current = metrics.get(self.monitor)
+
+            if not isinstance(current, torch.Tensor):
+                rank_zero_warn(
+                    f'The metric you returned {current} must be a Torch.Tensor instance, checkpoint not saved '
+                    f'HINT: what is the value of {self.monitor} in validation_end()?', RuntimeWarning
+                )
+
+            if current is None:
+                rank_zero_warn(
+                    f'Can save best model only with {self.monitor} available, skipping.', RuntimeWarning
+                )
+            elif self.check_monitor_top_k(current):
+                self._do_check_save(filepath, current, epoch)
+            elif self.verbose > 0:
+                log.info(f'\nEpoch {epoch:05d}: {self.monitor}  was not in top {self.save_top_k}')
+
+        else:
+            if self.verbose > 0:
+                log.info(f'\nEpoch {epoch:05d}: saving model to {filepath}')
+            self._save_model(filepath)
 
 def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callbacks=[], **extra_train_kwargs):
     # init model
@@ -325,8 +372,8 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
         logger.log_hyperparams(args)
 
     checkpoint_callback = ModelCheckpoint(
-        filepath=str(model.output_dir / "{epoch}-{val_avg_rouge2:.4f}"), monitor="val_avg_rouge2", mode="max", save_top_k=1,
-        save_weights_only=True,
+        filepath=str(model.output_dir / "{val_avg_rouge2:.4f}-{epoch}"), monitor="val_avg_rouge2", mode="max", save_top_k=1,
+        save_weights_only=True, period=0,
     )
 
     train_params = dict(
