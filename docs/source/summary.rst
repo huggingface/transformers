@@ -4,9 +4,10 @@ Summary of the models
 This is a summary of the models available in the transformers library. It assumes you’re familiar with the original 
 `transformer model <https://arxiv.org/abs/1706.03762>`_. For a gentle introduction check the `annotated transformer 
 <http://nlp.seas.harvard.edu/2018/04/03/attention.html>`_. Here we focus on the high-level differences between the
-models. You can check them more in detail in their respective documentation. Also,
+models. You can check them more in detail in their respective documentation. Also checkout the 
+:doc:`pretrained model page </pretrained_models>` to see the checkpoints available for each type of model.
 
-Each one of the models falls into one of the following categories:
+Each one of the models in the library falls into one of the following categories:
 
   * :ref:`autoregressive-models`
   * :ref:`autoencoding-models`
