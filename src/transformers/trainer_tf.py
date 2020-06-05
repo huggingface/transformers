@@ -243,6 +243,15 @@ class TFTrainer:
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
+    def _log_tb(self, logs: Dict[str, float]) -> None:
+        """
+        Log data to tensorboard. Called by `log_metrics`.
+        """
+        with self.tb_writer.as_default():
+            for k, v in logs.items():
+                tf.summary.scalar(k, v, step=self.global_step)
+        self.tb_writer.flush()
+    
     def evaluate(
         self, eval_dataset: Optional[tf.data.Dataset] = None, prediction_loss_only: Optional[bool] = None
     ) -> Dict[str, float]:

@@ -510,6 +510,14 @@ class Trainer:
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         return TrainOutput(self.global_step, tr_loss / self.global_step)
 
+    def _log_tb(self, logs: Dict[str, float]) -> None:
+        """
+        Log data to tensorboard. Called by `log_metrics`.
+        """
+        for k, v in logs.items():
+            self.tb_writer.add_scalar(k, v, self.global_step)
+        self.tb_writer.flush()
+            
     def _training_step(
         self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer
     ) -> float:

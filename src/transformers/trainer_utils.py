@@ -58,26 +58,20 @@ def setup_wandb(trainer):
 
 
 def log_metrics(trainer, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
+    """
+    Log metrics with available loggers.
+    """
     if trainer.epoch is not None:
         logs["epoch"] = trainer.epoch
     if trainer.tb_writer:
-        if trainer.__class__.__name__ == "Trainer":
-            for k, v in logs.items():
-                trainer.tb_writer.add_scalar(k, v, trainer.global_step)
-        elif trainer.__class__.__name__ == "TFTrainer":
-            import tensorflow as tf
-
-            with trainer.tb_writer.as_default():
-                for k, v in logs.items():
-                    tf.summary.scalar(k, v, step=trainer.global_step)
-        trainer.tb_writer.flush()
+        trainer._log_tb(logs)
     if is_wandb_available():
         trainer._wandb.log(logs, step=trainer.global_step)
     output = {**logs, **{"step": trainer.global_step}}
     if iterator is not None:
         iterator.write(output)
     else:
-        print(output)
+        logger.info(output)
 
 
 class EvalPrediction(NamedTuple):
