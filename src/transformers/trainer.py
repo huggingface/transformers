@@ -287,7 +287,7 @@ class Trainer:
         If you want to use something else, you can pass a tuple in the Trainer's init,
         or override this method in a subclass.
         """
-        if self.optimizers is not Noneself.eval:
+        if self.optimizers is not None:
             return self.optimizers
         # Prepare optimizer and schedule (linear warmup and decay)
         no_decay = ["bias", "LayerNorm.weight"]
