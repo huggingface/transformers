@@ -165,7 +165,7 @@ class XLNetConfig(PretrainedConfig):
         assert d_model % n_head == 0
         if "d_head" in kwargs:
             assert kwargs["d_head"] == d_model // n_head, (
-                f"`d_head` ({kwargs['d_head']}) should be " f"equal to `d_model // n_head` ({d_model // n_head})"
+                f"`d_head` ({kwargs['d_head']}) should be equal to `d_model // n_head` ({d_model // n_head})"
             )
         self.d_head = d_model // n_head
         self.ff_activation = ff_activation
