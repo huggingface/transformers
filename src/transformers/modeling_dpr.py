@@ -21,8 +21,9 @@
 
 import collections
 import logging
-from typing import List, Tuple
+from typing import Callable, List, Optional, Tuple
 
+import numpy as np
 import torch
 from torch import Tensor as T
 from torch import nn
@@ -389,6 +390,38 @@ def _get_sorted_prediction(
     return batch_results
 
 
+###########################################################
+# EmbedModel to use with the `nlp` library by Hugging Face
+###########################################################
+
+
+class DprEmbedModel:
+    def __init__(self, dpr_model):
+        self.dpr_model = dpr_model
+
+    def embed_documents(
+        self, texts: List[str], titles: Optional[List[str]] = None, tokenizer: Optional[Callable] = None
+    ) -> np.array:
+        if titles is not None:
+            token_tensors = [
+                self.dpr_model.tensorizer.text_to_tensor(text, title=title) for text, title in zip(texts, titles)
+            ]
+        else:
+            token_tensors = [self.dpr_model.tensorizer.text_to_tensor(text) for text in texts]
+        input_ids = torch.stack(token_tensors, dim=0)
+        type_ids = torch.zeros_like(input_ids)
+        attention_mask = self.dpr_model.tensorizer.get_attn_mask(input_ids)
+        _d_seq, d_pooled_out, _d_hidden = self.dpr_model.ctx_encoder(input_ids, type_ids, attention_mask)
+        return d_pooled_out.numpy().astype(np.float32)
+
+    def embed_queries(self, queries: List[str], tokenizer: Optional[Callable] = None) -> np.array:
+        token_tensors = [self.dpr_model.tensorizer.text_to_tensor(query) for query in queries]
+        input_ids = torch.stack(token_tensors, dim=0)
+        attention_mask = self.dpr_model.tensorizer.get_attn_mask(input_ids)
+        _q_seq, q_pooled_out, _q_hidden = self.dpr_model.question_encoder(input_ids, None, attention_mask)
+        return q_pooled_out.numpy().astype(np.float32)
+
+
 ####################################################
 # PreTrainedModel is a sub-class of torch.nn.Module
 # which take care of loading and saving pretrained weights
@@ -561,20 +594,15 @@ class DprModel(DprPreTrainedModel):
             saved_state = load_states_from_checkpoint(self.config.reader_model_file)
             self.reader.load_state_dict(saved_state.model_dict)
 
-    def _extract_reader_passages(self, index, top_ids_and_scores, questions) -> List[List[ReaderPassage]]:
+    def _extract_reader_passages(self, index, scores_and_top_ids, questions) -> List[List[ReaderPassage]]:
         all_reader_passages: List[List[ReaderPassage]] = []
-        for results_and_scores in top_ids_and_scores:
+        for scores, indices in zip(*scores_and_top_ids):
             reader_passages: List[ReaderPassage] = []
-            ctxs_num = len(results_and_scores[0])
-            docs = [index[doc_id] for doc_id in results_and_scores[0]]
+            ctxs_num = len(scores)
+            docs = [index[int(doc_id)] for doc_id in indices]
             for c in range(ctxs_num):
                 reader_passages.append(
-                    ReaderPassage(
-                        id=results_and_scores[0][c],
-                        title=docs[c]["title"],
-                        text=docs[c]["text"],
-                        score=results_and_scores[1][c],
-                    )
+                    ReaderPassage(id=indices[c], title=docs[c]["title"], text=docs[c]["text"], score=scores[c],)
                 )
             all_reader_passages.append(reader_passages)
         for question, reader_passages in zip(questions, all_reader_passages):
@@ -582,16 +610,20 @@ class DprModel(DprPreTrainedModel):
                 create_reader_sample_ids(passage, question, self.tensorizer)
         return all_reader_passages
 
+    def to_nlp_embed_model(self) -> DprEmbedModel:
+        return DprEmbedModel(self)
+
     def forward(self, index, questions: List[str]):
         # Question Encoder
         token_tensors = [self.tensorizer.text_to_tensor(q) for q in questions]
-        input_ids = torch.stack(token_tensors, dim=0).cuda()
+        input_ids = torch.stack(token_tensors, dim=0)
         attention_mask = self.tensorizer.get_attn_mask(input_ids)
         _q_seq, q_pooled_out, _q_hidden = self.question_encoder(input_ids, None, attention_mask)
-        query_tensor = q_pooled_out.cpu().split(1, dim=0)
         # Dense Retriever
-        top_ids_and_scores = index.query(query_tensor.numpy(), self.config.k)
-        all_reader_passages = self._extract_reader_passages(index, top_ids_and_scores, questions)
+        scores_and_top_ids = index.query_index_batch(
+            questions, self.config.k, q_rep=q_pooled_out.numpy().astype(np.float32)
+        )
+        all_reader_passages = self._extract_reader_passages(index, scores_and_top_ids, questions)
         # Reader
         input_ids = torch.stack(
             [
