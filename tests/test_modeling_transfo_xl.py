@@ -187,7 +187,9 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict = {"input_ids": input_ids_1}
             return config, inputs_dict
 
-    def check_cutoffs_and_n_token(self, copied_cutoffs, layer, model_embed, model, model_class, resized_value, vocab_size):
+    def check_cutoffs_and_n_token(
+        self, copied_cutoffs, layer, model_embed, model, model_class, resized_value, vocab_size
+    ):
         # Check that the cutoffs were modified accordingly
         for i in range(len(copied_cutoffs)):
             if i < layer:
@@ -261,7 +263,9 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
                 # Check that it actually resizes the embeddings matrix
                 self.assertEqual(model_embed.emb_layers[layer].weight.shape[0], cloned_embeddings[layer].shape[0] + 10)
                 # Check that the cutoffs were modified accordingly
-                self.check_cutoffs_and_n_token(copied_cutoffs, layer, model_embed, model, model_class, 10, model_vocab_size)
+                self.check_cutoffs_and_n_token(
+                    copied_cutoffs, layer, model_embed, model, model_class, 10, model_vocab_size
+                )
 
                 # Check that the model can still do a forward pass successfully (every parameter should be resized)
                 model(**inputs_dict)
@@ -272,7 +276,9 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
                 # Check that it actually resizes the embeddings matrix
                 self.assertEqual(model_embed.emb_layers[layer].weight.shape[0], cloned_embeddings[layer].shape[0] - 5)
                 # Check that the cutoffs were modified accordingly
-                self.check_cutoffs_and_n_token(copied_cutoffs, layer, model_embed, model, model_class, -5, model_vocab_size)
+                self.check_cutoffs_and_n_token(
+                    copied_cutoffs, layer, model_embed, model, model_class, -5, model_vocab_size
+                )
 
                 # Check that the model can still do a forward pass successfully (every parameter should be resized)
                 # Input ids should be clamped to the maximum size of the vocabulary
