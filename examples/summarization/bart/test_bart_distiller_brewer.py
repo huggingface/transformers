@@ -4,7 +4,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 
 from durbango import DEFAULT_DEVICE
-from textbrewer import DistillationConfig, GeneralDistiller, TrainingConfig
+
 from transformers import AdamW, BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.file_utils import cached_property
 
@@ -48,6 +48,7 @@ class TestDistiller(unittest.TestCase):
         copy_decoder_layers(teacher_model, student_model, l2copy=[0, 2])
 
     def test_bdistiller_tiny(self):
+        from textbrewer import DistillationConfig, GeneralDistiller, TrainingConfig
         Path("distil_tiny_log_dir").mkdir(exist_ok=True)
         teacher_model, student_model = make_teacher_and_student(teacher_cfg_kwargs, encoder_layers=1)
         train_config = TrainingConfig(device=DEFAULT_DEVICE, log_dir="distil_tiny_log_dir")

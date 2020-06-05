@@ -420,6 +420,7 @@ class SummarizationDistiller(SummarizationTrainer):
         # Copy weights
         student_cfg = BartConfig(**kw)
         student = BartForConditionalGeneration(student_cfg)
+        #student.save_pretrained('student')
 
         student, _ = init_student(student, teacher)
         self.different_encoder: bool = hparams.student_encoder_layers != teacher.config.encoder_layers
@@ -685,6 +686,7 @@ def main(args):
 
     model: BaseTransformer = module_cls(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
+    if not args.do_predict: return model
     model.hparams.test_checkpoint = ""
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
 

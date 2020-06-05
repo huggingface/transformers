@@ -174,7 +174,7 @@ class TestBartExamples(unittest.TestCase):
             alpha_ce=0.8,
             do_predict=True,
             n_gpu=0,
-            model_name_or_path="student",
+            model_name_or_path="sshleifer/tinier_bart",
             teacher=CHEAP_ARGS["model_name_or_path"],
             val_check_interval=0.5,
             alpha_encoder_loss=0.4,
