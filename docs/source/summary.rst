@@ -88,8 +88,6 @@ more).
 The library provides versions of the model for language modeling and multitask language modeling/multiple choice 
 classification.
 
-More information in this :doc:`model documentation </model_doc/gpt2>`.
-
 CTRL
 ----------------------------------------------
 
