@@ -16,9 +16,9 @@
 """ SuperGLUE processors and helpers """
 
 
-import os
 import json
 import logging
+import os
 from collections import defaultdict
 
 import numpy as np
@@ -51,7 +51,7 @@ def tokenize_tracking_span(tokenizer, text, spans):
     """
     toks = tokenizer.encode_plus(text, return_token_type_ids=True)
     full_toks = toks["input_ids"]
-    prefix_len = len(tokenizer.decode(full_toks[:1])) + 1 # add a space
+    prefix_len = len(tokenizer.decode(full_toks[:1])) + 1  # add a space
     len_covers = []
     for i in range(2, len(full_toks)):
         # iterate over the tokens and decode the length of the sequence
@@ -64,7 +64,7 @@ def tokenize_tracking_span(tokenizer, text, spans):
         start_tok, end_tok = None, None
         for tok_n, len_cover in enumerate(len_covers):
             if len_cover >= start and start_tok is None:
-                start_tok = tok_n + 1 # account for [CLS] tok
+                start_tok = tok_n + 1  # account for [CLS] tok
             if len_cover >= end:
                 assert start_tok is not None
                 end_tok = tok_n + 1
@@ -147,7 +147,13 @@ def superglue_convert_examples_to_features(
 
                 # TODO(AW): assumption is same number of non-special tokens + sos + eos
                 #   This handles varying number of intervening tokens (e.g. different models)
-                inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length, return_token_type_ids=True)
+                inputs = tokenizer.encode_plus(
+                    example.text_a,
+                    example.text_b,
+                    add_special_tokens=True,
+                    max_length=max_length,
+                    return_token_type_ids=True,
+                )
                 num_joiner_specials = len(inputs["input_ids"]) - num_non_special_tokens - 2
                 offset = len(inputs_a["input_ids"]) - 1 + num_joiner_specials - 1
                 span_locs_b = [(s + offset, e + offset) for s, e in span_locs_b]
@@ -170,7 +176,13 @@ def superglue_convert_examples_to_features(
                 span_locs = span_locs_a
 
         else:
-            inputs = tokenizer.encode_plus(example.text_a, example.text_b, add_special_tokens=True, max_length=max_length, return_token_type_ids=True)
+            inputs = tokenizer.encode_plus(
+                example.text_a,
+                example.text_b,
+                add_special_tokens=True,
+                max_length=max_length,
+                return_token_type_ids=True,
+            )
             input_ids, token_type_ids = inputs["input_ids"], inputs["token_type_ids"]
 
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
@@ -215,18 +227,22 @@ def superglue_convert_examples_to_features(
             logger.info("label: %s (id = %d)" % (example.label, label))
 
         if isinstance(example, SpanClassificationExample):
-            feats = SpanClassificationFeatures(guid=example.guid,
-                                               input_ids=input_ids,
-                                               span_locs=span_locs,
-                                               attention_mask=attention_mask,
-                                               token_type_ids=token_type_ids,
-                                               label=label)
+            feats = SpanClassificationFeatures(
+                guid=example.guid,
+                input_ids=input_ids,
+                span_locs=span_locs,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                label=label,
+            )
         else:
-            feats = InputFeatures(guid=example.guid,
-                                  input_ids=input_ids,
-                                  attention_mask=attention_mask,
-                                  token_type_ids=token_type_ids,
-                                  label=label)
+            feats = InputFeatures(
+                guid=example.guid,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                label=label,
+            )
 
         features.append(feats)
 
@@ -250,7 +266,7 @@ def superglue_convert_examples_to_features(
             ({"input_ids": tf.int32, "attention_mask": tf.int32, "token_type_ids": tf.int32}, tf.int64),
             (
                 {
-                    "guid": ex.guid,
+                    "guid": tf.TensorShape([None]),
                     "input_ids": tf.TensorShape([None]),
                     "attention_mask": tf.TensorShape([None]),
                     "token_type_ids": tf.TensorShape([None]),
@@ -303,7 +319,7 @@ class BoolqProcessor(DataProcessor):
 
     def write_preds(self, preds, ex_ids, out_dir):
         """Write predictions in SuperGLUE format."""
-        preds = preds[ex_ids] # sort just in case we got scrambled
+        preds = preds[ex_ids]  # sort just in case we got scrambled
         idx2label = {i: label for i, label in enumerate(self.get_labels())}
         with open(os.path.join(out_dir, "BoolQ.jsonl"), "w") as pred_fh:
             for idx, pred in enumerate(preds):
@@ -344,7 +360,7 @@ class CbProcessor(DataProcessor):
         """Creates examples for the training and dev sets."""
         examples = []
         for (i, line) in enumerate(lines):
-            #guid = "%s-%s" % (set_type, line["idx"])
+            # guid = "%s-%s" % (set_type, line["idx"])
             guid = line["idx"]
             text_a = line["premise"]
             text_b = line["hypothesis"]
@@ -354,7 +370,7 @@ class CbProcessor(DataProcessor):
 
     def write_preds(self, preds, ex_ids, out_dir):
         """Write predictions in SuperGLUE format."""
-        preds = preds[ex_ids] # sort just in case we got scrambled
+        preds = preds[ex_ids]  # sort just in case we got scrambled
         idx2label = {i: label for i, label in enumerate(self.get_labels())}
         with open(os.path.join(out_dir, "CB.jsonl"), "w") as pred_fh:
             for idx, pred in enumerate(preds):
@@ -365,6 +381,7 @@ class CbProcessor(DataProcessor):
 
 class CopaProcessor(DataProcessor):
     """Processor for the COPA data set (SuperGLUE version)."""
+
     # TODO(AW)
 
     def get_example_from_tensor_dict(self, tensor_dict):
@@ -396,7 +413,7 @@ class CopaProcessor(DataProcessor):
         """Creates examples for the training and dev sets."""
         examples = []
         for (i, line) in enumerate(lines):
-            #guid = "%s-%s" % (set_type, line["idx"])
+            # guid = "%s-%s" % (set_type, line["idx"])
             guid = line["idx"]
             label = line["label"] if "label" in line else 0
             premise = line["premise"][:-1]
@@ -410,7 +427,7 @@ class CopaProcessor(DataProcessor):
 
     def write_preds(self, preds, ex_ids, out_dir):
         """Write predictions in SuperGLUE format."""
-        preds = preds[ex_ids] # sort just in case we got scrambled
+        preds = preds[ex_ids]  # sort just in case we got scrambled
         idx2label = {i: label for i, label in enumerate(self.get_labels())}
         with open(os.path.join(out_dir, "COPA.jsonl"), "w") as pred_fh:
             for idx, pred in enumerate(preds):
@@ -421,6 +438,7 @@ class CopaProcessor(DataProcessor):
 
 class MultircProcessor(DataProcessor):
     """Processor for the Multirc data set (SuperGLUE version)."""
+
     # TODO(AW)
 
     def get_example_from_tensor_dict(self, tensor_dict):
@@ -465,7 +483,7 @@ class MultircProcessor(DataProcessor):
                 passage_and_question = " ".join([passage, question])
                 for answer_dict in question_dict["answers"]:
                     answer_id = answer_dict["idx"]
-                    #guid = "%s-%s-%s-%s" % (set_type, passage_id, question_id, answer_id)
+                    # guid = "%s-%s-%s-%s" % (set_type, passage_id, question_id, answer_id)
                     guid = [passage_id, question_id, answer_id]
                     answer = answer_dict["text"]
                     label = answer_dict["label"] if "label" in answer_dict else 0
@@ -493,8 +511,8 @@ class MultircProcessor(DataProcessor):
                     anss = []
                     for ans_id, pred in ans2pred.items():
                         pred_label = idx2label[pred]
-                        anss.append({'idx': ans_id, 'label': pred_label})
-                    psgs.append({'idx': qst_id, 'answers': anss})
+                        anss.append({"idx": ans_id, "label": pred_label})
+                    psgs.append({"idx": qst_id, "answers": anss})
                 pred_fh.write(f"{json.dumps({'idx': psg_id, 'passage': {'questions': psgs}})}\n")
 
         logger.info(f"Wrote predictions to {out_dir}.")
@@ -543,7 +561,7 @@ class RecordProcessor(DataProcessor):
 
                 ents = []
                 for ent_dict in line["passage"]["entities"]:
-                    ents.append(passage[ent_dict["start"]: ent_dict["end"] + 1])
+                    ents.append(passage[ent_dict["start"] : ent_dict["end"] + 1])
                 for question_dict in line["qas"]:
                     question_id = question_dict["idx"]
                     # TODO(AW): no answer case
@@ -562,7 +580,7 @@ class RecordProcessor(DataProcessor):
 
             ents = []
             for ent_dict in line["passage"]["entities"]:
-                ents.append(passage[ent_dict["start"]: ent_dict["end"] + 1])
+                ents.append(passage[ent_dict["start"] : ent_dict["end"] + 1])
 
             for question_dict in line["qas"]:
                 question_id = question_dict["idx"]
@@ -635,7 +653,7 @@ class RteProcessor(DataProcessor):
         """Creates examples for the training and dev sets."""
         examples = []
         for (i, line) in enumerate(lines):
-            #guid = "%s-%s" % (set_type, line["idx"])
+            # guid = "%s-%s" % (set_type, line["idx"])
             guid = line["idx"]
             text_a = line["premise"]
             text_b = line["hypothesis"]
@@ -645,7 +663,7 @@ class RteProcessor(DataProcessor):
 
     def write_preds(self, preds, ex_ids, out_dir):
         """Write predictions in SuperGLUE format."""
-        preds = preds[ex_ids] # sort just in case we got scrambled
+        preds = preds[ex_ids]  # sort just in case we got scrambled
         idx2label = {i: label for i, label in enumerate(self.get_labels())}
         with open(os.path.join(out_dir, "RTE.jsonl"), "w") as pred_fh:
             for idx, pred in enumerate(preds):
@@ -656,6 +674,7 @@ class RteProcessor(DataProcessor):
 
 class WicProcessor(DataProcessor):
     """Processor for the WiC data set (SuperGLUE version)."""
+
     # TODO(AW)
 
     def get_example_from_tensor_dict(self, tensor_dict):
@@ -687,20 +706,23 @@ class WicProcessor(DataProcessor):
         """Creates examples for the training and dev sets."""
         examples = []
         for (i, line) in enumerate(lines):
-            #guid = "%s-%s" % (set_type, line["idx"])
+            # guid = "%s-%s" % (set_type, line["idx"])
             guid = line["idx"]
             text_a = line["sentence1"]
             text_b = line["sentence2"]
             span_a = (line["start1"], line["end1"])
             span_b = (line["start2"], line["end2"])
             label = line["label"] if "label" in line else False
-            examples.append(SpanClassificationExample(guid=guid, text_a=text_a, spans_a=[span_a],
-                                                      text_b=text_b, spans_b=[span_b], label=label))
+            examples.append(
+                SpanClassificationExample(
+                    guid=guid, text_a=text_a, spans_a=[span_a], text_b=text_b, spans_b=[span_b], label=label
+                )
+            )
         return examples
 
     def write_preds(self, preds, ex_ids, out_dir):
         """Write predictions in SuperGLUE format."""
-        preds = preds[ex_ids] # sort just in case we got scrambled
+        preds = preds[ex_ids]  # sort just in case we got scrambled
         idx2label = {i: label for i, label in enumerate(self.get_labels())}
         with open(os.path.join(out_dir, "WiC.jsonl"), "w") as pred_fh:
             for idx, pred in enumerate(preds):
@@ -741,7 +763,7 @@ class WscProcessor(DataProcessor):
         """Creates examples for the training and dev sets."""
         examples = []
         for (i, line) in enumerate(lines):
-            #guid = "%s-%s" % (set_type, line["idx"])
+            # guid = "%s-%s" % (set_type, line["idx"])
             guid = line["idx"]
             text_a = line["text"]
             span_start1 = line["target"]["span1_index"]
@@ -756,7 +778,7 @@ class WscProcessor(DataProcessor):
 
     def write_preds(self, preds, ex_ids, out_dir):
         """Write predictions in SuperGLUE format."""
-        preds = preds[ex_ids] # sort just in case we got scrambled
+        preds = preds[ex_ids]  # sort just in case we got scrambled
         idx2label = {i: label for i, label in enumerate(self.get_labels())}
         with open(os.path.join(out_dir, "WSC.jsonl"), "w") as pred_fh:
             for idx, pred in enumerate(preds):
@@ -797,7 +819,7 @@ class DiagnosticBroadProcessor(DataProcessor):
         """Creates examples for the training and dev sets."""
         examples = []
         for (i, line) in enumerate(lines):
-            #guid = "%s-%s" % (set_type, line["idx"])
+            # guid = "%s-%s" % (set_type, line["idx"])
             guid = int(line["idx"])
             text_a = line["sentence1"]
             text_b = line["sentence2"]
@@ -807,7 +829,7 @@ class DiagnosticBroadProcessor(DataProcessor):
 
     def write_preds(self, preds, ex_ids, out_dir):
         """Write predictions in SuperGLUE format."""
-        preds = preds[ex_ids] # sort just in case we got scrambled
+        preds = preds[ex_ids]  # sort just in case we got scrambled
         idx2label = {i: label for i, label in enumerate(self.get_labels())}
         with open(os.path.join(out_dir, "AX-b.jsonl"), "w") as pred_fh:
             for idx, pred in enumerate(preds):
@@ -848,7 +870,7 @@ class DiagnosticGenderProcessor(DataProcessor):
         """Creates examples for the training and dev sets."""
         examples = []
         for (i, line) in enumerate(lines):
-            #guid = "%s-%s" % (set_type, line["idx"])
+            # guid = "%s-%s" % (set_type, line["idx"])
             guid = int(line["idx"])
             text_a = line["premise"]
             text_b = line["hypothesis"]
@@ -858,13 +880,14 @@ class DiagnosticGenderProcessor(DataProcessor):
 
     def write_preds(self, preds, ex_ids, out_dir):
         """Write predictions in SuperGLUE format."""
-        preds = preds[ex_ids] # sort just in case we got scrambled
+        preds = preds[ex_ids]  # sort just in case we got scrambled
         idx2label = {i: label for i, label in enumerate(self.get_labels())}
         with open(os.path.join(out_dir, "AX-g.jsonl"), "w") as pred_fh:
             for idx, pred in enumerate(preds):
                 pred_label = idx2label[int(pred)]
                 pred_fh.write(f"{json.dumps({'idx': idx, 'label': pred_label})}\n")
         logger.info(f"Wrote {len(preds)} predictions to {out_dir}.")
+
 
 superglue_tasks_num_labels = {
     "ax-b": 2,

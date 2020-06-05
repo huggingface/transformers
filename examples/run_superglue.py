@@ -28,51 +28,41 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
-from tqdm import tqdm, trange
+from tqdm import tqdm
 
-from transformers import (
+from transformers import superglue_compute_metrics as compute_metrics
+from transformers import superglue_convert_examples_to_features as convert_examples_to_features
+from transformers import superglue_output_modes as output_modes
+from transformers import superglue_processors as processors
+from transformers import superglue_tasks_metrics as task_metrics
+from transformers import superglue_tasks_num_spans as task_spans
+
+
+from transformers import (  # AlbertForSequenceClassification,; AlbertTokenizer,; DistilBertForSequenceClassification,; DistilBertTokenizer,; FlaubertForSequenceClassification,; FlaubertTokenizer,; XLMForSequenceClassification,; XLMRobertaForSequenceClassification,; XLMRobertaTokenizer,; XLMTokenizer,; XLNetForSequenceClassification,; XLNetTokenizer,
     WEIGHTS_NAME,
     AdamW,
     AlbertConfig,
-    AlbertForSequenceClassification,
-    AlbertTokenizer,
     BertConfig,
     BertForSequenceClassification,
     BertForSpanClassification,
     BertTokenizer,
     DistilBertConfig,
-    DistilBertForSequenceClassification,
-    DistilBertTokenizer,
     FlaubertConfig,
-    FlaubertForSequenceClassification,
-    FlaubertTokenizer,
     RobertaConfig,
     RobertaForSequenceClassification,
     RobertaForSpanClassification,
     RobertaTokenizer,
     XLMConfig,
-    XLMForSequenceClassification,
     XLMRobertaConfig,
-    XLMRobertaForSequenceClassification,
-    XLMRobertaTokenizer,
-    XLMTokenizer,
     XLNetConfig,
-    XLNetForSequenceClassification,
-    XLNetTokenizer,
     get_linear_schedule_with_warmup,
 )
-from transformers import superglue_compute_metrics as compute_metrics
-from transformers import superglue_convert_examples_to_features as convert_examples_to_features
-from transformers import superglue_tasks_num_spans as task_spans
-from transformers import superglue_tasks_metrics as task_metrics
-from transformers import superglue_output_modes as output_modes
-from transformers import superglue_processors as processors
 
 
-try:
-    from torch.utils.tensorboard import SummaryWriter
-except ImportError:
-    from tensorboardX import SummaryWriter
+# try:
+#     from torch.utils.tensorboard import SummaryWriter
+# except ImportError:
+#     from tensorboardX import SummaryWriter
 
 
 logger = logging.getLogger(__name__)
@@ -95,28 +85,35 @@ ALL_MODELS = sum(
 )
 
 MODEL_CLASSES = {
-    #"bert": (BertConfig, BertForSequenceClassification, BertTokenizer),
-    #"xlnet": (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
-    #"xlm": (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
-    #"roberta": (RobertaConfig, RobertaForSequenceClassification, RobertaTokenizer),
-    #"distilbert": (DistilBertConfig, DistilBertForSequenceClassification, DistilBertTokenizer),
-    #"albert": (AlbertConfig, AlbertForSequenceClassification, AlbertTokenizer),
-    #"xlmroberta": (XLMRobertaConfig, XLMRobertaForSequenceClassification, XLMRobertaTokenizer),
-    #"flaubert": (FlaubertConfig, FlaubertForSequenceClassification, FlaubertTokenizer),
-
-    "bert": (BertConfig, BertTokenizer, {"classification": BertForSequenceClassification, "span_classification": BertForSpanClassification}),
-    "roberta": (RobertaConfig, RobertaTokenizer, {"classification": RobertaForSequenceClassification, "span_classification": RobertaForSpanClassification}),
+    # "bert": (BertConfig, BertForSequenceClassification, BertTokenizer),
+    # "xlnet": (XLNetConfig, XLNetForSequenceClassification, XLNetTokenizer),
+    # "xlm": (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
+    # "roberta": (RobertaConfig, RobertaForSequenceClassification, RobertaTokenizer),
+    # "distilbert": (DistilBertConfig, DistilBertForSequenceClassification, DistilBertTokenizer),
+    # "albert": (AlbertConfig, AlbertForSequenceClassification, AlbertTokenizer),
+    # "xlmroberta": (XLMRobertaConfig, XLMRobertaForSequenceClassification, XLMRobertaTokenizer),
+    # "flaubert": (FlaubertConfig, FlaubertForSequenceClassification, FlaubertTokenizer),
+    "bert": (
+        BertConfig,
+        BertTokenizer,
+        {"classification": BertForSequenceClassification, "span_classification": BertForSpanClassification},
+    ),
+    "roberta": (
+        RobertaConfig,
+        RobertaTokenizer,
+        {"classification": RobertaForSequenceClassification, "span_classification": RobertaForSpanClassification},
+    ),
 }
 
 TASK2FILENAME = {
-                 "boolq": "BoolQ.jsonl",
-                 "cb": "CB.jsonl",
-                 "copa": "COPA.jsonl",
-                 "multirc": "MultiRC.jsonl",
-                 "record": "ReCoRD.jsonl",
-                 "rte": "RTE.jsonl",
-                 "wic": "WiC.jsonl",
-                 "wsc": "WSC.jsonl",
+    "boolq": "BoolQ.jsonl",
+    "cb": "CB.jsonl",
+    "copa": "COPA.jsonl",
+    "multirc": "MultiRC.jsonl",
+    "record": "ReCoRD.jsonl",
+    "rte": "RTE.jsonl",
+    "wic": "WiC.jsonl",
+    "wsc": "WSC.jsonl",
 }
 
 
@@ -130,7 +127,7 @@ def set_seed(args):
 
 def train(args, train_dataset, model, tokenizer):
     """ Train the model """
-    #if args.local_rank in [-1, 0]:
+    # if args.local_rank in [-1, 0]:
     #    tb_writer = SummaryWriter()
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
@@ -140,7 +137,7 @@ def train(args, train_dataset, model, tokenizer):
     if args.max_steps > 0:
         t_total = args.max_steps
         args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
-    else: # number of training steps = number of epochs * number of batches
+    else:  # number of training steps = number of epochs * number of batches
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
     num_warmup_steps = int(args.warmup_ratio * t_total)
 
@@ -219,9 +216,9 @@ def train(args, train_dataset, model, tokenizer):
 
     tr_loss, logging_loss = 0.0, 0.0
     model.zero_grad()
-    #train_iterator = trange(
+    # train_iterator = trange(
     #    epochs_trained, int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0],
-    #)
+    # )
     train_iterator = range(epochs_trained, int(args.num_train_epochs))
 
     set_seed(args)  # Added here for reproductibility
@@ -288,12 +285,16 @@ def train(args, train_dataset, model, tokenizer):
                     logs["avg_loss_since_last_log"] = loss_scalar
                     logging_loss = tr_loss
 
-                    #for key, value in logs.items():
+                    # for key, value in logs.items():
                     #    tb_writer.add_scalar(key, value, global_step)
-                    #print(json.dumps({**logs, **{"step": global_step}}))
+                    # print(json.dumps({**logs, **{"step": global_step}}))
                     logging.info(json.dumps({**logs, **{"step": global_step}}))
 
-                if args.local_rank in [-1, 0] and args.eval_and_save_steps > 0 and global_step % args.eval_and_save_steps == 0:
+                if (
+                    args.local_rank in [-1, 0]
+                    and args.eval_and_save_steps > 0
+                    and global_step % args.eval_and_save_steps == 0
+                ):
                     # evaluate
                     results, _, _ = evaluate(args, args.task_name, model, tokenizer, use_tqdm=False)
                     for key, value in results.items():
@@ -331,10 +332,10 @@ def train(args, train_dataset, model, tokenizer):
                 epoch_iterator.close()
                 break
         if args.max_steps > 0 and global_step >= args.max_steps:
-            #train_iterator.close()
+            # train_iterator.close()
             break
 
-    #if args.local_rank in [-1, 0]:
+    # if args.local_rank in [-1, 0]:
     #    tb_writer.close()
 
     return global_step, tr_loss / global_step
@@ -371,7 +372,7 @@ def evaluate(args, task_name, model, tokenizer, split="dev", prefix="", use_tqdm
     out_label_ids = None
     ex_ids = None
     eval_dataloader = tqdm(eval_dataloader, desc="Evaluating") if use_tqdm else eval_dataloader
-    debug_idx = 0
+    # debug_idx = 0
     for batch in eval_dataloader:
         model.eval()
         batch = tuple(t.to(args.device) for t in batch)
@@ -398,8 +399,8 @@ def evaluate(args, task_name, model, tokenizer, split="dev", prefix="", use_tqdm
             preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
             out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
             ex_ids.append(guids.detach().cpu().numpy())
-        #debug_idx += 1
-        #if debug_idx > 10:
+        # debug_idx += 1
+        # if debug_idx > 10:
         #    break
 
     ex_ids = np.concatenate(ex_ids, axis=0)
@@ -408,7 +409,7 @@ def evaluate(args, task_name, model, tokenizer, split="dev", prefix="", use_tqdm
         preds = np.argmax(preds, axis=1)
     elif args.output_mode == "regression":
         preds = np.squeeze(preds)
-    #logging.info(f"predictions: {preds}")
+    # logging.info(f"predictions: {preds}")
     if split != "test":
         # don't have access to test labels, so skip evaluating on them
         # NB(AW): forcing evaluation on ReCoRD on test (no labels) will error
@@ -434,10 +435,7 @@ def load_and_cache_examples(args, task, tokenizer, split="train"):
     cached_tensors_file = os.path.join(
         args.data_dir,
         "tensors_{}_{}_{}_{}".format(
-            split,
-            list(filter(None, args.model_name_or_path.split("/"))).pop(),
-            str(args.max_seq_length),
-            str(task),
+            split, list(filter(None, args.model_name_or_path.split("/"))).pop(), str(args.max_seq_length), str(task),
         ),
     )
     if os.path.exists(cached_tensors_file) and not args.overwrite_cache:
@@ -469,7 +467,7 @@ def load_and_cache_examples(args, task, tokenizer, split="train"):
             pad_token_segment_id=4 if args.model_type in ["xlnet"] else 0,
         )
         logger.info("\tFinished creating features")
-        if args.local_rank == 0 and not split in ["dev", "train"]:
+        if args.local_rank == 0 and split not in ["dev", "train"]:
             torch.distributed.barrier()  # Make sure only the first process in distributed training process the dataset, and the others will use the cache
 
         # Convert to Tensors and build dataset
@@ -484,10 +482,12 @@ def load_and_cache_examples(args, task, tokenizer, split="train"):
             all_labels = torch.tensor([f.label for f in features], dtype=torch.float)
 
         if output_mode in ["span_classification"]:
-            #all_starts = torch.tensor([[s[0] for s in f.span_locs] for f in features], dtype=torch.long)
-            #all_ends = torch.tensor([[s[1] for s in f.span_locs] for f in features], dtype=torch.long)
+            # all_starts = torch.tensor([[s[0] for s in f.span_locs] for f in features], dtype=torch.long)
+            # all_ends = torch.tensor([[s[1] for s in f.span_locs] for f in features], dtype=torch.long)
             all_spans = torch.tensor([f.span_locs for f in features])
-            dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_spans, all_guids)
+            dataset = TensorDataset(
+                all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_spans, all_guids
+            )
         else:
             dataset = TensorDataset(all_input_ids, all_attention_mask, all_token_type_ids, all_labels, all_guids)
         logger.info("\tFinished converting features into tensors")
@@ -570,7 +570,9 @@ def main():
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
 
     parser.add_argument(
-        "--log_evaluate_during_training", action="store_true", help="Run evaluation during training at each logging step.",
+        "--log_evaluate_during_training",
+        action="store_true",
+        help="Run evaluation during training at each logging step.",
     )
     parser.add_argument(
         "--do_lower_case", action="store_true", help="Set this flag if you are using an uncased model.",
@@ -591,8 +593,12 @@ def main():
     parser.add_argument("--learning_rate", default=5e-5, type=float, help="The initial learning rate for Adam.")
     parser.add_argument("--weight_decay", default=0.0, type=float, help="Weight decay if we apply some.")
     parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
-    parser.add_argument("--adam_beta1", default=1e-8, type=float, help="Epsilon for Adam optimizer. Currently not used. ")
-    parser.add_argument("--adam_beta2", default=1e-8, type=float, help="Epsilon for Adam optimizer. Currently not used. ")
+    parser.add_argument(
+        "--adam_beta1", default=1e-8, type=float, help="Epsilon for Adam optimizer. Currently not used. "
+    )
+    parser.add_argument(
+        "--adam_beta2", default=1e-8, type=float, help="Epsilon for Adam optimizer. Currently not used. "
+    )
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument(
         "--num_train_epochs", default=3.0, type=float, help="Total number of training epochs to perform.",
@@ -646,7 +652,7 @@ def main():
 
     # Setup logging
     logging.basicConfig(
-        #format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        # format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         format="%(asctime)s: %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if args.local_rank in [-1, 0] else logging.WARN,
@@ -655,6 +661,7 @@ def main():
     # Launch impact tracker
     if args.log_energy_consumption:
         from experiment_impact_tracker.compute_tracker import ImpactTracker
+
         logger.info("Launching impact tracker...")
         tracker = ImpactTracker(args.output_dir)
         tracker.launch_impact_monitor()
@@ -675,6 +682,7 @@ def main():
     if args.server_ip and args.server_port:
         # Distant debugging - see https://code.visualstudio.com/docs/python/debugging#_attach-to-a-local-script
         import ptvsd
+
         print("Waiting for debugger attach")
         ptvsd.enable_attach(address=(args.server_ip, args.server_port), redirect_output=True)
         ptvsd.wait_for_attach()
@@ -790,7 +798,7 @@ def main():
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
         for checkpoint in checkpoints:
-            global_step = checkpoint.split("-")[-1]# if len(checkpoints) > 1 else ""
+            global_step = checkpoint.split("-")[-1]  # if len(checkpoints) > 1 else ""
             prefix = checkpoint.split("/")[-1] if checkpoint.find("checkpoint") != -1 else ""
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
@@ -803,7 +811,9 @@ def main():
                 # Hack to handle diagnostic datasets
                 eval_task_names = ("rte", "ax-b", "ax-g") if args.task_name == "rte" else (args.task_name,)
                 for eval_task_name in eval_task_names:
-                    result, preds, ex_ids = evaluate(args, eval_task_name, model, tokenizer, split="test", prefix=prefix)
+                    result, preds, ex_ids = evaluate(
+                        args, eval_task_name, model, tokenizer, split="test", prefix=prefix
+                    )
                     processor = processors[eval_task_name]()
                     if args.task_name == "record":
                         answers = processor.get_answers(args.data_dir, "test")

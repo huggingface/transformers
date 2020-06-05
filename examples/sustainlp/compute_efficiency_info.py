@@ -3,7 +3,7 @@
 import argparse
 import json
 
-from experiment_impact_tracker.utils import load_initial_info, gather_additional_info
+from experiment_impact_tracker.utils import gather_additional_info, load_initial_info
 
 
 def main():
@@ -14,8 +14,7 @@ def main():
 
     sys_data = load_initial_info(args.log_dir)
     eff_data = gather_additional_info(sys_data, args.log_dir)
-    for stat in ["gpu_info", "experiment_impact_tracker_version",
-                 "region", "region_carbon_intensity_estimate"]:
+    for stat in ["gpu_info", "experiment_impact_tracker_version", "region", "region_carbon_intensity_estimate"]:
         print(f"{stat}: {sys_data[stat]}")
     print(f"Experiment energy usage: {json.dumps(eff_data)}")
 

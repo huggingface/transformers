@@ -19,7 +19,7 @@ import dataclasses
 import json
 import logging
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 from ...file_utils import is_tf_available, is_torch_available
 
@@ -126,6 +126,7 @@ class SpanClassificationFeatures(object):
         token_type_ids: Segment token indices to indicate first and second portions of the inputs.
         label: Label corresponding to the input
     """
+
     guid: List[int]
     input_ids: List[int]
     span_locs: List[Tuple[int]]

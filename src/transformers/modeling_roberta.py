@@ -710,13 +710,12 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
 )
 class RobertaForSpanClassification(BertPreTrainedModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.num_spans = config.num_spans # number of spans per input
+        self.num_spans = config.num_spans  # number of spans per input
 
         self.roberta = RobertaModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -806,7 +805,7 @@ class RobertaForSpanClassification(BertPreTrainedModel):
 
             span_mask = torch.zeros_like(sequence_output)
             for batch_idx, (start, end) in enumerate(batch_spans):
-                span_mask[batch_idx, start:end+1] = 1
+                span_mask[batch_idx, start : end + 1] = 1
 
             # pool within spans
             masked_output = sequence_output * span_mask

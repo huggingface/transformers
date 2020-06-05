@@ -16,7 +16,9 @@
 
 import re
 import string
-from collections import defaultdict, Counter
+from collections import Counter, defaultdict
+
+
 try:
     from scipy.stats import pearsonr, spearmanr
     from sklearn.metrics import matthews_corrcoef, f1_score
@@ -215,4 +217,3 @@ if _has_sklearn:
         "wic": "acc",
         "wsc": "acc_and_f1",
     }
-
