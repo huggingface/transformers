@@ -18,10 +18,10 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "blenderbot": os.path.abspath(os.path.expanduser("blenderbot-vocab.json"),
+        "blenderbot": os.path.abspath(os.path.expanduser("blenderbot-vocab.json")),
     },
     "merges_file": {
-        "blenderbot": os.path.abspath(os.path.expanduser("blenderbot-merges.txt"),
+        "blenderbot": os.path.abspath(os.path.expanduser("blenderbot-merges.txt")),
     },
 }
 
