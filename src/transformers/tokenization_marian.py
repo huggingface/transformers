@@ -7,7 +7,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import sentencepiece
 
-from .file_utils import S3_BUCKET_PREFIX
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 
 
@@ -16,11 +15,6 @@ vocab_files_names = {
     "target_spm": "target.spm",
     "vocab": "vocab.json",
     "tokenizer_config_file": "tokenizer_config.json",
-}
-MODEL_NAMES = ("opus-mt-en-de",)  # TODO(SS): delete this, the only required constant is vocab_files_names
-PRETRAINED_VOCAB_FILES_MAP = {
-    k: {m: f"{S3_BUCKET_PREFIX}/Helsinki-NLP/{m}/{fname}" for m in MODEL_NAMES}
-    for k, fname in vocab_files_names.items()
 }
 # Example URL https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/vocab.json
 
@@ -41,8 +35,6 @@ class MarianTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = vocab_files_names
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = {m: 512 for m in MODEL_NAMES}
     model_input_names = ["attention_mask"]  # actually attention_mask, decoder_attention_mask
     language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
