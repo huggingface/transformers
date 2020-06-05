@@ -325,7 +325,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
         logger.log_hyperparams(args)
 
     checkpoint_callback = ModelCheckpoint(
-        filepath=str(model.output_dir / "{epoch}-{val_avg_rouge2:.4f}"), monitor="val_loss", mode="min", save_top_k=1,
+        filepath=str(model.output_dir / "{epoch}-{val_avg_rouge2:.4f}"), monitor="val_avg_rouge2", mode="max", save_top_k=1,
         save_weights_only=True,
     )
 
