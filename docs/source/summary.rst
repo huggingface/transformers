@@ -5,7 +5,8 @@ This is a summary of the models available in the transformers library. It assume
 `transformer model <https://arxiv.org/abs/1706.03762>`_. For a gentle introduction check the `annotated transformer 
 <http://nlp.seas.harvard.edu/2018/04/03/attention.html>`_. Here we focus on the high-level differences between the
 models. You can check them more in detail in their respective documentation. Also checkout the 
-:doc:`pretrained model page </pretrained_models>` to see the checkpoints available for each type of model.
+:doc:`pretrained model page </pretrained_models>` to see the checkpoints available for each type of model and all `the 
+community models <https://huggingface.co/models>`_.
 
 Each one of the models in the library falls into one of the following categories:
 
