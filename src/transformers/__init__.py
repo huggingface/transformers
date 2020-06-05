@@ -132,10 +132,12 @@ from .tokenization_reformer import ReformerTokenizer
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
-from .tokenization_utils import PreTrainedTokenizer, TensorType
+from .tokenization_utils import BatchEncoding, PreTrainedTokenizer, PreTrainedTokenizerFast, SpecialTokensMixin, TensorType
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer
+
+# Trainer
 from .trainer_utils import EvalPrediction
 from .training_args import TrainingArguments
 from .training_args_tf import TFTrainingArguments
