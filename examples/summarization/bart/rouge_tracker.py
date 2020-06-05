@@ -52,6 +52,7 @@ class RougeTracker:
         self.gt = test_gt  # {'test': test_gt}
         self.tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
         self.csv_path = csv_path
+        self.new_results = pd.DataFrame()
 
     @property
     def finished_experiments(self):
@@ -91,5 +92,6 @@ class RougeTracker:
             .set_index("exp_name")
             .astype(float)
         )
+        self.new_results = new_df
         self.df = pd.concat([self.df, new_df]).dsort('R2')
         return self.df
