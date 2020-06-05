@@ -48,13 +48,12 @@ class MarianTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         eos_token="</s>",
         pad_token="<pad>",
-        max_len=512,
-        **kwargs,
+        model_max_length=512,
+        **kwargs
     ):
-
         super().__init__(
             # bos_token=bos_token,  unused. Start decoding with config.decoder_start_token_id
-            max_len=max_len,
+            model_max_length=model_max_length,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
