@@ -1,0 +1,17 @@
+{
+  "embedding_size": 512,
+  "n_layers": 8,
+  "ffn_size": 2048,
+  "dropout": 0.1,
+  "n_heads": 16,
+  "n_positions": 512,
+  "activation": "gelu",
+  "attention_dropout": 0.0,
+  "relu_dropout": 0.0,
+  "learn_positional_embeddings": true,
+  "vocab_size": 54944,
+  "pad_idx": 0,
+  "start_idx": 1,
+  "end_idx": 2,
+  "initializer_range": 0.02
+}
