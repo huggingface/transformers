@@ -38,6 +38,7 @@ if is_torch_available():
         convert_opus_name_to_hf_name,
         ORG_NAME,
     )
+    from transformers.pipelines import TranslationPipeline
 
 
 class ModelManagementTests(unittest.TestCase):
@@ -228,6 +229,11 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         self.assertIsInstance(normalized, str)
         with self.assertRaises(ValueError):
             self.tokenizer.prepare_translation_batch([""])
+
+    def test_pipeline(self):
+        pipeline = TranslationPipeline(self.model, self.tokenizer, framework="pt")
+        output = pipeline(self.src_text)
+        self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
 
 
 @require_torch
