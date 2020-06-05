@@ -251,7 +251,7 @@ class TFTrainer:
             for k, v in logs.items():
                 tf.summary.scalar(k, v, step=self.global_step)
         self.tb_writer.flush()
-    
+
     def evaluate(
         self, eval_dataset: Optional[tf.data.Dataset] = None, prediction_loss_only: Optional[bool] = None
     ) -> Dict[str, float]:

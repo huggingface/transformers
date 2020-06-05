@@ -517,7 +517,7 @@ class Trainer:
         for k, v in logs.items():
             self.tb_writer.add_scalar(k, v, self.global_step)
         self.tb_writer.flush()
-            
+
     def _training_step(
         self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer
     ) -> float:
