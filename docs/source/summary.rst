@@ -5,7 +5,8 @@ This is a summary of the models available in the transformers library. It assume
 `transformer model <https://arxiv.org/abs/1706.03762>`_. For a gentle introduction check the `annotated transformer 
 <http://nlp.seas.harvard.edu/2018/04/03/attention.html>`_. Here we focus on the high-level differences between the
 models. You can check them more in detail in their respective documentation. Also checkout the 
-:doc:`pretrained model page </pretrained_models>` to see the checkpoints available for each type of model.
+:doc:`pretrained model page </pretrained_models>` to see the checkpoints available for each type of model and all `the 
+community models <https://huggingface.co/models>`_.
 
 Each one of the models in the library falls into one of the following categories:
 
@@ -49,6 +50,15 @@ that at each position, the model can only look at the tokens before in the atten
 Original GPT
 ----------------------------------------------
 
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=openai-gpt">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-openai--gpt-blueviolet">
+   </a>
+   <a href="/model_doc/gpt">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-openai--gpt-blueviolet">
+   </a>
+
 `Improving Language Understanding by Generative Pre-Training <https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf>`_, 
 Alec Radford et al.
 
@@ -57,10 +67,17 @@ The first autoregressive model based on the transformer architecture, pretrained
 The library provides versions of the model for language modeling and multitask language modeling/multiple choice 
 classification.
 
-More information in this :doc:`model documentation </model_doc/gpt>`.
-
 GPT-2
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=gpt2">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-gpt2-blueviolet">
+   </a>
+   <a href="/model_doc/gpt2">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-gpt2-blueviolet">
+   </a>
 
 `Language Models are Unsupervised Multitask Learners <https://d4mucfpksywv.cloudfront.net/better-language-models/language_models_are_unsupervised_multitask_learners.pdf>`_, 
 Alec Radford et al.
@@ -71,10 +88,17 @@ more).
 The library provides versions of the model for language modeling and multitask language modeling/multiple choice 
 classification.
 
-More information in this :doc:`model documentation </model_doc/gpt2>`.
-
 CTRL
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=ctrl">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-ctrl-blueviolet">
+   </a>
+   <a href="/model_doc/ctrl">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-ctrl-blueviolet">
+   </a>
 
 `CTRL: A Conditional Transformer Language Model for Controllable Generation <https://arxiv.org/abs/1909.05858>`_, 
 Nitish Shirish Keskar et al.
@@ -85,10 +109,17 @@ wikipedia article, a book or a movie review.
 
 The library provides a version of the model for language modeling only.
 
-More information in this :doc:`model documentation </model_doc/ctrl>`.
-
 Transformer-XL
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=transfo-xl">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-transfo--xl-blueviolet">
+   </a>
+   <a href="/model_doc/transformerxl">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-transfo--xl-blueviolet">
+   </a>
 
 `Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`_, 
 Zihang Dai et al.
@@ -107,12 +138,19 @@ adjustments in the way attention scores are computed.
 
 The library provides a version of the model for language modeling only.
 
-More information in this :doc:`model documentation </model_doc/transformerxl>`.
-
 .. _reformer:
 
 Reformer
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=reformer">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-reformer-blueviolet">
+   </a>
+   <a href="/model_doc/reformer">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-reformer-blueviolet">
+   </a>
 
 `Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.04451>`_,
 Nikita Kitaev et al .
@@ -137,10 +175,17 @@ pretraining yet, though.
 
 The library provides a version of the model for language modeling only.
 
-More information in this :doc:`model documentation </model_doc/reformer>`.
-
 XLNet
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=xlnet">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlnet-blueviolet">
+   </a>
+   <a href="/model_doc/xlnet">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xlnet-blueviolet">
+   </a>
 
 `XLNet: Generalized Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_,
 Zhilin Yang et al.
@@ -155,19 +200,26 @@ XLNet also uses the same recurrence mechanism as TransformerXL to build long-ter
 The library provides a version of the model for language modeling, token classification, sentence classification, 
 multiple choice classification and question answering.
 
-More information in this :doc:`model documentation </model_doc/xlnet>`.
-
 .. _autoencoding-models:
 
 Autoencoding models
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-As mentioned before, these models rely on the encoder part of the original transformer and use no mask so the model can `
+As mentioned before, these models rely on the encoder part of the original transformer and use no mask so the model can
 look at all the tokens in the attention heads. For pretraining, inputs are a corrupted version of the sentence, usually 
 obtained by masking tokens, and targets are the original sentences.
 
 BERT
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=bert">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-bert-blueviolet">
+   </a>
+   <a href="/model_doc/bert">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-bert-blueviolet">
+   </a>
 
 `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding <https://arxiv.org/abs/1810.04805>`_,
 Jacob Devlin et al.
@@ -186,10 +238,17 @@ they are not related. The model has to predict if the sentences are consecutive 
 The library provides a version of the model for language modeling (traditional or masked), next sentence prediction, 
 token classification, sentence classification, multiple choice classification and question answering.
 
-More information in this :doc:`model documentation </model_doc/bert>`.
-
 ALBERT
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=albert">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-albert-blueviolet">
+   </a>
+   <a href="/model_doc/albert">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-albert-blueviolet">
+   </a>
 
 `ALBERT: A Lite BERT for Self-supervised Learning of Language Representations <https://arxiv.org/abs/1909.11942>`_,
 Zhenzhong Lan et al.
@@ -208,10 +267,17 @@ Same as BERT but with a few tweaks:
 The library provides a version of the model for masked language modeling, token classification, sentence 
 classification, multiple choice classification and question answering.
 
-More information in this :doc:`model documentation </model_doc/albert>`.
-
 RoBERTa
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=roberta">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-roberta-blueviolet">
+   </a>
+   <a href="/model_doc/roberta">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-roberta-blueviolet">
+   </a>
 
 `RoBERTa: A Robustly Optimized BERT Pretraining Approach <https://arxiv.org/abs/1907.11692>`_,
 Yinhan Liu et al.
@@ -227,10 +293,17 @@ Same as BERT with better pretraining tricks:
 The library provides a version of the model for masked language modeling, token classification, sentence 
 classification, multiple choice classification and question answering.
 
-More information in this :doc:`model documentation </model_doc/roberta>`.
-
 DistilBERT
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=distilbert">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-distilbert-blueviolet">
+   </a>
+   <a href="/model_doc/distilbert">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-distilbert-blueviolet">
+   </a>
 
 `DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter <https://arxiv.org/abs/1910.01108>`_,
 Victor Sanh et al.
@@ -245,10 +318,17 @@ the same probabilities as the larger model. The actual objective is a combinatio
 The library provides a version of the model for masked language modeling, token classification, sentence classification 
 and question answering.
 
-More information in this :doc:`model documentation </model_doc/distilbert>`.
-
 XLM
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=xlm">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm-blueviolet">
+   </a>
+   <a href="/model_doc/xlm">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xlm-blueviolet">
+   </a>
 
 `Cross-lingual Language Model Pretraining <https://arxiv.org/abs/1901.07291>`_, Guillaume Lample and Alexis Conneau
 
@@ -273,10 +353,17 @@ language.
 The library provides a version of the model for language modeling, token classification, sentence classification and 
 question answering.
 
-More information in this :doc:`model documentation </model_doc/xlm>`.
-
 XLM-RoBERTa
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=xlm-roberta">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xlm--roberta-blueviolet">
+   </a>
+   <a href="/model_doc/xlmroberta">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xlm--roberta-blueviolet">
+   </a>
 
 `Unsupervised Cross-lingual Representation Learning at Scale <https://arxiv.org/abs/1911.02116>`_, Alexis Conneau et 
 al.
@@ -288,10 +375,17 @@ masked language modeling on sentences coming from one language. However, the mod
 The library provides a version of the model for masked language modeling, token classification, sentence 
 classification, multiple choice classification and question answering.
 
-More information in this :doc:`model documentation </model_doc/xlmroberta>`.
-
 FlauBERT
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=flaubert">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-flaubert-blueviolet">
+   </a>
+   <a href="/model_doc/flaubert">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-flaubert-blueviolet">
+   </a>
 
 `FlauBERT: Unsupervised Language Model Pre-training for French <https://arxiv.org/abs/1912.05372>`_, Hang Le et al.
 
@@ -299,10 +393,17 @@ Like RoBERTa, without the sentence ordering prediction (so just trained on the M
 
 The library provides a version of the model for language modeling and sentence classification.
 
-More information in this :doc:`model documentation </model_doc/flaubert>`.
-
 ELECTRA
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=electra">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-electra-blueviolet">
+   </a>
+   <a href="/model_doc/electra">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-electra-blueviolet">
+   </a>
 
 `ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators <https://arxiv.org/abs/2003.10555>`_, 
 Kevin Clark et al.
@@ -316,12 +417,19 @@ traditional GAN setting) then the ELECTRA model is trained for a few steps.
 The library provides a version of the model for masked language modeling, token classification and sentence 
 classification.
 
-More information in this :doc:`model documentation </model_doc/electra>`.
-
 .. _longformer:
 
 Longformer
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=longformer">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-longformer-blueviolet">
+   </a>
+   <a href="/model_doc/longformer">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-longformer-blueviolet">
+   </a>
 
 `Longformer: The Long-Document Transformer <https://arxiv.org/abs/2004.05150>`_, Iz Beltagy et al.
 
@@ -338,9 +446,6 @@ pretraining yet, though.
 The library provides a version of the model for masked language modeling, token classification, sentence 
 classification, multiple choice classification and question answering.
 
-More information in this :doc:`model documentation </model_doc/longformer>`.
-
-
 .. _seq-to-seq-models:
 
 Sequence-to-sequence models
@@ -351,8 +456,17 @@ As mentioned before, these models keep both the encoder and the decoder of the o
 BART
 ----------------------------------------------
 
-`BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension <https://arxiv.org/abs/1910.13461>`_, 
-Mike Lewis et al.
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=bart">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-bart-blueviolet">
+   </a>
+   <a href="/model_doc/bart">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-bart-blueviolet">
+   </a>
+
+`BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension 
+<https://arxiv.org/abs/1910.13461>`_, Mike Lewis et al.
 
 Sequence-to-sequence model with an encoder and a decoder. Encoder is fed a corrupted version of the tokens, decoder is 
 fed the tokens (but has a mask to hide the future words like a regular transformers decoder). For the encoder, on the 
@@ -366,10 +480,17 @@ pretraining tasks, a composition of the following transformations are applied:
 
 The library provides a version of this model for conditional generation and sequence classification.
 
-More information in this :doc:`model documentation </model_doc/bart>`.
-
 MarianMT
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=marian">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-marian-blueviolet">
+   </a>
+   <a href="/model_doc/marian">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-marian-blueviolet">
+   </a>
 
 `Marian: Fast Neural Machine Translation in C++ <https://arxiv.org/abs/1804.00344>`_, Marcin Junczys-Dowmunt et al.
 
@@ -377,10 +498,17 @@ A framework for translation models, using the same models as BART
 
 The library provides a version of this model for conditional generation.
 
-More information in this :doc:`model documentation </model_doc/marian>`.
-
 T5
 ----------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=t5">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-t5-blueviolet">
+   </a>
+   <a href="/model_doc/t5">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-t5-blueviolet">
+   </a>
 
 `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer <https://arxiv.org/abs/1910.10683>`_, 
 Colin Raffel et al.
@@ -401,8 +529,6 @@ For instance, if we have the sentence “My dog is very cute .”, and we decide
 input becomes “My <x> very <y> .” and the target is “<x> dog is <y> . <z>”
 
 The library provides a version of this model for conditional generation.
-
-More information in this :doc:`model documentation </model_doc/t5>`.
 
 .. _multimodal-models:
 
