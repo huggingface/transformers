@@ -156,7 +156,7 @@ class Trainer:
     tb_writer: Optional["SummaryWriter"] = None
     optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = None
     global_step: Optional[int] = None
-    epoch: Optional[float] = None
+    epoch_logging: Optional[float] = None
 
     def __init__(
         self,
@@ -287,7 +287,7 @@ class Trainer:
         If you want to use something else, you can pass a tuple in the Trainer's init,
         or override this method in a subclass.
         """
-        if self.optimizers is not None:
+        if self.optimizers is not Noneself.eval:
             return self.optimizers
         # Prepare optimizer and schedule (linear warmup and decay)
         no_decay = ["bias", "LayerNorm.weight"]
@@ -386,8 +386,8 @@ class Trainer:
         logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
         logger.info("  Total optimization steps = %d", t_total)
 
-        self.global_step = 0
-        self.epoch = 0
+        self.global_step = 0  # used by loggers
+        self.epoch_logging = 0  # added with loggers to use as x-axis
         epochs_trained = 0
         steps_trained_in_current_epoch = 0
         # Check if continuing training from a checkpoint
@@ -453,7 +453,7 @@ class Trainer:
                     scheduler.step()
                     model.zero_grad()
                     self.global_step += 1
-                    self.epoch = epoch + (step + 1) / len(epoch_iterator)
+                    self.epoch_logging = epoch + (step + 1) / len(epoch_iterator)
 
                     if (self.args.logging_steps > 0 and self.global_step % self.args.logging_steps == 0) or (
                         self.global_step == 1 and self.args.logging_first_step

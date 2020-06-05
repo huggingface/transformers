@@ -61,8 +61,8 @@ def log_metrics(trainer, logs: Dict[str, float], iterator: Optional[tqdm] = None
     """
     Log metrics with available loggers.
     """
-    if trainer.epoch is not None:
-        logs["epoch"] = trainer.epoch
+    if trainer.epoch_logging is not None:
+        logs["epoch"] = trainer.epoch_logging
     if trainer.tb_writer:
         trainer._log_tb(logs)
     if is_wandb_available():

@@ -34,7 +34,7 @@ class TFTrainer:
     tb_writer: Optional[tf.summary.SummaryWriter] = None
     optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = None
     global_step: Optional[int] = None
-    epoch: Optional[float] = None
+    epoch_logging: Optional[float] = None
 
     def __init__(
         self,
@@ -284,13 +284,13 @@ class TFTrainer:
         logger.info("  Num Epochs = %d", epochs)
         logger.info("  Total optimization steps = %d", self.train_steps)
 
-        self.global_step = 0
-        self.epoch = 0
+        self.global_step = 0  # used by loggers
+        self.epoch_logging = 0  # added with loggers to use as x-axis
 
-        for epoch in range(start_epoch, int(epochs + 1)):
+        for epoch_iter in range(start_epoch, int(epochs + 1)):
             for step, training_loss in enumerate(self._training_steps(train_ds, optimizer)):
                 self.global_step = iterations.numpy()
-                self.epoch = epoch - 1 + (step + 1) / self.train_steps
+                self.epoch_logging = epoch_iter - 1 + (step + 1) / self.train_steps
 
                 if self.args.debug:
                     logs = {"loss": training_loss.numpy()}
@@ -304,7 +304,6 @@ class TFTrainer:
 
                 if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
                     self.evaluate()
-                    logger.info("Epoch {} Step {} Validation Metrics {}".format(epoch, self.global_step, logs))
 
                 if self.global_step % self.args.logging_steps == 0:
                     logs = {}
