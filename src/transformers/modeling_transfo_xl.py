@@ -530,6 +530,7 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
             return self.get_input_embeddings()
 
         new_num_tokens_layer, layer = self._get_new_num_tokens_layer(new_num_tokens, layer)
+        assert new_num_tokens_layer > 0, "The size of the new embedding layer cannot be 0 or less"
         model_embeds = base_model._resize_token_embeddings(new_num_tokens_layer, layer)
 
         # Update base model and current model config
@@ -1011,6 +1012,6 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     def _resize_cutoffs(self, new_num_tokens, new_emb_size, new_embedding_shapes, layer):
         new_cutoffs = super()._resize_cutoffs(new_num_tokens, new_emb_size, new_embedding_shapes, layer)
 
-        self.crit.cutoffs[layer] = new_cutoffs
+        self.crit.cutoffs = new_cutoffs
         self.crit.cutoff_ends = [0] + new_cutoffs
         self.crit.n_token = new_num_tokens
