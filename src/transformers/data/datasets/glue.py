@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Union
+from multiprocessing import Pool, cpu_count
 
 import torch
 from filelock import FileLock
@@ -52,6 +53,14 @@ class Split(Enum):
     train = "train"
     dev = "dev"
     test = "test"
+
+
+def multi_run_conversion(args):
+    """
+    Wrape glue_convert_examples_to_features into a fuction
+    to pass multiple parameters to it.
+    """
+    return glue_convert_examples_to_features(*args)
 
 
 class GlueDataset(Dataset):
@@ -119,12 +128,20 @@ class GlueDataset(Dataset):
                     examples = self.processor.get_train_examples(args.data_dir)
                 if limit_length is not None:
                     examples = examples[:limit_length]
-                self.features = glue_convert_examples_to_features(
-                    examples,
-                    tokenizer,
-                    max_length=args.max_seq_length,
-                    label_list=label_list,
-                    output_mode=self.output_mode,
+                # Utilize multiprocessing
+                chunk_num = cpu_count() - 1 if cpu_count() > 1 else 1
+                chunk_size = len(examples) // chunk_num
+                chunks = [examples[x*chunk_size:(x+1)*chunk_size] for x in range(0, chunk_num+1)]
+                start = time.time()
+                with Pool(chunk_num) as p:
+                    self.features_list = p.map(
+                        multi_run_conversion, [(
+                            chunk, tokenizer, args.max_seq_length, None, label_list, self.output_mode)
+                            for chunk in chunks]
+                    )
+                self.features = [feature for sublist in self.features_list for feature in sublist]
+                logger.info(
+                    "Converting examples into features [took %.3f s]", time.time() - start
                 )
                 start = time.time()
                 torch.save(self.features, cached_features_file)
