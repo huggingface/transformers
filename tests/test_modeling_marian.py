@@ -233,7 +233,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
             self.tokenizer.prepare_translation_batch([""])
 
     def test_pipeline(self):
-        device = 0 if torch_device == 'cuda' else -1
+        device = 0 if torch_device == "cuda" else -1
         pipeline = TranslationPipeline(self.model, self.tokenizer, framework="pt", device=device)
         output = pipeline(self.src_text)
         self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
