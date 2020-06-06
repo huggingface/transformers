@@ -931,7 +931,7 @@ class T5Model(T5PreTrainedModel):
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask, output_hidden_states=output_hidden_states
             )
 
         hidden_states = encoder_outputs[0]
@@ -1063,7 +1063,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask, output_hidden_states=output_hidden_states
             )
 
         hidden_states = encoder_outputs[0]
