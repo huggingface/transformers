@@ -264,3 +264,26 @@ class SortishSampler(Sampler):
         sort_idx = np.concatenate(np.random.permutation(ck_idx[1:])) if len(ck_idx) > 1 else np.array([], dtype=np.int)
         sort_idx = np.concatenate((ck_idx[0], sort_idx))
         return iter(sort_idx)
+import shutil
+
+def clean_output_dir(odir: Path, dry_run=False, best_match=None):
+    files_to_rm = []
+    #all_ckpts= list(sorted(Path(odir).glob("*.ckpt")))
+    matches = pickle_load(odir/'ckpt_matches.pkl').items()
+    ordered_matches = sorted(matches, key=lambda x: x[1], reverse=True)
+    for tfmr, pl in ordered_matches[1:]:
+        files_to_rm.append(tfmr)
+        files_to_rm.append(pl)
+    if dry_run:
+        return files_to_rm
+    else:
+        for f in files_to_rm:
+            remove_path(f)
+
+    return files_to_rm
+
+def remove_path(f):
+    try:
+        shutil.rmtree(f)
+    except NotADirectoryError:
+        os.remove(f)

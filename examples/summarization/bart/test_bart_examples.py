@@ -16,7 +16,7 @@ from transformers import BartTokenizer
 
 from .evaluate_cnn import run_generate
 from .finetune import eval_and_fix, main
-from .utils import PSEUDO_ID_SUFFIX, SummarizationDataset, summaries_for_file
+from .utils import PSEUDO_ID_SUFFIX, SummarizationDataset, summaries_for_file, clean_output_dir
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -157,6 +157,10 @@ class TestBartExamples(unittest.TestCase):
         matches = pickle_load(model.output_dir / "ckpt_matches.pkl")
 
         self.assertEqual(2, len(matches))
+        removed = clean_output_dir(model.output_dir)
+        self.assertEqual(len(removed), 2)
+        new_transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
+        self.assertEqual(len(new_transformer_ckpts), 1)
 
     def test_bdc_brewer(self):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1, alpha_hid=2.0)

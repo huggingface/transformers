@@ -2,18 +2,17 @@ import argparse
 import logging
 import os
 import random
-import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence, Set, Tuple, Union
+from typing import Any, Dict, List
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.utilities import rank_zero_only, rank_zero_warn
+from pytorch_lightning.utilities import rank_zero_only
 
-from durbango import pickle_load, pickle_save, remove_prefix
+from durbango import pickle_save, remove_prefix
 from transformers import (
     AdamW,
     AutoConfig,
@@ -25,7 +24,6 @@ from transformers import (
     AutoModelWithLMHead,
     AutoTokenizer,
     PretrainedConfig,
-    PreTrainedModel,
     PreTrainedTokenizer,
     get_linear_schedule_with_warmup,
 )
@@ -215,8 +213,8 @@ class BaseTransformer(pl.LightningModule):
             "--num_train_epochs", default=3, type=int, help="Total number of training epochs to perform."
         )
 
-        parser.add_argument("--train_batch_size", default=32, type=int)
-        parser.add_argument("--eval_batch_size", default=32, type=int)
+        parser.add_argument("--train_batch_size", default=4, type=int)
+        parser.add_argument("--eval_batch_size", default=8, type=int)
         parser.add_argument("--val_check_interval", default=1.0, type=float)
 
         # parser.add_argument("--eval_batch_size", default=32, type=int)
@@ -411,7 +409,6 @@ def generic_train(
 
     if args.n_tpu_cores > 0:
         global xm
-        import torch_xla.core.xla_model as xm
 
         train_params["num_tpu_cores"] = args.n_tpu_cores
         train_params["gpus"] = 0
