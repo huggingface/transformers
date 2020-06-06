@@ -3,6 +3,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from multiprocessing import Pool, cpu_count
 from typing import List, Optional, Union
 
 import torch
@@ -52,6 +53,14 @@ class Split(Enum):
     train = "train"
     dev = "dev"
     test = "test"
+
+
+def multi_run_conversion(args):
+    """
+    Wrape glue_convert_examples_to_features into a fuction
+    to pass multiple parameters to it.
+    """
+    return glue_convert_examples_to_features(*args)
 
 
 class GlueDataset(Dataset):
@@ -119,13 +128,15 @@ class GlueDataset(Dataset):
                     examples = self.processor.get_train_examples(args.data_dir)
                 if limit_length is not None:
                     examples = examples[:limit_length]
-                self.features = glue_convert_examples_to_features(
-                    examples,
-                    tokenizer,
-                    max_length=args.max_seq_length,
-                    label_list=label_list,
-                    output_mode=self.output_mode,
-                )
+                # Utilize multiprocessing: speed up the conversion process
+                chunk_num = cpu_count() - 1 if cpu_count() > 1 else 1
+                chunks = [examples[x : x + chunk_num] for x in range(0, len(examples), chunk_num)]
+                conversion_args = [
+                    (chunk, tokenizer, args.max_seq_length, None, label_list, self.output_mode,) for chunk in chunks
+                ]
+                with Pool(chunk_num) as p:
+                    features_list = p.map(multi_run_conversion, conversion_args)
+                self.features = [feature for sublist in features_list for feature in sublist]
                 start = time.time()
                 torch.save(self.features, cached_features_file)
                 # ^ This seems to take a lot of time so I want to investigate why and how we can improve.
