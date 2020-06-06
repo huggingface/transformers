@@ -32,6 +32,7 @@ from .modeling_tf_utils import (
     TFSequenceSummary,
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
+    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -133,10 +134,10 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         return x
 
-    def rel_attn_core(self, inputs, training=False, output_attentions=False):
+    def rel_attn_core(self, inputs, training=False):
         """Core relative positional attention operations."""
 
-        q_head, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask, head_mask = inputs
+        q_head, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask, head_mask, output_attentions = inputs
 
         # content based attention score
         ac = tf.einsum("ibnd,jbnd->ijbn", q_head + self.r_w_bias, k_head_h)
@@ -173,7 +174,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         # attention output
         attn_vec = tf.einsum("ijbn,jbnd->ibnd", attn_prob, v_head_h)
 
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             return attn_vec, attn_prob
 
         return attn_vec
@@ -193,8 +194,8 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         return output
 
-    def call(self, inputs, training=False, output_attentions=False):
-        (h, g, attn_mask_h, attn_mask_g, r, seg_mat, mems, target_mapping, head_mask) = inputs
+    def call(self, inputs, training=False):
+        (h, g, attn_mask_h, attn_mask_g, r, seg_mat, mems, target_mapping, head_mask, output_attentions) = inputs
 
         if g is not None:
             # Two-stream attention with relative positional encoding.
@@ -219,10 +220,11 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
             # core attention ops
             attn_vec_h = self.rel_attn_core(
-                [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask], training=training
+                [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask, output_attentions],
+                training=training,
             )
 
-            if output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 attn_vec_h, attn_prob_h = attn_vec_h
 
             # post processing
@@ -236,25 +238,27 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
             if target_mapping is not None:
                 q_head_g = tf.einsum("mbnd,mlb->lbnd", q_head_g, target_mapping)
                 attn_vec_g = self.rel_attn_core(
-                    [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask], training=training
+                    [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask, output_attentions],
+                    training=training,
                 )
 
-                if output_attentions:
+                if cast_bool_to_primitive(output_attentions) is True:
                     attn_vec_g, attn_prob_g = attn_vec_g
 
                 attn_vec_g = tf.einsum("lbnd,mlb->mbnd", attn_vec_g, target_mapping)
             else:
                 attn_vec_g = self.rel_attn_core(
-                    [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask], training=training
+                    [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask, output_attentions],
+                    training=training,
                 )
 
-                if output_attentions:
+                if cast_bool_to_primitive(output_attentions) is True:
                     attn_vec_g, attn_prob_g = attn_vec_g
 
             # post processing
             output_g = self.post_attention([g, attn_vec_g], training=training)
 
-            if output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 attn_prob = attn_prob_h, attn_prob_g
 
         else:
@@ -274,10 +278,11 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
             # core attention ops
             attn_vec = self.rel_attn_core(
-                [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask], training=training
+                [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask, output_attentions],
+                training=training,
             )
 
-            if output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 attn_vec, attn_prob = attn_vec
 
             # post processing
@@ -285,7 +290,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
             output_g = None
 
         outputs = (output_h, output_g)
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (attn_prob,)
         return outputs
 
@@ -506,8 +511,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
-        training=False,
         output_attentions=False,
+        training=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -520,7 +525,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
             use_cache = inputs[9] if len(inputs) > 9 else use_cache
-            assert len(inputs) <= 10, "Too many inputs."
+            output_attentions = inputs[10] if len(inputs) > 10 else output_attentions
+            assert len(inputs) <= 11, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -532,7 +538,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             use_cache = inputs.get("use_cache", use_cache)
-            assert len(inputs) <= 10, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 11, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -667,11 +674,22 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
             outputs = layer_module(
-                [output_h, output_g, non_tgt_mask, attn_mask, pos_emb, seg_mat, mems[i], target_mapping, head_mask[i]],
+                [
+                    output_h,
+                    output_g,
+                    non_tgt_mask,
+                    attn_mask,
+                    pos_emb,
+                    seg_mat,
+                    mems[i],
+                    target_mapping,
+                    head_mask[i],
+                    output_attentions,
+                ],
                 training=training,
             )
             output_h, output_g = outputs[:2]
-            if output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 attentions.append(outputs[2])
 
         # Add last hidden state
@@ -692,7 +710,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             else:
                 hidden_states = tuple(tf.transpose(hs, perm=(1, 0, 2)) for hs in hidden_states)
             outputs = outputs + (hidden_states,)
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
             outputs = outputs + (attentions,)
 
@@ -1095,7 +1113,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 

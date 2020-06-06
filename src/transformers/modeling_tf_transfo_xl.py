@@ -24,7 +24,13 @@ import tensorflow as tf
 from .configuration_transfo_xl import TransfoXLConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
+from .modeling_tf_utils import (
+    TFPreTrainedModel,
+    cast_bool_to_primitive,
+    get_initializer,
+    keras_serializable,
+    shape_list,
+)
 from .tokenization_utils import BatchEncoding
 
 
@@ -167,8 +173,8 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
 
         return x
 
-    def call(self, inputs, training=False, output_attentions=False):
-        w, r, attn_mask, mems, head_mask = inputs
+    def call(self, inputs, training=False):
+        w, r, attn_mask, mems, head_mask, output_attentions = inputs
         qlen, rlen, bsz = shape_list(w)[0], shape_list(r)[0], shape_list(w)[1]
 
         if mems is not None:
@@ -241,7 +247,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
             # residual connection + layer normalization
             outputs = [self.layer_norm(w + attn_out)]
 
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs.append(attn_prob)
 
         return outputs
@@ -294,10 +300,10 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
             name="pos_ff",
         )
 
-    def call(self, inputs, training=False, output_attentions=False):
-        dec_inp, r, dec_attn_mask, mems, head_mask = inputs
+    def call(self, inputs, training=False):
+        dec_inp, r, dec_attn_mask, mems, head_mask, output_attentions = inputs
         attn_outputs = self.dec_attn(
-            [dec_inp, r, dec_attn_mask, mems, head_mask], training=training, output_attentions=output_attentions
+            [dec_inp, r, dec_attn_mask, mems, head_mask, output_attentions], training=training
         )
         ff_output = self.pos_ff(attn_outputs[0], training=training)
 
@@ -510,19 +516,21 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
         return new_mems
 
-    def call(self, inputs, mems=None, head_mask=None, inputs_embeds=None, training=False, output_attentions=False):
+    def call(self, inputs, mems=None, head_mask=None, inputs_embeds=None, output_attentions=False, training=False):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             mems = inputs[1] if len(inputs) > 1 else mems
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
             inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            assert len(inputs) <= 4, "Too many inputs."
+            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
+            assert len(inputs) <= 5, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             mems = inputs.get("mems", mems)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 4, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 5, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -597,12 +605,10 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                 hids.append(core_out)
                 mems_i = None if mems is None else mems[i]
                 layer_outputs = layer(
-                    [core_out, pos_emb, dec_attn_mask, mems_i, head_mask[i]],
-                    training=training,
-                    output_attentions=output_attentions,
+                    [core_out, pos_emb, dec_attn_mask, mems_i, head_mask[i], output_attentions], training=training,
                 )
                 core_out = layer_outputs[0]
-                if output_attentions:
+                if cast_bool_to_primitive(output_attentions) is True:
                     attentions.append(layer_outputs[1])
         else:  # learnable embeddings and absolute embeddings
             raise NotImplementedError  # Removed these to avoid maintaining dead code - They are not used in our pretrained checkpoint
@@ -618,7 +624,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             hids.append(core_out)
             hids = list(tf.transpose(t, perm=(1, 0, 2)) for t in hids)
             outputs.append(hids)
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             # Transpose to library standard shape [bsz, n_heads, query_seq_len, key_seq_len]
             attentions = list(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
             outputs.append(attentions)

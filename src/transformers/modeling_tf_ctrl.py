@@ -26,9 +26,9 @@ from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
+    cast_bool_to_primitive,
     keras_serializable,
     shape_list,
-    cast_bool_to_primitive,
 )
 from .tokenization_utils import BatchEncoding
 
@@ -101,8 +101,8 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def call(self, inputs, training=False, output_attentions=False):
-        v, k, q, mask, layer_past, attention_mask, head_mask, use_cache = inputs
+    def call(self, inputs, training=False):
+        v, k, q, mask, layer_past, attention_mask, head_mask, use_cache, output_attentions = inputs
         batch_size = shape_list(q)[0]
 
         q = self.Wq(q)
@@ -133,7 +133,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         output = self.dense(original_size_attention)
 
         outputs = (output, present)
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (attn,)
         return outputs
 
@@ -158,13 +158,12 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         self.dropout1 = tf.keras.layers.Dropout(rate)
         self.dropout2 = tf.keras.layers.Dropout(rate)
 
-    def call(self, inputs, training=False, output_attentions=False):
-        x, mask, layer_past, attention_mask, head_mask, use_cache = inputs
+    def call(self, inputs, training=False):
+        x, mask, layer_past, attention_mask, head_mask, use_cache, output_attentions = inputs
         normed = self.layernorm1(x)
         attn_outputs = self.multi_head_attention(
-            [normed, normed, normed, mask, layer_past, attention_mask, head_mask, use_cache],
+            [normed, normed, normed, mask, layer_past, attention_mask, head_mask, use_cache, output_attentions],
             training=training,
-            output_attentions=output_attentions,
         )
         attn_output = attn_outputs[0]
         attn_output = self.dropout1(attn_output, training=training)
@@ -232,8 +231,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
-        training=False,
         output_attentions=False,
+        training=False,
     ):
 
         if isinstance(inputs, (tuple, list)):
@@ -245,7 +244,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             head_mask = inputs[5] if len(inputs) > 5 else head_mask
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             use_cache = inputs[7] if len(inputs) > 7 else use_cache
-            assert len(inputs) <= 8, "Too many inputs."
+            output_attentions = inputs[8] if len(inputs) > 8 else output_attentions
+            assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -255,7 +255,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             use_cache = inputs.get("use_cache", use_cache)
-            assert len(inputs) <= 8, "Too many inputs."
+            output_attention = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -345,13 +346,16 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         for i, (h, layer_past) in enumerate(zip(self.h, past)):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
-            outputs = h([hidden_states, mask, layer_past, attention_mask, head_mask[i], use_cache], training=training)
+            outputs = h(
+                [hidden_states, mask, layer_past, attention_mask, head_mask[i], use_cache, output_attentions],
+                training=training,
+            )
             hidden_states, present = outputs[:2]
 
             if use_cache is True:
                 presents = presents + (present,)
 
-            if output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 all_attentions.append(outputs[2])
 
         hidden_states = self.layernorm(hidden_states)
@@ -364,7 +368,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)

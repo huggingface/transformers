@@ -28,10 +28,10 @@ from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceSummary,
     TFSharedEmbeddings,
+    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
-    cast_bool_to_primitive,
 )
 from .tokenization_utils import BatchEncoding
 
