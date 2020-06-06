@@ -130,8 +130,8 @@ class BertTokenizer(PreTrainedTokenizer):
             Whether to lowercase the input when tokenizing.
         do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to do basic tokenization before WordPiece.
-        never_split (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            List of tokens which will never be split during tokenization. Only has an effect when
+        never_split (:obj:`Iterable`, `optional`, defaults to :obj:`None`):
+            Collection of tokens which will never be split during tokenization. Only has an effect when
             :obj:`do_basic_tokenize=True`
         unk_token (:obj:`string`, `optional`, defaults to "[UNK]"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
@@ -208,8 +208,12 @@ class BertTokenizer(PreTrainedTokenizer):
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-                for sub_token in self.wordpiece_tokenizer.tokenize(token):
-                    split_tokens.append(sub_token)
+
+                # If the token is part of the never_split set
+                if token in self.basic_tokenizer.never_split:
+                    split_tokens.append(token)
+                else:
+                    split_tokens += self.wordpiece_tokenizer.tokenize(token)
         else:
             split_tokens = self.wordpiece_tokenizer.tokenize(text)
         return split_tokens
@@ -363,7 +367,7 @@ class BasicTokenizer(object):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
-        self.never_split = never_split
+        self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
 
     def tokenize(self, text, never_split=None):
@@ -376,8 +380,9 @@ class BasicTokenizer(object):
                 Now implemented directly at the base class level (see :func:`PreTrainedTokenizer.tokenize`)
                 List of token not to split.
         """
-        never_split = self.never_split + (never_split if never_split is not None else [])
-        text = self._clean_text(text)
+        # union() returns a new set by concatenating the two sets.
+        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+
         # This was added on November 1st, 2018 for the multilingual and Chinese
         # models. This is also applied to the English models now, but it doesn't
         # matter since the English models were not trained on any Chinese data

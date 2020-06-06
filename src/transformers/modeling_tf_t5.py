@@ -25,7 +25,8 @@ import tensorflow as tf
 
 from .configuration_t5 import T5Config
 from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list, cast_bool_to_primitive
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, cast_bool_to_primitive, keras_serializable, shape_list
+from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
@@ -496,7 +497,10 @@ class _NoLayerEmbedTokens(object):
 # The full model without a specific pretrained or finetuning head is
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
+@keras_serializable
 class TFT5MainLayer(tf.keras.layers.Layer):
+    config_class = T5Config
+
     def __init__(self, config, embed_tokens=None, **kwargs):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
@@ -542,12 +546,32 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         training=False,
         output_attentions=False,
     ):
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            encoder_hidden_states = inputs[2] if len(inputs) > 2 else encoder_hidden_states
+            encoder_attention_mask = inputs[3] if len(inputs) > 3 else encoder_attention_mask
+            inputs_embeds = inputs[4] if len(inputs) > 4 else inputs_embeds
+            head_mask = inputs[5] if len(inputs) > 5 else head_mask
+            past_key_value_states = inputs[6] if len(inputs) > 6 else past_key_value_states
+            assert len(inputs) <= 7, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            input_ids = inputs.get("decoder_input_ids")
+            attention_mask = inputs.get("decoder_attention_mask", attention_mask)
+            encoder_hidden_states = inputs.get("encoder_hidden_states", encoder_hidden_states)
+            encoder_attention_mask = inputs.get("encoder_attention_mask", encoder_attention_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            head_mask = inputs.get("head_mask", head_mask)
+            past_key_value_states = inputs.get("past_key_value_states", past_key_value_states)
+            assert len(inputs) <= 7, "Too many inputs."
+        else:
+            input_ids = inputs
 
-        if inputs is not None and inputs_embeds is not None:
+        if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both inputs and inputs_embeds at the same time")
-        elif inputs is not None:
-            input_shape = shape_list(inputs)
-            inputs = tf.reshape(inputs, (-1, input_shape[-1]))
+        elif input_ids is not None:
+            input_shape = shape_list(input_ids)
+            input_ids = tf.reshape(input_ids, (-1, input_shape[-1]))
         elif inputs_embeds is not None:
             input_shape = shape_list(inputs_embeds)[:-1]
         else:
@@ -555,7 +579,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
-            inputs_embeds = self.embed_tokens(inputs)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
 

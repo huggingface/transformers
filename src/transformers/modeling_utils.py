@@ -1143,9 +1143,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
                 num_return_sequences=num_return_sequences,
@@ -1170,9 +1168,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
                 encoder_outputs=encoder_outputs,
@@ -1196,10 +1192,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
         eos_token_id,
-        decoder_start_token_id,
         batch_size,
         encoder_outputs,
         attention_mask,
@@ -1318,10 +1312,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
         eos_token_id,
-        decoder_start_token_id,
         batch_size,
         num_return_sequences,
         length_penalty,
@@ -1528,7 +1520,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             # test that beam scores match previously calculated scores if not eos and batch_idx not done
             if eos_token_id is not None and all(
-                (token_id % vocab_size).item() is not eos_token_id for token_id in next_tokens[batch_idx]
+                (token_id % vocab_size).item() != eos_token_id for token_id in next_tokens[batch_idx]
             ):
                 assert torch.all(
                     next_scores[batch_idx, :num_beams] == beam_scores.view(batch_size, num_beams)[batch_idx]

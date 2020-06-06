@@ -29,6 +29,7 @@ from .modeling_tf_utils import (
     TFSequenceSummary,
     TFSharedEmbeddings,
     get_initializer,
+    keras_serializable,
     shape_list,
 )
 from .tokenization_utils import BatchEncoding
@@ -200,7 +201,10 @@ class TFBlock(tf.keras.layers.Layer):
         return outputs  # x, (attentions)
 
 
+@keras_serializable
 class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
+    config_class = OpenAIGPTConfig
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         self.output_hidden_states = config.output_hidden_states
