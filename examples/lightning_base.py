@@ -4,6 +4,7 @@ import os
 import random
 import re
 from pathlib import Path
+from typing import Any, Dict, Iterable, List, Sequence, Set, Tuple, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -12,6 +13,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities import rank_zero_only, rank_zero_warn
 
+from durbango import pickle_load, pickle_save, remove_prefix
 from transformers import (
     AdamW,
     AutoConfig,
@@ -40,12 +42,15 @@ MODEL_MODES = {
     "language-modeling": AutoModelWithLMHead,
 }
 
-from durbango import remove_prefix
+
+
 def try_load_state_dict(model, sd1):
-    sd = {k:v for k,v in sd1.items() if not k.startswith('teacher')}
+    sd = {remove_prefix(k, "model."): v for k, v in sd1.items() if k.startswith("model")}
     model.load_state_dict(sd, strict=True)
     return model
 
+
+# def strip_ckpt(in_path,)
 
 
 def set_seed(args: argparse.Namespace):
@@ -76,6 +81,8 @@ class BaseTransformer(pl.LightningModule):
         "Initialize a model."
         super().__init__()
         self.hparams = hparams
+        self.step_count = 0
+        self.tfmr_ckpts = {}
         self.output_dir = Path(self.hparams.output_dir)
         cache_dir = self.hparams.cache_dir if self.hparams.cache_dir else None
         if config is None:
@@ -214,6 +221,42 @@ class BaseTransformer(pl.LightningModule):
 
         # parser.add_argument("--eval_batch_size", default=32, type=int)
 
+    @rank_zero_only
+    def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
+        # step, epoch = checkpoint['global_step'], checkpoint['epoch']
+        save_path = self.output_dir.joinpath(f"tfmr_ckpt_step_count={self.step_count}/")
+        save_path.mkdir(exist_ok=True)
+        self.model.save_pretrained(save_path)
+
+        self.tfmr_ckpts[self.step_count] = save_path
+        self.save_resolution_file()
+
+    def on_train_end(self) -> None:
+        self.save_resolution_file()
+
+    @property
+    def pl_checkpoints(self) -> List[Path]:
+        return list(sorted(Path(self.output_dir).glob("*.ckpt")))
+
+    def save_resolution_file(self):
+        resolved = self.resolve_checkpoints()
+        resolve_path = self.output_dir / "ckpt_matches.pkl"
+        if len(resolved) > 0:
+            pickle_save(resolved, resolve_path)
+
+    @rank_zero_only
+    def resolve_checkpoints(self) -> Dict[Path, Path]:
+        """Maps transformers save directories to lightning ckpt paths"""
+        matches = {}
+        for step, path in self.tfmr_ckpts.items():
+            for pl_path in self.pl_checkpoints:
+                if f"step_count={step}" in str(pl_path.name):
+                    matches[path] = pl_path
+                    break
+            else:
+                matches[path] = None
+        return matches
+
 
 class LoggingCallback(pl.Callback):
     def _do_work(
@@ -269,6 +312,11 @@ class LoggingCallback(pl.Callback):
         return self._do_work(trainer, pl_module, "test")
 
 
+class MyCheckpointer(ModelCheckpoint):
+    def _save_model(self, filepath):
+        pass
+
+
 def add_generic_args(parser, root_dir):
     parser.add_argument(
         "--output_dir",
@@ -307,7 +355,14 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
     parser.add_argument("--resume_from_checkpoint", type=str, default=None)
 
-def generic_train(model: BaseTransformer, args: argparse.Namespace, early_stopping_callback=False, extra_callbacks=[], **extra_train_kwargs):
+
+def generic_train(
+    model: BaseTransformer,
+    args: argparse.Namespace,
+    early_stopping_callback=False,
+    extra_callbacks=[],
+    **extra_train_kwargs
+):
     # init model
     set_seed(args)
     odir = Path(model.hparams.output_dir)
@@ -316,7 +371,7 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, early_stoppi
         args.output_dir.startswith("/var/")
         or args.fast_dev_run
         or args.output_dir.startswith("/tmp/")
-        or args.n_gpu > 1
+        or args.n_gpu > 1  # should be fixed in pl 0.8 June 12th
     ):
         logger = True
     else:
@@ -324,9 +379,12 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, early_stoppi
         logger.log_hyperparams(args)
 
     checkpoint_callback = ModelCheckpoint(
-        filepath=str(model.output_dir / "{val_avg_rouge2:.4f}-{epoch}"),
-        monitor="val_rouge", mode="max", save_top_k=3,
-        save_weights_only=True, period=0,
+        filepath=str(model.output_dir / "{val_avg_rouge2:.4f}-{step_count}"),
+        monitor="val_rouge",
+        mode="max",
+        save_top_k=2,
+        save_weights_only=True,
+        period=0,
     )
 
     # train_params = dict(
@@ -372,11 +430,10 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, early_stoppi
         callbacks=[LoggingCallback()] + extra_callbacks,
         fast_dev_run=args.fast_dev_run,
         val_check_interval=args.val_check_interval,
-
         weights_summary=None,
         resume_from_checkpoint=args.resume_from_checkpoint,
         auto_scale_batch_size=args.auto_scale_batch_size,
-        **train_params
+        **train_params,
     )
 
     if args.do_train:

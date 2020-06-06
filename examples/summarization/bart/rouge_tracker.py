@@ -87,11 +87,8 @@ class RougeTracker:
         if not records:
             return self.df
         new_df = (
-            pd.DataFrame(records)
-            .rename(columns=lambda x: x.replace("rouge", "R"))
-            .set_index("exp_name")
-            .astype(float)
+            pd.DataFrame(records).rename(columns=lambda x: x.replace("rouge", "R")).set_index("exp_name").astype(float)
         )
         self.new_results = new_df
-        self.df = pd.concat([self.df, new_df]).dsort('R2')
+        self.df = pd.concat([self.df, new_df]).dsort("R2")
         return self.df

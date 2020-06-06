@@ -15,15 +15,19 @@ def chunks(lst, n):
     for i in range(0, len(lst), n):
         yield lst[i : i + n]
 
-def generate_summaries(
-    examples: list, out_file: str, model_name: str, batch_size: int = 8, device: str = DEFAULT_DEVICE,
-    max_length=140,
-    min_length = 55,
-    num_beams=4,
-    length_penalty=2.,
-    n_obs=None,
-    model = None
 
+def generate_summaries(
+    examples: list,
+    out_file: str,
+    model_name: str,
+    batch_size: int = 8,
+    device: str = DEFAULT_DEVICE,
+    max_length=140,
+    min_length=55,
+    num_beams=4,
+    length_penalty=2.0,
+    n_obs=None,
+    model=None,
 ):
     fout = Path(out_file).open("w")
     if model is None:

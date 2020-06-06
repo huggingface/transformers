@@ -83,6 +83,7 @@ class SummarizationTrainer(BaseTransformer):
         self.model: BartForConditionalGeneration
         self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
         self.hparams_save_path = Path(self.output_dir) / "hparams.pkl"
+        self.step_count = 0
 
         if os.path.exists(self.metrics_save_path):
             self.metrics = pickle_load(self.metrics_save_path)
@@ -152,13 +153,15 @@ class SummarizationTrainer(BaseTransformer):
         return self._generative_step(batch)
 
     def validation_end(self, outputs, prefix="val") -> Dict:
+        self.step_count += 1
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
         rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS + ["gen_time"]}
-        rouge: torch.FloatTensor = torch.tensor(rouges['rouge2']).type_as(loss)
+        rouge: torch.FloatTensor = torch.tensor(rouges["rouge2"]).type_as(loss)
         rouges.update({k: v.item() for k, v in losses.items()})
         losses.update(rouges)
         metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
+        metrics["step_count"] = self.step_count
         self.save_metrics(metrics, prefix)
         preds = flatten_list([x["preds"] for x in outputs])
         ret_dict = {"log": metrics, "preds": preds}
@@ -424,7 +427,7 @@ class SummarizationDistiller(SummarizationTrainer):
         # Copy weights
         student_cfg = BartConfig(**kw)
         student = BartForConditionalGeneration(student_cfg)
-        #student.save_pretrained('student')
+        # student.save_pretrained('student')
 
         student, _ = init_student(student, teacher)
         self.different_encoder: bool = hparams.student_encoder_layers != teacher.config.encoder_layers
@@ -460,7 +463,7 @@ class SummarizationDistiller(SummarizationTrainer):
         self.alpha_mlm = hparams.alpha_mlm
         self.alpha_ce = hparams.alpha_ce
         self.alpha_hid = hparams.alpha_hid
-        #self.alpha_cos = hparams.alpha_cos
+        # self.alpha_cos = hparams.alpha_cos
         self.alpha_encoder_loss = self.hparams.alpha_encoder_loss
         gc.collect()
         torch.cuda.empty_cache()
@@ -574,7 +577,9 @@ class SummarizationDistiller(SummarizationTrainer):
         parser.add_argument("--alpha_mlm", default=0.2, type=float)
         # parser.add_argument("--alpha_cos", default=0.0, type=float)
         parser.add_argument("--alpha_encoder_loss", default=0.0, type=float)
-        parser.add_argument("--alpha_hid", default=0., type=float, required=False, )
+        parser.add_argument(
+            "--alpha_hid", default=0.0, type=float, required=False,
+        )
         parser.add_argument(
             "--student_decoder_layers", default=12, type=int, required=False,
         )
@@ -588,9 +593,7 @@ class SummarizationDistiller(SummarizationTrainer):
             "--enc_only", action="store_true", default=False,
         )
 
-
-        parser.add_argument('--auto_scale_batch_size', default=False, action='store_true')
-
+        parser.add_argument("--auto_scale_batch_size", default=False, action="store_true")
 
         return parser
 
@@ -621,7 +624,7 @@ class EncoderDistiller(SummarizationDistiller):
 
 class BrewerDistiller(SummarizationDistiller):
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
-    teacher_kwargs = {'output_hidden_states': True}
+    teacher_kwargs = {"output_hidden_states": True}
 
     def _step(self, batch):
         # assert is_frozen(self.teacher)
@@ -635,39 +638,57 @@ class BrewerDistiller(SummarizationDistiller):
         sloss, slogits, dec_hidden, enc_outputs, enc_hidden_state = self(
             source_ids, attention_mask=source_mask, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,
         )
+
         def zero_tensor():
             return torch.tensor(0.0).type_as(sloss)
+
         loss_encoder, hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor(), zero_tensor()
         if self.different_encoder:
             with torch.no_grad():
-                teacher_enc_outputs, teacher_enc_hid, _ = self.teacher.model.encoder(source_ids, attention_mask=source_mask)
+                teacher_enc_outputs, teacher_enc_hid, _ = self.teacher.model.encoder(
+                    source_ids, attention_mask=source_mask
+                )
             if self.hparams.alpha_encoder_loss > 0:
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, source_mask)
-            hid_loss_enc = self.calc_hidden_loss(source_mask, enc_hidden_state, teacher_enc_hid,
-                                                 self.hparams.e_layer_to_copy)
+            hid_loss_enc = self.calc_hidden_loss(
+                source_mask, enc_hidden_state, teacher_enc_hid, self.hparams.e_layer_to_copy
+            )
         else:
             teacher_enc_outputs = (enc_outputs,)
 
         with torch.no_grad():
-            tloss, tlogits, tdec_hidden, _ = self.teacher(source_ids, attention_mask=source_mask,
-                                                          encoder_outputs=teacher_enc_outputs, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,)
+            tloss, tlogits, tdec_hidden, _ = self.teacher(
+                source_ids,
+                attention_mask=source_mask,
+                encoder_outputs=teacher_enc_outputs,
+                decoder_input_ids=decoder_input_ids,
+                lm_labels=lm_labels,
+            )
         dec_mask = invert_mask(self.model.model.last_padding_mask)
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
         if not self.hparams.freeze_decoder and self.alpha_hid > 0:
             hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.layer_to_copy)
 
         blended_loss = (
-            loss_ce * self.alpha_ce + self.alpha_mlm * sloss + self.hparams.alpha_encoder_loss * loss_encoder + self.hparams.alpha_hid * (hid_loss_enc + hid_loss_dec)
+            loss_ce * self.alpha_ce
+            + self.alpha_mlm * sloss
+            + self.hparams.alpha_encoder_loss * loss_encoder
+            + self.hparams.alpha_hid * (hid_loss_enc + hid_loss_dec)
         )
         return blended_loss, loss_ce, sloss, loss_encoder, hid_loss_enc, hid_loss_dec
 
     def calc_hidden_loss(self, attention_mask, hidden_states, hidden_states_T, matches):
-        assert not isinstance(hidden_states, torch.Tensor), f'expected list or tuple for hidden_states, got tensor of shape {hidden_states.shape}'
-        assert not isinstance(hidden_states_T, torch.Tensor), f'expected list or tuple for hidden_states_T, got tensor of shape {hidden_states_T.shape}'
+        assert not isinstance(
+            hidden_states, torch.Tensor
+        ), f"expected list or tuple for hidden_states, got tensor of shape {hidden_states.shape}"
+        assert not isinstance(
+            hidden_states_T, torch.Tensor
+        ), f"expected list or tuple for hidden_states_T, got tensor of shape {hidden_states_T.shape}"
         mask = attention_mask.to(hidden_states[0])
         valid_count = mask.sum() * hidden_states[0].size(-1)
         hidden_losses = [
-            (F.mse_loss(hidden_states[i], hidden_states_T[j], reduction='none') * mask.unsqueeze(-1)).sum() / valid_count
+            (F.mse_loss(hidden_states[i], hidden_states_T[j], reduction="none") * mask.unsqueeze(-1)).sum()
+            / valid_count
             for i, j in enumerate(matches)
         ]
         return sum(hidden_losses)
@@ -690,7 +711,8 @@ def main(args):
 
     model: BaseTransformer = module_cls(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
-    if not args.do_predict: return model
+    if not args.do_predict:
+        return model
     model.hparams.test_checkpoint = ""
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
 
