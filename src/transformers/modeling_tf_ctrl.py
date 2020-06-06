@@ -255,7 +255,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             use_cache = inputs.get("use_cache", use_cache)
-            output_attention = inputs.get("output_attentions", output_attentions)
+            output_attentions = inputs.get("output_attentions", output_attentions)
             assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
