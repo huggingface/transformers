@@ -1201,7 +1201,7 @@ class _ReversibleFunction(Function):
         num_hashes,
         all_hidden_states,
         all_attentions,
-        do_output_hidden_states,
+        output_hidden_states,
         do_output_attentions,
     ):
         all_buckets = ()
@@ -1210,7 +1210,7 @@ class _ReversibleFunction(Function):
         hidden_states, attn_output = torch.chunk(hidden_states, 2, dim=-1)
 
         for layer, layer_head_mask in zip(layers, head_mask):
-            if do_output_hidden_states is True:
+            if output_hidden_states is True:
                 all_hidden_states.append(hidden_states)
 
             layer_outputs = layer(
@@ -1229,7 +1229,7 @@ class _ReversibleFunction(Function):
                 all_attentions.append(layer_outputs.attention_probs)
 
         # Add last layer
-        if do_output_hidden_states is True:
+        if output_hidden_states is True:
             all_hidden_states.append(hidden_states)
 
         # attach params to ctx for backward
@@ -1305,7 +1305,7 @@ class ReformerEncoder(nn.Module):
         attention_mask=None,
         head_mask=None,
         num_hashes=None,
-        do_output_hidden_states=False,
+        output_hidden_states=False,
         do_output_attentions=False,
     ):
         # hidden_states and attention lists to be filled if wished
@@ -1322,7 +1322,7 @@ class ReformerEncoder(nn.Module):
             num_hashes,
             all_hidden_states,
             all_attentions,
-            do_output_hidden_states,
+            output_hidden_states,
             do_output_attentions,
         )
 
@@ -1494,7 +1494,7 @@ class ReformerModel(ReformerPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         num_hashes=None,
-        do_output_hidden_states=False,
+        output_hidden_states=False,
         do_output_attentions=False,
     ):
         r"""
@@ -1585,7 +1585,7 @@ class ReformerModel(ReformerPreTrainedModel):
             head_mask=head_mask,
             attention_mask=attention_mask,
             num_hashes=num_hashes,
-            do_output_hidden_states=do_output_hidden_states,
+            output_hidden_states=output_hidden_states,
             do_output_attentions=do_output_attentions,
         )
         sequence_output = encoder_outputs.hidden_states
@@ -1596,7 +1596,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
         outputs = (sequence_output,)
         # TODO(PVP): Replace by named tuple after namedtuples are introduced in the library.
-        if do_output_hidden_states is True:
+        if output_hidden_states is True:
             outputs = outputs + (encoder_outputs.all_hidden_states,)
         if do_output_attentions is True:
             outputs = outputs + (encoder_outputs.all_attentions,)
@@ -1686,7 +1686,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         inputs_embeds=None,
         num_hashes=None,
         labels=None,
-        do_output_hidden_states=False,
+        output_hidden_states=False,
         do_output_attentions=False,
     ):
         r"""
@@ -1735,7 +1735,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
-            do_output_hidden_states=do_output_hidden_states,
+            output_hidden_states=output_hidden_states,
             do_output_attentions=do_output_attentions,
         )
 

@@ -900,7 +900,11 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         transformer_outputs = self.transformer(
-            input_ids, mems=mems, head_mask=head_mask, inputs_embeds=inputs_embeds, output_hidden_states=False
+            input_ids,
+            mems=mems,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_hidden_states=output_hidden_states,
         )
 
         last_hidden = transformer_outputs[0]

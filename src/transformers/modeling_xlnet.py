@@ -1061,6 +1061,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_hidden_states=output_hidden_states,
         )
 
         logits = self.lm_loss(transformer_outputs[0])
@@ -1270,6 +1271,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = outputs[0]

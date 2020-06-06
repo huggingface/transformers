@@ -1704,6 +1704,7 @@ def get_initializer(initializer_range=0.02):
     """
     return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)
 
+
 def cast_bool_to_primitive(bool_variable, default_tensor_to_true=False):
     """Function arguments can be inserted as boolean tensor
         and bool variables to cope with keras serialization
