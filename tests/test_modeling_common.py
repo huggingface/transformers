@@ -131,7 +131,7 @@ class ModelTesterMixin:
 
         for model_class in self.all_model_classes:
             config.output_attentions = True
-            inputs_dict[output_hidden_states] = False
+            inputs_dict["output_hidden_states"] = False
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -139,7 +139,7 @@ class ModelTesterMixin:
                 outputs = model(**inputs_dict)
             attentions = outputs[-1]
             self.assertEqual(model.config.output_attentions, True)
-            self.assertEqual(inputs_dict[output_hidden_states], False)
+            self.assertEqual(inputs_dict["output_hidden_states"], False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             if chunk_length is not None:
@@ -173,7 +173,7 @@ class ModelTesterMixin:
 
             # Check attention is always last and order is fine
             config.output_attentions = True
-            inputs_dict[output_hidden_states] = True
+            inputs_dict["output_hidden_states"] = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -181,7 +181,7 @@ class ModelTesterMixin:
                 outputs = model(**inputs_dict)
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
             self.assertEqual(model.config.output_attentions, True)
-            self.assertEqual(inputs_dict[output_hidden_states], True)
+            self.assertEqual(inputs_dict["output_hidden_states"], True)
 
             self_attentions = outputs[-1]
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
@@ -210,7 +210,7 @@ class ModelTesterMixin:
     def test_torchscript_output_hidden_state(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        inputs_dict[output_hidden_states] = True
+        inputs_dict["output_hidden_states"] = True
         self._create_and_check_torchscript(config, inputs_dict)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
@@ -271,7 +271,7 @@ class ModelTesterMixin:
         global_rng.seed()
 
         config.output_attentions = True
-        inputs_dict[output_hidden_states] = True
+        inputs_dict["output_hidden_states"] = True
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
@@ -327,7 +327,7 @@ class ModelTesterMixin:
                 del inputs_dict["head_mask"]
 
             config.output_attentions = True
-            inputs_dict[output_hidden_states] = False
+            inputs_dict["output_hidden_states"] = False
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
@@ -356,7 +356,7 @@ class ModelTesterMixin:
                 del inputs_dict["head_mask"]
 
             config.output_attentions = True
-            inputs_dict[output_hidden_states] = False
+            inputs_dict["output_hidden_states"] = False
             model = model_class(config=config)
             model.to(torch_device)
             model.eval()
@@ -389,7 +389,7 @@ class ModelTesterMixin:
                 del inputs_dict["head_mask"]
 
             config.output_attentions = True
-            inputs_dict[output_hidden_states] = False
+            inputs_dict["output_hidden_states"] = False
 
             heads_to_prune = {
                 0: list(range(1, self.model_tester.num_attention_heads)),
@@ -420,7 +420,7 @@ class ModelTesterMixin:
                 del inputs_dict["head_mask"]
 
             config.output_attentions = True
-            inputs_dict[output_hidden_states] = False
+            inputs_dict["output_hidden_states"] = False
 
             heads_to_prune = {0: [0], 1: [1, 2]}
             config.pruned_heads = heads_to_prune
@@ -470,7 +470,7 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            inputs_dict[output_hidden_states] = True
+            inputs_dict["output_hidden_states"] = True
             config.output_attentions = False
             model = model_class(config)
             model.to(torch_device)
@@ -479,7 +479,7 @@ class ModelTesterMixin:
                 outputs = model(**inputs_dict)
             hidden_states = outputs[-1]
             self.assertEqual(model.config.output_attentions, False)
-            self.assertEqual(inputs_dict[output_hidden_states], True)
+            self.assertEqual(inputs_dict["output_hidden_states"], True)
             self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
 
             if hasattr(self.model_tester, "encoder_seq_length"):
