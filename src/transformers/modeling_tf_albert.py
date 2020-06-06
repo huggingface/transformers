@@ -413,6 +413,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
                     head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
                 ],
                 training=training,
+                output_hidden_states=output_hidden_states
             )
             hidden_states = layer_group_output[0]
 
@@ -515,6 +516,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         inputs_embeds=None,
         training=False,
+        output_hidden_states=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -577,7 +579,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
         embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
-        encoder_outputs = self.encoder([embedding_output, extended_attention_mask, head_mask], training=training)
+        encoder_outputs = self.encoder([embedding_output, extended_attention_mask, head_mask], training=training, output_hidden_states=output_hidden_states)
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output[:, 0])

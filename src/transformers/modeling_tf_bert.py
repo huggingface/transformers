@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from .configuration_bert import BertConfig
 from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list, cast_bool_to_primitive
 from .tokenization_utils import BatchEncoding
 
 
@@ -364,13 +364,13 @@ class TFBertEncoder(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         self.layer = [TFBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
-    def call(self, inputs, output_hidden_states=False, training=False):
-        hidden_states, attention_mask, head_mask = inputs
+    def call(self, inputs, training=False):
+        hidden_states, attention_mask, head_mask, output_hidden_states = inputs
 
         all_hidden_states = ()
         all_attentions = ()
         for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
+            if cast_bool_to_primitive(output_hidden_states):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module([hidden_states, attention_mask, head_mask[i]], training=training)
@@ -380,11 +380,11 @@ class TFBertEncoder(tf.keras.layers.Layer):
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         # Add last layer
-        if output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states):
             outputs = outputs + (all_hidden_states,)
         if self.output_attentions:
             outputs = outputs + (all_attentions,)
@@ -505,6 +505,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         inputs_embeds=None,
         training=False,
+        output_hidden_states=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -513,7 +514,8 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             position_ids = inputs[3] if len(inputs) > 3 else position_ids
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            assert len(inputs) <= 6, "Too many inputs."
+            output_hidden_states = inputs[6] if len(inputs) > 6 else output_hidden_states
+            assert len(inputs) <= 7, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -521,7 +523,8 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             position_ids = inputs.get("position_ids", position_ids)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 6, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -567,7 +570,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
         embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
-        encoder_outputs = self.encoder([embedding_output, extended_attention_mask, head_mask], training=training)
+        encoder_outputs = self.encoder([embedding_output, extended_attention_mask, head_mask, output_hidden_states], training=training)
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output)
@@ -669,7 +672,7 @@ class TFBertModel(TFBertPreTrainedModel):
         self.bert = TFBertMainLayer(config, name="bert")
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, output_hidden_states=False, **kwargs):
+    def call(self, inputs, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
@@ -705,7 +708,7 @@ class TFBertModel(TFBertPreTrainedModel):
         outputs = model(input_ids)
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
-        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
+        outputs = self.bert(inputs, **kwargs)
         return outputs
 
 
@@ -726,7 +729,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         return self.bert.embeddings
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, output_hidden_states=False, **kwargs):
+    def call(self, inputs, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
@@ -757,7 +760,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
         prediction_scores, seq_relationship_scores = outputs[:2]
 
         """
-        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
+        outputs = self.bert(inputs, **kwargs)
 
         sequence_output, pooled_output = outputs[:2]
         prediction_scores = self.mlm(sequence_output, training=kwargs.get("training", False))
@@ -782,7 +785,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         return self.bert.embeddings
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, output_hidden_states=False, **kwargs):
+    def call(self, inputs, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
@@ -811,7 +814,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel):
         prediction_scores = outputs[0]
 
         """
-        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
+        outputs = self.bert(inputs, **kwargs)
 
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output, training=kwargs.get("training", False))
@@ -832,7 +835,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, output_hidden_states=False, **kwargs):
+    def call(self, inputs, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
@@ -861,7 +864,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
         seq_relationship_scores = outputs[0]
 
         """
-        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
+        outputs = self.bert(inputs, **kwargs)
 
         pooled_output = outputs[1]
         seq_relationship_score = self.nsp(pooled_output)
@@ -888,7 +891,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, output_hidden_states=False, **kwargs):
+    def call(self, inputs, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
@@ -917,7 +920,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel):
         logits = outputs[0]
 
         """
-        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
+        outputs = self.bert(inputs, **kwargs)
 
         pooled_output = outputs[1]
 
@@ -963,7 +966,6 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         training=False,
-        output_hidden_states=False,
     ):
         r"""
     Return:
@@ -1036,7 +1038,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel):
             inputs_embeds,
         ]
 
-        outputs = self.bert(flat_inputs, output_hidden_states=output_hidden_states, training=training)
+        outputs = self.bert(flat_inputs, training=training)
 
         pooled_output = outputs[1]
 
@@ -1066,7 +1068,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, output_hidden_states=False, **kwargs):
+    def call(self, inputs, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
@@ -1095,7 +1097,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel):
         scores = outputs[0]
 
         """
-        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
+        outputs = self.bert(inputs, **kwargs)
 
         sequence_output = outputs[0]
 
@@ -1123,7 +1125,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING)
-    def call(self, inputs, output_hidden_states=False, **kwargs):
+    def call(self, inputs, **kwargs):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
@@ -1160,7 +1162,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel):
         assert answer == "a nice puppet"
 
         """
-        outputs = self.bert(inputs, output_hidden_states=output_hidden_states, **kwargs)
+        outputs = self.bert(inputs, **kwargs)
 
         sequence_output = outputs[0]
 
