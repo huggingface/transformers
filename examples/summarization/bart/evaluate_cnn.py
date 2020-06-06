@@ -22,10 +22,12 @@ def generate_summaries(
     num_beams=4,
     length_penalty=2.,
     n_obs=None,
+    model = None
 
 ):
     fout = Path(out_file).open("w")
-    model = BartForConditionalGeneration.from_pretrained(model_name).to(device).half()
+    if model is None:
+        model = BartForConditionalGeneration.from_pretrained(model_name).to(device).half()
     tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
     if n_obs is not None:
         examples = examples[:n_obs]
