@@ -351,7 +351,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             cache = inputs.get("cache", cache)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attention = inputs.get("output_attentions", output_attentions)
+            output_attentions = inputs.get("output_attentions", output_attentions)
             assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
