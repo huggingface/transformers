@@ -307,7 +307,7 @@ def add_generic_args(parser, root_dir):
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
     parser.add_argument("--resume_from_checkpoint", type=str, default=None)
 
-def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callbacks=[], **extra_train_kwargs):
+def generic_train(model: BaseTransformer, args: argparse.Namespace, early_stopping_callback=False, extra_callbacks=[], **extra_train_kwargs):
     # init model
     set_seed(args)
     odir = Path(model.hparams.output_dir)
@@ -325,26 +325,27 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
 
     checkpoint_callback = ModelCheckpoint(
         filepath=str(model.output_dir / "{val_avg_rouge2:.4f}-{epoch}"),
-        monitor="val_loss", mode="min", save_top_k=5,
+        monitor="val_rouge", mode="max", save_top_k=3,
         save_weights_only=True, period=0,
     )
 
-    train_params = dict(
-        accumulate_grad_batches=args.gradient_accumulation_steps,
-        gpus=args.n_gpu,
-        max_epochs=args.num_train_epochs,
-        early_stop_callback=extra_train_kwargs.get("early_stop_callback", False),
-        gradient_clip_val=args.max_grad_norm,
-        checkpoint_callback=checkpoint_callback,
-        callbacks=[LoggingCallback()] + extra_callbacks,
-        fast_dev_run=args.fast_dev_run,
-        val_check_interval=args.val_check_interval,
-        logger=logger,
-        weights_summary=None,
-        resume_from_checkpoint=args.resume_from_checkpoint,
-        auto_scale_batch_size=args.auto_scale_batch_size,
-
-    )
+    # train_params = dict(
+    #     accumulate_grad_batches=args.gradient_accumulation_steps,
+    #     gpus=args.n_gpu,
+    #     max_epochs=args.num_train_epochs,
+    #     early_stop_callback=early_stopping_callback,
+    #     gradient_clip_val=args.max_grad_norm,
+    #     checkpoint_callback=checkpoint_callback,
+    #     callbacks=[LoggingCallback()] + extra_callbacks,
+    #     fast_dev_run=args.fast_dev_run,
+    #     val_check_interval=args.val_check_interval,
+    #     logger=logger,
+    #     weights_summary=None,
+    #     resume_from_checkpoint=args.resume_from_checkpoint,
+    #     auto_scale_batch_size=args.auto_scale_batch_size,
+    #
+    # )
+    train_params = {}
 
     if args.fp16:
         train_params["use_amp"] = args.fp16
@@ -360,7 +361,23 @@ def generic_train(model: BaseTransformer, args: argparse.Namespace, extra_callba
     if args.n_gpu > 1:
         train_params["distributed_backend"] = "ddp"
 
-    trainer = pl.Trainer(**train_params)
+    trainer = pl.Trainer(
+        logger=logger,
+        accumulate_grad_batches=args.gradient_accumulation_steps,
+        gpus=args.n_gpu,
+        max_epochs=args.num_train_epochs,
+        early_stop_callback=early_stopping_callback,
+        gradient_clip_val=args.max_grad_norm,
+        checkpoint_callback=checkpoint_callback,
+        callbacks=[LoggingCallback()] + extra_callbacks,
+        fast_dev_run=args.fast_dev_run,
+        val_check_interval=args.val_check_interval,
+
+        weights_summary=None,
+        resume_from_checkpoint=args.resume_from_checkpoint,
+        auto_scale_batch_size=args.auto_scale_batch_size,
+        **train_params
+    )
 
     if args.do_train:
         trainer.fit(model)

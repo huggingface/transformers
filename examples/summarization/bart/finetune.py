@@ -155,16 +155,20 @@ class SummarizationTrainer(BaseTransformer):
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
         rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS + ["gen_time"]}
+        rouge: torch.FloatTensor = torch.tensor(rouges['rouge2']).type_as(loss)
         rouges.update({k: v.item() for k, v in losses.items()})
         losses.update(rouges)
         metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
-        self.metrics[prefix].append(metrics)
-
-        pickle_save(self.metrics, self.metrics_save_path)
+        self.save_metrics(metrics, prefix)
         preds = flatten_list([x["preds"] for x in outputs])
         ret_dict = {"log": metrics, "preds": preds}
         ret_dict[f"{prefix}_loss"] = loss
+        ret_dict[f"{prefix}_rouge"] = rouge
         return ret_dict
+
+    def save_metrics(self, metrics, prefix) -> None:
+        self.metrics[prefix].append(metrics)
+        pickle_save(self.metrics, self.metrics_save_path)
 
     def ids_to_clean_text(self, generated_ids: List[int]):
         gen_text = self.tokenizer.batch_decode(

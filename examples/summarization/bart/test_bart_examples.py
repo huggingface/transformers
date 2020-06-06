@@ -119,7 +119,7 @@ class TestBartExamples(unittest.TestCase):
             self.assertTrue(Path(output_file_name).exists())
             os.remove(Path(output_file_name))
 
-    @unittest.skipUnless(DEFAULT_DEVICE.startswith("cuda"), "skipping multiGPU test")
+    @unittest.skipUnless(torch.cuda.device_count() > 1, "skipping multiGPU test")
     def test_bdc_multigpu(self):
         updates = dict(
             student_encoder_layers=2,
@@ -145,6 +145,14 @@ class TestBartExamples(unittest.TestCase):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1,)
         self._bart_distiller_cli(updates)
 
+    def test_bdc_checkpointing(self):
+
+        updates = dict(student_encoder_layers=2, student_decoder_layers=1, num_train_epochs=4,
+                       val_check_interval=0.25)
+        model = self._bart_distiller_cli(updates, check_contents=False)
+        ckpts = list(Path(model.output_dir).glob('*.ckpt'))
+        self.assertEqual(3, len(ckpts))
+
     def test_bdc_brewer(self):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1, alpha_hid=2.)
         self._bart_distiller_cli(updates)
@@ -164,7 +172,7 @@ class TestBartExamples(unittest.TestCase):
         args.output_dir = tempfile.mkdtemp(prefix="output_v2")
         eval_and_fix(args)
 
-    def _bart_distiller_cli(self, updates):
+    def _bart_distiller_cli(self, updates, check_contents=True):
         default_updates = dict(
             model_type="bart",
             train_batch_size=1,
@@ -186,8 +194,10 @@ class TestBartExamples(unittest.TestCase):
 
         args_d.update(data_dir=tmp_dir, output_dir=output_dir, **default_updates)
         model = main(argparse.Namespace(**args_d))
+        if not check_contents:
+            return model
         contents = os.listdir(output_dir)
-        ckpt_name = "epoch=1-val_avg_rouge2=0.0000.ckpt"
+        ckpt_name = 'val_avg_rouge2=0.0000-epoch=1.ckpt' #"epoch=1-val_avg_rouge2=0.0000.ckpt"
         contents = {os.path.basename(p) for p in contents}
         self.assertIn(ckpt_name, contents)
         self.assertIn("metrics.pkl", contents)
@@ -195,7 +205,7 @@ class TestBartExamples(unittest.TestCase):
         self.assertIn("val_generations_3.txt", contents)
         self.assertIn("val_3_results.txt", contents)
         self.assertIn("test_results.txt", contents)
-        self.assertEqual(len(contents), 14)
+        self.assertEqual(len(contents), 16)
 
         metrics = pickle_load(Path(output_dir) / "metrics.pkl")
         val_df = pd.DataFrame(metrics["val"])
