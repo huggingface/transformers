@@ -844,6 +844,7 @@ class BartModel(PretrainedBartModel):
             decoder_causal_mask=causal_mask,
             decoder_cached_states=decoder_cached_states,
             use_cache=use_cache,
+            output_hidden_states=output_hidden_states,
         )
         # Attention and hidden_states will be [] or None if they aren't needed
         decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
