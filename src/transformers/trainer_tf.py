@@ -232,7 +232,7 @@ class TFTrainer:
             iterations = optimizer.iterations
             folder = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
             ckpt = tf.train.Checkpoint(optimizer=optimizer, model=self.model)
-            self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, folder, max_to_keep=5)
+            self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, folder, max_to_keep=self.args.save_total_limit)
 
             if self.model.ckpt_manager.latest_checkpoint:
                 logger.info(
@@ -402,16 +402,11 @@ class TFTrainer:
 
     def save_model(self, output_dir: Optional[str] = None):
         """
-        Save the pretrained model and create a Tensorflow saved model.
+        Save the pretrained model.
         """
         output_dir = output_dir if output_dir is not None else self.args.output_dir
 
         logger.info("Saving model in {}".format(output_dir))
-
-        path = os.path.join(self.args.output_dir, "saved_model")
-
-        logger.info("Saving model in {}".format(path))
-        os.makedirs(path, exist_ok=True)
 
         if not isinstance(self.model, TFPreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")
