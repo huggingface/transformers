@@ -791,7 +791,16 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         return self.transformer.init_mems(bsz)
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
-    def call(self, inputs, mems=None, head_mask=None, inputs_embeds=None, labels=None, output_attentions=False, training=False):
+    def call(
+        self,
+        inputs,
+        mems=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=False,
+        training=False,
+    ):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
@@ -849,7 +858,9 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         else:
             bsz, tgt_len = shape_list(inputs_embeds)[:2]
 
-        transformer_outputs = self.transformer([input_ids, mems, head_mask, inputs_embeds, output_attentions], training=training)
+        transformer_outputs = self.transformer(
+            [input_ids, mems, head_mask, inputs_embeds, output_attentions], training=training
+        )
 
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]
