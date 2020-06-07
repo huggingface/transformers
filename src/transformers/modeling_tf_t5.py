@@ -25,7 +25,14 @@ import tensorflow as tf
 
 from .configuration_t5 import T5Config
 from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, keras_serializable, shape_list, cast_bool_to_primitive
+from .modeling_tf_utils import (
+    TFPreTrainedModel,
+    TFSharedEmbeddings,
+    cast_bool_to_primitive,
+    keras_serializable,
+    shape_list,
+    cast_bool_to_primitive
+)
 from .tokenization_utils import BatchEncoding
 
 
@@ -287,7 +294,7 @@ class TFT5Attention(tf.keras.layers.Layer):
 
         outputs = (context,) + present_key_value_state
 
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (weights,)
         if self.has_relative_attention_bias:
             outputs = outputs + (position_bias,)
@@ -311,6 +318,7 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
         head_mask=None,
         past_key_value_state=None,
         use_cache=False,
+        output_attentions=False,
         training=False,
     ):
         norm_x = self.layer_norm(hidden_states)
@@ -321,6 +329,7 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
             head_mask=head_mask,
             past_key_value_state=past_key_value_state,
             use_cache=use_cache,
+            output_attentions=output_attentions,
             training=training,
         )
         y = attention_output[0]
@@ -348,6 +357,7 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
         past_key_value_state=None,
         query_length=None,
         use_cache=False,
+        output_attentions=False,
         training=False,
     ):
         norm_x = self.layer_norm(hidden_states)
@@ -360,6 +370,7 @@ class TFT5LayerCrossAttention(tf.keras.layers.Layer):
             past_key_value_state=past_key_value_state,
             query_length=query_length,
             use_cache=use_cache,
+            output_attentions=output_attentions,
             training=training,
         )
         y = attention_output[0]
@@ -396,6 +407,7 @@ class TFT5Block(tf.keras.layers.Layer):
         head_mask=None,
         past_key_value_state=None,
         use_cache=False,
+        output_attentions=False,
         training=False,
     ):
 
@@ -422,6 +434,7 @@ class TFT5Block(tf.keras.layers.Layer):
             head_mask=head_mask,
             past_key_value_state=self_attn_past_key_value_state,
             use_cache=use_cache,
+            output_attentions=output_attentions,
             training=training,
         )
         hidden_states, present_key_value_state = self_attention_outputs[:2]
@@ -444,6 +457,7 @@ class TFT5Block(tf.keras.layers.Layer):
                 past_key_value_state=cross_attn_past_key_value_state,
                 query_length=query_length,
                 use_cache=use_cache,
+                output_attentions=output_attentions,
                 training=training,
             )
             hidden_states = cross_attention_outputs[0]
@@ -554,7 +568,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs[4] if len(inputs) > 4 else inputs_embeds
             head_mask = inputs[5] if len(inputs) > 5 else head_mask
             past_key_value_states = inputs[6] if len(inputs) > 6 else past_key_value_states
-            assert len(inputs) <= 7, "Too many inputs."
+            output_attentions = inputs[7] if len(inputs) > 7 else output_attentions
+            assert len(inputs) <= 8, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("decoder_input_ids")
             attention_mask = inputs.get("decoder_attention_mask", attention_mask)
@@ -563,7 +578,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             head_mask = inputs.get("head_mask", head_mask)
             past_key_value_states = inputs.get("past_key_value_states", past_key_value_states)
-            assert len(inputs) <= 7, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 8, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -691,6 +707,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 head_mask=head_mask[i],
                 past_key_value_state=past_key_value_state,
                 use_cache=use_cache,
+                output_attentions=output_attentions,
                 training=training,
             )
             # layer_outputs is a tuple with:
@@ -705,7 +722,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             # append next layer key value states
             present_key_value_states = present_key_value_states + (present_key_value_state,)
 
-            if output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 all_attentions = all_attentions + (layer_outputs[2],)
 
         hidden_states = self.final_layer_norm(hidden_states)
@@ -721,7 +738,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             outputs = outputs + (present_key_value_states,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
@@ -925,11 +942,16 @@ class TFT5Model(TFT5PreTrainedModel):
         decoder_past_key_value_states = kwargs.get("decoder_past_key_value_states", None)
         use_cache = kwargs.get("use_cache", True)
         head_mask = kwargs.get("head_mask", None)
+        output_attentions = kwargs.get("output_attentions", False)
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                inputs, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask,
+                inputs,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
             )
 
         hidden_states = encoder_outputs[0]
@@ -952,6 +974,7 @@ class TFT5Model(TFT5PreTrainedModel):
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         if use_cache is True:

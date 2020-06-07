@@ -31,6 +31,7 @@ from .modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
+    cast_bool_to_primitive,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -207,7 +208,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, inputs, training=False, output_attentions=False):
+    def call(self, inputs, training=False):
         """
         Parameters
         ----------
@@ -223,7 +224,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         context: tf.Tensor(bs, seq_length, dim)
             Contextualized layer. Optional: only if `output_attentions=True`
         """
-        query, key, value, mask, head_mask = inputs
+        query, key, value, mask, head_mask, output_attentions = inputs
         bs, q_length, dim = shape_list(query)
         k_length = shape_list(key)[1]
         # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
@@ -262,7 +263,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         context = unshape(context)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
 
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             return (context, weights)
         else:
             return (context,)
@@ -311,7 +312,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         self.ffn = TFFFN(config, name="ffn")
         self.output_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="output_layer_norm")
 
-    def call(self, inputs, training=False, output_attentions=False):  # removed: src_enc=None, src_len=None
+    def call(self, inputs, training=False):  # removed: src_enc=None, src_len=None
         """
         Parameters
         ----------
@@ -325,11 +326,11 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         ffn_output: tf.Tensor(bs, seq_length, dim)
             The output of the transformer block contextualization.
         """
-        x, attn_mask, head_mask = inputs
+        x, attn_mask, head_mask, output_attentions = inputs
 
         # Self-Attention
-        sa_output = self.attention([x, x, x, attn_mask, head_mask], training=training)
-        if output_attentions:
+        sa_output = self.attention([x, x, x, attn_mask, head_mask, output_attentions], training=training)
+        if cast_bool_to_primitive(output_attentions) is True:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attention` or `output_hidden_states` cases returning tuples
             # assert type(sa_output) == tuple
@@ -341,7 +342,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         ffn_output = self.output_layer_norm(ffn_output + sa_output)  # (bs, seq_length, dim)
 
         output = (ffn_output,)
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             output = (sa_weights,) + output
         return output
 
@@ -354,7 +355,7 @@ class TFTransformer(tf.keras.layers.Layer):
 
         self.layer = [TFTransformerBlock(config, name="layer_._{}".format(i)) for i in range(config.n_layers)]
 
-    def call(self, inputs, training=False, output_attentions=False):
+    def call(self, inputs, training=False):
         """
         Parameters
         ----------
@@ -374,7 +375,7 @@ class TFTransformer(tf.keras.layers.Layer):
             Tuple of length n_layers with the attention weights from each layer
             Optional: only if output_attentions=True
         """
-        x, attn_mask, head_mask = inputs
+        x, attn_mask, head_mask, output_attentions = inputs
 
         all_hidden_states = ()
         all_attentions = ()
@@ -384,10 +385,10 @@ class TFTransformer(tf.keras.layers.Layer):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
-            layer_outputs = layer_module([hidden_state, attn_mask, head_mask[i]], training=training)
+            layer_outputs = layer_module([hidden_state, attn_mask, head_mask[i], output_attentions], training=training)
             hidden_state = layer_outputs[-1]
 
-            if output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 assert len(layer_outputs) == 2
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
@@ -401,7 +402,7 @@ class TFTransformer(tf.keras.layers.Layer):
         outputs = (hidden_state,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
@@ -426,19 +427,23 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-    def call(self, inputs, attention_mask=None, head_mask=None, inputs_embeds=None, training=False):
+    def call(
+        self, inputs, attention_mask=None, head_mask=None, inputs_embeds=None, output_attentions=False, training=False
+    ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
             inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            assert len(inputs) <= 4, "Too many inputs."
+            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
+            assert len(inputs) <= 5, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 4, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 5, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -466,7 +471,9 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
             head_mask = [None] * self.num_hidden_layers
 
         embedding_output = self.embeddings(input_ids, inputs_embeds=inputs_embeds)  # (bs, seq_length, dim)
-        tfmr_output = self.transformer([embedding_output, attention_mask, head_mask], training=training)
+        tfmr_output = self.transformer(
+            [embedding_output, attention_mask, head_mask, output_attentions], training=training
+        )
 
         return tfmr_output  # last-layer hidden-state, (all hidden_states), (all attentions)
 
@@ -876,7 +883,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
 
