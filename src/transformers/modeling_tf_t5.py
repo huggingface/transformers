@@ -28,7 +28,6 @@ from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_star
 from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
-    cast_bool_to_primitive,
     keras_serializable,
     shape_list,
     cast_bool_to_primitive
@@ -1074,12 +1073,13 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         inputs_embeds = kwargs.get("inputs_embeds", None)
         decoder_inputs_embeds = kwargs.get("decoder_inputs_embeds", None)
         head_mask = kwargs.get("head_mask", None)
+        output_attentions = kwargs.get("output_attentions", False)
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder(
-                inputs, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask,
+                inputs, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask, output_attentions=output_attentions
             )
 
         hidden_states = encoder_outputs[0]
@@ -1102,6 +1102,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
+            output_attentions=output_attentions
         )
 
         # insert decoder past at right place

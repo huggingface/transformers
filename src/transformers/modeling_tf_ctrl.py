@@ -119,7 +119,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
             v = tf.concat((past_value, v), axis=-2)
 
         # to cope with keras serialization
-        use_cache = cast_bool_to_primitive(use_cache)
+        use_cache = cast_bool_to_primitive(use_cache, True)
 
         if use_cache is True:
             present = tf.stack((k, v), axis=0)
