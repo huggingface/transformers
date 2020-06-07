@@ -71,7 +71,6 @@ ACT2FN = {
 class TFXLNetRelativeAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.output_attentions = config.output_attentions
 
         if config.d_model % config.n_head != 0:
             raise ValueError(
@@ -134,7 +133,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         return x
 
-    def rel_attn_core(self, inputs, training=False):
+    def rel_attn_core(self, inputs, training=False, output_attentions=False):
         """Core relative positional attention operations."""
 
         q_head, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask, head_mask = inputs
@@ -174,7 +173,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         # attention output
         attn_vec = tf.einsum("ijbn,jbnd->ibnd", attn_prob, v_head_h)
 
-        if self.output_attentions:
+        if output_attentions:
             return attn_vec, attn_prob
 
         return attn_vec
@@ -194,7 +193,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         return output
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         (h, g, attn_mask_h, attn_mask_g, r, seg_mat, mems, target_mapping, head_mask) = inputs
 
         if g is not None:
@@ -223,7 +222,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
                 [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask], training=training
             )
 
-            if self.output_attentions:
+            if output_attentions:
                 attn_vec_h, attn_prob_h = attn_vec_h
 
             # post processing
@@ -240,7 +239,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
                     [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask], training=training
                 )
 
-                if self.output_attentions:
+                if output_attentions:
                     attn_vec_g, attn_prob_g = attn_vec_g
 
                 attn_vec_g = tf.einsum("lbnd,mlb->mbnd", attn_vec_g, target_mapping)
@@ -249,13 +248,13 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
                     [q_head_g, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_g, head_mask], training=training
                 )
 
-                if self.output_attentions:
+                if output_attentions:
                     attn_vec_g, attn_prob_g = attn_vec_g
 
             # post processing
             output_g = self.post_attention([g, attn_vec_g], training=training)
 
-            if self.output_attentions:
+            if output_attentions:
                 attn_prob = attn_prob_h, attn_prob_g
 
         else:
@@ -278,7 +277,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
                 [q_head_h, k_head_h, v_head_h, k_head_r, seg_mat, attn_mask_h, head_mask], training=training
             )
 
-            if self.output_attentions:
+            if output_attentions:
                 attn_vec, attn_prob = attn_vec
 
             # post processing
@@ -286,7 +285,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
             output_g = None
 
         outputs = (output_h, output_g)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (attn_prob,)
         return outputs
 
@@ -361,7 +360,6 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
         self.mem_len = config.mem_len
@@ -672,7 +670,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                 training=training,
             )
             output_h, output_g = outputs[:2]
-            if self.output_attentions:
+            if output_attentions:
                 attentions.append(outputs[2])
 
         # Add last hidden state
@@ -693,7 +691,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             else:
                 hidden_states = tuple(tf.transpose(hs, perm=(1, 0, 2)) for hs in hidden_states)
             outputs = outputs + (hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
             outputs = outputs + (attentions,)
 
@@ -817,7 +815,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -901,7 +899,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -991,7 +989,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1233,7 +1231,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1339,7 +1337,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1425,7 +1423,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
 #             list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
 #             of shape ``(batch_size, sequence_length, hidden_size)``:
 #             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-#         **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+#         **attentions**: (`optional`, returned when ``output_attentions=True``)
 #             list of ``tf.Tensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
 #             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 

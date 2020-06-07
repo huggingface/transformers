@@ -128,6 +128,7 @@ class FlaubertModel(XLMModel):
         cache=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=False,
     ):
         r"""
     Return:
@@ -139,7 +140,7 @@ class FlaubertModel(XLMModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -242,7 +243,7 @@ class FlaubertModel(XLMModel):
             if not self.pre_norm:
                 attn_outputs = self.attentions[i](tensor, attn_mask, cache=cache, head_mask=head_mask[i])
                 attn = attn_outputs[0]
-                if self.output_attentions:
+                if output_attentions:
                     attentions = attentions + (attn_outputs[1],)
                 attn = F.dropout(attn, p=self.dropout, training=self.training)
                 tensor = tensor + attn
@@ -251,7 +252,7 @@ class FlaubertModel(XLMModel):
                 tensor_normalized = self.layer_norm1[i](tensor)
                 attn_outputs = self.attentions[i](tensor_normalized, attn_mask, cache=cache, head_mask=head_mask[i])
                 attn = attn_outputs[0]
-                if self.output_attentions:
+                if output_attentions:
                     attentions = attentions + (attn_outputs[1],)
                 attn = F.dropout(attn, p=self.dropout, training=self.training)
                 tensor = tensor + attn
@@ -287,7 +288,7 @@ class FlaubertModel(XLMModel):
         outputs = (tensor,)
         if self.output_hidden_states:
             outputs = outputs + (hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (attentions,)
         return outputs  # outputs, (hidden_states), (attentions)
 

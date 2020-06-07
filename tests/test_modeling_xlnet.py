@@ -483,7 +483,6 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_xlnet_base_model_with_att_output(self):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config_and_inputs[0].output_attentions = True
         self.model_tester.create_and_check_xlnet_base_model_with_att_output(*config_and_inputs)
 
     def test_xlnet_lm_head(self):

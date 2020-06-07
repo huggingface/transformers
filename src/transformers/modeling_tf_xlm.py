@@ -112,7 +112,6 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
     def __init__(self, n_heads, dim, config, **kwargs):
         super().__init__(**kwargs)
         self.layer_id = next(TFMultiHeadAttention.NEW_ID)
-        self.output_attentions = config.output_attentions
         self.dim = dim
         self.n_heads = n_heads
         assert self.dim % self.n_heads == 0
@@ -127,7 +126,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=False, output_attentions=False):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
         """
@@ -188,7 +187,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         context = unshape(context)  # (bs, qlen, dim)
 
         outputs = (self.out_lin(context),)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (weights,)
         return outputs
 
@@ -215,7 +214,6 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
         # encoder / decoder, output layer
@@ -328,6 +326,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         inputs_embeds=None,
         training=False,
+        output_attentions=False,
     ):  # removed: src_enc=None, src_len=None
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -442,7 +441,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             # self attention
             attn_outputs = self.attentions[i]([tensor, attn_mask, None, cache, head_mask[i]], training=training)
             attn = attn_outputs[0]
-            if self.output_attentions:
+            if output_attentions:
                 attentions = attentions + (attn_outputs[1],)
             attn = self.dropout(attn, training=training)
             tensor = tensor + attn
@@ -474,7 +473,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         outputs = (tensor,)
         if self.output_hidden_states:
             outputs = outputs + (hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (attentions,)
         return outputs  # outputs, (hidden_states), (attentions)
 
@@ -602,7 +601,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -698,7 +697,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -770,7 +769,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1094,7 +1093,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
