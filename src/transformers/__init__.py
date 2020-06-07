@@ -343,7 +343,12 @@ if is_torch_available():
 
     # Trainer
     from .trainer import Trainer, set_seed, torch_distributed_zero_first, EvalPrediction
-    from .data.data_collator import DefaultDataCollator, DataCollator, DataCollatorForLanguageModeling
+    from .data.data_collator import (
+        DefaultDataCollator,
+        DataCollator,
+        DataCollatorForLanguageModeling,
+        DataCollatorForQuestionAnswering,
+    )
     from .data.datasets import (
         GlueDataset,
         TextDataset,
