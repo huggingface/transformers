@@ -151,12 +151,12 @@ class TestBartExamples(unittest.TestCase):
         model = self._bart_distiller_cli(updates, check_contents=False)
 
         ckpts = list(Path(model.output_dir).glob("*.ckpt"))
-        self.assertEqual(2, len(ckpts))
+        self.assertEqual(1, len(ckpts))
         transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(transformer_ckpts), len(ckpts))
         matches = pickle_load(model.output_dir / "ckpt_matches.pkl")
 
-        self.assertEqual(2, len(matches))
+        self.assertEqual(1, len(matches))
         removed = clean_output_dir(model.output_dir)
         self.assertEqual(len(removed), 2)
         new_transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
@@ -213,7 +213,7 @@ class TestBartExamples(unittest.TestCase):
         self.assertIn("val_generations_3.txt", contents)
         self.assertIn("val_3_results.txt", contents)
         self.assertIn("test_results.txt", contents)
-        self.assertEqual(len(contents), 18)
+        self.assertEqual(len(contents), 16)
 
         metrics = pickle_load(Path(output_dir) / "metrics.pkl")
         val_df = pd.DataFrame(metrics["val"])
