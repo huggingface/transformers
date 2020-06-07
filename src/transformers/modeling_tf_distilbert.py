@@ -414,6 +414,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
+        self.output_attentions = config.output_attentions
 
         self.embeddings = TFEmbeddings(config, name="embeddings")  # Embeddings
         self.transformer = TFTransformer(config, name="transformer")  # Encoder
@@ -428,7 +429,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         raise NotImplementedError
 
     def call(
-        self, inputs, attention_mask=None, head_mask=None, inputs_embeds=None, output_attentions=False, training=False
+        self, inputs, attention_mask=None, head_mask=None, inputs_embeds=None, output_attentions=None, training=False
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -446,6 +447,8 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
             assert len(inputs) <= 5, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -697,7 +700,14 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
     def call(
-        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -739,6 +749,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
             training=training,
         )
 
@@ -775,7 +786,14 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
     def call(
-        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -815,6 +833,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             attention_mask=attention_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
             training=training,
         )
 
@@ -864,7 +883,14 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
     def call(
-        self, inputs, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
+        self,
+        inputs,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -982,6 +1008,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         cls_index=None,
         p_mask=None,
         is_impossible=None,
+        output_attentions=None,
         training=False,
     ):
         r"""

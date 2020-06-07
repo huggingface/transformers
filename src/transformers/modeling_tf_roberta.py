@@ -365,6 +365,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -403,6 +404,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
             training=training,
         )
 
@@ -452,6 +454,7 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -576,6 +579,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -618,6 +622,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
             training=training,
         )
 
@@ -663,6 +668,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
         cls_index=None,
         p_mask=None,
         is_impossible=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -717,6 +723,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
             training=training,
         )
 

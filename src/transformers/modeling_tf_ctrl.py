@@ -185,6 +185,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
+        self.output_attentions = config.output_attentions
 
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
@@ -231,7 +232,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
-        output_attentions=False,
+        output_attentions=None,
         training=False,
     ):
 
@@ -259,6 +260,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
 
         # If using past key value states, only the last tokens
         # should be given as an input

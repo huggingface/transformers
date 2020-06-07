@@ -235,7 +235,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
+        output_attentions=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -258,6 +258,8 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
             assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -426,6 +428,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -457,7 +460,14 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         """
 
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, training=training
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            inputs_embeds,
+            output_attentions,
+            training=training,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
         logits = self.discriminator_predictions(discriminator_sequence_output)
@@ -519,6 +529,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -551,7 +562,14 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         """
 
         generator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, training=training
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            inputs_embeds,
+            output_attentions=output_attentions,
+            training=training,
         )
         generator_sequence_output = generator_hidden_states[0]
         prediction_scores = self.generator_predictions(generator_sequence_output, training=training)
@@ -589,6 +607,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -626,7 +645,14 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         """
 
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, training=training
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            inputs_embeds,
+            output_attentions,
+            training=training,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
         discriminator_sequence_output = self.dropout(discriminator_sequence_output)
@@ -670,6 +696,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
         cls_index=None,
         p_mask=None,
         is_impossible=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -716,7 +743,14 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
 
         """
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, training=training
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            inputs_embeds,
+            output_attentions,
+            training=training,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 

@@ -501,6 +501,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
+        self.output_attentions = config.output_attentions
 
         self.embeddings = TFAlbertEmbeddings(config, name="embeddings")
         self.encoder = TFAlbertTransformer(config, name="encoder")
@@ -532,7 +533,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
+        output_attentions=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -555,6 +556,8 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -883,6 +886,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -928,6 +932,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
             training=training,
         )
 
@@ -971,6 +976,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -1013,6 +1019,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
             training=training,
         )
 
@@ -1058,6 +1065,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
         cls_index=None,
         p_mask=None,
         is_impossible=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -1112,6 +1120,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
             training=training,
         )
 
@@ -1167,6 +1176,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -1215,7 +1225,8 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             position_ids = inputs[3] if len(inputs) > 3 else position_ids
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            assert len(inputs) <= 6, "Too many inputs."
+            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
+            assert len(inputs) <= 7, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -1223,7 +1234,8 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             position_ids = inputs.get("position_ids", position_ids)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 6, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -1246,6 +1258,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             flat_position_ids,
             head_mask,
             inputs_embeds,
+            output_attentions,
         ]
 
         outputs = self.albert(flat_inputs, training=training)

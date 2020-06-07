@@ -517,6 +517,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
     def __init__(self, config, embed_tokens=None, **kwargs):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
+        self.output_attentions = config.output_attentions
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
@@ -556,8 +557,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         head_mask=None,
         past_key_value_states=None,
         use_cache=False,
+        output_attentions=None,
         training=False,
-        output_attentions=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -581,6 +582,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             assert len(inputs) <= 8, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both inputs and inputs_embeds at the same time")
@@ -941,7 +944,7 @@ class TFT5Model(TFT5PreTrainedModel):
         decoder_past_key_value_states = kwargs.get("decoder_past_key_value_states", None)
         use_cache = kwargs.get("use_cache", True)
         head_mask = kwargs.get("head_mask", None)
-        output_attentions = kwargs.get("output_attentions", False)
+        output_attentions = kwargs.get("output_attentions", None)
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1073,7 +1076,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         inputs_embeds = kwargs.get("inputs_embeds", None)
         decoder_inputs_embeds = kwargs.get("decoder_inputs_embeds", None)
         head_mask = kwargs.get("head_mask", None)
-        output_attentions = kwargs.get("output_attentions", False)
+        output_attentions = kwargs.get("output_attentions", None)
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
