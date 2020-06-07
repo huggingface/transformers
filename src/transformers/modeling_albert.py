@@ -604,7 +604,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         labels=None,
         sentence_order_label=None,
         output_attentions=False,
-        **kwargs
+        **kwargs,
     ):
         r"""
         labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
