@@ -31,6 +31,7 @@ from .modeling_tf_utils import (
     get_initializer,
     keras_serializable,
     shape_list,
+    cast_bool_to_primitive,
 )
 from .tokenization_utils import BatchEncoding
 
@@ -91,8 +92,8 @@ class TFAttention(tf.keras.layers.Layer):
         m = i >= j - ns + nd
         return tf.cast(m, dtype)
 
-    def _attn(self, inputs, training=False, output_attentions=False):
-        q, k, v, attention_mask, head_mask = inputs
+    def _attn(self, inputs, training=False):
+        q, k, v, attention_mask, head_mask, output_attentions = inputs
         # q, k, v have shape [batch, heads, sequence, features]
         w = tf.matmul(q, k, transpose_b=True)
         if self.scale:
@@ -117,7 +118,7 @@ class TFAttention(tf.keras.layers.Layer):
             w = w * head_mask
 
         outputs = [tf.matmul(w, v)]
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs.append(w)
         return outputs
 
@@ -133,8 +134,8 @@ class TFAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, new_x_shape)
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
-    def call(self, inputs, training=False, output_attentions=False):
-        x, layer_past, attention_mask, head_mask, use_cache = inputs
+    def call(self, inputs, training=False):
+        x, layer_past, attention_mask, head_mask, use_cache, output_attentions = inputs
 
         x = self.c_attn(x)
         query, key, value = tf.split(x, 3, axis=2)
@@ -147,22 +148,12 @@ class TFAttention(tf.keras.layers.Layer):
             value = tf.concat([past_value, value], axis=-2)
 
         # to cope with keras serialization
-        # we need to cast `use_cache` to correct bool
-        # if it is a tensor
-        if tf.is_tensor(use_cache):
-            if hasattr(use_cache, "numpy"):
-                use_cache = bool(use_cache.numpy())
-            else:
-                use_cache = True
-
-        if use_cache is True:
+        if cast_bool_to_primitive(use_cache, True) is True:
             present = tf.stack([key, value], axis=0)
         else:
             present = (None,)
 
-        attn_outputs = self._attn(
-            [query, key, value, attention_mask, head_mask], training=training, output_attentions=output_attentions
-        )
+        attn_outputs = self._attn([query, key, value, attention_mask, head_mask, output_attentions], training=training)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -199,10 +190,12 @@ class TFBlock(tf.keras.layers.Layer):
         self.mlp = TFMLP(4 * nx, config, name="mlp")
 
     def call(self, inputs, training=False):
-        x, layer_past, attention_mask, head_mask, use_cache = inputs
+        x, layer_past, attention_mask, head_mask, use_cache, output_attentions = inputs
 
         a = self.ln_1(x)
-        output_attn = self.attn([a, layer_past, attention_mask, head_mask, use_cache], training=training)
+        output_attn = self.attn(
+            [a, layer_past, attention_mask, head_mask, use_cache, output_attentions], training=training
+        )
         a = output_attn[0]  # output_attn: a, present, (attentions)
         x = x + a
 
@@ -272,7 +265,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             head_mask = inputs[5] if len(inputs) > 5 else head_mask
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             use_cache = inputs[7] if len(inputs) > 7 else use_cache
-            assert len(inputs) <= 8, "Too many inputs."
+            output_attentions = inputs[8] if len(inputs) > 7 else output_attentions
+            assert len(inputs) <= 9, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -282,7 +276,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             use_cache = inputs.get("use_cache", use_cache)
-            assert len(inputs) <= 8, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -356,12 +351,15 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
-            outputs = block([hidden_states, layer_past, attention_mask, head_mask[i], use_cache], training=training)
+            outputs = block(
+                [hidden_states, layer_past, attention_mask, head_mask[i], use_cache, output_attentions],
+                training=training,
+            )
 
             hidden_states, present = outputs[:2]
             presents = presents + (present,)
 
-            if output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 all_attentions.append(outputs[2])
 
         hidden_states = self.ln_f(hidden_states)
@@ -377,7 +375,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             outputs = outputs + (presents,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
@@ -615,6 +613,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         inputs_embeds=None,
         mc_token_ids=None,
         use_cache=True,
+        output_attentions=False,
         training=False,
     ):
         r"""
@@ -682,7 +681,8 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             mc_token_ids = inputs[7] if len(inputs) > 7 else mc_token_ids
             use_cache = inputs[8] if len(inputs) > 8 else use_cache
-            assert len(inputs) <= 9, "Too many inputs."
+            output_attentions = inputs[9] if len(inputs) > 8 else output_attentions
+            assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -693,7 +693,8 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             mc_token_ids = inputs.get("mc_token_ids", mc_token_ids)
             use_cache = inputs.get("use_cache", use_cache)
-            assert len(inputs) <= 9, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -718,6 +719,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             head_mask,
             inputs_embeds,
             use_cache,
+            output_attentions,
         ]
 
         transformer_outputs = self.transformer(flat_inputs, training=training)

@@ -23,7 +23,13 @@ import tensorflow as tf
 
 from .configuration_ctrl import CTRLConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, keras_serializable, shape_list
+from .modeling_tf_utils import (
+    TFPreTrainedModel,
+    TFSharedEmbeddings,
+    keras_serializable,
+    shape_list,
+    cast_bool_to_primitive,
+)
 from .tokenization_utils import BatchEncoding
 
 
@@ -113,13 +119,7 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
             v = tf.concat((past_value, v), axis=-2)
 
         # to cope with keras serialization
-        # we need to cast `use_cache` to correct bool
-        # if it is a tensor
-        if tf.is_tensor(use_cache):
-            if hasattr(use_cache, "numpy"):
-                use_cache = bool(use_cache.numpy())
-            else:
-                use_cache = True
+        use_cache = cast_bool_to_primitive(use_cache)
 
         if use_cache is True:
             present = tf.stack((k, v), axis=0)
