@@ -667,8 +667,10 @@ class T5Stack(T5PreTrainedModel):
         head_mask=None,
         past_key_value_states=None,
         use_cache=False,
-        output_attentions=False,
+        output_attentions=None,
     ):
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -901,7 +903,7 @@ class T5Model(T5PreTrainedModel):
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         head_mask=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
     Return:
@@ -1027,7 +1029,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         head_mask=None,
-        output_attentions=False,
+        output_attentions=None,
         **kwargs
     ):
         r"""

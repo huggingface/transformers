@@ -405,7 +405,7 @@ class XLMModel(XLMPreTrainedModel):
         cache=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
     Return:
@@ -436,6 +436,8 @@ class XLMModel(XLMPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
         if input_ids is not None:
             bs, slen = input_ids.size()
         else:
@@ -637,7 +639,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -725,7 +727,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -824,7 +826,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -947,7 +949,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         is_impossible=None,
         cls_index=None,
         p_mask=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1061,7 +1063,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         position_ids=None,
         head_mask=None,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):

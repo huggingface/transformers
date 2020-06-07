@@ -1549,7 +1549,7 @@ class ReformerModel(ReformerPreTrainedModel):
         inputs_embeds=None,
         num_hashes=None,
         do_output_hidden_states=False,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
     Return:
@@ -1582,6 +1582,7 @@ class ReformerModel(ReformerPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
         """
 
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         do_output_hidden_states = self.config.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
@@ -1742,7 +1743,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         num_hashes=None,
         labels=None,
         do_output_hidden_states=False,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):

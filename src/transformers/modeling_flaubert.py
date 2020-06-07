@@ -128,7 +128,7 @@ class FlaubertModel(XLMModel):
         cache=None,
         head_mask=None,
         inputs_embeds=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
     Return:
@@ -159,6 +159,8 @@ class FlaubertModel(XLMModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
         # removed: src_enc=None, src_len=None
         if input_ids is not None:
             bs, slen = input_ids.size()

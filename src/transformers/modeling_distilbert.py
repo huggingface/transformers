@@ -415,7 +415,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
     def forward(
-        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, output_attentions=False,
+        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, output_attentions=None,
     ):
         r"""
     Return:
@@ -448,6 +448,8 @@ class DistilBertModel(DistilBertPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -504,7 +506,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
         **kwargs
     ):
         r"""
@@ -600,7 +602,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -692,7 +694,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -798,7 +800,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
