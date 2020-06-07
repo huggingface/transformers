@@ -791,7 +791,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         return self.transformer.init_mems(bsz)
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
-    def call(self, inputs, mems=None, head_mask=None, inputs_embeds=None, labels=None, training=False):
+    def call(self, inputs, mems=None, head_mask=None, inputs_embeds=None, labels=None, output_attentions=False, training=False):
         r"""
     Return:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
@@ -831,14 +831,16 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
             inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
             labels = inputs[4] if len(inputs) > 4 else labels
-            assert len(inputs) <= 5, "Too many inputs."
+            output_attentions = inputs[5] if len(inputs) > 5 else output_attentions
+            assert len(inputs) <= 6, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get("input_ids")
             mems = inputs.get("mems", mems)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             labels = inputs.get("labels", labels)
-            assert len(inputs) <= 5, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 6, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -847,7 +849,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         else:
             bsz, tgt_len = shape_list(inputs_embeds)[:2]
 
-        transformer_outputs = self.transformer([input_ids, mems, head_mask, inputs_embeds], training=training)
+        transformer_outputs = self.transformer([input_ids, mems, head_mask, inputs_embeds, output_attentions], training=training)
 
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]
