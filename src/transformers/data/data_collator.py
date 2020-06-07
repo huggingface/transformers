@@ -142,3 +142,21 @@ class DataCollatorForLanguageModeling(DataCollator):
 
         # The rest of the time (10% of the time) we keep the masked input tokens unchanged
         return inputs, labels
+
+
+@dataclass
+class DataCollatorForQuestionAnswering(DataCollator):
+    """
+    Data collator used for language modeling.
+    - collates batches of tensors
+    - preprocesses batches for question answering
+    """
+
+    def collate_batch(self, batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+        keys = batch[0].keys()
+        inputs = {}
+
+        for key in keys:
+            inputs[key] = torch.stack([example[key] for example in batch])
+
+        return inputs
