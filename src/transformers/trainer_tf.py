@@ -230,8 +230,9 @@ class TFTrainer:
         with self.args.strategy.scope():
             optimizer, lr_scheduler = self.get_optimizers()
             iterations = optimizer.iterations
+            folder = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
             ckpt = tf.train.Checkpoint(optimizer=optimizer, model=self.model)
-            self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, PREFIX_CHECKPOINT_DIR, max_to_keep=5)
+            self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, folder, max_to_keep=5)
 
             if self.model.ckpt_manager.latest_checkpoint:
                 logger.info(
