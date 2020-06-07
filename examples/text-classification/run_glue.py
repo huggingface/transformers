@@ -215,6 +215,12 @@ def main():
             test_datasets.append(
                 GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, mode="test", cache_dir=model_args.cache_dir)
             )
+            # Before conducting on diagnostic task, diagnostic.tsv should be copied from
+            # {your_path}/glue_data/diagnostic to {your_path}/glue_data/MNLI.
+            diagnostic_args = dataclasses.replace(data_args, task_name="diagnostic")
+            test_datasets.append(
+                GlueDataset(diagnostic_args, tokenizer=tokenizer, mode="test", cache_dir=model_args.cache_dir)
+            )
 
         for test_dataset in test_datasets:
             predictions = trainer.predict(test_dataset=test_dataset).predictions

@@ -257,6 +257,27 @@ class MnliMismatchedProcessor(MnliProcessor):
         """See base class."""
         return self._create_examples(self._read_tsv(os.path.join(data_dir, "test_mismatched.tsv")), "test_mismatched")
 
+class DiagnosticProcessor(DataProcessor):
+    def get_labels(self):
+        """Get the labels of the dataset. This should be consistent with MNLI dataset."""
+        return ["contradiction", "entailment", "neutral"]
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "diagnostic.tsv")), "diagnostic")
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training, dev and test sets."""
+        examples = []
+        for (i, line) in enumerate(lines):
+            if i == 0:
+                continue
+            guid = "%s-%s" % (set_type, line[0])
+            text_a = line[1]
+            text_b = line[2]
+            examples.append(InputExample(guid=guid, text_a=text_a, text_b=text_b, label=None))
+        return examples
+
 
 class ColaProcessor(DataProcessor):
     """Processor for the CoLA data set (GLUE version)."""
@@ -582,6 +603,7 @@ glue_processors = {
     "qnli": QnliProcessor,
     "rte": RteProcessor,
     "wnli": WnliProcessor,
+    "diagnostic": DiagnosticProcessor,
 }
 
 glue_output_modes = {
@@ -595,4 +617,5 @@ glue_output_modes = {
     "qnli": "classification",
     "rte": "classification",
     "wnli": "classification",
+    "diagnostic": "classification",
 }

@@ -88,7 +88,7 @@ class GlueDataset(Dataset):
             ),
         )
         label_list = self.processor.get_labels()
-        if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__ in (
+        if args.task_name in ["mnli", "mnli-mm", "diagnostic"] and tokenizer.__class__ in (
             RobertaTokenizer,
             RobertaTokenizerFast,
             XLMRobertaTokenizer,
@@ -101,7 +101,6 @@ class GlueDataset(Dataset):
         # and the others will use the cache.
         lock_path = cached_features_file + ".lock"
         with FileLock(lock_path):
-
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
                 self.features = torch.load(cached_features_file)
