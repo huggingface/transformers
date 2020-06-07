@@ -588,7 +588,7 @@ class LongformerModel(RobertaModel):
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
-        output_attentions=False,
+        output_attentions=False
     ):
         r"""
 
