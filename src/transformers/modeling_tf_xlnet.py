@@ -366,6 +366,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
+        self.output_attentions = config.output_attentions
 
         self.mem_len = config.mem_len
         self.reuse_len = config.reuse_len
@@ -511,7 +512,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
-        output_attentions=False,
+        output_attentions=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -525,7 +526,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
             use_cache = inputs[9] if len(inputs) > 9 else use_cache
-            output_attentions = inputs[10] if len(inputs) > 10 else output_attentions
+            output_attentions = inputs[-9] if len(inputs) > 10 else output_attentions
             assert len(inputs) <= 11, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
@@ -542,6 +543,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             assert len(inputs) <= 11, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
 
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -986,6 +989,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         inputs_embeds=None,
         use_cache=True,
         labels=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -1039,6 +1043,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         output = transformer_outputs[0]
 
@@ -1094,6 +1099,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -1146,7 +1152,8 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             head_mask = inputs[7] if len(inputs) > 7 else head_mask
             inputs_embeds = inputs[8] if len(inputs) > 8 else inputs_embeds
             use_cache = inputs[9] if len(inputs) > 9 else use_cache
-            assert len(inputs) <= 10, "Too many inputs."
+            output_attentions = inputs[-9] if len(inputs) > 10 else output_attentions
+            assert len(inputs) <= 11, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -1158,7 +1165,8 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             use_cache = inputs.get("use_cache", use_cache)
-            assert len(inputs) <= 10, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 11, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -1185,6 +1193,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             head_mask,
             inputs_embeds,
             use_cache,
+            output_attentions,
         ]
 
         transformer_outputs = self.transformer(flat_inputs, training=training)
@@ -1230,6 +1239,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         inputs_embeds=None,
         use_cache=True,
         labels=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -1281,6 +1291,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
             training=training,
         )
         output = transformer_outputs[0]
@@ -1327,6 +1338,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         cls_index=None,
         p_mask=None,
         is_impossible=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -1389,6 +1401,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
             training=training,
         )
 

@@ -391,6 +391,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.output_hidden_states = config.output_hidden_states
+        self.output_attentions = config.output_attentions
 
         self.n_token = config.vocab_size
 
@@ -516,7 +517,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
         return new_mems
 
-    def call(self, inputs, mems=None, head_mask=None, inputs_embeds=None, output_attentions=False, training=False):
+    def call(self, inputs, mems=None, head_mask=None, inputs_embeds=None, output_attentions=None, training=False):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             mems = inputs[1] if len(inputs) > 1 else mems
@@ -533,6 +534,8 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             assert len(inputs) <= 5, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
 
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
@@ -798,7 +801,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
         training=False,
     ):
         r"""
