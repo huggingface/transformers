@@ -380,7 +380,7 @@ def generic_train(
         filepath=str(model.output_dir / "{val_avg_rouge2:.4f}-{step_count}"),
         monitor="val_rouge",
         mode="max",
-        save_top_k=2,
+        save_top_k=1,
         save_weights_only=True,
         period=0,
     )
