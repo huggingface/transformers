@@ -490,6 +490,7 @@ class AlbertModel(AlbertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=False,
     ):
         r"""
     Return:
@@ -554,7 +555,9 @@ class AlbertModel(AlbertPreTrainedModel):
         embedding_output = self.embeddings(
             input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
-        encoder_outputs = self.encoder(embedding_output, extended_attention_mask, head_mask=head_mask)
+        encoder_outputs = self.encoder(
+            embedding_output, extended_attention_mask, head_mask=head_mask, output_attentions=output_attentions
+        )
 
         sequence_output = encoder_outputs[0]
 

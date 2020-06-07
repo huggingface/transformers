@@ -588,6 +588,7 @@ class LongformerModel(RobertaModel):
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
+        output_attentions=False,
     ):
         r"""
 
@@ -666,6 +667,7 @@ class LongformerModel(RobertaModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
+            output_attentions=output_attentions,
         )
 
         # undo padding
@@ -703,6 +705,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
         position_ids=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
         **kwargs
     ):
         r"""
@@ -763,6 +766,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
