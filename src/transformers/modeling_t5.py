@@ -414,6 +414,7 @@ class T5LayerSelfAttention(nn.Module):
         head_mask=None,
         past_key_value_state=None,
         use_cache=False,
+        output_attentions=False,
     ):
         norm_x = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
@@ -423,6 +424,7 @@ class T5LayerSelfAttention(nn.Module):
             head_mask=head_mask,
             past_key_value_state=past_key_value_state,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         y = attention_output[0]
         layer_output = hidden_states + self.dropout(y)
@@ -447,6 +449,7 @@ class T5LayerCrossAttention(nn.Module):
         past_key_value_state=None,
         use_cache=False,
         query_length=None,
+        output_attentions=False,
     ):
         norm_x = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
@@ -458,6 +461,7 @@ class T5LayerCrossAttention(nn.Module):
             past_key_value_state=past_key_value_state,
             use_cache=use_cache,
             query_length=query_length,
+            output_attentions=output_attentions,
         )
         y = attention_output[0]
         layer_output = hidden_states + self.dropout(y)
@@ -487,6 +491,7 @@ class T5Block(nn.Module):
         head_mask=None,
         past_key_value_state=None,
         use_cache=False,
+        output_attentions=False,
     ):
 
         if past_key_value_state is not None:
@@ -512,6 +517,7 @@ class T5Block(nn.Module):
             head_mask=head_mask,
             past_key_value_state=self_attn_past_key_value_state,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
@@ -736,6 +742,7 @@ class T5Stack(T5PreTrainedModel):
                 head_mask=head_mask[i],
                 past_key_value_state=past_key_value_state,
                 use_cache=use_cache,
+                output_attentions=output_attentions,
             )
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
@@ -1018,6 +1025,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         head_mask=None,
+        output_attentions=False,
         **kwargs
     ):
         r"""
@@ -1077,7 +1085,11 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
             )
 
         hidden_states = encoder_outputs[0]

@@ -241,7 +241,9 @@ class TransformerBlock(nn.Module):
             The output of the transformer block contextualization.
         """
         # Self-Attention
-        sa_output = self.attention(query=x, key=x, value=x, mask=attn_mask, head_mask=head_mask)
+        sa_output = self.attention(
+            query=x, key=x, value=x, mask=attn_mask, head_mask=head_mask, output_attentions=output_attentions,
+        )
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attention` or `output_hidden_states` cases returning tuples
@@ -296,7 +298,9 @@ class Transformer(nn.Module):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
-            layer_outputs = layer_module(x=hidden_state, attn_mask=attn_mask, head_mask=head_mask[i])
+            layer_outputs = layer_module(
+                x=hidden_state, attn_mask=attn_mask, head_mask=head_mask[i], output_attentions=output_attentions
+            )
             hidden_state = layer_outputs[-1]
 
             if output_attentions:
@@ -411,7 +415,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
     def forward(
-        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, output_attentions=False
+        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, output_attentions=False,
     ):
         r"""
     Return:
@@ -464,7 +468,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)  # (bs, seq_length, dim)
         tfmr_output = self.transformer(
-            x=inputs_embeds, attn_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions
+            x=inputs_embeds, attn_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions,
         )
         hidden_state = tfmr_output[0]
         output = (hidden_state,) + tfmr_output[1:]
@@ -493,7 +497,16 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         return self.vocab_projector
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, **kwargs):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=False,
+        **kwargs
+    ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
@@ -542,7 +555,11 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         dlbrt_output = self.distilbert(
-            input_ids=input_ids, attention_mask=attention_mask, head_mask=head_mask, inputs_embeds=inputs_embeds
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
         hidden_states = dlbrt_output[0]  # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
@@ -576,7 +593,15 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=False,
+    ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
             Labels for computing the sequence classification/regression loss.
@@ -616,7 +641,11 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
 
         """
         distilbert_output = self.distilbert(
-            input_ids=input_ids, attention_mask=attention_mask, head_mask=head_mask, inputs_embeds=inputs_embeds
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
         hidden_state = distilbert_output[0]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
@@ -663,6 +692,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        output_attentions=False,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -709,7 +739,11 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
 
         """
         distilbert_output = self.distilbert(
-            input_ids=input_ids, attention_mask=attention_mask, head_mask=head_mask, inputs_embeds=inputs_embeds
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
         hidden_states = distilbert_output[0]  # (bs, max_query_len, dim)
 
@@ -757,7 +791,15 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=False,
+    ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the token classification loss.
@@ -796,7 +838,11 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         """
 
         outputs = self.distilbert(
-            input_ids, attention_mask=attention_mask, head_mask=head_mask, inputs_embeds=inputs_embeds
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]

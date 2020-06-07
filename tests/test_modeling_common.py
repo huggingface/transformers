@@ -130,7 +130,7 @@ class ModelTesterMixin:
             encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True  
+            inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
             model = model_class(config)
             model.to(torch_device)

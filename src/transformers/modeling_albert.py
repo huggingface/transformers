@@ -274,8 +274,8 @@ class AlbertLayer(nn.Module):
         self.ffn_output = nn.Linear(config.intermediate_size, config.hidden_size)
         self.activation = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None):
-        attention_output = self.attention(hidden_states, attention_mask, head_mask)
+    def forward(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False):
+        attention_output = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
         ffn_output = self.ffn(attention_output[0])
         ffn_output = self.activation(ffn_output)
         ffn_output = self.ffn_output(ffn_output)
@@ -296,7 +296,7 @@ class AlbertLayerGroup(nn.Module):
         layer_attentions = ()
 
         for layer_index, albert_layer in enumerate(self.albert_layers):
-            layer_output = albert_layer(hidden_states, attention_mask, head_mask[layer_index])
+            layer_output = albert_layer(hidden_states, attention_mask, head_mask[layer_index], output_attentions)
             hidden_states = layer_output[0]
 
             if output_attentions:
@@ -341,6 +341,7 @@ class AlbertTransformer(nn.Module):
                 hidden_states,
                 attention_mask,
                 head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
+                output_attentions,
             )
             hidden_states = layer_group_output[0]
 
@@ -556,7 +557,7 @@ class AlbertModel(AlbertPreTrainedModel):
             input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
         encoder_outputs = self.encoder(
-            embedding_output, extended_attention_mask, head_mask=head_mask, output_attentions=output_attentions
+            embedding_output, extended_attention_mask, head_mask=head_mask, output_attentions=output_attentions,
         )
 
         sequence_output = encoder_outputs[0]
@@ -602,6 +603,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         sentence_order_label=None,
+        output_attentions=False,
         **kwargs
     ):
         r"""
@@ -670,6 +672,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         sequence_output, pooled_output = outputs[:2]
@@ -755,6 +758,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
         **kwargs
     ):
         r"""
@@ -811,6 +815,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
         sequence_outputs = outputs[0]
 
@@ -851,6 +856,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -898,6 +904,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         pooled_output = outputs[1]
@@ -946,6 +953,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -993,6 +1001,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -1043,6 +1052,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        output_attentions=False,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1097,6 +1107,7 @@ class AlbertForQuestionAnswering(AlbertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]

@@ -241,7 +241,9 @@ class FlaubertModel(XLMModel):
 
             # self attention
             if not self.pre_norm:
-                attn_outputs = self.attentions[i](tensor, attn_mask, cache=cache, head_mask=head_mask[i])
+                attn_outputs = self.attentions[i](
+                    tensor, attn_mask, cache=cache, head_mask=head_mask[i], output_attentions=output_attentions,
+                )
                 attn = attn_outputs[0]
                 if output_attentions:
                     attentions = attentions + (attn_outputs[1],)

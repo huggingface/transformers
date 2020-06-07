@@ -350,7 +350,14 @@ class XLNetRelativeAttention(nn.Module):
 
             # core attention ops
             attn_vec_h = self.rel_attn_core(
-                q_head_h, k_head_h, v_head_h, k_head_r, seg_mat=seg_mat, attn_mask=attn_mask_h, head_mask=head_mask
+                q_head_h,
+                k_head_h,
+                v_head_h,
+                k_head_r,
+                seg_mat=seg_mat,
+                attn_mask=attn_mask_h,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
             )
 
             if output_attentions:
@@ -376,7 +383,14 @@ class XLNetRelativeAttention(nn.Module):
                 attn_vec_g = torch.einsum("lbnd,mlb->mbnd", attn_vec_g, target_mapping)
             else:
                 attn_vec_g = self.rel_attn_core(
-                    q_head_g, k_head_h, v_head_h, k_head_r, seg_mat=seg_mat, attn_mask=attn_mask_g, head_mask=head_mask
+                    q_head_g,
+                    k_head_h,
+                    v_head_h,
+                    k_head_r,
+                    seg_mat=seg_mat,
+                    attn_mask=attn_mask_g,
+                    head_mask=head_mask,
+                    output_attentions=output_attentions,
                 )
 
                 if output_attentions:
@@ -405,7 +419,14 @@ class XLNetRelativeAttention(nn.Module):
 
             # core attention ops
             attn_vec = self.rel_attn_core(
-                q_head_h, k_head_h, v_head_h, k_head_r, seg_mat=seg_mat, attn_mask=attn_mask_h, head_mask=head_mask
+                q_head_h,
+                k_head_h,
+                v_head_h,
+                k_head_r,
+                seg_mat=seg_mat,
+                attn_mask=attn_mask_h,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
             )
 
             if output_attentions:
@@ -452,7 +473,17 @@ class XLNetLayer(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(
-        self, output_h, output_g, attn_mask_h, attn_mask_g, r, seg_mat, mems=None, target_mapping=None, head_mask=None
+        self,
+        output_h,
+        output_g,
+        attn_mask_h,
+        attn_mask_g,
+        r,
+        seg_mat,
+        mems=None,
+        target_mapping=None,
+        head_mask=None,
+        output_attentions=False,
     ):
         outputs = self.rel_attn(
             output_h,
@@ -464,6 +495,7 @@ class XLNetLayer(nn.Module):
             mems=mems,
             target_mapping=target_mapping,
             head_mask=head_mask,
+            output_attentions=output_attentions,
         )
         output_h, output_g = outputs[:2]
 
@@ -904,6 +936,7 @@ class XLNetModel(XLNetPreTrainedModel):
                 mems=mems[i],
                 target_mapping=target_mapping,
                 head_mask=head_mask[i],
+                output_attentions=output_attentions,
             )
             output_h, output_g = outputs[:2]
             if output_attentions:
@@ -1006,6 +1039,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_predict)`, `optional`, defaults to :obj:`None`):
@@ -1081,6 +1115,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         logits = self.lm_loss(transformer_outputs[0])
@@ -1126,6 +1161,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`)
@@ -1181,6 +1217,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         output = transformer_outputs[0]
 
@@ -1231,6 +1268,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1287,6 +1325,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -1340,6 +1379,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1405,6 +1445,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         output = transformer_outputs[0]
@@ -1454,6 +1495,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         use_cache=True,
         start_positions=None,
         end_positions=None,
+        output_attentions=False,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1517,6 +1559,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -1583,6 +1626,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         is_impossible=None,
         cls_index=None,
         p_mask=None,
+        output_attentions=False,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1657,6 +1701,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         hidden_states = transformer_outputs[0]
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)

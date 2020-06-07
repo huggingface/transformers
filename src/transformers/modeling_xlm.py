@@ -511,7 +511,9 @@ class XLMModel(XLMPreTrainedModel):
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
-            attn_outputs = self.attentions[i](tensor, attn_mask, cache=cache, head_mask=head_mask[i])
+            attn_outputs = self.attentions[i](
+                tensor, attn_mask, cache=cache, head_mask=head_mask[i], output_attentions=output_attentions,
+            )
             attn = attn_outputs[0]
             if output_attentions:
                 attentions = attentions + (attn_outputs[1],)
@@ -635,6 +637,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -684,6 +687,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
             cache=cache,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         output = transformer_outputs[0]
@@ -721,6 +725,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -770,6 +775,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
             cache=cache,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         output = transformer_outputs[0]
@@ -818,6 +824,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        output_attentions=False,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -873,6 +880,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
             cache=cache,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         sequence_output = transformer_outputs[0]
@@ -939,6 +947,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         is_impossible=None,
         cls_index=None,
         p_mask=None,
+        output_attentions=False,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1007,6 +1016,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             cache=cache,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         output = transformer_outputs[0]
@@ -1051,6 +1061,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
         position_ids=None,
         head_mask=None,
         labels=None,
+        output_attentions=False,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -1095,6 +1106,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
