@@ -52,6 +52,7 @@ class RougeTracker:
         self.gt = test_gt  # {'test': test_gt}
         self.tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
         self.csv_path = csv_path
+        self.new_results = pd.DataFrame()
 
     @property
     def finished_experiments(self):
@@ -86,10 +87,8 @@ class RougeTracker:
         if not records:
             return self.df
         new_df = (
-            pd.DataFrame(records)
-            .rename(columns=lambda x: x.replace("rouge", "R"))
-            .set_index("exp_name")
-            .astype(float)
+            pd.DataFrame(records).rename(columns=lambda x: x.replace("rouge", "R")).set_index("exp_name").astype(float)
         )
-        self.df = pd.concat([self.df, new_df]).dsort('R2')
+        self.new_results = new_df
+        self.df = pd.concat([self.df, new_df]).dsort("R2")
         return self.df

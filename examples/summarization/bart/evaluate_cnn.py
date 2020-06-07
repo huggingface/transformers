@@ -17,22 +17,31 @@ def chunks(lst, n):
 
 
 def generate_summaries(
-    examples: list, out_file: str, model_name: str, batch_size: int = 8, device: str = DEFAULT_DEVICE
+    examples: list,
+    out_file: str,
+    model_name: str,
+    batch_size: int = 8,
+    device: str = DEFAULT_DEVICE,
+    max_length=140,
+    min_length=55,
+    num_beams=4,
+    length_penalty=2.0,
+    n_obs=None,
+    model=None,
 ):
     fout = Path(out_file).open("w")
-    model = BartForConditionalGeneration.from_pretrained(model_name).to(device)
+    if model is None:
+        model = BartForConditionalGeneration.from_pretrained(model_name).to(device).half()
     tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
-
-    max_length = 140
-    min_length = 55
-
+    if n_obs is not None:
+        examples = examples[:n_obs]
     for batch in tqdm(list(chunks(examples, batch_size))):
         dct = tokenizer.batch_encode_plus(batch, max_length=1024, return_tensors="pt", pad_to_max_length=True)
         summaries = model.generate(
             input_ids=dct["input_ids"].to(device),
             attention_mask=dct["attention_mask"].to(device),
-            num_beams=4,
-            length_penalty=2.0,
+            num_beams=num_beams,
+            length_penalty=length_penalty,
             max_length=max_length + 2,  # +2 from original because we start at step=1 and stop before max_length
             min_length=min_length + 1,  # +1 from original because we start at step=1
             no_repeat_ngram_size=3,

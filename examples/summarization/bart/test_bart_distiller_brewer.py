@@ -4,7 +4,6 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 
 from durbango import DEFAULT_DEVICE
-from textbrewer import DistillationConfig, GeneralDistiller, TrainingConfig
 from transformers import AdamW, BartConfig, BartForConditionalGeneration, BartTokenizer
 from transformers.file_utils import cached_property
 
@@ -32,7 +31,9 @@ class TestDistiller(unittest.TestCase):
     @property
     def loader(self):
         DATA_DIR = "/Users/shleifer/Dropbox/cnn_tiny/"
-        dataset = SummarizationDataset.from_raw_data(self.tok, data_dir=DATA_DIR, max_source_length=12, max_target_length=6)
+        dataset = SummarizationDataset.from_raw_data(
+            self.tok, data_dir=DATA_DIR, max_source_length=12, max_target_length=6
+        )
         dataloader = DataLoader(dataset, batch_size=2, collate_fn=dataset.collate_fn, shuffle=False)
         return dataloader
 
@@ -48,13 +49,15 @@ class TestDistiller(unittest.TestCase):
         copy_decoder_layers(teacher_model, student_model, l2copy=[0, 2])
 
     def test_bdistiller_tiny(self):
+        from textbrewer import DistillationConfig, GeneralDistiller, TrainingConfig
+
         Path("distil_tiny_log_dir").mkdir(exist_ok=True)
         teacher_model, student_model = make_teacher_and_student(teacher_cfg_kwargs, encoder_layers=1)
         train_config = TrainingConfig(device=DEFAULT_DEVICE, log_dir="distil_tiny_log_dir")
         # Matching different layers of the student and the teacher
         distill_config = DistillationConfig(
             intermediate_matches=[
-                {'layer_T':0, 'layer_S':0, 'feature':'hidden', 'loss': 'hidden_mse','weight' : 1},
+                {"layer_T": 0, "layer_S": 0, "feature": "hidden", "loss": "hidden_mse", "weight": 1},
                 # {'layer_T':8, 'layer_S':2, 'feature':'hidden', 'loss': 'hidden_mse','weight' : 1}
             ]
         )
