@@ -238,7 +238,7 @@ class SummarizationTrainer(BaseTransformer):
         if self.hparams.sortish_sampler and type_path == "train":
             sampler = dataset.make_sortish_sampler(batch_size)
             shuffle = False
-            assert self.hparams.n_gpu <= 1
+            assert self.hparams.gpus <= 1
 
         dataloader = DataLoader(
             dataset,
@@ -253,7 +253,7 @@ class SummarizationTrainer(BaseTransformer):
     def train_dataloader(self) -> DataLoader:
         dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
         t_total = (
-            (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.n_gpu)))
+            (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.gpus)))
             // self.hparams.gradient_accumulation_steps
             * float(self.hparams.num_train_epochs)
         )

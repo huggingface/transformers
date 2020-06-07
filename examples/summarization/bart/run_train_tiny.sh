@@ -23,7 +23,7 @@ python finetune.py \
 --eval_batch_size=2 \
 --output_dir=$OUTPUT_DIR \
 --num_train_epochs=1  \
---n_gpu=0 \
+--gpus=0 \
 --do_train \
 --do_predict \
 

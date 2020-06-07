@@ -35,7 +35,7 @@ CHEAP_ARGS = {
     "fp16": False,
     "no_teacher": False,
     "fp16_opt_level": "O1",
-    "n_gpu": 0,
+    "gpus": 0,
     "n_tpu_cores": 0,
     "max_grad_norm": 1.0,
     "do_train": True,
@@ -126,7 +126,7 @@ class TestBartExamples(unittest.TestCase):
             student_decoder_layers=1,
             no_teacher=True,
             freeze_encoder=True,
-            n_gpu=2,
+            gpus=2,
             sortish_sampler=False,
         )
         self._bart_distiller_cli(updates)
@@ -188,7 +188,7 @@ class TestBartExamples(unittest.TestCase):
             alpha_mlm=0.2,
             alpha_ce=0.8,
             do_predict=True,
-            n_gpu=0,
+            gpus=0,
             model_name_or_path="sshleifer/tinier_bart",
             teacher=CHEAP_ARGS["model_name_or_path"],
             val_check_interval=0.5,
@@ -204,7 +204,7 @@ class TestBartExamples(unittest.TestCase):
         if not check_contents:
             return model
         contents = os.listdir(output_dir)
-        ckpt_name = 'val_avg_rouge2=0.0000-step_count=3.ckpt' #"val_avg_rouge2=0.0000-epoch=1.ckpt"  # "epoch=1-val_avg_rouge2=0.0000.ckpt"
+        ckpt_name = 'val_avg_rouge2=0.0000-step_count=2.ckpt' #"val_avg_rouge2=0.0000-epoch=1.ckpt"  # "epoch=1-val_avg_rouge2=0.0000.ckpt"
         contents = {os.path.basename(p) for p in contents}
         self.assertIn(ckpt_name, contents)
         self.assertIn("metrics.pkl", contents)
@@ -235,7 +235,7 @@ class TestBartExamples(unittest.TestCase):
             model_name_or_path="patrickvonplaten/t5-tiny-random",
             train_batch_size=2,
             eval_batch_size=2,
-            n_gpu=0,
+            gpus=0,
             output_dir=output_dir,
             do_predict=True,
         )

@@ -179,7 +179,7 @@ class SummarizationDataset(Dataset):
         return lmap(len, self.target)
 
     def make_sampler(self, params) -> GroupedBatchSampler:
-        if params.n_gpu <= 1:
+        if params.gpus <= 1:
             sampler = RandomSampler(self)
         else:
             sampler = DistributedSampler(self)

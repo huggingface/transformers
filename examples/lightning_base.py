@@ -55,7 +55,7 @@ def set_seed(args: argparse.Namespace):
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
+    if args.gpus > 0:
         torch.cuda.manual_seed_all(args.seed)
 
 
@@ -338,7 +338,7 @@ def add_generic_args(parser, root_dir):
         "See details at https://nvidia.github.io/apex/amp.html",
     )
     parser.add_argument("--fast_dev_run", action="store_true")
-    parser.add_argument("--n_gpu", type=int, default=1)
+    parser.add_argument("--gpus", type=int, default=1)
     parser.add_argument("--n_tpu_cores", type=int, default=0)
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
@@ -369,7 +369,7 @@ def generic_train(
         args.output_dir.startswith("/var/")
         or args.fast_dev_run
         or args.output_dir.startswith("/tmp/")
-        or args.n_gpu > 1  # should be fixed in pl 0.8 June 12th
+        or args.gpus > 1  # should be fixed in pl 0.8 June 12th
     ):
         logger = True
     else:
@@ -387,7 +387,7 @@ def generic_train(
 
     # train_params = dict(
     #     accumulate_grad_batches=args.gradient_accumulation_steps,
-    #     gpus=args.n_gpu,
+    #     gpus=args.gpus,
     #     max_epochs=args.num_train_epochs,
     #     early_stop_callback=early_stopping_callback,
     #     gradient_clip_val=args.max_grad_norm,
@@ -413,13 +413,13 @@ def generic_train(
         train_params["num_tpu_cores"] = args.n_tpu_cores
         train_params["gpus"] = 0
 
-    if args.n_gpu > 1:
+    if args.gpus > 1:
         train_params["distributed_backend"] = "ddp"
 
     trainer = pl.Trainer(
         logger=logger,
         accumulate_grad_batches=args.gradient_accumulation_steps,
-        gpus=args.n_gpu,
+        gpus=args.gpus,
         max_epochs=args.num_train_epochs,
         early_stop_callback=early_stopping_callback,
         gradient_clip_val=args.max_grad_norm,
