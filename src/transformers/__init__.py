@@ -230,6 +230,7 @@ if is_torch_available():
         XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_bart import (
+        PretrainedBartModel,
         BartForSequenceClassification,
         BartModel,
         BartForConditionalGeneration,
