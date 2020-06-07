@@ -31,6 +31,7 @@ from .modeling_tf_utils import (
     cast_bool_to_primitive,
     keras_serializable,
     shape_list,
+    cast_bool_to_primitive
 )
 from .tokenization_utils import BatchEncoding
 

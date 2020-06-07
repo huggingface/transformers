@@ -588,8 +588,7 @@ class LongformerModel(RobertaModel):
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
-        output_attentions=False,
+        output_attentions=False
     ):
         r"""
 
@@ -707,7 +706,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=False,
-        **kwargs,
+        **kwargs
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):

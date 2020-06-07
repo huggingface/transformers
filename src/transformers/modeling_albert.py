@@ -759,7 +759,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=False,
-        **kwargs,
+        **kwargs
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
