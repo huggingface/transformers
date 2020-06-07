@@ -44,3 +44,11 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(TensorType("tf"), TensorType.TENSORFLOW)
         self.assertEqual(TensorType("pt"), TensorType.PYTORCH)
         self.assertEqual(TensorType("np"), TensorType.NUMPY)
+
+    def test_pretrained_tokenizer_convert_tokens_to_string(self):
+        pretrained = PreTrainedTokenizer()
+
+        actual = pretrained.convert_tokens_to_string(["hello", "world"])
+        expected = "hello world"
+
+        self.assertEqual(actual, expected)

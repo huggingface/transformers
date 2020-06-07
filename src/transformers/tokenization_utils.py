@@ -2150,11 +2150,19 @@ class PreTrainedTokenizer(SpecialTokensMixin):
         raise NotImplementedError
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """ Converts a sequence of tokens (string) in a single string.
-            The most simple way to do it is ' '.join(self.convert_ids_to_tokens(token_ids))
-            but we often want to remove sub-word tokenization artifacts at the same time.
+        """Converts a sequence of tokens (string) in a single string.
+
+        The simpliest way to do it is ' '.join(tokens) but we often want to remove sub-word
+        tokenization artifacts at the same time, so see the particular tokenizer's implementation.
+
+        Args:
+            tokens: A list of tokens to turn into a string.
+
+        Returns:
+            The stringified tokens.
+
         """
-        return " ".join(self.convert_ids_to_tokens(tokens))
+        return " ".join(tokens)
 
     def decode(
         self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
