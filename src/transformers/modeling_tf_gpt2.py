@@ -213,6 +213,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
+        self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.num_hidden_layers = config.n_layer
         self.vocab_size = config.vocab_size
@@ -254,7 +255,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         use_cache=True,
         training=False,
-        output_attentions=False,
+        output_attentions=None,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -280,6 +281,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             assert len(inputs) <= 9, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -613,7 +616,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         inputs_embeds=None,
         mc_token_ids=None,
         use_cache=True,
-        output_attentions=False,
+        output_attentions=None,
         training=False,
     ):
         r"""

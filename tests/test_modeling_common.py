@@ -141,6 +141,18 @@ class ModelTesterMixin:
             self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict)
+            attentions = outputs[-1]
+            self.assertEqual(model.config.output_hidden_states, False)
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
             if chunk_length is not None:
                 self.assertListEqual(
                     list(attentions[0].shape[-4:]),
@@ -197,6 +209,11 @@ class ModelTesterMixin:
     def test_torchscript(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+        self._create_and_check_torchscript(config, inputs_dict)
+
+    def test_torchscript_output_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_attentions = True
         self._create_and_check_torchscript(config, inputs_dict)
 
     def test_torchscript_output_hidden_state(self):

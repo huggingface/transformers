@@ -760,7 +760,7 @@ class XLNetModel(XLNetPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
     Return:
@@ -798,6 +798,8 @@ class XLNetModel(XLNetPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
         # so we move here the first dimension (batch) to the end
@@ -1046,7 +1048,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_predict)`, `optional`, defaults to :obj:`None`):
@@ -1168,7 +1170,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`)
@@ -1275,7 +1277,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1386,7 +1388,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1502,7 +1504,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         use_cache=True,
         start_positions=None,
         end_positions=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1633,7 +1635,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         is_impossible=None,
         cls_index=None,
         p_mask=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):

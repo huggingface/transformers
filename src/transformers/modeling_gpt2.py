@@ -378,7 +378,7 @@ class GPT2Model(GPT2PreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
     Return:
@@ -413,6 +413,7 @@ class GPT2Model(GPT2PreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -556,7 +557,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         inputs_embeds=None,
         labels=None,
         use_cache=True,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -663,7 +664,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         labels=None,
         mc_labels=None,
         use_cache=True,
-        output_attentions=False,
+        output_attentions=None,
         **kwargs
     ):
         r"""

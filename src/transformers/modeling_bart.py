@@ -814,8 +814,9 @@ class BartModel(PretrainedBartModel):
         decoder_attention_mask=None,
         decoder_cached_states=None,
         use_cache=False,
-        output_attentions=False,
+        output_attentions=None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         # make masks if user doesn't supply
         if not use_cache:
@@ -905,7 +906,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
         decoder_cached_states=None,
         labels=None,
         use_cache=False,
-        output_attentions=False,
+        output_attentions=None,
         **unused,
     ):
         r"""
@@ -1059,7 +1060,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):

@@ -588,7 +588,7 @@ class LongformerModel(RobertaModel):
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
 
@@ -627,6 +627,8 @@ class LongformerModel(RobertaModel):
                                             # LM: potentially on the beginning of sentences and paragraphs
         sequence_output, pooled_output = model(input_ids, attention_mask=attention_mask)
         """
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         # padding
         attention_window = (
@@ -705,7 +707,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
         position_ids=None,
         inputs_embeds=None,
         labels=None,
-        output_attentions=False,
+        output_attentions=None,
         **kwargs
     ):
         r"""
@@ -807,6 +809,7 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         position_ids=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -926,7 +929,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
-        output_attentions=False,
+        output_attentions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1052,6 +1055,7 @@ class LongformerForTokenClassification(BertPreTrainedModel):
         position_ids=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -1151,6 +1155,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         labels=None,
         position_ids=None,
         inputs_embeds=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
