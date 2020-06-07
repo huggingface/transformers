@@ -30,7 +30,7 @@ from .modeling_tf_utils import (
     TFSharedEmbeddings,
     keras_serializable,
     shape_list,
-    cast_bool_to_primitive
+    cast_bool_to_primitive,
 )
 from .tokenization_utils import BatchEncoding
 
@@ -1079,7 +1079,11 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
         if encoder_outputs is None:
             # Convert encoder inputs in embeddings if needed
             encoder_outputs = self.encoder(
-                inputs, attention_mask=attention_mask, inputs_embeds=inputs_embeds, head_mask=head_mask, output_attentions=output_attentions
+                inputs,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
             )
 
         hidden_states = encoder_outputs[0]
@@ -1102,7 +1106,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel):
             encoder_attention_mask=attention_mask,
             head_mask=head_mask,
             use_cache=use_cache,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
 
         # insert decoder past at right place

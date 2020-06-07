@@ -654,7 +654,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             flat_position_ids,
             head_mask,
             inputs_embeds,
-            output_attentions
+            output_attentions,
         ]
 
         transformer_outputs = self.transformer(flat_inputs, training=training)
