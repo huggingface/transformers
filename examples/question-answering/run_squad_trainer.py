@@ -22,7 +22,14 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-from transformers import AutoConfig, AutoModelForQuestionAnswering, AutoTokenizer, HfArgumentParser, SquadDataset
+from transformers import (
+    AutoConfig,
+    AutoModelForQuestionAnswering,
+    AutoTokenizer,
+    DataCollatorForQuestionAnswering,
+    HfArgumentParser,
+    SquadDataset,
+)
 from transformers import SquadDataTrainingArguments as DataTrainingArguments
 from transformers import Trainer, TrainingArguments
 
@@ -135,9 +142,16 @@ def main():
         if training_args.do_eval
         else None
     )
+    data_collator = DataCollatorForQuestionAnswering()
 
     # Initialize our Trainer
-    trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, eval_dataset=eval_dataset,)
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        data_collator=data_collator,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+    )
 
     # Training
     if training_args.do_train:
