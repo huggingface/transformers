@@ -23,7 +23,7 @@ class TestT5Examples(unittest.TestCase):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
         tmp = Path(tempfile.gettempdir()) / "utest_generations_t5_sum.hypo"
-        with tmp.open("w") as f:
+        with tmp.open("w", encoding="utf-8") as f:
             f.write("\n".join(articles))
 
         output_file_name = Path(tempfile.gettempdir()) / "utest_output_t5_sum.hypo"
@@ -31,13 +31,15 @@ class TestT5Examples(unittest.TestCase):
 
         testargs = [
             "evaluate_cnn.py",
-            "patrickvonplaten/t5-tiny-random",
             str(tmp),
             str(output_file_name),
+            "patrickvonplaten/t5-tiny-random",
+            "--reference_path",
             str(tmp),
+            "--score_path",
             str(score_file_name),
         ]
-
+        print(testargs)
         with patch.object(sys, "argv", testargs):
             run_generate()
             self.assertTrue(Path(output_file_name).exists())
