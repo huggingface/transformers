@@ -127,9 +127,6 @@ if is_torch_available():
                         label_list,
                         max_seq_length,
                         tokenizer,
-                        pad_on_left=bool(tokenizer.padding_side == "left"),
-                        pad_token=tokenizer.pad_token_id,
-                        pad_token_segment_id=tokenizer.pad_token_type_id,
                     )
                     logger.info("Saving features into cached file %s", cached_features_file)
                     torch.save(self.features, cached_features_file)
@@ -172,15 +169,12 @@ if is_tf_available():
             else:
                 examples = processor.get_train_examples(data_dir)
             logger.info("Training examples: %s", len(examples))
-            # TODO clean up all this to leverage built-in features of tokenizers
+
             self.features = convert_examples_to_features(
                 examples,
                 label_list,
                 max_seq_length,
                 tokenizer,
-                pad_on_left=bool(tokenizer.padding_side == "left"),
-                pad_token=tokenizer.pad_token_id,
-                pad_token_segment_id=tokenizer.pad_token_type_id,
             )
 
             def gen():
@@ -510,10 +504,6 @@ def convert_examples_to_features(
     label_list: List[str],
     max_length: int,
     tokenizer: PreTrainedTokenizer,
-    pad_token_segment_id=0,
-    pad_on_left=False,
-    pad_token=0,
-    mask_padding_with_zero=True,
 ) -> List[InputFeatures]:
     """
     Loads a data file into a list of `InputFeatures`
