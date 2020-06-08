@@ -23,6 +23,7 @@ import tqdm
 from filelock import FileLock
 
 from transformers import (
+    DataProcessor,
     PreTrainedTokenizer,
     RobertaTokenizer,
     RobertaTokenizerFast,
@@ -30,7 +31,6 @@ from transformers import (
     is_tf_available,
     is_torch_available,
 )
-from transformers.data.processors.utils import DataProcessor
 
 
 logger = logging.getLogger(__name__)
