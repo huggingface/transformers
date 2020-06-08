@@ -1145,8 +1145,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
                 # Sample 2 next tokens for each beam (so we have some spare tokens and match output of greedy beam search)
                 _scores = tf.reshape(_scores, (batch_size, num_beams * vocab_size))
 
-                next_tokens = tf.random.categorical(
-                    _scores, dtype=tf.int32, num_samples=2 * num_beams
+                next_tokens = sample_without_replacement(
+                    _scores, num_samples=2 * num_beams
                 )  # (batch_size, 2 * num_beams)
                 # Compute next scores
                 next_scores = tf.gather(_scores, next_tokens, batch_dims=1)  # (batch_size, 2 * num_beams)
@@ -1734,6 +1734,17 @@ def shape_list(x):
     static = x.shape.as_list()
     dynamic = tf.shape(x)
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
+
+
+def sample_without_replacement(logits, dtype, num_samples):
+    """
+        categorical sampling witouth replacement is currently not implemented
+        the gumbel-max trick will do for now
+        see https://github.com/tensorflow/tensorflow/issues/9260 for more info
+    """
+    z = -tf.math.log(tf.random.uniform(shape_list(logits), 0, 1))
+    _, indices = tf.nn.top_k(logits + z, num_samples)
+    return indices
 
 
 def get_initializer(initializer_range=0.02):
