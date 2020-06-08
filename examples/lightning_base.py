@@ -229,9 +229,9 @@ class BaseTransformer(pl.LightningModule):
 
     @rank_zero_only
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
-        # step, epoch = checkpoint['global_step'], checkpoint['epoch']
-        save_path = self.output_dir.joinpath(f"tfmr_ckpt_step_count={self.step_count}/")
+        save_path = self.output_dir.joinpath('best_tfmr')
         save_path.mkdir(exist_ok=True)
+        self.model.config.save_step = self.step_count
         self.model.save_pretrained(save_path)
 
         self.tfmr_ckpts[self.step_count] = save_path
@@ -245,6 +245,7 @@ class BaseTransformer(pl.LightningModule):
         return list(sorted(Path(self.output_dir).glob("*.ckpt")))
 
     def save_resolution_file(self):
+        "Can be deleted"
         resolved = self.resolve_checkpoints()
         resolve_path = self.output_dir / "ckpt_matches.pkl"
         if len(resolved) > 0:
