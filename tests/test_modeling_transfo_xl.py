@@ -196,10 +196,14 @@ class TransfoXLModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertEqual(model_embed.cutoffs[i], copied_cutoffs[i])
                 if model_class == TransfoXLLMHeadModel:
                     self.assertEqual(model.crit.cutoffs[i], copied_cutoffs[i])
+                if i < len(model.config.cutoffs):
+                    self.assertEqual(model.config.cutoffs[i], copied_cutoffs[i])
             else:
                 self.assertEqual(model_embed.cutoffs[i], copied_cutoffs[i] + resized_value)
                 if model_class == TransfoXLLMHeadModel:
                     self.assertEqual(model.crit.cutoffs[i], copied_cutoffs[i] + resized_value)
+                if i < len(model.config.cutoffs):
+                    self.assertEqual(model.config.cutoffs[i], copied_cutoffs[i] + resized_value)
 
         self.assertEqual(model_embed.n_token, vocab_size + resized_value)
         if model_class == TransfoXLLMHeadModel:

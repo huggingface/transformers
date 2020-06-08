@@ -583,6 +583,8 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
         embeddings.cutoff_ends = [0] + embeddings.cutoffs
         embeddings.n_token = new_num_tokens
 
+        self.config.cutoffs = embeddings.cutoffs[:-1]
+
         return embeddings.cutoffs
 
 
