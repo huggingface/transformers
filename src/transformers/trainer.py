@@ -336,13 +336,14 @@ class Trainer:
             WANDB_DISABLED:
                 (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
         """
-        logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
-        wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
-        # keep track of model topology and gradients
-        if os.getenv("WANDB_WATCH") != "false":
-            wandb.watch(
-                self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
-            )
+        if (is_tpu_available() and self.is_world_master()) or not is_tpu_available():
+            logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
+            wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
+            # keep track of model topology and gradients
+            if os.getenv("WANDB_WATCH") != "false":
+                wandb.watch(
+                    self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
+                )
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
@@ -557,7 +558,8 @@ class Trainer:
                 self.tb_writer.add_scalar(k, v, self.global_step)
             self.tb_writer.flush()
         if is_wandb_available():
-            wandb.log(logs, step=self.global_step)
+            if (is_tpu_available() and self.is_world_master()) or not is_tpu_available():
+                wandb.log(logs, step=self.global_step)
         output = json.dumps({**logs, **{"step": self.global_step}})
         if iterator is not None:
             iterator.write(output)
