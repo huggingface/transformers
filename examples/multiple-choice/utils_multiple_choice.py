@@ -121,7 +121,6 @@ if is_torch_available():
                     else:
                         examples = processor.get_train_examples(data_dir)
                     logger.info("Training examples: %s", len(examples))
-                    # TODO clean up all this to leverage built-in features of tokenizers
                     self.features = convert_examples_to_features(examples, label_list, max_seq_length, tokenizer,)
                     logger.info("Saving features into cached file %s", cached_features_file)
                     torch.save(self.features, cached_features_file)
