@@ -231,12 +231,12 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
         (LongformerConfig, LongformerForQuestionAnswering),
+        (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
         (RobertaConfig, RobertaForQuestionAnswering),
         (BertConfig, BertForQuestionAnswering),
         (XLNetConfig, XLNetForQuestionAnsweringSimple),
         (FlaubertConfig, FlaubertForQuestionAnsweringSimple),
         (XLMConfig, XLMForQuestionAnsweringSimple),
-        (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
     ]
 )
 

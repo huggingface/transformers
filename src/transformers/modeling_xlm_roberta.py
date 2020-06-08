@@ -124,7 +124,7 @@ class XLMRobertaForTokenClassification(RobertaForTokenClassification):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa Model with a span classification head on top for extractive question-answering tasks like SQuAD (a 
+    """XLM-RoBERTa Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
     linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
     XLM_ROBERTA_START_DOCSTRING,
 )
