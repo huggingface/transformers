@@ -495,7 +495,7 @@ def qa_s2s_generate(question_doc, qa_s2s_model, qa_s2s_tokenizer,
         [(question_doc, 'A')],
         qa_s2s_tokenizer,
         max_input_length,
-        device
+        device=device,
     )
     n_beams = num_answers if num_beams is None else max(num_beams, num_answers)
     generated_ids = qa_s2s_model.generate(
