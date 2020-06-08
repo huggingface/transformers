@@ -59,8 +59,7 @@ def get_git_info():
     return repo_infos
 
 
-def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
-    # score_file = Path(score_path).open("w")
+def calculate_rouge(output_lns: List[str], reference_lns: List[str], all_stats=False) -> Dict:
     scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=True)
     aggregator = scoring.BootstrapAggregator()
 
@@ -69,7 +68,10 @@ def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
         aggregator.add_scores(scores)
 
     result = aggregator.aggregate()
-    return {k: v.mid.fmeasure for k, v in result.items()}
+    if all_stats:
+        return result
+    else:
+        return {k: v.mid.fmeasure for k, v in result.items()}
 
 
 class SummarizationTrainer(BaseTransformer):

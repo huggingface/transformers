@@ -25,7 +25,10 @@ def rouge_files(src_file: Path, tgt_file: Path):
 
 
 def read_gens(exp_name, split="test", n=None):
-    expdir = LOGDIR / exp_name
+    if Path(exp_name).exists():
+        exp_dir = exp_name
+    else:
+        expdir = LOGDIR / exp_name
     assert expdir.exists(), expdir
     paths = list(expdir.glob(f"{split}_generations*.txt"))
     assert paths
@@ -67,14 +70,22 @@ class RougeTracker:
             GENS[f] = read_gens(f)
         return GENS
 
-    def score(self, gens, k):
-        rouge_raw = calculate_rouge(gens, self.gt)
+    def score(self, gens, k, all_stats=False):
+        rouge_raw = calculate_rouge(gens, self.gt, all_stats=all_stats)
         lens = np.mean(lmap(self.tok_len, gens))
         return dict(avg_len=lens, exp_name=k, **rouge_raw)
 
+
+
     @property
-    def new_experiments(rt):
-        return set(rt.finished_experiments).difference(rt.df.index)
+    def new_experiments(self):
+        possible = set(self.finished_experiments).difference(self.df.index)
+        to_score = set()
+        for p in possible:
+            gens = read_gens(p)
+            if len(gens) == len(self.gt):
+                to_score.add(p)
+        return to_score
 
     def update(self):
         records = []
