@@ -18,8 +18,8 @@
 """
 
 
-import inspect
 import logging
+import os
 import timeit
 
 from transformers import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING, PretrainedConfig, is_torch_available
@@ -52,66 +52,34 @@ class PyTorchBenchmark(Benchmark):
             model.to(self.args.device)
             model.train()
 
+            # encoder-decoder has vocab size saved differently
+            vocab_size = config.vocab_size if hasattr(config, "vocab_size") else config.encoder.vocab_size
             input_ids = torch.randint(
-                model.config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
+                vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
             )
 
-            def compute_loss_and_backprob():
-                # TODO: Not all models call labels argument labels => this hack using the function signature should be corrected once all models have a common name for labels
-                function_argument_names = inspect.getfullargspec(model.forward).args
-                if "labels" in function_argument_names:
-                    loss = model(input_ids, labels=input_ids)[0]
-                elif "lm_labels" in function_argument_names:
-                    loss = model(input_ids, lm_labels=input_ids)[0]
-                elif "masked_lm_labels" in function_argument_names:
-                    loss = model(input_ids, masked_lm_labels=input_ids)[0]
-                else:
-                    NotImplementedError(f"{model_name} does not seem to allow training with labels")
-
+            def compute_loss_and_backprob_encoder():
+                loss = model(input_ids, labels=input_ids)[0]
                 loss.backward()
                 model.zero_grad()
 
-            if trace_memory is True:
-                if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
-                    trace = start_memory_tracing("transformers")
-                else:
-                    # clear cuda cache
-                    torch.cuda.empty_cache()
-                    torch.cuda.reset_peak_memory_stats()
+            def compute_loss_and_backprob_encoder_decoder():
+                loss = model(input_ids, decoder_input_ids=input_ids, labels=input_ids)[0]
+                loss.backward()
+                model.zero_grad()
 
-                # calculate loss and do backpropagation
-                compute_loss_and_backprob()
-
-                if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
-                    summary = stop_memory_tracing(trace)
-                    memory = summary.total
-                else:
-                    memory = Memory(torch.cuda.max_memory_reserved())
-
-                return memory
-            else:
-                # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
-                runtimes = timeit.repeat(lambda: compute_loss_and_backprob(), repeat=self.args.repeat, number=10,)
-                return min(runtimes) / 10.0
-        except RuntimeError as e:
-            self.print_fn("Doesn't fit on GPU. {}".format(e))
-            return "N/A"
-
-    def inference(self, model_name, batch_size, sequence_length, trace_memory=False):
-        try:
-            config = self.config_dict[model_name]
-            model = MODEL_MAPPING[config.__class__](config)
-            model.to(self.args.device)
-            model.eval()
-
-            input_ids = torch.randint(
-                config.vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
+            _train = (
+                compute_loss_and_backprob_encoder_decoder
+                if config.is_encoder_decoder
+                else compute_loss_and_backprob_encoder
             )
+
             if trace_memory is True:
-                if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
+                if self.args.trace_memory_line_by_line:
                     trace = start_memory_tracing("transformers")
-                else:
-                    # clear cuda cache
+
+                if self.args.n_gpu > 0:
+                    # clear gpu cache
                     torch.cuda.empty_cache()
                     if hasattr(torch.cuda, "max_memory_reserved"):
                         torch.cuda.reset_peak_memory_stats()
@@ -121,12 +89,16 @@ class PyTorchBenchmark(Benchmark):
                         )
                         torch.cuda.reset_max_memory_cached()
 
-                model(input_ids)
+                # calculate loss and do backpropagation
+                _train()
 
-                if self.args.trace_memory_line_by_line or self.args.n_gpu == 0:
+                if self.args.trace_memory_line_by_line:
                     summary = stop_memory_tracing(trace)
-                    memory = summary.total
                 else:
+                    summary = None
+
+                if self.args.n_gpu > 0:
+                    # gpu
                     if hasattr(torch.cuda, "max_memory_reserved"):
                         memory = Memory(torch.cuda.max_memory_reserved())
                     else:
@@ -134,11 +106,106 @@ class PyTorchBenchmark(Benchmark):
                             "Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage"
                         )
                         memory = Memory(torch.cuda.max_memory_cached())
+                    memory = Memory(torch.cuda.max_memory_reserved())
+                else:
+                    # cpu
+                    try:
+                        import psutil
+                    except (ImportError):
+                        logger.warning(
+                            "Psutil not installed, we won't log CPU memory usage. "
+                            "Install psutil (pip install psutil) to use CPU memory tracing."
+                        )
+                        memory = "N/A"
+                    else:
+                        process = psutil.Process(os.getpid())
+                        memory = Memory(process.memory_info().rss)
 
-                return memory
+                return memory, summary
             else:
                 # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
-                runtimes = timeit.repeat(lambda: model(input_ids), repeat=self.args.repeat, number=10,)
+                runtimes = timeit.repeat(_train, repeat=self.args.repeat, number=10,)
+                return min(runtimes) / 10.0
+        except RuntimeError as e:
+            self.print_fn("Doesn't fit on GPU. {}".format(e))
+            return "N/A"
+
+    def inference(self, model_name, batch_size, sequence_length, trace_memory=False):
+        try:
+            config = self.config_dict[model_name]
+
+            if self.args.with_lm_head:
+                model = MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
+            else:
+                model = MODEL_MAPPING[config.__class__](config)
+
+            model.to(self.args.device)
+            model.eval()
+
+            # encoder-decoder has vocab size saved differently
+            vocab_size = config.vocab_size if hasattr(config, "vocab_size") else config.encoder.vocab_size
+
+            input_ids = torch.randint(
+                vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
+            )
+
+            def encoder_decoder_forward():
+                model(input_ids, decoder_input_ids=input_ids)
+
+            def encoder_forward():
+                model(input_ids)
+
+            _forward = encoder_decoder_forward if config.is_encoder_decoder else encoder_forward
+
+            if trace_memory is True:
+                if self.args.trace_memory_line_by_line:
+                    trace = start_memory_tracing("transformers")
+
+                if self.args.n_gpu > 0:
+                    # clear gpu cache
+                    torch.cuda.empty_cache()
+                    if hasattr(torch.cuda, "max_memory_reserved"):
+                        torch.cuda.reset_peak_memory_stats()
+                    else:
+                        logger.info(
+                            "Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage"
+                        )
+                        torch.cuda.reset_max_memory_cached()
+
+                _forward()
+
+                if self.args.trace_memory_line_by_line:
+                    summary = stop_memory_tracing(trace)
+                else:
+                    summary = None
+
+                if self.args.n_gpu > 0:
+                    # gpu
+                    if hasattr(torch.cuda, "max_memory_reserved"):
+                        memory = Memory(torch.cuda.max_memory_reserved())
+                    else:
+                        logger.info(
+                            "Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage"
+                        )
+                        memory = Memory(torch.cuda.max_memory_cached())
+                else:
+                    # cpu
+                    try:
+                        import psutil
+                    except (ImportError):
+                        logger.warning(
+                            "Psutil not installed, we won't log CPU memory usage. "
+                            "Install psutil (pip install psutil) to use CPU memory tracing."
+                        )
+                        memory = "N/A"
+                    else:
+                        process = psutil.Process(os.getpid())
+                        memory = Memory(process.memory_info().rss)
+
+                return memory, summary
+            else:
+                # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
+                runtimes = timeit.repeat(_forward, repeat=self.args.repeat, number=10,)
                 return min(runtimes) / 10.0
 
         except RuntimeError as e:

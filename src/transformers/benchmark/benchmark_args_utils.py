@@ -61,6 +61,12 @@ class BenchmarkArguments:
     save_to_csv: bool = field(default=False, metadata={"help": "Save result to a CSV file"})
     log_print: bool = field(default=False, metadata={"help": "Save all print statements in a log file"})
     no_env_print: bool = field(default=False, metadata={"help": "Don't print environment information"})
+    with_lm_head: bool = field(
+        default=False,
+        metadata={
+            "help": "Use model with its language model head (MODEL_WITH_LM_HEAD_MAPPING instead of MODEL_MAPPING)"
+        },
+    )
     inference_time_csv_file: str = field(
         default=f"inference_time_{round(time())}.csv",
         metadata={"help": "CSV filename used if saving time results to csv."},
