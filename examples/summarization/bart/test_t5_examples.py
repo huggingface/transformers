@@ -39,7 +39,7 @@ class TestT5Examples(unittest.TestCase):
             "--score_path",
             str(score_file_name),
         ]
-        print(testargs)
+
         with patch.object(sys, "argv", testargs):
             run_generate()
             self.assertTrue(Path(output_file_name).exists())

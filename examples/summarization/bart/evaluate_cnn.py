@@ -5,7 +5,7 @@ import torch
 from rouge_score import rouge_scorer, scoring
 from tqdm import tqdm
 
-from transformers import BartForConditionalGeneration, BartTokenizer, T5ForConditionalGeneration, T5Tokenizer
+from transformers import AutoTokenizer, BartForConditionalGeneration, T5ForConditionalGeneration
 
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -23,15 +23,14 @@ def generate_summaries(
     fout = Path(out_file).open("w", encoding="utf-8")
     if "t5" in model_name:
         model = T5ForConditionalGeneration.from_pretrained(model_name).to(device)
-        tokenizer = T5Tokenizer.from_pretrained(model_name)
-        # update config with summarization specific params
-        task_specific_params = model.config.task_specific_params
-        if task_specific_params is not None:
-            model.config.update(task_specific_params.get("summarization", {}))
     else:
         model = BartForConditionalGeneration.from_pretrained(model_name).to(device)
-        tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
+    # update config with summarization specific params
+    task_specific_params = model.config.task_specific_params
+    if task_specific_params is not None:
+        model.config.update(task_specific_params.get("summarization", {}))
     max_length = 140
     min_length = 55
 
