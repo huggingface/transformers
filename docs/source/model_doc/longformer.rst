@@ -4,7 +4,7 @@ Longformer
 file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title>`_
 
 Overview
-~~~~~
+~~~~~~~~~
 The Longformer model was presented in `Longformer: The Long-Document Transformer <https://arxiv.org/pdf/2004.05150.pdf>`_ by Iz Beltagy, Matthew E. Peters, Arman Cohan.
 Here the abstract: 
 
@@ -13,7 +13,7 @@ Here the abstract:
 The Authors' code can be found `here <https://github.com/allenai/longformer>`_ .
 
 Longformer Self Attention
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 Longformer self attention employs self attention on both a "local" context and a "global" context.
 Most tokens only attend "locally" to each other meaning that each token attends to its :math:`\frac{1}{2} w` previous tokens and :math:`\frac{1}{2} w` succeding tokens with :math:`w` being the window length as defined in `config.attention_window`. Note that `config.attention_window` can be of type ``list`` to define a different :math:`w` for each layer. 
 A selecetd few tokens attend "globally" to all other tokens, as it is conventionally done for all tokens in *e.g.* `BertSelfAttention`.
@@ -55,6 +55,13 @@ LongformerTokenizer
     :members: 
 
 
+LongformerTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LongformerTokenizerFast
+    :members: 
+
+
 LongformerModel
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -69,10 +76,10 @@ LongformerForMaskedLM
     :members:
 
 
-LongformerForQuestionAnswering
+LongformerForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.LongformerForQuestionAnswering
+.. autoclass:: transformers.LongformerForSequenceClassification
     :members:
 
 
@@ -89,3 +96,9 @@ LongformerForTokenClassification
 .. autoclass:: transformers.LongformerForTokenClassification
     :members:
 
+
+LongformerForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.LongformerForQuestionAnswering
+    :members:
