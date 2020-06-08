@@ -121,9 +121,9 @@ from .modeling_xlm import (
 from .modeling_xlm_roberta import (
     XLMRobertaForMaskedLM,
     XLMRobertaForMultipleChoice,
+    XLMRobertaForQuestionAnswering,
     XLMRobertaForSequenceClassification,
     XLMRobertaForTokenClassification,
-    XLMRobertaForQuestionAnswering,
     XLMRobertaModel,
 )
 from .modeling_xlnet import (
