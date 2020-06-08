@@ -38,6 +38,7 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
     torchscript: bool = field(default=False, metadata={"help": "Trace the models using torchscript"})
     no_tpu: bool = field(default=False, metadata={"help": "Whether to run on available tpu devices"})
     fp16: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
+    tpu_print_metrics: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
 
     @cached_property
     @torch_required

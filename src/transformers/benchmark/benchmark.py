@@ -152,6 +152,12 @@ class PyTorchBenchmark(Benchmark):
 
                 # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
                 runtimes = timeit.repeat(_train, repeat=self.args.repeat, number=10,)
+
+                if not self.args.no_tpu and is_tpu_available() and self.args.tpu_print_metrics:
+                    import torch_xla.debug.metrics as met
+
+                    self.print_fn(met.metrics_report())
+
                 return min(runtimes) / 10.0
         except RuntimeError as e:
             self.print_fn("Doesn't fit on GPU. {}".format(e))
@@ -259,6 +265,12 @@ class PyTorchBenchmark(Benchmark):
 
                 # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
                 runtimes = timeit.repeat(_forward, repeat=self.args.repeat, number=10,)
+
+                if not self.args.no_tpu and is_tpu_available() and self.args.tpu_print_metrics:
+                    import torch_xla.debug.metrics as met
+
+                    self.print_fn(met.metrics_report())
+
                 return min(runtimes) / 10.0
 
         except RuntimeError as e:
