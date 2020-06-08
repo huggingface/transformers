@@ -145,6 +145,7 @@ class PyTorchBenchmark(Benchmark):
             else:
                 if not self.args.no_tpu and is_tpu_available():
                     # run additional 10 times to stabilize compilation for tpu
+                    logger.info("Do training on TPU. Running model 10 times to stabilize compilation")
                     timeit.repeat(
                         _train, repeat=1, number=10,
                     )
@@ -251,6 +252,7 @@ class PyTorchBenchmark(Benchmark):
 
                 if not self.args.no_tpu and is_tpu_available():
                     # run additional 10 times to stabilize compilation for tpu
+                    logger.info("Do inference on TPU. Running model 10 times to stabilize compilation")
                     timeit.repeat(
                         _forward, repeat=1, number=10,
                     )
