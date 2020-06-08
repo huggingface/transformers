@@ -179,7 +179,7 @@ class RetrievalQAEmbedder(torch.nn.Module):
         return self.project_a(a_reps)
 
     def forward(self, q_ids, q_mask, a_ids, a_mask, checkpoint_batch_size=-1):
-        device = next(self.parameters()).device
+        device = q_ids.device
         q_reps = self.embed_questions(q_ids, q_mask, checkpoint_batch_size)
         a_reps = self.embed_answers(a_ids, a_mask, checkpoint_batch_size)
         compare_scores = torch.mm(q_reps, a_reps.t())
@@ -239,7 +239,7 @@ def train_qa_retriever_epoch(model, dataset, tokenizer, optimizer, scheduler, ar
             q_ids, q_mask, a_ids, a_mask,
             checkpoint_batch_size=args.checkpoint_batch_size
         )
-        loss = pre_loss.sum() / pre_loss.shape[0]
+        loss = pre_loss.sum()
         # optimizer
         loss.backward()
         optimizer.step()
@@ -248,7 +248,7 @@ def train_qa_retriever_epoch(model, dataset, tokenizer, optimizer, scheduler, ar
         # some printing within the epoch
         loc_loss += loss.item()
         loc_steps += 1
-        if step % args.print_freq == 0:
+        if step % args.print_freq == 0 or step == 1:
             print(
                 "{:2d} {:5d} of {:5d} \t L: {:.3f} \t -- {:.3f}".format(
                     e, step,
