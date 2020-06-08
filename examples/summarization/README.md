@@ -46,10 +46,10 @@ The rouge scores "rouge1, rouge2, rougeL" are automatically created and saved in
 
 ### Training
 #### BART models
-Run/modify `run_train_bart.sh`
+Run/modify `finetune_bart.sh`
 
 #### T5 models
-Run/modify `run_train_t5.sh`
+Run/modify `finetune_t5.sh`
 
 ### Where is the code?
 The core model is in `src/transformers/modeling_bart.py` and `src/transformers/modeling_t5.py`. This directory only contains examples.

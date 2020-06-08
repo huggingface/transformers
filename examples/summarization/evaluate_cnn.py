@@ -5,7 +5,7 @@ import torch
 from rouge_score import rouge_scorer, scoring
 from tqdm import tqdm
 
-from transformers import AutoTokenizer, BartForConditionalGeneration, T5ForConditionalGeneration
+from transformers import AutoModelWithLMHead, AutoTokenizer
 
 
 DEFAULT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -21,18 +21,17 @@ def generate_summaries(
     examples: list, out_file: str, model_name: str, batch_size: int = 8, device: str = DEFAULT_DEVICE
 ):
     fout = Path(out_file).open("w", encoding="utf-8")
-    if "t5" in model_name:
-        model = T5ForConditionalGeneration.from_pretrained(model_name).to(device)
-    else:
-        model = BartForConditionalGeneration.from_pretrained(model_name).to(device)
+    try:
+        model = AutoModelWithLMHead.from_pretrained(model_name).to(device)
+    except Exception as err:
+        return err
+
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     # update config with summarization specific params
     task_specific_params = model.config.task_specific_params
     if task_specific_params is not None:
         model.config.update(task_specific_params.get("summarization", {}))
-    max_length = 140
-    min_length = 55
 
     for batch in tqdm(list(chunks(examples, batch_size))):
         if "t5" in model_name:
@@ -41,20 +40,7 @@ def generate_summaries(
 
         input_ids = dct["input_ids"].to(device)
         attention_mask = dct["attention_mask"].to(device)
-        if "t5" not in model_name:
-            summaries = model.generate(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                num_beams=4,
-                length_penalty=2.0,
-                max_length=max_length + 2,  # +2 from original because we start at step=1 and stop before max_length
-                min_length=min_length + 1,  # +1 from original because we start at step=1
-                no_repeat_ngram_size=3,
-                early_stopping=True,
-                decoder_start_token_id=model.config.eos_token_id,
-            )
-        else:
-            summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask)
+        summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask)
 
         dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summaries]
         for hypothesis in dec:
