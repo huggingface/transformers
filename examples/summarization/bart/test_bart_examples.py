@@ -14,10 +14,10 @@ from torch.utils.data import DataLoader
 from durbango import DEFAULT_DEVICE, pickle_load, pickle_save
 from transformers import BartTokenizer
 
-from .evaluate_cnn import run_generate
+from .evaluate_cnn import run_generate, generate_summaries
 from .finetune import eval_and_fix, main, evaluate_checkpoint
 from .utils import PSEUDO_ID_SUFFIX, SummarizationDataset, summaries_for_file, clean_output_dir
-
+from durbango import lmap
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -161,6 +161,11 @@ class TestBartExamples(unittest.TestCase):
         self.assertEqual(len(removed), n_extra)
         new_transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(new_transformer_ckpts), 1)
+        examples = lmap(str.strip, model.hparams.data_dir.joinpath('test.source').open().readlines())
+        out_path = tempfile.mktemp()
+        generate_summaries(examples, out_path, model_name=new_transformer_ckpts[0].parent)
+        self.assertTrue(Path(out_path).exists())
+
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
     def test_bdc_brewer(self):
