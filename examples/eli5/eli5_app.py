@@ -96,8 +96,14 @@ def make_support(question, source='wiki40b', method='dense', n_results=10):
 
 
 # @st.cache(allow_output_mutation=True)
-# @st.cache(allow_output_mutation=True, hash_funcs={torch.Tensor: (lambda _ : None)})
+import transformers
+@st.cache(hash_funcs={
+    torch.nn.Module: (lambda _ : None),
+    torch.Tensor: (lambda _ : None),
+    transformers.tokenization_bart.BartTokenizer: (lambda _ : None),
+})
 def answer_question(question_doc,
+                    s2s_model, s2s_tokenizer,
                     min_len=64, max_len=256,
                     sampling=False,
                     n_beams=4,
@@ -266,8 +272,9 @@ if st.button('Go!'):
     if action in [0, 3]:
         answer, support_list = answer_question(
                 question_doc,
+                s2s_model, s2s_tokenizer,
                 min_len=min_len,
-                max_len=max_len,
+                max_len=int(max_len),
                 sampling=(sampled == 'sampled'),
                 n_beams=n_beams,
                 top_p=top_p,
