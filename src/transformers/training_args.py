@@ -5,24 +5,14 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 
-from .file_utils import cached_property, is_torch_available, torch_required
+from .file_utils import cached_property, is_torch_available, is_tpu_available, torch_required
 
 
 if is_torch_available():
     import torch
 
-
-try:
+if is_tpu_available():
     import torch_xla.core.xla_model as xm
-
-    _has_tpu = True
-except ImportError:
-    _has_tpu = False
-
-
-@torch_required
-def is_tpu_available():
-    return _has_tpu
 
 
 logger = logging.getLogger(__name__)

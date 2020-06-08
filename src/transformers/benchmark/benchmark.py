@@ -22,7 +22,13 @@ import logging
 import os
 import timeit
 
-from transformers import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING, PretrainedConfig, is_torch_available
+from transformers import (
+    MODEL_MAPPING,
+    MODEL_WITH_LM_HEAD_MAPPING,
+    PretrainedConfig,
+    is_torch_available,
+    is_tpu_available,
+)
 
 from .benchmark_utils import Benchmark, Memory, start_memory_tracing, stop_memory_tracing
 
@@ -48,6 +54,10 @@ class PyTorchBenchmark(Benchmark):
     def train(self, model_name, batch_size, sequence_length, trace_memory=False):
         try:
             config = self.config_dict[model_name]
+
+            if self.args.torchscript:
+                config.torchscript = True
+
             model = MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
             model.to(self.args.device)
             model.train()
@@ -58,15 +68,25 @@ class PyTorchBenchmark(Benchmark):
                 vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
             )
 
+            if self.args.torchscript:
+                raise NotImplementedError("Training for torchscript is currently not implemented")
+            #                if config.is_encoder_decoder:
+            #                    raise NotImplementedError("Torchscript is currently not supported for EncoderDecoder models")
+            #                else:
+            #                    train_model = torch.jit.trace(model, input_ids)  # HOW TO SET LABELS HERE?
+
+            else:
+                train_model = model
+
             def compute_loss_and_backprob_encoder():
-                loss = model(input_ids, labels=input_ids)[0]
+                loss = train_model(input_ids, labels=input_ids)[0]
                 loss.backward()
-                model.zero_grad()
+                train_model.zero_grad()
 
             def compute_loss_and_backprob_encoder_decoder():
-                loss = model(input_ids, decoder_input_ids=input_ids, labels=input_ids)[0]
+                loss = train_model(input_ids, decoder_input_ids=input_ids, labels=input_ids)[0]
                 loss.backward()
-                model.zero_grad()
+                train_model.zero_grad()
 
             _train = (
                 compute_loss_and_backprob_encoder_decoder
@@ -123,24 +143,37 @@ class PyTorchBenchmark(Benchmark):
 
                 return memory, summary
             else:
+                if not self.args.no_tpu and is_tpu_available():
+                    # run additional 10 times to stabilize compilation for tpu
+                    timeit.repeat(
+                        _train, repeat=1, number=10,
+                    )
+
                 # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
                 runtimes = timeit.repeat(_train, repeat=self.args.repeat, number=10,)
                 return min(runtimes) / 10.0
         except RuntimeError as e:
             self.print_fn("Doesn't fit on GPU. {}".format(e))
-            return "N/A"
+            if trace_memory:
+                return "N/A", None
+            else:
+                return "N/A"
 
     def inference(self, model_name, batch_size, sequence_length, trace_memory=False):
         try:
             config = self.config_dict[model_name]
+            model = None
+
+            if self.args.torchscript:
+                config.torchscript = True
 
             if self.args.with_lm_head:
                 model = MODEL_WITH_LM_HEAD_MAPPING[config.__class__](config)
             else:
                 model = MODEL_MAPPING[config.__class__](config)
 
-            model.to(self.args.device)
             model.eval()
+            model.to(self.args.device)
 
             # encoder-decoder has vocab size saved differently
             vocab_size = config.vocab_size if hasattr(config, "vocab_size") else config.encoder.vocab_size
@@ -149,11 +182,22 @@ class PyTorchBenchmark(Benchmark):
                 vocab_size, (batch_size, sequence_length), dtype=torch.long, device=self.args.device
             )
 
+            if self.args.torchscript:
+                with torch.no_grad():
+                    if config.is_encoder_decoder:
+                        raise NotImplementedError("Torchscript is currently not supported for EncoderDecoder models")
+                    else:
+                        inference_model = torch.jit.trace(model, input_ids)
+            else:
+                inference_model = model
+
             def encoder_decoder_forward():
-                model(input_ids, decoder_input_ids=input_ids)
+                with torch.no_grad():
+                    inference_model(input_ids, decoder_input_ids=input_ids)
 
             def encoder_forward():
-                model(input_ids)
+                with torch.no_grad():
+                    inference_model(input_ids)
 
             _forward = encoder_decoder_forward if config.is_encoder_decoder else encoder_forward
 
@@ -204,10 +248,20 @@ class PyTorchBenchmark(Benchmark):
 
                 return memory, summary
             else:
+
+                if not self.args.no_tpu and is_tpu_available():
+                    # run additional 10 times to stabilize compilation for tpu
+                    timeit.repeat(
+                        _forward, repeat=1, number=10,
+                    )
+
                 # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
                 runtimes = timeit.repeat(_forward, repeat=self.args.repeat, number=10,)
                 return min(runtimes) / 10.0
 
         except RuntimeError as e:
             self.print_fn("Doesn't fit on GPU. {}".format(e))
-            return "N/A"
+            if trace_memory:
+                return "N/A", None
+            else:
+                return "N/A"
