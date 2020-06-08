@@ -374,7 +374,7 @@ def generic_train(
         logger = True
     else:
         logger = WandbLogger(name=model.output_dir.name)
-        logger.log_hyperparams(args)
+
 
     checkpoint_callback = ModelCheckpoint(
         filepath=str(model.output_dir / "{val_avg_rouge2:.4f}-{step_count}"),
@@ -435,5 +435,5 @@ def generic_train(
 
     if args.do_train:
         trainer.fit(model)
-
+    trainer.logger.log_hyperparams(args)
     return trainer

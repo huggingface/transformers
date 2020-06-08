@@ -743,7 +743,10 @@ def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
     if clash:
         print(f'SKIPPING to avoid overwriting {clash}')
     ckpt = torch.load(ckpt_path, map_location='cpu')
-    args = argparse.Namespace(**ckpt['hparams'])
+    if 'hparams' in ckpt:
+        args = argparse.Namespace(**ckpt['hparams'])
+    else:
+        args = pickle_load(exp_dir/'hparams.pkl')
     args.resume_from_checkpoint = str(ckpt_path)
     args.do_train = False
     args.output_dir = str(dest_dir)
