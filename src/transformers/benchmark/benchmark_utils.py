@@ -36,7 +36,15 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 _is_memory_tracing_enabled = False
 
 BenchmarkOutput = namedtuple(
-    "BenchmarkOutput", ["time_inference_result", "memory_inference_result", "time_train_result", "memory_train_result"]
+    "BenchmarkOutput",
+    [
+        "time_inference_result",
+        "memory_inference_result",
+        "time_train_result",
+        "memory_train_result",
+        "inference_summary",
+        "train_summary",
+    ],
 )
 
 
@@ -401,15 +409,10 @@ class Benchmark(ABC):
     def print_fn(self):
         if self._print_fn is None:
             if self.args.log_print:
-                logging.basicConfig(
-                    level=logging.DEBUG,
-                    filename=self.args.log_filename,
-                    filemode="a+",
-                    format="%(asctime)-15s %(levelname)-8s %(message)s",
-                )
 
                 def print_and_log(*args):
-                    logging.info(*args)
+                    with open(self.args.log_filename, "a") as log_file:
+                        log_file.write(str(*args) + "\n")
                     print(*args)
 
                 self._print_fn = print_and_log
@@ -454,11 +457,15 @@ class Benchmark(ABC):
             train_result_time[model_name] = copy.deepcopy(model_dict)
             train_result_memory[model_name] = copy.deepcopy(model_dict)
 
+            inference_summary = train_summary = None
+
             for batch_size in self.args.batch_sizes:
                 for sequence_length in self.args.sequence_lengths:
                     if not self.args.no_inference:
                         if not self.args.no_memory:
-                            memory = self.inference(model_name, batch_size, sequence_length, trace_memory=True)
+                            memory, inference_summary = self.inference(
+                                model_name, batch_size, sequence_length, trace_memory=True
+                            )
                             inference_result_memory[model_name]["result"][batch_size][sequence_length] = memory
                         if not self.args.no_speed:
                             time = self.inference(model_name, batch_size, sequence_length, trace_memory=False)
@@ -466,7 +473,9 @@ class Benchmark(ABC):
 
                     if self.args.training:
                         if not self.args.no_memory:
-                            memory = self.train(model_name, batch_size, sequence_length, trace_memory=True)
+                            memory, train_summary = self.train(
+                                model_name, batch_size, sequence_length, trace_memory=True
+                            )
                             train_result_memory[model_name]["result"][batch_size][sequence_length] = memory
                         if not self.args.no_speed:
                             time = self.inference(model_name, batch_size, sequence_length, trace_memory=False)
@@ -483,6 +492,10 @@ class Benchmark(ABC):
                 self.print_results(inference_result_memory)
                 self.save_to_csv(inference_result_memory, self.args.inference_memory_csv_file)
 
+            if self.args.trace_memory_line_by_line:
+                self.print_fn("======= INFERENCE - MEMORY LINE BY LINE TRACE - SUMMARY =======")
+                self.print_memory_trace_statistics(inference_summary)
+
         if self.args.training:
             if not self.args.no_speed:
                 self.print_fn("======= TRAIN - SPEED - RESULT =======")
@@ -493,6 +506,10 @@ class Benchmark(ABC):
                 self.print_fn("======= TRAIN - MEMORY - RESULT =======")
                 self.print_results(train_result_memory)
                 self.save_to_csv(train_result_memory, self.args.train_memory_csv_file)
+
+            if self.args.trace_memory_line_by_line:
+                self.print_fn("======= TRAIN - MEMORY LINE BY LINE TRACE - SUMMARY =======")
+                self.print_memory_trace_statistics(train_summary)
 
         if not self.args.no_env_print:
             self.print_fn("\n======== ENVIRONMENT - INFORMATION ========")
@@ -506,7 +523,14 @@ class Benchmark(ABC):
                 for key, value in self.environment_info.items():
                     writer.writerow([key, value])
 
-        return BenchmarkOutput(inference_result_time, inference_result_memory, train_result_time, train_result_memory)
+        return BenchmarkOutput(
+            inference_result_time,
+            inference_result_memory,
+            train_result_time,
+            train_result_memory,
+            inference_summary,
+            train_summary,
+        )
 
     @property
     def environment_info(self):
