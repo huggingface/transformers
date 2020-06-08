@@ -26,7 +26,7 @@ def rouge_files(src_file: Path, tgt_file: Path):
 
 def read_gens(exp_name, split="test", n=None):
     if Path(exp_name).exists():
-        exp_dir = exp_name
+        expdir = exp_name
     else:
         expdir = LOGDIR / exp_name
     assert expdir.exists(), expdir
