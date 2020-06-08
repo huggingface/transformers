@@ -1736,7 +1736,7 @@ def shape_list(x):
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
-def sample_without_replacement(logits, dtype, num_samples):
+def sample_without_replacement(logits, num_samples):
     """
         categorical sampling witouth replacement is currently not implemented
         the gumbel-max trick will do for now
