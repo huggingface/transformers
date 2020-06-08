@@ -95,7 +95,12 @@ class BenchmarkTest(unittest.TestCase):
         MODEL_ID = "sshleifer/tiny-gpt2"
         config = AutoConfig.from_pretrained(MODEL_ID)
         benchmark_args = PyTorchBenchmarkArguments(
-            models=[MODEL_ID], training=True, no_inference=True, torchscript=True, sequence_lengths=[8], batch_sizes=[1]
+            models=[MODEL_ID],
+            training=True,
+            no_inference=True,
+            torchscript=True,
+            sequence_lengths=[8],
+            batch_sizes=[1],
         )
         benchmark = PyTorchBenchmark(benchmark_args, configs=[config])
         results = benchmark.run()
