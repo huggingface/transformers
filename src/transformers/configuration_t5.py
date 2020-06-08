@@ -59,7 +59,6 @@ class T5Config(PretrainedConfig):
             initializer_factor: A factor for initializing all weight matrices (should be kept to 1.0, used for initialization testing).
             layer_norm_eps: The epsilon used by LayerNorm.
     """
-    pretrained_config_archive_map = T5_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "t5"
 
     def __init__(

@@ -31,7 +31,7 @@ if is_tf_available():
         TFXLMWithLMHeadModel,
         TFXLMForSequenceClassification,
         TFXLMForQuestionAnsweringSimple,
-        TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -308,11 +308,12 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_XLM_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFXLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_tf
 class TFXLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):

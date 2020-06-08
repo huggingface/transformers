@@ -35,12 +35,13 @@ from .modeling_xlm import (
 
 logger = logging.getLogger(__name__)
 
-FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "flaubert-small-cased": "https://cdn.huggingface.co/flaubert/flaubert_small_cased/pytorch_model.bin",
-    "flaubert-base-uncased": "https://cdn.huggingface.co/flaubert/flaubert_base_uncased/pytorch_model.bin",
-    "flaubert-base-cased": "https://cdn.huggingface.co/flaubert/flaubert_base_cased/pytorch_model.bin",
-    "flaubert-large-cased": "https://cdn.huggingface.co/flaubert/flaubert_large_cased/pytorch_model.bin",
-}
+FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "flaubert/flaubert_small_cased",
+    "flaubert/flaubert_base_uncased",
+    "flaubert/flaubert_base_cased",
+    "flaubert/flaubert_large_cased",
+    # See all Flaubert models at https://huggingface.co/models?filter=flaubert
+]
 
 
 FLAUBERT_START_DOCSTRING = r"""
@@ -95,7 +96,7 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -109,7 +110,6 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
 class FlaubertModel(XLMModel):
 
     config_class = FlaubertConfig
-    pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config):  # , dico, is_encoder, with_output):
         super().__init__(config)
@@ -304,7 +304,6 @@ class FlaubertWithLMHeadModel(XLMWithLMHeadModel):
     """
 
     config_class = FlaubertConfig
-    pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config):
         super().__init__(config)
@@ -324,7 +323,6 @@ class FlaubertForSequenceClassification(XLMForSequenceClassification):
     """
 
     config_class = FlaubertConfig
-    pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config):
         super().__init__(config)
@@ -344,7 +342,6 @@ class FlaubertForQuestionAnsweringSimple(XLMForQuestionAnsweringSimple):
     """
 
     config_class = FlaubertConfig
-    pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config):
         super().__init__(config)
@@ -364,7 +361,6 @@ class FlaubertForQuestionAnswering(XLMForQuestionAnswering):
     """
 
     config_class = FlaubertConfig
-    pretrained_model_archive_map = FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config):
         super().__init__(config)

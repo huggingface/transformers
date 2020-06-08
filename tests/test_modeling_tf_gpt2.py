@@ -29,7 +29,7 @@ if is_tf_available():
         TFGPT2Model,
         TFGPT2LMHeadModel,
         TFGPT2DoubleHeadsModel,
-        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         shape_list,
     )
 
@@ -323,11 +323,12 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_GPT2_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFGPT2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_tf
 class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gpt2(self):

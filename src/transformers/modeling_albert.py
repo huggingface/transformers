@@ -17,6 +17,7 @@
 import logging
 import math
 import os
+import warnings
 
 import torch
 import torch.nn as nn
@@ -31,16 +32,17 @@ from .modeling_utils import PreTrainedModel
 logger = logging.getLogger(__name__)
 
 
-ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "albert-base-v1": "https://cdn.huggingface.co/albert-base-v1-pytorch_model.bin",
-    "albert-large-v1": "https://cdn.huggingface.co/albert-large-v1-pytorch_model.bin",
-    "albert-xlarge-v1": "https://cdn.huggingface.co/albert-xlarge-v1-pytorch_model.bin",
-    "albert-xxlarge-v1": "https://cdn.huggingface.co/albert-xxlarge-v1-pytorch_model.bin",
-    "albert-base-v2": "https://cdn.huggingface.co/albert-base-v2-pytorch_model.bin",
-    "albert-large-v2": "https://cdn.huggingface.co/albert-large-v2-pytorch_model.bin",
-    "albert-xlarge-v2": "https://cdn.huggingface.co/albert-xlarge-v2-pytorch_model.bin",
-    "albert-xxlarge-v2": "https://cdn.huggingface.co/albert-xxlarge-v2-pytorch_model.bin",
-}
+ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "albert-base-v1",
+    "albert-large-v1",
+    "albert-xlarge-v1",
+    "albert-xxlarge-v1",
+    "albert-base-v2",
+    "albert-large-v2",
+    "albert-xlarge-v2",
+    "albert-xxlarge-v2",
+    # See all ALBERT models at https://huggingface.co/models?filter=albert
+]
 
 
 def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
@@ -365,7 +367,6 @@ class AlbertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = AlbertConfig
-    pretrained_model_archive_map = ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "albert"
 
     def _init_weights(self, module):
@@ -425,7 +426,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
@@ -439,7 +440,6 @@ ALBERT_INPUTS_DOCSTRING = r"""
 class AlbertModel(AlbertPreTrainedModel):
 
     config_class = AlbertConfig
-    pretrained_model_archive_map = ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_albert
     base_model_prefix = "albert"
 
@@ -600,11 +600,12 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
+        labels=None,
         sentence_order_label=None,
+        **kwargs
     ):
         r"""
-        masked_lm_labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
+        labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
@@ -614,10 +615,12 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             Indices should be in ``[0, 1]``.
             ``0`` indicates original order (sequence A, then sequence B),
             ``1`` indicates switched order (sequence B, then sequence A).
+        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Used to hide legacy arguments that have been deprecated.
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
-        loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Total loss as the sum of the masked language modeling loss and the next sequence prediction (classification) loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -652,6 +655,14 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
 
         """
 
+        if "masked_lm_labels" in kwargs:
+            warnings.warn(
+                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                DeprecationWarning,
+            )
+            labels = kwargs.pop("masked_lm_labels")
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
+
         outputs = self.albert(
             input_ids,
             attention_mask=attention_mask,
@@ -668,9 +679,9 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
 
         outputs = (prediction_scores, sop_scores,) + outputs[2:]  # add hidden states and attention if they are here
 
-        if masked_lm_labels is not None and sentence_order_label is not None:
+        if labels is not None and sentence_order_label is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             sentence_order_loss = loss_fct(sop_scores.view(-1, 2), sentence_order_label.view(-1))
             total_loss = masked_lm_loss + sentence_order_loss
             outputs = (total_loss,) + outputs
@@ -743,18 +754,21 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
+        labels=None,
+        **kwargs
     ):
         r"""
-        masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with
             labels in ``[0, ..., config.vocab_size]``
+        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Used to hide legacy arguments that have been deprecated.
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.AlbertConfig`) and inputs:
-        loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -778,10 +792,18 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
         model = AlbertForMaskedLM.from_pretrained('albert-base-v2')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, masked_lm_labels=input_ids)
+        outputs = model(input_ids, labels=input_ids)
         loss, prediction_scores = outputs[:2]
 
         """
+        if "masked_lm_labels" in kwargs:
+            warnings.warn(
+                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                DeprecationWarning,
+            )
+            labels = kwargs.pop("masked_lm_labels")
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
+
         outputs = self.albert(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -795,9 +817,9 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         prediction_scores = self.predictions(sequence_outputs)
 
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
-        if masked_lm_labels is not None:
+        if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             outputs = (masked_lm_loss,) + outputs
 
         return outputs

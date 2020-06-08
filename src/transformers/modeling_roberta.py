@@ -17,6 +17,7 @@
 
 
 import logging
+import warnings
 
 import torch
 import torch.nn as nn
@@ -30,14 +31,15 @@ from .modeling_utils import create_position_ids_from_input_ids
 
 logger = logging.getLogger(__name__)
 
-ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "roberta-base": "https://cdn.huggingface.co/roberta-base-pytorch_model.bin",
-    "roberta-large": "https://cdn.huggingface.co/roberta-large-pytorch_model.bin",
-    "roberta-large-mnli": "https://cdn.huggingface.co/roberta-large-mnli-pytorch_model.bin",
-    "distilroberta-base": "https://cdn.huggingface.co/distilroberta-base-pytorch_model.bin",
-    "roberta-base-openai-detector": "https://cdn.huggingface.co/roberta-base-openai-detector-pytorch_model.bin",
-    "roberta-large-openai-detector": "https://cdn.huggingface.co/roberta-large-openai-detector-pytorch_model.bin",
-}
+ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "roberta-base",
+    "roberta-large",
+    "roberta-large-mnli",
+    "distilroberta-base",
+    "roberta-base-openai-detector",
+    "roberta-large-openai-detector",
+    # See all RoBERTa models at https://huggingface.co/models?filter=roberta
+]
 
 
 class RobertaEmbeddings(BertEmbeddings):
@@ -95,7 +97,7 @@ ROBERTA_START_DOCSTRING = r"""
 
 ROBERTA_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`transformers.RobertaTokenizer`.
@@ -103,19 +105,19 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
@@ -142,7 +144,6 @@ class RobertaModel(BertModel):
     """
 
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -161,7 +162,6 @@ class RobertaModel(BertModel):
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
 class RobertaForMaskedLM(BertPreTrainedModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -175,7 +175,7 @@ class RobertaForMaskedLM(BertPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -184,18 +184,21 @@ class RobertaForMaskedLM(BertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
+        labels=None,
+        **kwargs
     ):
         r"""
-        masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
+        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Used to hide legacy arguments that have been deprecated.
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
-        masked_lm_loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        masked_lm_loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -219,10 +222,18 @@ class RobertaForMaskedLM(BertPreTrainedModel):
         tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
         model = RobertaForMaskedLM.from_pretrained('roberta-base')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-        outputs = model(input_ids, masked_lm_labels=input_ids)
+        outputs = model(input_ids, labels=input_ids)
         loss, prediction_scores = outputs[:2]
 
         """
+        if "masked_lm_labels" in kwargs:
+            warnings.warn(
+                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                DeprecationWarning,
+            )
+            labels = kwargs.pop("masked_lm_labels")
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
+
         outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
@@ -236,9 +247,9 @@ class RobertaForMaskedLM(BertPreTrainedModel):
 
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
 
-        if masked_lm_labels is not None:
+        if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             outputs = (masked_lm_loss,) + outputs
 
         return outputs  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
@@ -276,7 +287,6 @@ class RobertaLMHead(nn.Module):
 )
 class RobertaForSequenceClassification(BertPreTrainedModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -286,7 +296,7 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
         self.roberta = RobertaModel(config)
         self.classifier = RobertaClassificationHead(config)
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -367,7 +377,6 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
 )
 class RobertaForMultipleChoice(BertPreTrainedModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -379,7 +388,7 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -466,7 +475,6 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
 )
 class RobertaForTokenClassification(BertPreTrainedModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -479,7 +487,7 @@ class RobertaForTokenClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -586,7 +594,6 @@ class RobertaClassificationHead(nn.Module):
 )
 class RobertaForQuestionAnswering(BertPreTrainedModel):
     config_class = RobertaConfig
-    pretrained_model_archive_map = ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "roberta"
 
     def __init__(self, config):
@@ -598,7 +605,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids,

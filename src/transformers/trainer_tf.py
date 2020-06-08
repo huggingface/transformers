@@ -3,12 +3,12 @@
 import logging
 import math
 import os
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
 
-from .modeling_tf_utils import TFPreTrainedModel, shape_list
+from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput
 from .training_args_tf import TFTrainingArguments
@@ -20,13 +20,14 @@ logger = logging.getLogger(__name__)
 class TFTrainer:
     model: TFPreTrainedModel
     args: TFTrainingArguments
-    # something similar to a PT Dataset.
-    # This is just temporary before to have
-    # a framework-agnostic approach for datasets.
     train_dataset: Optional[tf.data.Dataset]
     eval_dataset: Optional[tf.data.Dataset]
     compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None
     prediction_loss_only: bool
+    tb_writer: Optional[tf.summary.SummaryWriter] = None
+    optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = None
+    global_step: Optional[int] = None
+    epoch: Optional[float] = None
 
     def __init__(
         self,
@@ -36,6 +37,8 @@ class TFTrainer:
         eval_dataset: Optional[tf.data.Dataset] = None,
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         prediction_loss_only=False,
+        tb_writer: Optional[tf.summary.SummaryWriter] = None,
+        optimizers: Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule] = None,
     ):
         self.model = model
         self.args = args
@@ -43,120 +46,73 @@ class TFTrainer:
         self.eval_dataset = eval_dataset
         self.compute_metrics = compute_metrics
         self.prediction_loss_only = prediction_loss_only
+        self.optimizers = optimizers
         self.gradient_accumulator = GradientAccumulator()
 
-        self._setup_training()
-
-    def _setup_training(self) -> None:
-        """
-        Setup the different steps to train a model:
-          - check if all the data are given
-          - create the proper strategy
-          - create the features
-          - prepare the model settings
-        """
-        self._prepare_dataset()
-
-        with self.args.strategy.scope():
-            self._create_optimizer()
-            _ = self.optimizer.iterations
-            self._set_loss_and_metric()
-            self._create_checkpoint_manager()
-            self._create_summary_writer()
-
-    def _set_loss_and_metric(self) -> None:
-        """
-        Create the training loss and metric with their name. Allowed names are those listed
-        in the Tensorflow documentation and those contained in the transformers library.
-        """
-        try:
-            self.loss = tf.keras.losses.get(
-                {
-                    "class_name": self.args.loss_name,
-                    "config": {"from_logits": True, "reduction": tf.keras.losses.Reduction.NONE},
-                }
-            )
-        except TypeError:
-            self.loss = tf.keras.losses.get(
-                {"class_name": self.args.loss_name, "config": {"reduction": tf.keras.losses.Reduction.NONE}}
-            )
-
-    def _create_summary_writer(self) -> None:
-        """
-        Create a summary writer to be able to read the logs in Tensorboard.
-        """
-        self.writer = tf.summary.create_file_writer(self.args.logging_dir)
-
-    def _prepare_dataset(self) -> None:
-        """
-        Prepare the training, validation and test data.
-        """
-        if self.train_dataset is not None:
-            self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
-
-            if self.args.max_steps > 0:
-                self.train_steps = self.args.max_steps
-            else:
-                self.train_steps: int = math.ceil(self.num_train_examples / self.args.train_batch_size)
-
-            self.train_dataset = (
-                self.train_dataset.cache()
-                .shuffle(self.num_train_examples)
-                .batch(self.args.train_batch_size)
-                .prefetch(tf.data.experimental.AUTOTUNE)
-            )
-
-            if self.args.max_steps > 0:
-                self.train_dataset = self.train_dataset.repeat(-1)
-
-            self.train_dataset = self.args.strategy.experimental_distribute_dataset(self.train_dataset)
+        if tb_writer is not None:
+            self.tb_writer = tb_writer
         else:
-            self.train_steps = 0
+            self.tb_writer = tf.summary.create_file_writer(self.args.logging_dir)
 
-        if self.eval_dataset is not None:
-            self.eval_dataset = (
-                self.eval_dataset.batch(self.args.eval_batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
-            )
-            self.eval_dataset = self.args.strategy.experimental_distribute_dataset(self.eval_dataset)
+    def get_train_tfdataset(self) -> tf.data.Dataset:
+        if self.train_dataset is None:
+            raise ValueError("Trainer: training requires a train_dataset.")
 
-    def _create_optimizer(self) -> None:
-        """
-        Create the training optimizer with its name. Allowed names are those listed
-        in the Tensorflow documentation and those contained in the transformers library.
-        """
-        if self.args.optimizer_name == "adamw":
-            self.optimizer = create_optimizer(
-                self.args.learning_rate, self.train_steps, self.args.warmup_steps, self.args.end_lr
-            )
+        self.num_train_examples = self.train_dataset.reduce(tf.constant(0), lambda x, _: x + 1).numpy()
+
+        if self.args.max_steps > 0:
+            self.train_steps = self.args.max_steps
         else:
-            try:
-                self.optimizer = tf.keras.optimizers.get(
-                    {
-                        "class_name": self.args.optimizer_name,
-                        "config": {"learning_rate": self.args.learning_rate, "epsilon": self.args.adam_epsilon},
-                    }
-                )
-            except TypeError:
-                # This is for the case where the optimizer is not Adam-like such as SGD
-                self.optimizer = tf.keras.optimizers.get(
-                    {"class_name": self.args.optimizer_name, "config": {"learning_rate": self.args.learning_rate}}
-                )
-        logger.info("Created an/a {} optimizer".format(self.args.optimizer_name))
+            self.train_steps: int = math.ceil(self.num_train_examples / self.args.train_batch_size)
 
-    def _create_checkpoint_manager(self, max_to_keep: int = 5, load_model: bool = True) -> None:
+        ds = (
+            self.train_dataset.cache()
+            .shuffle(self.num_train_examples)
+            .batch(self.args.train_batch_size)
+            .prefetch(tf.data.experimental.AUTOTUNE)
+        )
+
+        if self.args.max_steps > 0:
+            self.train_dataset = self.train_dataset.repeat(-1)
+
+        return self.args.strategy.experimental_distribute_dataset(ds)
+
+    def get_eval_tfdataset(self, eval_dataset: Optional[tf.data.Dataset] = None) -> tf.data.Dataset:
+        if eval_dataset is None and self.eval_dataset is None:
+            raise ValueError("Trainer: evaluation requires an eval_dataset.")
+
+        eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+        ds = eval_dataset.cache().batch(self.args.eval_batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+
+        return self.args.strategy.experimental_distribute_dataset(ds)
+
+    def get_test_tfdataset(self, test_dataset: tf.data.Dataset) -> tf.data.Dataset:
+        ds = test_dataset.batch(self.args.eval_batch_size)
+
+        return self.args.strategy.experimental_distribute_dataset(ds)
+
+    def get_optimizers(
+        self,
+    ) -> Tuple[tf.keras.optimizers.Optimizer, tf.keras.optimizers.schedules.LearningRateSchedule]:
         """
-        Create a checkpoint manager in order to be able to make the training
-        fault-tolerant.
-        Args:
-          max_to_keep: the maximum number of checkpoints to keep in the checkpoint path.
-          load_model: if we want to start the training from the latest checkpoint.
+        Setup the optimizer and the learning rate scheduler.
+
+        We provide a reasonable default that works well.
+        If you want to use something else, you can pass a tuple in the Trainer's init,
+        or override this method in a subclass.
         """
-        ckpt = tf.train.Checkpoint(optimizer=self.optimizer, model=self.model)
+        if self.optimizers is not None:
+            return self.optimizers
 
-        self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, PREFIX_CHECKPOINT_DIR, max_to_keep=max_to_keep)
+        optimizer, scheduler = create_optimizer(
+            self.args.learning_rate,
+            self.train_steps,
+            self.args.warmup_steps,
+            adam_epsilon=self.args.adam_epsilon,
+            weight_decay_rate=self.args.weight_decay,
+        )
 
-        if load_model:
-            ckpt.restore(self.model.ckpt_manager.latest_checkpoint).expect_partial()
+        return optimizer, scheduler
 
     @tf.function
     def _evaluate_steps(self, per_replica_features, per_replica_labels):
@@ -182,6 +138,14 @@ class TFTrainer:
     def _prediction_loop(
         self, dataset: tf.data.Dataset, description: str, prediction_loss_only: Optional[bool] = None
     ) -> PredictionOutput:
+        """
+        Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
+
+        Works both with or without labels.
+        """
+
+        prediction_loss_only = prediction_loss_only if prediction_loss_only is not None else self.prediction_loss_only
+
         logger.info("***** Running %s *****", description)
         logger.info("  Batch size = %d", self.args.eval_batch_size)
 
@@ -196,6 +160,12 @@ class TFTrainer:
             loss = tf.reduce_mean(loss)
 
             if not prediction_loss_only:
+                if isinstance(logits, tuple):
+                    logits = logits[0]
+
+                if isinstance(labels, tuple):
+                    labels = labels[0]
+
                 if self.args.n_gpu > 1:
                     for val in logits.values:
                         if preds is None:
@@ -240,10 +210,9 @@ class TFTrainer:
         """
         Prediction/evaluation loop, shared by `evaluate()` and `predict()`.
         """
-        if eval_dataset is None:
-            eval_dataset = self.eval_dataset
+        eval_ds = self.get_eval_tfdataset(eval_dataset)
 
-        output = self._prediction_loop(eval_dataset, description="Evaluation")
+        output = self._prediction_loop(eval_ds, description="Evaluation")
 
         return output.metrics
 
@@ -251,12 +220,26 @@ class TFTrainer:
         """
         Train method to train the model.
         """
+        train_ds = self.get_train_tfdataset()
+
         if self.args.debug:
             tf.summary.trace_on(graph=True, profiler=True)
 
         self.gradient_accumulator.reset()
 
-        iterations = self.optimizer.iterations
+        with self.args.strategy.scope():
+            optimizer, lr_scheduler = self.get_optimizers()
+            iterations = optimizer.iterations
+            folder = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
+            ckpt = tf.train.Checkpoint(optimizer=optimizer, model=self.model)
+            self.model.ckpt_manager = tf.train.CheckpointManager(ckpt, folder, max_to_keep=self.args.save_total_limit)
+
+            if self.model.ckpt_manager.latest_checkpoint:
+                logger.info(
+                    "Checkpoint file %s found and restoring from checkpoint", self.model.ckpt_manager.latest_checkpoint
+                )
+
+                ckpt.restore(self.model.ckpt_manager.latest_checkpoint).expect_partial()
 
         if iterations.numpy() > 0:
             logger.info("Start the training from the last checkpoint")
@@ -268,21 +251,30 @@ class TFTrainer:
 
         epochs = 1 if self.args.max_steps > 0 else self.args.num_train_epochs
 
+        if self.args.fp16:
+            policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
+            tf.keras.mixed_precision.experimental.set_policy(policy)
+
+        with self.tb_writer.as_default():
+            tf.summary.text("args", self.args.to_json_string())
+
+        self.tb_writer.flush()
+
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", self.num_train_examples)
         logger.info("  Num Epochs = %d", epochs)
         logger.info("  Total optimization steps = %d", self.train_steps)
 
         for epoch in range(start_epoch, int(epochs + 1)):
-            for training_loss in self._training_steps():
+            for training_loss in self._training_steps(train_ds, optimizer):
                 step = iterations.numpy()
 
                 if self.args.debug:
-                    with self.writer.as_default():
+                    with self.tb_writer.as_default():
                         tf.summary.scalar("loss", training_loss, step=step)
 
                 if step == 1 and self.args.debug:
-                    with self.writer.as_default():
+                    with self.tb_writer.as_default():
                         tf.summary.trace_export(name="training", step=step, profiler_outdir=self.args.logging_dir)
 
                 if self.args.evaluate_during_training and step % self.args.eval_steps == 0:
@@ -293,16 +285,15 @@ class TFTrainer:
                         eval_key = "eval_{}".format(key)
                         logs[eval_key] = value
 
-                    if callable(self.optimizer.learning_rate):
-                        logs["learning_rate"] = self.optimizer.learning_rate(step).numpy()
-                    else:
-                        logs["learning_rate"] = self.optimizer.learning_rate.numpy()
+                    logs["learning_rate"] = lr_scheduler(step).numpy()
 
                     logger.info("Epoch {} Step {} Validation Metrics {}".format(epoch, step, logs))
 
-                    with self.writer.as_default():
+                    with self.tb_writer.as_default():
                         for k, v in logs.items():
                             tf.summary.scalar(k, v, step=step)
+
+                    self.tb_writer.flush()
 
                 if step % self.args.logging_steps == 0:
                     logger.info("Epoch {} Step {} Train Loss {:.4f}".format(epoch, step, training_loss.numpy()))
@@ -314,21 +305,21 @@ class TFTrainer:
                 if step % self.train_steps == 0:
                     break
 
-    def _training_steps(self):
+    def _training_steps(self, ds, optimizer):
         """
         Returns a generator over training steps (i.e. parameters update).
         """
-        for i, loss in enumerate(self._accumulate_next_gradients()):
+        for i, loss in enumerate(self._accumulate_next_gradients(ds)):
             if i % self.args.gradient_accumulation_steps == 0:
-                self._apply_gradients()
+                self._apply_gradients(optimizer)
                 yield loss
 
     @tf.function
-    def _apply_gradients(self):
+    def _apply_gradients(self, optimizer):
         """Applies the gradients (cross-replica)."""
-        self.args.strategy.experimental_run_v2(self._step)
+        self.args.strategy.experimental_run_v2(self._step, args=(optimizer,))
 
-    def _step(self):
+    def _step(self, optimizer):
         """Applies gradients and resets accumulation."""
         gradient_scale = self.gradient_accumulator.step * self.args.strategy.num_replicas_in_sync
         gradients = [
@@ -336,12 +327,12 @@ class TFTrainer:
         ]
         gradients = [(tf.clip_by_value(grad, -self.args.max_grad_norm, self.args.max_grad_norm)) for grad in gradients]
 
-        self.optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
+        optimizer.apply_gradients(list(zip(gradients, self.model.trainable_variables)))
         self.gradient_accumulator.reset()
 
-    def _accumulate_next_gradients(self):
+    def _accumulate_next_gradients(self, ds):
         """Accumulates the gradients from the next element in dataset."""
-        iterator = iter(self.train_dataset)
+        iterator = iter(ds)
 
         @tf.function
         def _accumulate_next():
@@ -388,23 +379,10 @@ class TFTrainer:
           labels: the batched labels.
           training: run the model in training mode or not
         """
-        if self.args.mode == "text-classification" or self.args.mode == "token-classification":
-            logits = self.model(features, training=training)[0]
+        if isinstance(labels, (dict)):
+            loss, logits = self.model(features, training=training, **labels)[:2]
         else:
-            logits = self.model(features, training=training)
-
-        if self.args.mode == "token-classification":
-            active_loss = tf.reshape(labels, (-1,)) != -1
-            reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-            labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
-            loss = self.loss(labels, reduced_logits)
-        elif self.args.mode == "question-answering":
-            start_loss = self.loss(labels["start_position"], logits[0])
-            end_loss = self.loss(labels["end_position"], logits[1])
-            loss = (start_loss + end_loss) / 2.0
-        else:
-            loss = self.loss(labels, logits)
-
+            loss, logits = self.model(features, labels=labels, training=training)[:2]
         loss += sum(self.model.losses) * (1.0 / self.args.n_gpu)
 
         return loss, logits
@@ -418,19 +396,19 @@ class TFTrainer:
           test_dataset: something similar to a PT Dataset. This is just
             temporary before to have a framework-agnostic approach for datasets.
         """
-        test_dataset = test_dataset.batch(self.args.eval_batch_size)
-        test_dataset = self.args.strategy.experimental_distribute_dataset(test_dataset)
+        test_ds = self.get_test_tfdataset(test_dataset)
 
-        return self._prediction_loop(test_dataset, description="Prediction")
+        return self._prediction_loop(test_ds, description="Prediction")
 
-    def save_model(self) -> None:
+    def save_model(self, output_dir: Optional[str] = None):
         """
-        Save the pretrained model and create a Tensorflow saved model.
+        Save the pretrained model.
         """
-        logger.info("Saving model in {}".format(self.args.output_dir))
+        output_dir = output_dir if output_dir is not None else self.args.output_dir
 
-        path = os.path.join(self.args.output_dir, "saved_model")
+        logger.info("Saving model in {}".format(output_dir))
 
-        logger.info("Saving model in {}".format(path))
-        os.makedirs(path, exist_ok=True)
+        if not isinstance(self.model, TFPreTrainedModel):
+            raise ValueError("Trainer.model appears to not be a PreTrainedModel")
+
         self.model.save_pretrained(self.args.output_dir)

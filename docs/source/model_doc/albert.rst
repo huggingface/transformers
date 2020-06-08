@@ -94,3 +94,17 @@ TFAlbertForSequenceClassification
 
 .. autoclass:: transformers.TFAlbertForSequenceClassification
     :members:
+
+
+TFAlbertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForMultipleChoice
+    :members:
+
+
+TFAlbertForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForQuestionAnswering
+    :members:

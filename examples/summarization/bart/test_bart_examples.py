@@ -129,7 +129,7 @@ class TestBartExamples(unittest.TestCase):
         summaries = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
         _dump_articles((tmp_dir / "train.source"), articles)
         _dump_articles((tmp_dir / "train.target"), summaries)
-        tokenizer = BartTokenizer.from_pretrained("bart-large")
+        tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
         max_len_source = max(len(tokenizer.encode(a)) for a in articles)
         max_len_target = max(len(tokenizer.encode(a)) for a in summaries)
         trunc_target = 4

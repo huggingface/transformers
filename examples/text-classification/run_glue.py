@@ -21,7 +21,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 import numpy as np
 
@@ -134,16 +134,29 @@ def main():
     )
 
     # Get datasets
-    train_dataset = GlueDataset(data_args, tokenizer=tokenizer) if training_args.do_train else None
-    eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev") if training_args.do_eval else None
-    test_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="test") if training_args.do_predict else None
+    train_dataset = (
+        GlueDataset(data_args, tokenizer=tokenizer, cache_dir=model_args.cache_dir) if training_args.do_train else None
+    )
+    eval_dataset = (
+        GlueDataset(data_args, tokenizer=tokenizer, mode="dev", cache_dir=model_args.cache_dir)
+        if training_args.do_eval
+        else None
+    )
+    test_dataset = (
+        GlueDataset(data_args, tokenizer=tokenizer, mode="test", cache_dir=model_args.cache_dir)
+        if training_args.do_predict
+        else None
+    )
 
-    def compute_metrics(p: EvalPrediction) -> Dict:
-        if output_mode == "classification":
-            preds = np.argmax(p.predictions, axis=1)
-        elif output_mode == "regression":
-            preds = np.squeeze(p.predictions)
-        return glue_compute_metrics(data_args.task_name, preds, p.label_ids)
+    def build_compute_metrics_fn(task_name: str) -> Callable[[EvalPrediction], Dict]:
+        def compute_metrics_fn(p: EvalPrediction):
+            if output_mode == "classification":
+                preds = np.argmax(p.predictions, axis=1)
+            elif output_mode == "regression":
+                preds = np.squeeze(p.predictions)
+            return glue_compute_metrics(task_name, preds, p.label_ids)
+
+        return compute_metrics_fn
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -151,7 +164,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        compute_metrics=compute_metrics,
+        compute_metrics=build_compute_metrics_fn(data_args.task_name),
     )
 
     # Training
@@ -174,9 +187,12 @@ def main():
         eval_datasets = [eval_dataset]
         if data_args.task_name == "mnli":
             mnli_mm_data_args = dataclasses.replace(data_args, task_name="mnli-mm")
-            eval_datasets.append(GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, mode="dev"))
+            eval_datasets.append(
+                GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, mode="dev", cache_dir=model_args.cache_dir)
+            )
 
         for eval_dataset in eval_datasets:
+            trainer.compute_metrics = build_compute_metrics_fn(eval_dataset.args.task_name)
             eval_result = trainer.evaluate(eval_dataset=eval_dataset)
 
             output_eval_file = os.path.join(
@@ -196,7 +212,9 @@ def main():
         test_datasets = [test_dataset]
         if data_args.task_name == "mnli":
             mnli_mm_data_args = dataclasses.replace(data_args, task_name="mnli-mm")
-            test_datasets.append(GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, mode="test"))
+            test_datasets.append(
+                GlueDataset(mnli_mm_data_args, tokenizer=tokenizer, mode="test", cache_dir=model_args.cache_dir)
+            )
 
         for test_dataset in test_datasets:
             predictions = trainer.predict(test_dataset=test_dataset).predictions
