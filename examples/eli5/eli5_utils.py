@@ -376,7 +376,7 @@ def make_qa_s2s_model(model_name="facebook/bart-large", from_file=None, device="
         model.load_state_dict(param_dict['model'])
     return tokenizer, model
 
-def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, max_a_len=512, device="cuda:0"):
+def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, max_a_len=360, device="cuda:0"):
     q_ls = [q for q, a in qa_list]
     a_ls = [a for q, a in qa_list]
     q_toks = tokenizer.batch_encode_plus(q_ls, max_length=max_len, pad_to_max_length=True)
@@ -428,7 +428,7 @@ def train_qa_s2s_epoch(model, dataset, tokenizer, optimizer, scheduler, args, e=
         # some printing within the epoch
         loc_loss += loss.item()
         loc_steps += 1
-        if step % args.print_freq == 0:
+        if step % args.print_freq == 0 or step == 1:
             print(
                 "{:2d} {:5d} of {:5d} \t L: {:.3f} \t -- {:.3f}".format(
                     e, step,
