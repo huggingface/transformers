@@ -499,9 +499,9 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 class LongformerModel(RobertaModel):
     """
     This class overrides :class:`~transformers.RobertaModel` to provide the ability to process
-    long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer 
-    <https://arxiv.org/abs/2004.05150>`_ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention 
-    combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in 
+    long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer
+    <https://arxiv.org/abs/2004.05150>`_ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention
+    combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
     memory and compute.
 
     The selfattention module `LongformerSelfAttention` implemented here supports the combination of local and
