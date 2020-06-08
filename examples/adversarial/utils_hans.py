@@ -184,8 +184,8 @@ if is_tf_available():
             ):
                 # HACK(label indices are swapped in RoBERTa pretrained model)
                 label_list[1], label_list[2] = label_list[2], label_list[1]
-                examples = processor.get_dev_examples(data_dir) if evaluate else processor.get_train_examples(data_dir)
 
+            examples = processor.get_dev_examples(data_dir) if evaluate else processor.get_train_examples(data_dir)
             self.features = hans_convert_examples_to_features(
                 examples, label_list, max_seq_length, tokenizer, output_mode
             )
