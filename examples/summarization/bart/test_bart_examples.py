@@ -172,14 +172,7 @@ class TestBartExamples(unittest.TestCase):
         model = self._bart_distiller_cli(updates)
         self.assertFalse(model.different_decoder)
         ckpt_path = list(model.output_dir.glob("*.ckpt"))[0]
-
-        ckpt = torch.load(ckpt_path, map_location="cpu")
-        args = argparse.Namespace(**ckpt["hparams"])
-        args.resume_from_checkpoint = str(ckpt_path)
-        args.do_train = False
-        args.output_dir = tempfile.mkdtemp(prefix="output_v2")
-
-        eval_and_fix(args)
+        evaluate_checkpoint(ckpt_path, dest_dir=Path(tempfile.mkdtemp(prefix="output_v2")))
 
 
     def _bart_distiller_cli(self, updates, check_contents=True):

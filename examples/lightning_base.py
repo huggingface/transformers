@@ -77,6 +77,9 @@ class BaseTransformer(pl.LightningModule):
         **config_kwargs
     ):
         "Initialize a model."
+        if isinstance(hparams, dict):
+            hparams = argparse.Namespace(**hparams)
+
         super().__init__()
         self.hparams = hparams
         self.step_count = 0
@@ -100,14 +103,19 @@ class BaseTransformer(pl.LightningModule):
         else:
             self.tokenizer: PreTrainedTokenizer = tokenizer
         if model is None:
-            self.model: PretrainedModel = MODEL_MODES[mode].from_pretrained(
+            self.model_type = MODEL_MODES[mode]
+            self.model: PretrainedModel = self.model_type.from_pretrained(
                 self.hparams.model_name_or_path,
                 from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
                 config=self.config,
                 cache_dir=cache_dir,
             )
         else:
+            self.model_type = type(model)
             self.model: PretrainedModel = model
+
+    def load_hf_checkpoint(self, *args, **kwargs):
+        self.model = self.model_type.from_pretrained(*args, **kwargs)
 
     def is_logger(self):
         return self.trainer.proc_rank <= 0
@@ -310,6 +318,7 @@ class LoggingCallback(pl.Callback):
         return self._do_work(trainer, pl_module, "test")
 
 
+
 class MyCheckpointer(ModelCheckpoint):
     def _save_model(self, filepath):
         pass
@@ -381,26 +390,9 @@ def generic_train(
         monitor="val_rouge",
         mode="max",
         save_top_k=1,
-        save_weights_only=True,
+        save_weights_only=False,
         period=0,
     )
-
-    # train_params = dict(
-    #     accumulate_grad_batches=args.gradient_accumulation_steps,
-    #     gpus=args.gpus,
-    #     max_epochs=args.num_train_epochs,
-    #     early_stop_callback=early_stopping_callback,
-    #     gradient_clip_val=args.max_grad_norm,
-    #     checkpoint_callback=checkpoint_callback,
-    #     callbacks=[LoggingCallback()] + extra_callbacks,
-    #     fast_dev_run=args.fast_dev_run,
-    #     val_check_interval=args.val_check_interval,
-    #     logger=logger,
-    #     weights_summary=None,
-    #     resume_from_checkpoint=args.resume_from_checkpoint,
-    #     auto_scale_batch_size=args.auto_scale_batch_size,
-    #
-    # )
     train_params = {}
 
     if args.fp16:
@@ -436,4 +428,5 @@ def generic_train(
     if args.do_train:
         trainer.fit(model)
     trainer.logger.log_hyperparams(args)
+    trainer.logger.save()
     return trainer

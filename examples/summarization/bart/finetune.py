@@ -703,11 +703,16 @@ def main(args):
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
     if not args.do_predict:
         return model
+    #return model  # hack
+
     model.hparams.test_checkpoint = ""
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
     if checkpoints:
         model.hparams.test_checkpoint = checkpoints[-1]
-        model = model.load_from_checkpoint(checkpoints[-1])
+        #model = model.load_from_checkpoint(checkpoints[-1],
+        #                                   #hparams_file=str(model.output_dir/'hparams.pkl')
+        #                                   )
+        trainer.resume_from_checkpoint = checkpoints[-1]
     trainer.logger.log_hyperparams(model.hparams)
     trainer.test(model)
     return model
@@ -746,7 +751,7 @@ def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
     if 'hparams' in ckpt:
         args = argparse.Namespace(**ckpt['hparams'])
     else:
-        args = pickle_load(exp_dir/'hparams.pkl')
+        args = argparse.Namespace(**pickle_load(exp_dir/'hparams.pkl'))
     args.resume_from_checkpoint = str(ckpt_path)
     args.do_train = False
     args.output_dir = str(dest_dir)
