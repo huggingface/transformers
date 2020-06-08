@@ -698,6 +698,22 @@ def main(args):
     Path(args.output_dir).mkdir(exist_ok=True)
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
+
+    model: BaseTransformer = create_module(args)
+    trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
+    if not args.do_predict:
+        return model
+    model.hparams.test_checkpoint = ""
+    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
+    if checkpoints:
+        model.hparams.test_checkpoint = checkpoints[-1]
+        model = model.load_from_checkpoint(checkpoints[-1])
+    trainer.logger.log_hyperparams(model.hparams)
+    trainer.test(model)
+    return model
+
+
+def create_module(args) -> BaseTransformer:
     if args.no_teacher:
         assert not args.enc_only
         module_cls = SummarizationTrainer
@@ -708,37 +724,33 @@ def main(args):
     else:
         module_cls = SummarizationDistiller
     args.setup_cls: str = module_cls.__name__
-
-    model: BaseTransformer = module_cls(args)
-    trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
-    if not args.do_predict:
-        return model
-    model.hparams.test_checkpoint = ""
-    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
-
-    if checkpoints:
-        model.hparams.test_checkpoint = checkpoints[-1]
-        model = model.load_from_checkpoint(checkpoints[-1])
-    trainer.logger.log_hyperparams(model.hparams)
-    trainer.test(model)
+    model = module_cls(args)
     return model
 
 
 def eval_and_fix(args):
     Path(args.output_dir).mkdir(exist_ok=True)
-    if args.no_teacher:
-        assert not args.enc_only
-        module_cls = SummarizationTrainer
-    elif args.enc_only:
-        module_cls = EncoderDistiller
-    elif args.alpha_hid > 0:
-        module_cls = BrewerDistiller
-    else:
-        module_cls = SummarizationDistiller
-
-    model: BaseTransformer = module_cls(args)
-    trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
+    model: BaseTransformer = create_module(args)
+    trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=False)
     trainer.test(model)
+
+
+def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
+    exp_dir = ckpt_path.parent
+    if dest_dir is None:
+        dest_dir = exp_dir
+    clash = list(dest_dir.glob('test_generations*'))
+    if clash:
+        print(f'SKIPPING to avoid overwriting {clash}')
+    ckpt = torch.load(ckpt_path, map_location='cpu')
+    args = argparse.Namespace(**ckpt['hparams'])
+    args.resume_from_checkpoint = str(ckpt_path)
+    args.do_train = False
+    args.output_dir = str(dest_dir)
+    args.n_gpu = 1
+    args.eval_batch_size = 16
+    return eval_and_fix(args)
+
 
 
 if __name__ == "__main__":

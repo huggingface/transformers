@@ -15,7 +15,7 @@ from durbango import DEFAULT_DEVICE, pickle_load, pickle_save
 from transformers import BartTokenizer
 
 from .evaluate_cnn import run_generate
-from .finetune import eval_and_fix, main
+from .finetune import eval_and_fix, main, evaluate_checkpoint
 from .utils import PSEUDO_ID_SUFFIX, SummarizationDataset, summaries_for_file, clean_output_dir
 
 
@@ -155,12 +155,13 @@ class TestBartExamples(unittest.TestCase):
         transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(transformer_ckpts), len(ckpts))
         matches = pickle_load(model.output_dir / "ckpt_matches.pkl")
-
-        self.assertEqual(1, len(matches))
+        n_extra = 0  # more than 1 checkpoint saved, specified in lightning_base.py
+        self.assertEqual(1+n_extra, len(matches))
         removed = clean_output_dir(model.output_dir)
-        self.assertEqual(len(removed), 2)
+        self.assertEqual(len(removed), n_extra)
         new_transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(new_transformer_ckpts), 1)
+        evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
     def test_bdc_brewer(self):
         updates = dict(student_encoder_layers=2, student_decoder_layers=1, alpha_hid=2.0)
@@ -177,7 +178,9 @@ class TestBartExamples(unittest.TestCase):
         args.resume_from_checkpoint = str(ckpt_path)
         args.do_train = False
         args.output_dir = tempfile.mkdtemp(prefix="output_v2")
+
         eval_and_fix(args)
+
 
     def _bart_distiller_cli(self, updates, check_contents=True):
         default_updates = dict(
