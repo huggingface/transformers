@@ -235,10 +235,11 @@ def train_qa_retriever_epoch(model, dataset, tokenizer, optimizer, scheduler, ar
     st_time = time()
     for step, batch in enumerate(epoch_iterator):
         q_ids, q_mask, a_ids, a_mask = batch
-        loss = model(
+        pre_loss = model(
             q_ids, q_mask, a_ids, a_mask,
             checkpoint_batch_size=args.checkpoint_batch_size
         )
+        loss = pre_loss.sum() / pre_loss.shape[0]
         # optimizer
         loss.backward()
         optimizer.step()
@@ -303,7 +304,6 @@ def train_qa_retriever_joint_epoch(model, dataset_list, tokenizer, optimizer, sc
             )
             loc_loss = 0
             loc_steps = 0
-
 
 def evaluate_qa_retriever(model, dataset, tokenizer, args):
     model.eval()
@@ -376,7 +376,7 @@ def make_qa_s2s_model(model_name="facebook/bart-large", from_file=None, device="
         model.load_state_dict(param_dict['model'])
     return tokenizer, model
 
-def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, device="cuda:0"):
+def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, max_a_len=512, device="cuda:0"):
     q_ls = [q for q, a in qa_list]
     a_ls = [a for q, a in qa_list]
     q_toks = tokenizer.batch_encode_plus(q_ls, max_length=max_len, pad_to_max_length=True)
@@ -384,7 +384,7 @@ def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, device="cuda:0"):
         torch.LongTensor(q_toks['input_ids']).to(device),
         torch.LongTensor(q_toks['attention_mask']).to(device),
     )
-    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=max_len, pad_to_max_length=True)
+    a_toks = tokenizer.batch_encode_plus(a_ls, max_length=min(max_len, max_a_len), pad_to_max_length=True)
     a_ids, a_mask = (
         torch.LongTensor(a_toks['input_ids']).to(device),
         torch.LongTensor(a_toks['attention_mask']).to(device),
@@ -417,7 +417,8 @@ def train_qa_s2s_epoch(model, dataset, tokenizer, optimizer, scheduler, args, e=
     loc_loss = 0.0
     st_time = time()
     for step, batch_inputs in enumerate(epoch_iterator):
-        loss = model(**batch_inputs)[0]
+        pre_loss = model(**batch_inputs)[0]
+        loss = pre_loss.sum() / pre_loss.shape[0]
         loss.backward()
         # optimizer
         if step % args.backward_freq == 0:
@@ -438,6 +439,45 @@ def train_qa_s2s_epoch(model, dataset, tokenizer, optimizer, scheduler, args, e=
             )
             loc_loss = 0
             loc_steps = 0
+
+def eval_qa_s2s_epoch(model, dataset, tokenizer, args):
+    model.eval()
+    # make iterator
+    train_sampler = SequentialSampler(dataset)
+    model_collate_fn = functools.partial(
+        make_qa_s2s_batch,
+        tokenizer=tokenizer, max_len=args.max_length, device='cuda:0'
+    )
+    data_loader = DataLoader(
+        dataset, batch_size=args.batch_size,
+        sampler=train_sampler, collate_fn=model_collate_fn
+    )
+    epoch_iterator = tqdm(data_loader, desc="Iteration", disable=True)
+    # accumulate loss since last print
+    loc_steps = 0
+    loc_loss = 0.0
+    st_time = time()
+    with torch.no_grad():
+        for step, batch_inputs in enumerate(epoch_iterator):
+            pre_loss = model(**batch_inputs)[0]
+            loss = pre_loss.sum() / pre_loss.shape[0]
+            loc_loss += loss.item()
+            loc_steps += 1
+            if step % args.print_freq == 0:
+                print(
+                    "{:5d} of {:5d} \t L: {:.3f} \t -- {:.3f}".format(
+                        step,
+                        len(dataset) // args.batch_size,
+                        loc_loss / loc_steps,
+                        time() - st_time,
+                    )
+                )
+    print(
+        "Total \t L: {:.3f} \t -- {:.3f}".format(
+            loc_loss / loc_steps,
+            time() - st_time,
+        )
+    )
 
 # generate answer from input "question: ... context: <p> ..."
 def qa_s2s_generate(question_doc, qa_s2s_model, qa_s2s_tokenizer,
