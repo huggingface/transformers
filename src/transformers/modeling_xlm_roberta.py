@@ -25,6 +25,7 @@ from .modeling_roberta import (
     RobertaForMultipleChoice,
     RobertaForSequenceClassification,
     RobertaForTokenClassification,
+    RobertaForQuestionAnswering,
     RobertaModel,
 )
 
@@ -116,6 +117,20 @@ class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
 class XLMRobertaForTokenClassification(RobertaForTokenClassification):
     """
     This class overrides :class:`~transformers.RobertaForTokenClassification`. Please check the
+    superclass for the appropriate documentation alongside usage examples.
+    """
+
+    config_class = XLMRobertaConfig
+
+
+@add_start_docstrings(
+    """XLM-RoBERTa Model with a span classification head on top for extractive question-answering tasks like SQuAD (a 
+    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).""",
+    XLM_ROBERTA_START_DOCSTRING,
+)
+class XLMRobertaForQuestionAnswering(RobertaForQuestionAnswering):
+    """
+    This class overrides :class:`~transformers.RobertaForQuestionAnswering`. Please check the
     superclass for the appropriate documentation alongside usage examples.
     """
 

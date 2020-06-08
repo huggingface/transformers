@@ -123,6 +123,7 @@ from .modeling_xlm_roberta import (
     XLMRobertaForMultipleChoice,
     XLMRobertaForSequenceClassification,
     XLMRobertaForTokenClassification,
+    XLMRobertaForQuestionAnswering,
     XLMRobertaModel,
 )
 from .modeling_xlnet import (
@@ -235,6 +236,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (XLNetConfig, XLNetForQuestionAnsweringSimple),
         (FlaubertConfig, FlaubertForQuestionAnsweringSimple),
         (XLMConfig, XLMForQuestionAnsweringSimple),
+        (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
     ]
 )
 
