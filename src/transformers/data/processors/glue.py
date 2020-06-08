@@ -145,7 +145,7 @@ def _glue_convert_examples_to_features(
     for i in range(len(examples)):
         inputs = {k: batch_encoding[k][i] for k in batch_encoding}
 
-        feature = InputFeatures(**inputs, label=labels[i])
+        feature = InputFeatures(guid=examples[i].guid, **inputs, label=labels[i])
         features.append(feature)
 
     for i, example in enumerate(examples[:5]):
