@@ -69,9 +69,27 @@ def calculate_rouge(output_lns: List[str], reference_lns: List[str], all_stats=F
 
     result = aggregator.aggregate()
     if all_stats:
-        return result
+        return expanded_rouge_df(result)
     else:
         return {k: v.mid.fmeasure for k, v in result.items()}
+
+
+def dictify(rouge_obj) -> List:
+    records = []
+    for k, rouge_measurement in rouge_obj.items():
+        if k == 'rouge1': continue
+        for k1 in ['low', 'mid', 'high']:
+            if k1 != 'mid': continue
+            v1 = getattr(rouge_measurement, k1)
+            for k2 in ['precision', 'recall', 'fmeasure']:
+                records.append([k, k1, k2, getattr(v1, k2)])
+
+    return records
+
+
+def expanded_rouge_df(rouge_all) -> pd.DataFrame:
+    return pd.DataFrame(dictify(rouge_all), columns=['metric', 'k1', 'k2', 'val']).set_index(['metric', 'k2'])[
+        'val'].unstack('metric').rename_axis(None)
 
 
 class SummarizationTrainer(BaseTransformer):
