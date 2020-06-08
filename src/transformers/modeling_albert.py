@@ -26,7 +26,7 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from .configuration_albert import AlbertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
-from .modeling_utils import PreTrainedModel
+from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices
 
 
 logger = logging.getLogger(__name__)
@@ -199,14 +199,9 @@ class AlbertAttention(BertSelfAttention):
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
-        mask = torch.ones(self.num_attention_heads, self.attention_head_size)
-        heads = set(heads) - self.pruned_heads  # Convert to set and emove already pruned heads
-        for head in heads:
-            # Compute how many pruned heads are before the head and move the index accordingly
-            head = head - sum(1 if h < head else 0 for h in self.pruned_heads)
-            mask[head] = 0
-        mask = mask.view(-1).contiguous().eq(1)
-        index = torch.arange(len(mask))[mask].long()
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.num_attention_heads, self.attention_head_size, self.pruned_heads
+        )
 
         # Prune linear layers
         self.query = prune_linear_layer(self.query, index)
