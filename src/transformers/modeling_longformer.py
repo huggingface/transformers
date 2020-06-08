@@ -499,18 +499,16 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 class LongformerModel(RobertaModel):
     """
     This class overrides :class:`~transformers.RobertaModel` to provide the ability to process
-    long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer`_by
-    Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention combines a local (sliding window)
-    and global attention to extend to long documents without the O(n^2) increase in memory and compute.
+    long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer
+    <https://arxiv.org/abs/2004.05150>`_ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention
+    combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
+    memory and compute.
 
     The selfattention module `LongformerSelfAttention` implemented here supports the combination of local and
     global attention but it lacks support for autoregressive attention and dilated attention. Autoregressive
     and dilated attention are more relevant for autoregressive language modeling than finetuning on downstream
     tasks. Future release will add support for autoregressive attention, but the support for dilated attention
     requires a custom CUDA kernel to be memory and compute efficient.
-
-    .. _`Longformer: the Long-Document Transformer`:
-        https://arxiv.org/abs/2004.05150
 
     """
 
@@ -1154,7 +1152,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor`` of shape ``(1,)`, `optional`, returned when :obj:`labels` is provided):
+        loss (:obj:`torch.FloatTensor`` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
             Classification loss.
         classification_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
             `num_choices` is the second dimension of the input tensors. (see `input_ids` above).
