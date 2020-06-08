@@ -19,7 +19,7 @@ from typing import Iterable, List, NamedTuple, Optional, Union
 from transformers import AutoConfig, PretrainedConfig
 from transformers import __version__ as version
 
-from ..file_utils import is_tf_available, is_torch_available
+from ..file_utils import is_tf_available, is_torch_available, is_tpu_available
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -425,6 +425,10 @@ class Benchmark(ABC):
         return self.args.n_gpu > 0
 
     @property
+    def is_tpu(self):
+        return is_tpu_available() and not self.args.no_tpu
+
+    @property
     @abstractmethod
     def framework_version(self):
         pass
@@ -486,6 +490,10 @@ class Benchmark(ABC):
                 self.print_fn("======= INFERENCE - SPEED - RESULT =======")
                 self.print_results(inference_result_time)
                 self.save_to_csv(inference_result_time, self.args.inference_time_csv_file)
+                if self.is_tpu:
+                    self.print_fn(
+                        "TPU was used for inference. Note that the time after compilation stabilized (after ~10 inferences model.forward(..) calls) was measured."
+                    )
 
             if not self.args.no_memory:
                 self.print_fn("======= INFERENCE - MEMORY - RESULT =======")
@@ -501,6 +509,10 @@ class Benchmark(ABC):
                 self.print_fn("======= TRAIN - SPEED - RESULT =======")
                 self.print_results(train_result_time)
                 self.save_to_csv(train_result_time, self.args.train_time_csv_file)
+                if self.is_tpu:
+                    self.print_fn(
+                        "TPU was used for training. Note that the time after compilation stabilized (after ~10 train loss=model.forward(...) + loss.backward() calls) was measured."
+                    )
 
             if not self.args.no_memory:
                 self.print_fn("======= TRAIN - MEMORY - RESULT =======")
@@ -589,6 +601,10 @@ class Benchmark(ABC):
                     info["gpu_power_watts"] = py3nvml.nvmlDeviceGetPowerManagementLimit(handle) / 1000
                     info["gpu_performance_state"] = py3nvml.nvmlDeviceGetPerformanceState(handle)
                     py3nvml.nvmlShutdown()
+
+            info["use_tpu"] = self.is_tpu
+            # TODO(PVP): See if we can add more information about TPU
+            # see: https://github.com/pytorch/xla/issues/2180
 
             self._environment_info = info
         return self._environment_info
