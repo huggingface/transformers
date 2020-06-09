@@ -199,6 +199,9 @@ class BARTModelTest(ModelTesterMixin, unittest.TestCase):
             tiny(**inputs_dict)
 
 
+EN_CODE = 250004
+
+
 @require_torch
 class BartTranslationTests(unittest.TestCase):
     src_text = [
@@ -206,6 +209,7 @@ class BartTranslationTests(unittest.TestCase):
         " I ate lunch twice yesterday",
     ]
     tgt_text = ["Şeful ONU declară că nu există o soluţie militară în Siria", "to be padded"]
+    expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, EN_CODE]
 
     @classmethod
     def setUpClass(cls):
@@ -227,18 +231,24 @@ class BartTranslationTests(unittest.TestCase):
             model = model.half()
         return model
 
-    def test_enro_prepare_translation_batch(self):
-        expected_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]
+    def test_enro_tokenizer_prepare_translation_batch(self):
+
         batch = self.tokenizer.prepare_translation_batch(
-            self.src_text, tgt_texts=self.tgt_text, max_length=len(expected_tokens), return_tensors="pt"
+            self.src_text, tgt_texts=self.tgt_text, max_length=len(self.expected_src_tokens), return_tensors="pt"
         )
         self.assertIsInstance(batch, BatchEncoding)
 
         self.assertEqual((2, 14), batch["input_ids"].shape)
         self.assertEqual((2, 14), batch["attention_mask"].shape)
         result = batch["input_ids"].tolist()[0]
-        self.assertListEqual(expected_tokens, result)
+        self.assertListEqual(self.expected_src_tokens, result)
         self.assertEqual(2, batch["decoder_input_ids"][0, -2])  # EOS
+
+    def test_enro_tokenizer_batch_encode_plus(self):
+        raw = "UN Chief Says There Is No Military Solution in Syria"
+        ids = self.tokenizer.batch_encode_plus([raw])["input_ids"][0]
+
+        self.assertListEqual(self.expected_src_tokens, ids)
 
     @slow
     def test_enro_forward(self):
@@ -285,12 +295,6 @@ class BartTranslationTests(unittest.TestCase):
                 except AssertionError as e:
                     e.args += (name, k)
                     raise
-
-    def test_enro_tokenizer_batch_encode_plus(self):
-        raw = "UN Chief Says There Is No Military Solution in Syria"
-        ids = self.tokenizer.batch_encode_plus([raw])["input_ids"][0]
-        expected_result = [0, 8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250020]
-        self.assertListEqual(expected_result, ids)
 
     def test_mbart_fast_forward(self):
         config = BartConfig(

@@ -94,16 +94,11 @@ class MBartTokenizer(XLMRobertaTokenizer):
         "vi_VN": 250024,
         "zh_CN": 250025,
     }
-    cur_lang_code = lang_code_to_id['en_XX']
-    def _append_special_tokens_and_truncate(self, raw_text: str, lang_code: str, max_length: int,) -> List[int]:
-        tokenized_text: str = self.tokenize(raw_text)
-        ids: list = self.convert_tokens_to_ids(tokenized_text)[:max_length]
-        lang_id: int = self.lang_code_to_id[lang_code]
-        return ids + [self.eos_token_id, lang_id]
+    cur_lang_code = lang_code_to_id["en_XX"]
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
-        special_tokens = [self.cur_lang_code, self.eos_token_id]
+        special_tokens = [self.eos_token_id, self.cur_lang_code]
         if token_ids_1 is None:
             return token_ids_0 + special_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
@@ -134,7 +129,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
         if max_length is None:
             max_length = self.max_len
         self.cur_lang_code = self.lang_code_to_id[src_lang]
-        #encoder_ids: list = [self._append_special_tokens_and_truncate(t, src_lang, max_length - 2) for t in src_texts]
         model_inputs: BatchEncoding = self.batch_encode_plus(
             src_texts,
             add_special_tokens=True,
@@ -145,7 +139,6 @@ class MBartTokenizer(XLMRobertaTokenizer):
         if tgt_texts is None:
             return model_inputs
         self.cur_lang_code = self.lang_code_to_id[tgt_lang]
-        #decoder_ids = [self._append_special_tokens_and_truncate(t, tgt_lang, max_length - 2) for t in tgt_texts]
         decoder_inputs: BatchEncoding = self.batch_encode_plus(
             tgt_texts,
             add_special_tokens=True,
@@ -155,4 +148,5 @@ class MBartTokenizer(XLMRobertaTokenizer):
         )
         for k, v in decoder_inputs.items():
             model_inputs[f"decoder_{k}"] = v
+        self.cur_lang_code = self.lang_code_to_id[src_lang]
         return model_inputs
