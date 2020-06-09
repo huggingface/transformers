@@ -5,6 +5,7 @@ import logging
 import math
 import numpy as np
 import os
+import pandas as pd
 import pickle
 import time
 import sys
@@ -326,6 +327,30 @@ def evaluate_qa_retriever(model, dataset, tokenizer, args):
             tot_loss += loss.item()
         return tot_loss / (step + 1)
 
+def train_qa_retriever(qar_model, qar_tokenizer,
+                       qar_train_dset, qar_valid_dset,
+                       qar_args):
+    qar_optimizer = AdamW(qar_model.parameters(), lr=qar_args.learning_rate, eps=1e-8)
+    qar_scheduler = get_linear_schedule_with_warmup(
+            qar_optimizer,
+            num_warmup_steps=100,
+            num_training_steps= (qar_args.num_epochs + 1) * math.ceil(len(qar_train_dset) / qar_args.batch_size)
+    )
+    for e in range(qar_args.num_epochs):
+        train_qa_retriever_epoch(
+            qar_model, qar_train_dset, qar_tokenizer,
+            qar_optimizer, qar_scheduler, qar_args, e
+        )
+        m_save_dict = {
+            'model': qar_model.state_dict(),
+            'optimizer': qar_optimizer.state_dict(),
+            'scheduler': qar_scheduler.state_dict(),
+        }
+        print("Saving model {}".format(qar_args.model_save_name))
+        torch.save(m_save_dict, '{}_{}.pth'.format(qar_args.model_save_name, e))
+        eval_loss = evaluate_qa_retriever(qar_model, qar_valid_dset, qar_tokenizer, qar_args)
+        print("Evaluation loss epoch {:4d}: {:.3f}".format(e, eval_loss))
+
 ###############
 ### ELI5 seq2seq model training
 ###############
@@ -399,10 +424,13 @@ def make_qa_s2s_batch(qa_list, tokenizer, max_len=64, max_a_len=360, device="cud
     }
     return model_inputs
 
-def train_qa_s2s_epoch(model, dataset, tokenizer, optimizer, scheduler, args, e=0):
+def train_qa_s2s_epoch(model, dataset, tokenizer, optimizer, scheduler, args, e=0, curriculum=False):
     model.train()
     # make iterator
-    train_sampler = RandomSampler(dataset)
+    if curriculum:
+        train_sampler = SequentialSampler(dataset)
+    else:
+        train_sampler = RandomSampler(dataset)
     model_collate_fn = functools.partial(
         make_qa_s2s_batch,
         tokenizer=tokenizer, max_len=args.max_length, device='cuda:0'
@@ -478,6 +506,36 @@ def eval_qa_s2s_epoch(model, dataset, tokenizer, args):
             time() - st_time,
         )
     )
+
+def train_qa_s2s(qa_s2s_model, qa_s2s_tokenizer,
+                 s2s_train_dset, s2s_valid_dset,
+                 s2s_args):
+    s2s_optimizer = AdamW(qa_s2s_model.parameters(), lr=s2s_args.learning_rate, eps=1e-8)
+    s2s_scheduler = get_linear_schedule_with_warmup(
+            s2s_optimizer,
+            num_warmup_steps=400,
+            num_training_steps=(s2s_args.num_epochs + 1) * math.ceil(len(s2s_train_dset) / s2s_args.batch_size)
+    )
+    for e in range(s2s_args.num_epochs):
+        train_qa_s2s_epoch(
+            qa_s2s_model,
+            s2s_train_dset, qa_s2s_tokenizer,
+            s2s_optimizer, s2s_scheduler,
+            s2s_args, e,
+            curriculum=(e == 0),
+        )
+        m_save_dict = {
+            'model': qa_s2s_model.state_dict(),
+            'optimizer': s2s_optimizer.state_dict(),
+            'scheduler': s2s_scheduler.state_dict(),
+        }
+        print("Saving model {}".format(s2s_args.model_save_name))
+        eval_qa_s2s_epoch(
+                qa_s2s_model,
+                s2s_valid_dset, qa_s2s_tokenizer,
+                s2s_args
+        )
+        torch.save(m_save_dict, '{}_{}.pth'.format(s2s_args.model_save_name, e))
 
 # generate answer from input "question: ... context: <p> ..."
 def qa_s2s_generate(question_doc, qa_s2s_model, qa_s2s_tokenizer,
