@@ -674,6 +674,8 @@ class Benchmark(ABC):
             info = {}
             info["transformers_version"] = version
             info["framework"] = self.framework
+            if self.framework == "PyTorch":
+                info["use_torchscript"] = self.args.torchscript
             info["framework_version"] = self.framework_version
             info["python_version"] = platform.python_version()
             info["system"] = platform.system()
