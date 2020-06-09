@@ -203,7 +203,7 @@ EN_CODE = 250004
 
 
 @require_torch
-class BartTranslationTests(unittest.TestCase):
+class MBartIntegrationTests(unittest.TestCase):
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
         " I ate lunch twice yesterday",
@@ -219,10 +219,6 @@ class BartTranslationTests(unittest.TestCase):
         return cls
 
     @cached_property
-    def net_input_live(self):
-        return self.tokenizer.prepare_translation_batch(self.src_text, tgt_texts=self.tgt_text)
-
-    @cached_property
     def model(self):
         """Only load the model if needed."""
 
@@ -230,25 +226,6 @@ class BartTranslationTests(unittest.TestCase):
         if "cuda" in torch_device:
             model = model.half()
         return model
-
-    def test_enro_tokenizer_prepare_translation_batch(self):
-
-        batch = self.tokenizer.prepare_translation_batch(
-            self.src_text, tgt_texts=self.tgt_text, max_length=len(self.expected_src_tokens), return_tensors="pt"
-        )
-        self.assertIsInstance(batch, BatchEncoding)
-
-        self.assertEqual((2, 14), batch["input_ids"].shape)
-        self.assertEqual((2, 14), batch["attention_mask"].shape)
-        result = batch["input_ids"].tolist()[0]
-        self.assertListEqual(self.expected_src_tokens, result)
-        self.assertEqual(2, batch["decoder_input_ids"][0, -2])  # EOS
-
-    def test_enro_tokenizer_batch_encode_plus(self):
-        raw = "UN Chief Says There Is No Military Solution in Syria"
-        ids = self.tokenizer.batch_encode_plus([raw])["input_ids"][0]
-
-        self.assertListEqual(self.expected_src_tokens, ids)
 
     @slow
     def test_enro_forward(self):
@@ -315,6 +292,36 @@ class BartTranslationTests(unittest.TestCase):
         loss, logits, enc_features = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(logits.shape, expected_shape)
+
+
+@require_torch
+class MBartTokenizerTests(MBartIntegrationTests):
+    def test_enro_tokenizer_prepare_translation_batch(self):
+        batch = self.tokenizer.prepare_translation_batch(
+            self.src_text, tgt_texts=self.tgt_text, max_length=len(self.expected_src_tokens),
+        )
+        self.assertIsInstance(batch, BatchEncoding)
+
+        self.assertEqual((2, 14), batch.input_ids.shape)
+        self.assertEqual((2, 14), batch.attention_mask.shape)
+        result = batch.input_ids.tolist()[0]
+        self.assertListEqual(self.expected_src_tokens, result)
+        self.assertEqual(2, batch.decoder_input_ids[0, -2])  # EOS
+
+    def test_enro_tokenizer_batch_encode_plus(self):
+        ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
+        self.assertListEqual(self.expected_src_tokens, ids)
+
+    def test_enro_tokenizer_truncation(self):
+        src_text = ["this is gunna be a long sentence " * 20]
+        assert isinstance(src_text[0], str)
+        desired_max_length = 10
+        ids = self.tokenizer.prepare_translation_batch(
+            src_text, return_tensors=None, max_length=desired_max_length
+        ).input_ids[0]
+        self.assertEqual(ids[-2], 2)
+        self.assertEqual(ids[-1], EN_CODE)
+        self.assertEqual(len(ids), desired_max_length)
 
 
 @require_torch
