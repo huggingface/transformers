@@ -618,12 +618,13 @@ def make_qa_dense_index(qa_embedder, tokenizer, passages_dset,
             print(i, time() - st_time)
 
 # build a support document for the question out of Wikipedia snippets
-def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10):
+def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10, min_length=20):
     q_rep = embed_questions_for_retrieval([question], tokenizer, qa_embedder)
-    D, I = wiki_index.search(q_rep, n_results)
+    D, I = wiki_index.search(q_rep, 2 * n_results)
     res_passages = [wiki_passages[int(i)] for i in I[0]]
     support_doc = '<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
     res_list = [dict([(k, p[k]) for k in wiki_passages.column_names]) for p in res_passages]
+    res_list = [res for res in res_list if len(res['passage_text'].split()) > min_length][:n_results]
     for r, sc in zip(res_list, D[0]):
         r['score'] = float(sc)
     return support_doc, res_list
