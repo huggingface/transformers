@@ -20,6 +20,7 @@ import copy
 import json
 import logging
 import os
+import warnings
 from typing import Dict, Tuple
 
 from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
@@ -54,6 +55,13 @@ class PretrainedConfig(object):
     def __init__(self, **kwargs):
         # Attributes with defaults
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
+
+        if "output_attentions" in kwargs:
+            warnings.warn(
+                "The `output_attentions` in the configuration is deprecated and will be removed in a later version. "
+                "Please use `output_attention` as an argument to your model instead.",
+                FutureWarning,
+            )
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.use_cache = kwargs.pop("use_cache", True)  # Not used by all models
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
@@ -286,6 +294,13 @@ class PretrainedConfig(object):
 
         if hasattr(config, "pruned_heads"):
             config.pruned_heads = dict((int(key), value) for key, value in config.pruned_heads.items())
+
+        if "output_attentions" in kwargs:
+            warnings.warn(
+                "The `output_attentions` in the configuration is deprecated and will be removed in a later version. "
+                "Please use `output_attention` as an argument to your model instead.",
+                FutureWarning,
+            )
 
         # Update config with kwargs if needed
         to_remove = []
