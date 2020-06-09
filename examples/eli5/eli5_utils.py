@@ -65,7 +65,7 @@ def make_es_index_snippets(es_client, passages_dset, index_name='english_wiki_ki
         successes += ok
     print("Indexed %d documents" % (successes,))
 
-def query_es_index(question, es_client, index_name='english_wiki_kilt_snippets_100w', n_results=10):
+def query_es_index(question, es_client, index_name='english_wiki_kilt_snippets_100w', n_results=10, min_length=20):
     q = question.lower()
     banned = ['how', 'why', 'what', 'where', 'which', 'do', 'does', 'is', '?', 'eli5', 'eli5:']
     q = ' '.join([w for w in q.split() if w not in banned])
@@ -79,7 +79,7 @@ def query_es_index(question, es_client, index_name='english_wiki_kilt_snippets_1
                     "type": "cross_fields",
                 }
             },
-            "size": n_results,
+            "size": 2 * n_results,
         }
     )
     hits = response['hits']['hits']
@@ -89,6 +89,7 @@ def query_es_index(question, es_client, index_name='english_wiki_kilt_snippets_1
         r['passage_id'] = hit['_id']
         r['score'] = hit['_score']
         r['passage_text'] = hit['_source']['passage_text']
+    res_list = [res for res in res_list if len(res['passage_text'].split()) > min_length][:n_results]
     return support_doc, res_list
 
 ###############
@@ -641,12 +642,13 @@ def batch_query_qa_dense_index(questions, qa_embedder, tokenizer, wiki_passages,
     return support_doc_lst, all_res_lists
 
 # find nearest neighbors of an answer or declarative text in Wikipedia snippets
-def query_qa_dense_index_nn(passage, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10):
+def query_qa_dense_index_nn(passage, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10, min_length=20):
     a_rep = embed_passages_for_retrieval([passage], tokenizer, qa_embedder)
-    D, I = wiki_index.search(a_rep, n_results)
+    D, I = wiki_index.search(a_rep, 2 * n_results)
     res_passages = [wiki_passages[int(i)] for i in I[0]]
     support_doc = '<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
     res_list = [dict([(k, p[k]) for k in wiki_passages.column_names]) for p in res_passages]
+    res_list = [res for res in res_list if len(res['passage_text'].split()) > min_length][:n_results]
     for r, sc, i in zip(res_list, D[0], I[0]):
         r['passage_id'] = int(i)
         r['score'] = float(sc)
