@@ -407,7 +407,6 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
         (
             BertModel,
             BertForMaskedLM,
-            BertForMultipleChoice,
             BertForNextSentencePrediction,
             BertForPreTraining,
             BertForQuestionAnswering,
