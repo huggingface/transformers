@@ -59,7 +59,7 @@ class PretrainedConfig(object):
         if "output_attentions" in kwargs:
             warnings.warn(
                 "The `output_attentions` in the configuration is deprecated and will be removed in a later version. "
-                "Please use `output_attention` as an argument to your model instead.",
+                "Please use `output_attention` as an argument to your model's foward method instead.",
                 FutureWarning,
             )
         self.output_attentions = kwargs.pop("output_attentions", False)
@@ -298,7 +298,7 @@ class PretrainedConfig(object):
         if "output_attentions" in kwargs:
             warnings.warn(
                 "The `output_attentions` in the configuration is deprecated and will be removed in a later version. "
-                "Please use `output_attention` as an argument to your model instead.",
+                "Please use `output_attention` as an argument to your model's forward method instead.",
                 FutureWarning,
             )
 
