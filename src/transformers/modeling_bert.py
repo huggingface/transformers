@@ -952,7 +952,6 @@ class BertLMHeadModel(BertPreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
-        effective_batch_size = input_shape[0]
 
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
@@ -965,7 +964,7 @@ class BertLMHeadModel(BertPreTrainedModel):
 class BertForMaskedLM(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        
+
         self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config)
 
@@ -1067,9 +1066,7 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         #  add a dummy token
         assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
-        attention_mask = torch.cat(
-            [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1
-        )
+        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
         dummy_token = torch.full(
             (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
         )
