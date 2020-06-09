@@ -29,6 +29,8 @@ import nlp
 from transformers import AutoModel, AutoModelWithLMHead, AutoTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
 
+pd.set_option('display.max_colwidth', None)
+
 ###############
 ### Sparse index
 ###############
