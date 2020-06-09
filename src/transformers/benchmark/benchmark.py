@@ -113,7 +113,8 @@ class PyTorchBenchmark(Benchmark):
                         _train()
                 else:
                     # cpu and tpu
-                    memory = Memory(measure_peak_memory_cpu(_train))
+                    memory_bytes = measure_peak_memory_cpu(_train)
+                    memory = Memory(memory_bytes) if isinstance(memory_bytes, int) else memory_bytes
 
                 if self.args.trace_memory_line_by_line:
                     summary = stop_memory_tracing(trace)
@@ -218,7 +219,8 @@ class PyTorchBenchmark(Benchmark):
                         _forward()
                 else:
                     # cpu and tpu
-                    memory = Memory(measure_peak_memory_cpu(_forward))
+                    memory_bytes = measure_peak_memory_cpu(_forward)
+                    memory = Memory(memory_bytes) if isinstance(memory_bytes, int) else memory_bytes
 
                 if self.args.trace_memory_line_by_line:
                     summary = stop_memory_tracing(trace)
