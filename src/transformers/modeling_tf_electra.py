@@ -12,7 +12,7 @@ from .modeling_tf_utils import (
     get_initializer,
     keras_serializable,
     shape_list,
-)
+    TFSequenceClassificationLoss)
 from .tokenization_utils import BatchEncoding
 
 
@@ -756,7 +756,7 @@ class TFElectraClassificationHead(tf.keras.layers.Layer):
     the pooled output) e.g. for GLUE tasks. """,
     ELECTRA_START_DOCSTRING,
 )
-class TFElectraForSequenceClassification(TFElectraPreTrainedModel):
+class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -764,7 +764,7 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel):
         self.classifier = TFElectraClassificationHead(config=config)
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, labels, **kwargs):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
@@ -796,5 +796,7 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel):
         outputs = self.electra(inputs, **kwargs)
         logits = self.classifier(outputs[0])
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
-
+        if labels is not None:
+            loss = self.compute_loss(labels, logits)
+            outputs = (loss,) + outputs
         return outputs  # logits, (hidden_states), (attentions)
