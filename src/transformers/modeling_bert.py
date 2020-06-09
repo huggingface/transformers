@@ -911,11 +911,11 @@ class BertLMHeadModel(BertPreTrainedModel):
 
         Examples::
 
-            from transformers import BertTokenizer, BertForMaskedLM
+            from transformers import BertTokenizer, BertLMHeadModel
             import torch
 
             tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            model = BertWithLMHead.from_pretrained('bert-base-uncased')
+            model = BertLMHeadModel.from_pretrained('bert-base-uncased')
 
             input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             outputs = model(input_ids, labels=input_ids)
