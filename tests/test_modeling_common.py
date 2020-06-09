@@ -63,14 +63,13 @@ class ModelTesterMixin:
     test_missing_keys = True
     is_encoder_decoder = False
 
-
     def _prepare_for_class(self, inputs_dict, model_class):
         if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
             return {
-                k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous() for k,v in inputs_dict.items()
+                k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
+                for k, v in inputs_dict.items()
             }
         return inputs_dict
-
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -641,7 +640,8 @@ class ModelTesterMixin:
             inputs_dict.pop("decoder_input_ids", None)
 
         for model_class in self.all_model_classes:
-            if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values(): continue
+            if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+                continue
             model = model_class(config)
             model.to(torch_device)
             model.eval()
