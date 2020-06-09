@@ -311,8 +311,8 @@ class CommonFastTokenizerTest(unittest.TestCase):
 
     def assert_pretokenized_inputs(self, tokenizer_r, tokenizer_p):
         # Input string
-        pretokenized_input_simple = tokenizer_p.tokenize("This is a sample input")
-        pretokenized_input_pair = tokenizer_p.tokenize("This is a sample pair")
+        pretokenized_input_simple = "This is a sample input".split()
+        pretokenized_input_pair = "This is a sample pair".split()
 
         # Test encode for pretokenized inputs
         output_r = tokenizer_r.encode(pretokenized_input_simple, is_pretokenized=True)
