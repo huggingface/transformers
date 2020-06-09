@@ -26,7 +26,7 @@ from transformers import (
     MODEL_WITH_LM_HEAD_MAPPING,
     PretrainedConfig,
     is_torch_available,
-    is_tpu_available,
+    is_torch_tpu_available,
 )
 
 from .benchmark_utils import Benchmark, Memory, measure_peak_memory_cpu, start_memory_tracing, stop_memory_tracing
@@ -106,7 +106,7 @@ class PyTorchBenchmark(Benchmark):
 
                         # calculate loss and do backpropagation
                         _train()
-                elif not self.args.no_tpu and is_tpu_available():
+                elif not self.args.no_tpu and is_torch_tpu_available():
                     # tpu
                     raise NotImplementedError(
                         "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `args.no_memory=True`"
@@ -134,7 +134,7 @@ class PyTorchBenchmark(Benchmark):
 
                 return memory, summary
             else:
-                if (not self.args.no_tpu and is_tpu_available()) or self.args.torchscript:
+                if (not self.args.no_tpu and is_torch_tpu_available()) or self.args.torchscript:
                     # run additional 10 times to stabilize compilation for tpu and torchscript
                     logger.info("Do inference on TPU or torchscript. Running model 5 times to stabilize compilation")
                     timeit.repeat(
@@ -144,7 +144,7 @@ class PyTorchBenchmark(Benchmark):
                 # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
                 runtimes = timeit.repeat(_train, repeat=self.args.repeat, number=10,)
 
-                if not self.args.no_tpu and is_tpu_available() and self.args.tpu_print_metrics:
+                if not self.args.no_tpu and is_torch_tpu_available() and self.args.tpu_print_metrics:
                     import torch_xla.debug.metrics as met
 
                     self.print_fn(met.metrics_report())
@@ -217,7 +217,7 @@ class PyTorchBenchmark(Benchmark):
 
                         # run forward
                         _forward()
-                elif not self.args.no_tpu and is_tpu_available():
+                elif not self.args.no_tpu and is_torch_tpu_available():
                     # tpu
                     raise NotImplementedError(
                         "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `args.no_memory=True`"
@@ -245,7 +245,7 @@ class PyTorchBenchmark(Benchmark):
                 return memory, summary
             else:
 
-                if (not self.args.no_tpu and is_tpu_available()) or self.args.torchscript:
+                if (not self.args.no_tpu and is_torch_tpu_available()) or self.args.torchscript:
                     # run additional 10 times to stabilize compilation for tpu and torchscript
                     logger.info("Do inference on TPU or torchscript. Running model 5 times to stabilize compilation")
                     timeit.repeat(
@@ -255,7 +255,7 @@ class PyTorchBenchmark(Benchmark):
                 # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
                 runtimes = timeit.repeat(_forward, repeat=self.args.repeat, number=10,)
 
-                if not self.args.no_tpu and is_tpu_available() and self.args.tpu_print_metrics:
+                if not self.args.no_tpu and is_torch_tpu_available() and self.args.tpu_print_metrics:
                     import torch_xla.debug.metrics as met
 
                     self.print_fn(met.metrics_report())

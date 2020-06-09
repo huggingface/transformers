@@ -22,7 +22,7 @@ from typing import Callable, Iterable, List, NamedTuple, Optional, Union
 from transformers import AutoConfig, PretrainedConfig
 from transformers import __version__ as version
 
-from ..file_utils import is_tf_available, is_torch_available, is_tpu_available
+from ..file_utils import is_tf_available, is_torch_available, is_torch_tpu_available
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -550,7 +550,7 @@ class Benchmark(ABC):
 
     @property
     def is_tpu(self):
-        return is_tpu_available() and not self.args.no_tpu
+        return is_torch_tpu_available() and not self.args.no_tpu
 
     @property
     @abstractmethod

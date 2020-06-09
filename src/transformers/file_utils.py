@@ -76,11 +76,11 @@ try:
     tpu_device = xm.xla_device()
 
     if _torch_available:
-        _tpu_available = True  # pylint: disable=
+        _torch_tpu_available = True  # pylint: disable=
     else:
-        _tpu_available = False
+        _torch_tpu_available = False
 except ImportError:
-    _tpu_available = False
+    _torch_tpu_available = False
 
 
 default_cache_path = os.path.join(torch_cache_home, "transformers")
@@ -113,8 +113,8 @@ def is_tf_available():
     return _tf_available
 
 
-def is_tpu_available():
-    return _tpu_available
+def is_torch_tpu_available():
+    return _torch_tpu_available
 
 
 def add_start_docstrings(*docstr):

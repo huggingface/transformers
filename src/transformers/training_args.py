@@ -5,13 +5,13 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 
-from .file_utils import cached_property, is_torch_available, is_tpu_available, torch_required
+from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
 
 
 if is_torch_available():
     import torch
 
-if is_tpu_available():
+if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
 
@@ -166,7 +166,7 @@ class TrainingArguments:
         if self.no_cuda:
             device = torch.device("cpu")
             n_gpu = 0
-        elif is_tpu_available():
+        elif is_torch_tpu_available():
             device = xm.xla_device()
             n_gpu = 0
         elif self.local_rank == -1:
