@@ -314,12 +314,11 @@ class TFModelTesterMixin:
         )
 
         for model_class in self.all_model_classes:
-            config.output_attentions = True
+            inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
             model = model_class(config)
             outputs = model(inputs_dict)
             attentions = [t.numpy() for t in outputs[-1]]
-            self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
@@ -331,7 +330,6 @@ class TFModelTesterMixin:
             if self.is_encoder_decoder:
                 self.assertEqual(out_len % 2, 0)
                 decoder_attentions = outputs[(out_len // 2) - 1]
-                self.assertEqual(model.config.output_attentions, True)
                 self.assertEqual(model.config.output_hidden_states, False)
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
@@ -339,13 +337,25 @@ class TFModelTesterMixin:
                     [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
                 )
 
-            # Check attention is always last and order is fine
+            # Check that output attentions can also be changed via the config
+            del inputs_dict["output_attentions"]
             config.output_attentions = True
+            model = model_class(config)
+            outputs = model(inputs_dict)
+            attentions = [t.numpy() for t in outputs[-1]]
+            self.assertEqual(model.config.output_hidden_states, False)
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
             config.output_hidden_states = True
             model = model_class(config)
             outputs = model(inputs_dict)
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
-            self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, True)
 
             attentions = [t.numpy() for t in outputs[-1]]
@@ -360,11 +370,9 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
-            config.output_attentions = False
             model = model_class(config)
             outputs = model(inputs_dict)
             hidden_states = [t.numpy() for t in outputs[-1]]
-            self.assertEqual(model.config.output_attentions, False)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
             self.assertListEqual(
