@@ -148,6 +148,9 @@ def perturb_past(
     for i in range(num_iterations):
         print("Iteration ", i + 1)
         curr_perturbation = [torch.from_numpy(p_).requires_grad_(True).to(device=device) for p_ in grad_accumulator]
+        # make sure p_.grad is not None
+        for p_ in curr_perturbation:
+            p_.retain_grad()
 
         # Compute hidden using perturbed past
         perturbed_past = list(map(add, past, curr_perturbation))
