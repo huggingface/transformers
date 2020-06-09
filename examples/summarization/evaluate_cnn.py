@@ -21,10 +21,7 @@ def generate_summaries(
     examples: list, out_file: str, model_name: str, batch_size: int = 8, device: str = DEFAULT_DEVICE
 ):
     fout = Path(out_file).open("w", encoding="utf-8")
-    try:
-        model = AutoModelWithLMHead.from_pretrained(model_name).to(device)
-    except Exception as err:
-        return err
+    model = AutoModelWithLMHead.from_pretrained(model_name).to(device)
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
@@ -36,13 +33,12 @@ def generate_summaries(
     for batch in tqdm(list(chunks(examples, batch_size))):
         if "t5" in model_name:
             batch = [model.config.prefix + text for text in batch]
-        dct = tokenizer.batch_encode_plus(batch, max_length=1024, return_tensors="pt", pad_to_max_length=True)
+        dct = tokenizer.batch_encode_plus(batch, max_length=1024, return_tensors="pt", pad_to_max_length=True).to(
+            device
+        )
+        summaries = model.generate(**dct)
 
-        input_ids = dct["input_ids"].to(device)
-        attention_mask = dct["attention_mask"].to(device)
-        summaries = model.generate(input_ids=input_ids, attention_mask=attention_mask)
-
-        dec = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summaries]
+        dec = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         for hypothesis in dec:
             fout.write(hypothesis + "\n")
             fout.flush()
