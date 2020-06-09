@@ -73,6 +73,13 @@ BertForPreTraining
     :members:
 
 
+BertLMHeadModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BertLMHeadModel
+    :members:
+
+
 BertForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 

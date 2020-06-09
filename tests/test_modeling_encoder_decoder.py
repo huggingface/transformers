@@ -70,7 +70,6 @@ class EncoderDecoderModelTest(unittest.TestCase):
             "decoder_token_labels": decoder_token_labels,
             "decoder_choice_labels": decoder_choice_labels,
             "encoder_hidden_states": encoder_hidden_states,
-            "lm_labels": decoder_token_labels,
             "labels": decoder_token_labels,
         }
 
@@ -288,38 +287,6 @@ class EncoderDecoderModelTest(unittest.TestCase):
         self.assertEqual(outputs_encoder_decoder[1].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)))
         self.assertEqual(outputs_encoder_decoder[2].shape, (input_ids.shape + (config.hidden_size,)))
 
-    def create_and_check_bert_encoder_decoder_model_lm_labels(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        encoder_hidden_states,
-        decoder_config,
-        decoder_input_ids,
-        decoder_attention_mask,
-        lm_labels,
-        **kwargs
-    ):
-        encoder_model = BertModel(config)
-        decoder_model = BertForMaskedLM(decoder_config)
-        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
-        enc_dec_model.to(torch_device)
-        outputs_encoder_decoder = enc_dec_model(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
-            lm_labels=lm_labels,
-        )
-
-        lm_loss = outputs_encoder_decoder[0]
-        self.check_loss_output(lm_loss)
-        # check that backprop works
-        lm_loss.backward()
-
-        self.assertEqual(outputs_encoder_decoder[1].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,)))
-        self.assertEqual(outputs_encoder_decoder[2].shape, (input_ids.shape + (config.hidden_size,)))
-
     def create_and_check_bert_encoder_decoder_model_generate(self, input_ids, config, decoder_config, **kwargs):
         encoder_model = BertModel(config)
         decoder_model = BertForMaskedLM(decoder_config)
@@ -355,10 +322,6 @@ class EncoderDecoderModelTest(unittest.TestCase):
     def test_bert_encoder_decoder_model_labels(self):
         input_ids_dict = self.prepare_config_and_inputs_bert()
         self.create_and_check_bert_encoder_decoder_model_labels(**input_ids_dict)
-
-    def test_bert_encoder_decoder_model_lm_labels(self):
-        input_ids_dict = self.prepare_config_and_inputs_bert()
-        self.create_and_check_bert_encoder_decoder_model_lm_labels(**input_ids_dict)
 
     def test_bert_encoder_decoder_model_generate(self):
         input_ids_dict = self.prepare_config_and_inputs_bert()

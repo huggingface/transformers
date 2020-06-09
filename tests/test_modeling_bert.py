@@ -34,6 +34,7 @@ if is_torch_available():
         BertForSequenceClassification,
         BertForTokenClassification,
         BertForMultipleChoice,
+        BertLMHeadModel,
     )
     from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -210,6 +211,24 @@ class BertModelTester:
             list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
         )
         self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
+
+    def create_and_check_bert_for_autoregressive_lm(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = BertLMHeadModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        loss, prediction_scores = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
+        )
+        result = {
+            "loss": loss,
+            "prediction_scores": prediction_scores,
+        }
+        self.parent.assertListEqual(
+            list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+        )
+        self.check_loss_output(result)
 
     def create_and_check_bert_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -459,6 +478,10 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
             encoder_hidden_states,
             encoder_attention_mask,
         )
+
+    def test_for_autoregressive_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_bert_for_autoregressive_lm(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
