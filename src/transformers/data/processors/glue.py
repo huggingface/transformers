@@ -83,10 +83,7 @@ if is_tf_available():
             for ex in features:
                 if ex.token_type_ids is None:
                     yield (
-                        {
-                            "input_ids": ex.input_ids,
-                            "attention_mask": ex.attention_mask,
-                        },
+                        {"input_ids": ex.input_ids, "attention_mask": ex.attention_mask,},
                         ex.label,
                     )
                 else:
@@ -99,19 +96,7 @@ if is_tf_available():
                         ex.label,
                     )
 
-        if features[0].token_type_ids is None:
-            ds = tf.data.Dataset.from_generator(
-                gen,
-                ({"input_ids": tf.int32, "attention_mask": tf.int32}, tf.int64),
-                (
-                    {
-                        "input_ids": tf.TensorShape([None]),
-                        "attention_mask": tf.TensorShape([None]),
-                    },
-                    tf.TensorShape([]),
-                ),
-            )
-        else:
+        if "token_type_ids" in tokenizer.model_input_names:
             ds = tf.data.Dataset.from_generator(
                 gen,
                 ({"input_ids": tf.int32, "attention_mask": tf.int32, "token_type_ids": tf.int32}, tf.int64),
@@ -124,7 +109,16 @@ if is_tf_available():
                     tf.TensorShape([]),
                 ),
             )
-        
+        else:
+            ds = tf.data.Dataset.from_generator(
+                gen,
+                ({"input_ids": tf.int32, "attention_mask": tf.int32}, tf.int64),
+                (
+                    {"input_ids": tf.TensorShape([None]), "attention_mask": tf.TensorShape([None]),},
+                    tf.TensorShape([]),
+                ),
+            )
+
         return ds
 
 
