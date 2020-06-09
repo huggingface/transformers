@@ -9,12 +9,12 @@ wget https://s3.amazonaws.com/datasets.huggingface.co/summarization/cnn_dm.tgz
 tar -xzvf cnn_dm.tgz
 ```
 
-this should make a directory called cnn_dm/ with files like `test.source`. 
+this should make a directory called cnn_dm/ with files like `test.source`.
 To use your own data, copy that files format. Each article to be summarized is on its own line.
 
 #### For T5 models
-First, you need to download the CNN data. It's about ~400 MB and can be downloaded by 
-running 
+First, you need to download the CNN data. It's about ~400 MB and can be downloaded by
+running
 
 ```bash
 python download_cnn_daily_mail.py cnn_articles_input_data.txt cnn_articles_reference_summaries.txt
@@ -29,32 +29,22 @@ wc -l cnn_articles_reference_summaries.txt # should print 11490
 
 ### Evaluation
 
-#### For BART models
 To create summaries for each article in dataset, run:
 ```bash
-python evaluate_cnn.py <path_to_test.source> cnn_test_summaries.txt
-```
-the default batch size, 8, fits in 16GB GPU memory, but may need to be adjusted to fit your system.
-
-#### For T5 models
-To create summaries for each article in dataset, run:
-```bash
-python evaluate_cnn.py cnn_articles_input_data.txt cnn_generated_articles_summaries.txt cnn_articles_reference_summaries.txt rouge_score.txt
+python evaluate_cnn.py <path_to_test.source> test_generations.txt <model-name>
 ```
 The default batch size, 8, fits in 16GB GPU memory, but may need to be adjusted to fit your system.
-The rouge scores "rouge1, rouge2, rougeL" are automatically created and saved in ``rouge_score.txt``.
 
 ### Training
-#### BART models
-Run/modify `finetune_bart.sh`
-
-#### T5 models
-Run/modify `finetune_t5.sh`
-
-### Where is the code?
-The core model is in `src/transformers/modeling_bart.py` and `src/transformers/modeling_t5.py`. This directory only contains examples.
+Run/modify `finetune_bart.sh` or `finetune_t5.sh`
 
 ## (WIP) Rouge Scores
+
+To create summaries for each article in dataset and also calculate rouge scores run:
+```bash
+python evaluate_cnn.py <path_to_test.source> test_generations.txt <model-name> --reference_path <path_to_correct_summaries> --score_path <path_to_save_rouge_scores>
+```
+The rouge scores "rouge1, rouge2, rougeL" are automatically created and saved in ``<path_to_save_rouge_scores>``.
 
 ### Stanford CoreNLP Setup
 ```
