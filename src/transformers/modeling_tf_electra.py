@@ -764,7 +764,17 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
         self.classifier = TFElectraClassificationHead(config=config)
 
     @add_start_docstrings_to_callable(ELECTRA_INPUTS_DOCSTRING)
-    def call(self, inputs, labels, **kwargs):
+    def call(
+            self,
+            input_ids=None,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            labels=None,
+            training=False,
+    ):
         r"""
     Returns:
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
@@ -793,7 +803,15 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
         logits = outputs[0]
 
         """
-        outputs = self.electra(inputs, **kwargs)
+        outputs = self.electra(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            training=training,
+        )
         logits = self.classifier(outputs[0])
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
         if labels is not None:
