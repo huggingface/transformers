@@ -20,25 +20,26 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
     from transformers import (
         AlbertConfig,
         AlbertModel,
+        AlbertForPreTraining,
         AlbertForMaskedLM,
         AlbertForSequenceClassification,
         AlbertForTokenClassification,
         AlbertForQuestionAnswering,
     )
-    from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
 class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (AlbertModel, AlbertForMaskedLM) if is_torch_available() else ()
+    all_model_classes = (AlbertModel, AlbertForPreTraining, AlbertForMaskedLM) if is_torch_available() else ()
 
     class AlbertModelTester(object):
         def __init__(
@@ -151,6 +152,30 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
 
+        def create_and_check_albert_for_pretraining(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            model = AlbertForPreTraining(config=config)
+            model.to(torch_device)
+            model.eval()
+            loss, prediction_scores, sop_scores = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                labels=token_labels,
+                sentence_order_label=sequence_labels,
+            )
+            result = {
+                "loss": loss,
+                "prediction_scores": prediction_scores,
+                "sop_scores": sop_scores,
+            }
+            self.parent.assertListEqual(
+                list(result["prediction_scores"].size()), [self.batch_size, self.seq_length, self.vocab_size]
+            )
+            self.parent.assertListEqual(list(result["sop_scores"].size()), [self.batch_size, config.num_labels])
+            self.check_loss_output(result)
+
         def create_and_check_albert_for_masked_lm(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
@@ -158,7 +183,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
             )
             result = {
                 "loss": loss,
@@ -252,6 +277,10 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_albert_model(*config_and_inputs)
 
+    def test_for_pretraining(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_albert_for_pretraining(*config_and_inputs)
+
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_albert_for_masked_lm(*config_and_inputs)
@@ -266,6 +295,6 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = AlbertModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = AlbertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

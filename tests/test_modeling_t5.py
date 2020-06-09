@@ -20,13 +20,13 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
     import torch
     from transformers import T5Config, T5Model, T5ForConditionalGeneration
-    from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.tokenization_t5 import T5Tokenizer
 
 
@@ -206,7 +206,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 input_ids=input_ids,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
-                lm_labels=lm_labels,
+                labels=lm_labels,
             )
             loss, prediction_scores, _, _ = outputs
             self.parent.assertEqual(len(outputs), 4)
@@ -227,7 +227,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             # first forward pass
-            output, past_key_value_states = model(input_ids)
+            output, past_key_value_states = model(input_ids, use_cache=True)
 
             # create hypothetical next token and extent to next_input_ids
             next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -235,8 +235,8 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             # append to next input_ids and
             next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
-            output_from_no_past, _ = model(next_input_ids)
-            output_from_past, _ = model(next_tokens, past_key_value_states=past_key_value_states)
+            output_from_no_past = model(next_input_ids)[0]
+            output_from_past = model(next_tokens, past_key_value_states=past_key_value_states)[0]
 
             # select random slice
             random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -260,7 +260,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             attn_mask[:, half_seq_length:] = 0
 
             # first forward pass
-            output, past_key_value_states = model(input_ids, attention_mask=attn_mask)
+            output, past_key_value_states = model(input_ids, attention_mask=attn_mask, use_cache=True)
 
             # create hypothetical next token and extent to next_input_ids
             next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -277,10 +277,10 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
             )
 
             # get two different outputs
-            output_from_no_past, _ = model(next_input_ids, attention_mask=attn_mask)
-            output_from_past, _ = model(
+            output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]
+            output_from_past = model(
                 next_tokens, past_key_value_states=past_key_value_states, attention_mask=attn_mask
-            )
+            )[0]
 
             # select random slice
             random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -293,17 +293,26 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
         def create_t5_and_check_t5_generate_with_past_key_value_states(
             self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,
         ):
-            config.num_layers = 1
             model = T5ForConditionalGeneration(config=config)
             model.to(torch_device)
             model.eval()
             torch.manual_seed(0)
-            model.set_output_past(False)
-            output_without_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
+            output_without_past_cache = model.generate(
+                input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
+            )
             torch.manual_seed(0)
-            model.set_output_past(True)
             output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
             self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
+
+        def create_and_check_t5_model_fp16_forward(
+            self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels,
+        ):
+            model = T5Model(config=config)
+            model.to(torch_device)
+            model.half()
+            model.eval()
+            output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)[0]
+            self.parent.assertFalse(torch.isnan(output).any().item())
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -321,6 +330,7 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
                 "attention_mask": attention_mask,
                 "decoder_input_ids": decoder_input_ids,
                 "decoder_attention_mask": decoder_attention_mask,
+                "use_cache": False,
             }
             return config, inputs_dict
 
@@ -355,10 +365,15 @@ class T5ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_t5_and_check_t5_generate_with_past_key_value_states(*config_and_inputs)
 
+    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    def test_t5_model_fp16_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_t5_model_fp16_forward(*config_and_inputs)
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(T5_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = T5Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = T5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -429,6 +444,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         )
 
         input_ids = tok.encode(model.config.prefix + original_input, return_tensors="pt")
+        input_ids = input_ids.to(torch_device)
 
         output = model.generate(
             input_ids=input_ids,
@@ -456,6 +472,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         expected_translation = "Cette section d'images provenant de l'enregistrement infrarouge effectué par le télescope Spitzer montre un « portrait familial » de générations innombrables de étoiles : les plus anciennes sont observées sous forme de pointes bleues, alors que les « nouveau-nés » de couleur rose dans la salle des accouchements doivent être plus difficiles "
 
         input_ids = tok.encode(model.config.prefix + original_input, return_tensors="pt")
+        input_ids = input_ids.to(torch_device)
 
         output = model.generate(
             input_ids=input_ids,
@@ -483,6 +500,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         expected_translation = "Taco Bell a declarat că intenţionează să adauge 2 000 de locaţii în SUA până în 2022."
 
         input_ids = tok.encode(model.config.prefix + original_input, return_tensors="pt")
+        input_ids = input_ids.to(torch_device)
 
         output = model.generate(
             input_ids=input_ids,

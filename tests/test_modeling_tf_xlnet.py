@@ -21,7 +21,7 @@ from transformers import XLNetConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -33,7 +33,7 @@ if is_tf_available():
         TFXLNetForSequenceClassification,
         TFXLNetForTokenClassification,
         TFXLNetForQuestionAnsweringSimple,
-        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP,
+        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
 
@@ -410,11 +410,12 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(TF_XLNET_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = TFXLNetModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFXLNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_tf
 class TFXLNetModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlnet_base_cased(self):

@@ -67,7 +67,8 @@ class ElectraTokenizer(BertTokenizer):
 
 class ElectraTokenizerFast(BertTokenizerFast):
     r"""
-    Constructs an Electra Fast tokenizer.
+    Constructs a "Fast" Electra Fast tokenizer (backed by HuggingFace's `tokenizers` library).
+
     :class:`~transformers.ElectraTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
     tokenization: punctuation splitting + wordpiece.
 

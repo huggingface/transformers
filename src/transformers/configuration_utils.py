@@ -20,7 +20,7 @@ import copy
 import json
 import logging
 import os
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
 
@@ -37,7 +37,6 @@ class PretrainedConfig(object):
             It only affects the model's configuration.
 
         Class attributes (overridden by derived classes):
-            - ``pretrained_config_archive_map``: a python ``dict`` with `shortcut names` (string) as keys and `url` (string) of associated pretrained model configurations as values.
             - ``model_type``: a string that identifies the model type, that we serialize into the JSON file, and that we use to recreate the correct object in :class:`~transformers.AutoConfig`.
 
         Args:
@@ -52,14 +51,13 @@ class PretrainedConfig(object):
             torchscript (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Is the model used with Torchscript (for PyTorch models).
     """
-    pretrained_config_archive_map = {}  # type: Dict[str, str]
-    model_type = ""  # type: str
+    model_type: str = ""
 
     def __init__(self, **kwargs):
         # Attributes with defaults
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
-        self.output_past = kwargs.pop("output_past", True)  # Not used by all models
+        self.use_cache = kwargs.pop("use_cache", True)  # Not used by all models
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.pruned_heads = kwargs.pop("pruned_heads", {})
@@ -86,11 +84,14 @@ class PretrainedConfig(object):
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
         self.finetuning_task = kwargs.pop("finetuning_task", None)
-        self.num_labels = kwargs.pop("num_labels", 2)
-        self.id2label = kwargs.pop("id2label", {i: "LABEL_{}".format(i) for i in range(self.num_labels)})
-        self.id2label = dict((int(key), value) for key, value in self.id2label.items())
-        self.label2id = kwargs.pop("label2id", dict(zip(self.id2label.values(), self.id2label.keys())))
-        self.label2id = dict((key, int(value)) for key, value in self.label2id.items())
+        self.id2label = kwargs.pop("id2label", None)
+        self.label2id = kwargs.pop("label2id", None)
+        if self.id2label is not None:
+            kwargs.pop("num_labels", None)
+            self.id2label = dict((int(key), value) for key, value in self.id2label.items())
+            # Keys are always strings in JSON so convert ids to int here.
+        else:
+            self.num_labels = kwargs.pop("num_labels", 2)
 
         # Tokenizer arguments TODO: eventually tokenizer and models should share the same config
         self.prefix = kwargs.pop("prefix", None)
@@ -115,15 +116,12 @@ class PretrainedConfig(object):
 
     @property
     def num_labels(self):
-        return self._num_labels
+        return len(self.id2label)
 
     @num_labels.setter
     def num_labels(self, num_labels):
-        self._num_labels = num_labels
-        self.id2label = {i: "LABEL_{}".format(i) for i in range(self.num_labels)}
-        self.id2label = dict((int(key), value) for key, value in self.id2label.items())
+        self.id2label = {i: "LABEL_{}".format(i) for i in range(num_labels)}
         self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
-        self.label2id = dict((key, int(value)) for key, value in self.label2id.items())
 
     def save_pretrained(self, save_directory):
         """
@@ -141,7 +139,7 @@ class PretrainedConfig(object):
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 
-        self.to_json_file(output_config_file)
+        self.to_json_file(output_config_file, use_diff=True)
         logger.info("Configuration saved in {}".format(output_config_file))
 
     @classmethod
@@ -204,9 +202,7 @@ class PretrainedConfig(object):
         return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
-    def get_config_dict(
-        cls, pretrained_model_name_or_path: str, pretrained_config_archive_map: Optional[Dict] = None, **kwargs
-    ) -> Tuple[Dict, Dict]:
+    def get_config_dict(cls, pretrained_model_name_or_path: str, **kwargs) -> Tuple[Dict, Dict]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used
         for instantiating a Config using `from_dict`.
@@ -214,8 +210,6 @@ class PretrainedConfig(object):
         Parameters:
             pretrained_model_name_or_path (:obj:`string`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
-            pretrained_config_archive_map: (:obj:`Dict[str, str]`, `optional`) Dict:
-                A map of `shortcut names` to `url`. By default, will use the current class attribute.
 
         Returns:
             :obj:`Tuple[Dict, Dict]`: The dictionary that will be used to instantiate the configuration object.
@@ -227,17 +221,12 @@ class PretrainedConfig(object):
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
 
-        if pretrained_config_archive_map is None:
-            pretrained_config_archive_map = cls.pretrained_config_archive_map
-
-        if pretrained_model_name_or_path in pretrained_config_archive_map:
-            config_file = pretrained_config_archive_map[pretrained_model_name_or_path]
-        elif os.path.isdir(pretrained_model_name_or_path):
+        if os.path.isdir(pretrained_model_name_or_path):
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
         else:
-            config_file = hf_bucket_url(pretrained_model_name_or_path, postfix=CONFIG_NAME)
+            config_file = hf_bucket_url(pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False)
 
         try:
             # Load from URL or cache if already cached
@@ -255,21 +244,11 @@ class PretrainedConfig(object):
             config_dict = cls._dict_from_json_file(resolved_config_file)
 
         except EnvironmentError:
-            if pretrained_model_name_or_path in pretrained_config_archive_map:
-                msg = "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
-                    config_file
-                )
-            else:
-                msg = (
-                    "Can't load '{}'. Make sure that:\n\n"
-                    "- '{}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
-                    "- or '{}' is the correct path to a directory containing a '{}' file\n\n".format(
-                        pretrained_model_name_or_path,
-                        pretrained_model_name_or_path,
-                        pretrained_model_name_or_path,
-                        CONFIG_NAME,
-                    )
-                )
+            msg = (
+                f"Can't load config for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {CONFIG_NAME} file\n\n"
+            )
             raise EnvironmentError(msg)
 
         except json.JSONDecodeError:
@@ -353,6 +332,29 @@ class PretrainedConfig(object):
     def __repr__(self):
         return "{} {}".format(self.__class__.__name__, self.to_json_string())
 
+    def to_diff_dict(self):
+        """
+        Removes all attributes from config which correspond to the default
+        config attributes for better readability and serializes to a Python
+        dictionary.
+
+        Returns:
+            :obj:`Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        config_dict = self.to_dict()
+
+        # get the default config dict
+        default_config_dict = PretrainedConfig().to_dict()
+
+        serializable_config_dict = {}
+
+        # only serialize values that differ from the default config
+        for key, value in config_dict.items():
+            if key not in default_config_dict or value != default_config_dict[key]:
+                serializable_config_dict[key] = value
+
+        return serializable_config_dict
+
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary.
@@ -365,25 +367,35 @@ class PretrainedConfig(object):
             output["model_type"] = self.__class__.model_type
         return output
 
-    def to_json_string(self):
+    def to_json_string(self, use_diff=True):
         """
         Serializes this instance to a JSON string.
+
+        Args:
+            use_diff (:obj:`bool`):
+                If set to True, only the difference between the config instance and the default PretrainedConfig() is serialized to JSON string.
 
         Returns:
             :obj:`string`: String containing all the attributes that make up this configuration instance in JSON format.
         """
-        return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+        if use_diff is True:
+            config_dict = self.to_diff_dict()
+        else:
+            config_dict = self.to_dict()
+        return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path):
+    def to_json_file(self, json_file_path, use_diff=True):
         """
         Save this instance to a json file.
 
         Args:
             json_file_path (:obj:`string`):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
+            use_diff (:obj:`bool`):
+                If set to True, only the difference between the config instance and the default PretrainedConfig() is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
-            writer.write(self.to_json_string())
+            writer.write(self.to_json_string(use_diff=use_diff))
 
     def update(self, config_dict: Dict):
         """

@@ -20,6 +20,7 @@ import torch
 
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
+from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
@@ -28,9 +29,12 @@ logger = logging.getLogger(__name__)
 # vocab and merges same as roberta
 vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json"
 merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
-_all_bart_models = ["bart-large", "bart-large-mnli", "bart-large-cnn", "bart-large-xsum"]
-
-VOCAB_FILES_NAMES = {"vocab_file": "sentence.bpe.model"}
+_all_bart_models = [
+    "facebook/bart-large",
+    "facebook/bart-large-mnli",
+    "facebook/bart-large-cnn",
+    "facebook/bart-large-xsum",
+]
 
 
 class BartTokenizer(RobertaTokenizer):
@@ -42,29 +46,13 @@ class BartTokenizer(RobertaTokenizer):
     }
 
 
-_all_mbart_models = ["mbart-large-en-ro"]
+_all_mbart_models = ["facebook/mbart-large-en-ro"]
 SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
 
 
 class MBartTokenizer(XLMRobertaTokenizer):
-    """
-    This inherits from XLMRobertaTokenizer. ``prepare_translation_batch`` should be used to encode inputs.
-    Other tokenizer methods like encode do not work properly.
-    The tokenization method is <tokens> <eos> <language code>. There is no BOS token.
 
-    Examples::
-        from transformers import MBartTokenizer
-        tokenizer = MBartTokenizer.from_pretrained('mbart-large-en-ro')
-        tok.prepare_translation_batch([
-        example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
-        expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-        batch: dict = tokenizer.prepare_translation_batch(
-            example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
-        )
-
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
+    vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
     lang_code_to_id = {  # TODO(SS): resize embeddings will break this
@@ -110,7 +98,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         max_length: Optional[int] = None,
         pad_to_max_length: bool = True,
         return_tensors: str = "pt",
-    ) -> Dict[str, torch.Tensor]:
+    ) -> BatchEncoding:
         """
         Arguments:
             src_texts: list of src language texts
@@ -126,27 +114,23 @@ class MBartTokenizer(XLMRobertaTokenizer):
         if max_length is None:
             max_length = self.max_len
         encoder_ids: list = [self._append_special_tokens_and_truncate(t, src_lang, max_length - 2) for t in src_texts]
-        encoder_inputs = self.batch_encode_plus(
+        model_inputs: BatchEncoding = self.batch_encode_plus(
             encoder_ids,
             add_special_tokens=False,
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
         )
+        if tgt_texts is None:
+            return model_inputs
 
-        if tgt_texts is not None:
-            decoder_ids = [self._append_special_tokens_and_truncate(t, tgt_lang, max_length - 2) for t in tgt_texts]
-            decoder_inputs = self.batch_encode_plus(
-                decoder_ids,
-                add_special_tokens=False,
-                return_tensors=return_tensors,
-                max_length=max_length,
-                pad_to_max_length=pad_to_max_length,
-            )
-        else:
-            decoder_inputs = {}
-        return {
-            "input_ids": encoder_inputs["input_ids"],
-            "attention_mask": encoder_inputs["attention_mask"],
-            "decoder_input_ids": decoder_inputs.get("input_ids", None),
-        }
+        decoder_inputs: BatchEncoding = self.batch_encode_plus(
+            tgt_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            pad_to_max_length=pad_to_max_length,
+        )
+        for k, v in decoder_inputs.items():
+            model_inputs[f"decoder_{k}"] = v
+        return model_inputs

@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -28,7 +28,7 @@ if is_torch_available():
     from transformers import (
         OpenAIGPTConfig,
         OpenAIGPTModel,
-        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP,
+        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OpenAIGPTLMHeadModel,
         OpenAIGPTDoubleHeadsModel,
     )
@@ -169,7 +169,7 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            loss, lm_logits, mc_logits = model(input_ids, token_type_ids=token_type_ids, lm_labels=input_ids)
+            loss, lm_logits, mc_logits = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
 
             result = {"loss": loss, "lm_logits": lm_logits}
 
@@ -218,15 +218,17 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = OpenAIGPTModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = OpenAIGPTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_torch
 class OPENAIGPTModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_openai_gpt(self):
         model = OpenAIGPTLMHeadModel.from_pretrained("openai-gpt")
+        model.to(torch_device)
         input_ids = torch.tensor([[481, 4735, 544]], dtype=torch.long, device=torch_device)  # the president is
         expected_output_ids = [
             481,

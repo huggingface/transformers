@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -30,8 +30,9 @@ if is_torch_available():
         ElectraForMaskedLM,
         ElectraForTokenClassification,
         ElectraForPreTraining,
+        ElectraForSequenceClassification,
     )
-    from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -179,7 +180,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
             )
             result = {
                 "loss": loss,
@@ -242,6 +243,31 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.seq_length])
             self.check_loss_output(result)
 
+        def create_and_check_electra_for_sequence_classification(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_token_labels,
+        ):
+            config.num_labels = self.num_labels
+            model = ElectraForSequenceClassification(config)
+            model.to(torch_device)
+            model.eval()
+            loss, logits = model(
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
+            )
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
+            self.check_loss_output(result)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -280,8 +306,12 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_electra_for_pretraining(*config_and_inputs)
 
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_electra_for_sequence_classification(*config_and_inputs)
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = ElectraModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = ElectraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

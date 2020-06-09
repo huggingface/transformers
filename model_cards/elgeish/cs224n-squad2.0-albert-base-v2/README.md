@@ -1,3 +1,8 @@
+---
+tags:
+- exbert
+---
+
 ## CS224n SQuAD2.0 Project Dataset
 The goal of this model is to save CS224n students GPU time when establising
 baselines to beat for the [Default Final Project](http://web.stanford.edu/class/cs224n/project/default-final-project-handout.pdf).
@@ -10,6 +15,10 @@ version. Given that the official SQuAD2.0 dev set contains the project's test
 set, students must make sure not to use the official SQuAD2.0 dev set in any way
 — including the use of models fine-tuned on the official SQuAD2.0, since they
 used the official SQuAD2.0 dev set for model selection.
+
+<a href="https://huggingface.co/exbert/?model=elgeish/cs224n-squad2.0-albert-base-v2">
+	<img width="300px" src="https://hf-dinosaur.huggingface.co/exbert/button.png">
+</a>
 
 ## Results
 ```json
@@ -64,6 +73,18 @@ used the official SQuAD2.0 dev set for model selection.
   "python": "3.6.5=hc3d631a_2",
   "os": "Linux 4.15.0-1060-aws #62-Ubuntu SMP Tue Feb 11 21:23:22 UTC 2020 x86_64 x86_64 x86_64 GNU/Linux",
   "gpu": "Tesla V100-SXM2-16GB"
+}
+```
+
+## How to Cite
+```BibTeX
+@misc{elgeish2020gestalt,
+  title={Gestalt: a Stacking Ensemble for SQuAD2.0},
+  author={Mohamed El-Geish},
+  journal={arXiv e-prints},
+  archivePrefix={arXiv},
+  eprint={2004.07067},
+  year={2020},
 }
 ```
 

@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -33,7 +33,7 @@ if is_torch_available():
         RobertaForTokenClassification,
     )
     from transformers.modeling_roberta import RobertaEmbeddings, RobertaForMultipleChoice, RobertaForQuestionAnswering
-    from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_roberta import ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.modeling_utils import create_position_ids_from_input_ids
 
 
@@ -155,7 +155,7 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
             )
             result = {
                 "loss": loss,
@@ -273,8 +273,8 @@ class RobertaModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = RobertaModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = RobertaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):

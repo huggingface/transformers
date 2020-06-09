@@ -1,6 +1,9 @@
 FlauBERT
 ----------------------------------------------------
 
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
 The FlauBERT model was proposed in the paper
 `FlauBERT: Unsupervised Language Model Pre-training for French <https://arxiv.org/abs/1912.05372>`__ by Hang Le et al.
 It's a transformer pre-trained using a masked language modeling (MLM) objective (BERT-like).
@@ -19,6 +22,8 @@ classification, paraphrasing, natural language inference, parsing, word sense di
 of the time they outperform other pre-training approaches. Different versions of FlauBERT as well as a unified
 evaluation protocol for the downstream tasks, called FLUE (French Language Understanding Evaluation), are shared
 to the research community for further reproducible experiments in French NLP.*
+
+The original code can be found `here <https://github.com/getalp/Flaubert>`_.
 
 
 FlaubertConfig
@@ -70,3 +75,43 @@ FlaubertForQuestionAnswering
     :members:
 
 
+TFFlaubertModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertModel
+    :members:
+
+
+TFFlaubertWithLMHeadModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertWithLMHeadModel
+    :members:
+
+
+TFFlaubertForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertForSequenceClassification
+    :members:
+
+
+TFFlaubertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertForMultipleChoice
+    :members:
+
+
+TFFlaubertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertForTokenClassification
+    :members:
+
+
+TFFlaubertForQuestionAnsweringSimple
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFFlaubertForQuestionAnsweringSimple
+    :members:

@@ -35,6 +35,8 @@ Tips:
   prediction rather than a token prediction. However, averaging over the sequence may yield better results than using
   the [CLS] token.
 
+The original code can be found `here <https://github.com/google-research/bert>`_.
+
 BertConfig
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -48,6 +50,13 @@ BertTokenizer
 .. autoclass:: transformers.BertTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
+
+
+BertTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BertTokenizerFast
+    :members:
 
 
 BertModel

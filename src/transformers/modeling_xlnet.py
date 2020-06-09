@@ -32,10 +32,11 @@ from .modeling_utils import PoolerAnswerClass, PoolerEndLogits, PoolerStartLogit
 
 logger = logging.getLogger(__name__)
 
-XLNET_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-pytorch_model.bin",
-    "xlnet-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-pytorch_model.bin",
-}
+XLNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "xlnet-base-cased",
+    "xlnet-large-cased",
+    # See all XLNet models at https://huggingface.co/models?filter=xlnet
+]
 
 
 def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
@@ -459,7 +460,6 @@ class XLNetPreTrainedModel(PreTrainedModel):
     """
 
     config_class = XLNetConfig
-    pretrained_model_archive_map = XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_xlnet
     base_model_prefix = "transformer"
 
@@ -506,7 +506,7 @@ XLNET_START_DOCSTRING = r"""
 
 XLNET_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`transformers.BertTokenizer`.
@@ -514,7 +514,7 @@ XLNET_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
@@ -524,6 +524,7 @@ XLNET_INPUTS_DOCSTRING = r"""
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
             (see `mems` output below). Can be used to speed up sequential decoding. The token ids which have their mems
             given to this model should not be passed as input ids as they have already been computed.
+            `use_cache` has to be set to `True` to make use of `mems`.
         perm_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, sequence_length)`, `optional`, defaults to :obj:`None`):
             Mask to indicate the attention pattern for each input token with values selected in ``[0, 1]``:
             If ``perm_mask[k, i, j] = 0``, i attend to j in batch k;
@@ -534,13 +535,13 @@ XLNET_INPUTS_DOCSTRING = r"""
             Mask to indicate the output tokens to use.
             If ``target_mapping[k, i, j] = 1``, the i-th predict in batch k is on the j-th token.
             Only used during pretraining for partial prediction or for sequential decoding (generation).
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token. The classifier token should be represented by a ``2``.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
-        input_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        input_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Mask to avoid performing attention on padding token indices.
             Negative of `attention_mask`, i.e. with 0 for real tokens and 1 for padding.
             Kept for compatibility with the original code base.
@@ -551,10 +552,12 @@ XLNET_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        use_cache (:obj:`bool`):
+            If `use_cache` is True, `mems` are returned and can be used to speed up decoding (see `mems`). Defaults to `True`.
 """
 
 
@@ -567,7 +570,6 @@ class XLNetModel(XLNetPreTrainedModel):
         super().__init__(config)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.output_past = config.output_past
 
         self.mem_len = config.mem_len
         self.reuse_len = config.reuse_len
@@ -621,7 +623,7 @@ class XLNetModel(XLNetPreTrainedModel):
             mask_lo = torch.tril(attn_mask, diagonal=-1)
             ret = torch.cat([ret[:, :qlen] + mask_lo, ret[:, qlen:]], dim=1)
 
-        ret = ret.to(next(self.parameters()))
+        ret = ret.to(self.device)
         return ret
 
     def cache_mem(self, curr_out, prev_mem):
@@ -683,10 +685,10 @@ class XLNetModel(XLNetPreTrainedModel):
                 fwd_pos_seq = fwd_pos_seq.clamp(-self.clamp_len, self.clamp_len)
             pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz)
 
-        pos_emb = pos_emb.to(next(self.parameters()))
+        pos_emb = pos_emb.to(self.device)
         return pos_emb
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -698,6 +700,7 @@ class XLNetModel(XLNetPreTrainedModel):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        use_cache=True,
     ):
         r"""
     Return:
@@ -758,8 +761,8 @@ class XLNetModel(XLNetPreTrainedModel):
         mlen = mems[0].shape[0] if mems is not None and mems[0] is not None else 0
         klen = mlen + qlen
 
-        dtype_float = next(self.parameters()).dtype
-        device = next(self.parameters()).device
+        dtype_float = self.dtype
+        device = self.device
 
         # Attention mask
         # causal attention mask
@@ -864,7 +867,7 @@ class XLNetModel(XLNetPreTrainedModel):
         attentions = []
         hidden_states = []
         for i, layer_module in enumerate(self.layer):
-            if self.mem_len is not None and self.mem_len > 0 and self.output_past:
+            if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
                 # cache new mems
                 new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
             if self.output_hidden_states:
@@ -894,7 +897,7 @@ class XLNetModel(XLNetPreTrainedModel):
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         outputs = (output.permute(1, 0, 2).contiguous(),)
 
-        if self.mem_len is not None and self.mem_len > 0 and self.output_past:
+        if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
             outputs = outputs + (new_mems,)
 
         if self.output_hidden_states:
@@ -935,7 +938,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_loss
 
-    def prepare_inputs_for_generation(self, input_ids, past, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
@@ -955,7 +958,12 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         )
         target_mapping[0, 0, -1] = 1.0
 
-        inputs = {"input_ids": input_ids, "perm_mask": perm_mask, "target_mapping": target_mapping}
+        inputs = {
+            "input_ids": input_ids,
+            "perm_mask": perm_mask,
+            "target_mapping": target_mapping,
+            "use_cache": kwargs["use_cache"],
+        }
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:
@@ -963,7 +971,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 
         return inputs
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -975,6 +983,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        use_cache=True,
         labels=None,
     ):
         r"""
@@ -1050,6 +1059,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
         )
 
         logits = self.lm_loss(transformer_outputs[0])
@@ -1081,7 +1091,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -1093,6 +1103,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        use_cache=True,
         labels=None,
     ):
         r"""
@@ -1148,6 +1159,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
         )
         output = transformer_outputs[0]
 
@@ -1184,7 +1196,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -1196,6 +1208,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        use_cache=True,
         labels=None,
     ):
         r"""
@@ -1252,6 +1265,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
         )
 
         sequence_output = outputs[0]
@@ -1291,7 +1305,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -1301,9 +1315,10 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         mems=None,
         perm_mask=None,
         target_mapping=None,
-        labels=None,
         head_mask=None,
         inputs_embeds=None,
+        use_cache=True,
+        labels=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1313,7 +1328,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.XLNetConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor`` of shape ``(1,)`, `optional`, returned when :obj:`labels` is provided):
+        loss (:obj:`torch.FloatTensor`` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
             Classification loss.
         classification_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
             `num_choices` is the second dimension of the input tensors. (see `input_ids` above).
@@ -1368,6 +1383,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             target_mapping=target_mapping,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
         )
 
         output = transformer_outputs[0]
@@ -1402,7 +1418,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -1414,6 +1430,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        use_cache=True,
         start_positions=None,
         end_positions=None,
     ):
@@ -1478,6 +1495,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
         )
 
         sequence_output = outputs[0]
@@ -1526,7 +1544,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
@@ -1538,6 +1556,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        use_cache=True,
         start_positions=None,
         end_positions=None,
         is_impossible=None,
@@ -1616,6 +1635,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
         )
         hidden_states = transformer_outputs[0]
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)

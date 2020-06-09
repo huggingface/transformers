@@ -1,4 +1,3 @@
-tensorboardX
 tensorboard
 scikit-learn
 seqeval
@@ -6,3 +5,5 @@ psutil
 sacrebleu
 rouge-score
 tensorflow_datasets
+pytorch-lightning==0.7.3  # April 10, 2020 release
+matplotlib

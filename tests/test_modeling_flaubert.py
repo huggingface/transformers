@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -32,7 +32,7 @@ if is_torch_available():
         FlaubertForQuestionAnsweringSimple,
         FlaubertForSequenceClassification,
     )
-    from transformers.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -387,6 +387,6 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = FlaubertModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = FlaubertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

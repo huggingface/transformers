@@ -151,7 +151,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
             model = DistilBertForMaskedLM(config=config)
             model.to(torch_device)
             model.eval()
-            loss, prediction_scores = model(input_ids, attention_mask=input_mask, masked_lm_labels=token_labels)
+            loss, prediction_scores = model(input_ids, attention_mask=input_mask, labels=token_labels)
             result = {
                 "loss": loss,
                 "prediction_scores": prediction_scores,
@@ -247,6 +247,6 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     # @slow
     # def test_model_from_pretrained(self):
-    #     for model_name in list(DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-    #         model = DistilBertModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+    #     for model_name in DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+    #         model = DistilBertModel.from_pretrained(model_name)
     #         self.assertIsNotNone(model)

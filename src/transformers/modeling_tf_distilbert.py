@@ -23,22 +23,33 @@ import numpy as np
 import tensorflow as tf
 
 from .configuration_distilbert import DistilBertConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, shape_list
+from .file_utils import MULTIPLE_CHOICE_DUMMY_INPUTS, add_start_docstrings, add_start_docstrings_to_callable
+from .modeling_tf_utils import (
+    TFMultipleChoiceLoss,
+    TFPreTrainedModel,
+    TFQuestionAnsweringLoss,
+    TFSequenceClassificationLoss,
+    TFSharedEmbeddings,
+    TFTokenClassificationLoss,
+    get_initializer,
+    keras_serializable,
+    shape_list,
+)
 from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
 
 
-TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "distilbert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-tf_model.h5",
-    "distilbert-base-uncased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-distilled-squad-tf_model.h5",
-    "distilbert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-cased-tf_model.h5",
-    "distilbert-base-cased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-cased-distilled-squad-tf_model.h5",
-    "distilbert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-multilingual-cased-tf_model.h5",
-    "distilbert-base-uncased-finetuned-sst-2-english": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-uncased-finetuned-sst-2-english-tf_model.h5",
-}
+TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "distilbert-base-uncased",
+    "distilbert-base-uncased-distilled-squad",
+    "distilbert-base-cased",
+    "distilbert-base-cased-distilled-squad",
+    "distilbert-base-multilingual-cased",
+    "distilbert-base-uncased-finetuned-sst-2-english",
+    # See all DistilBERT models at https://huggingface.co/models?filter=distilbert
+]
 
 
 # UTILS AND BUILDING BLOCKS OF THE ARCHITECTURE #
@@ -398,7 +409,10 @@ class TFTransformer(tf.keras.layers.Layer):
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
 
+@keras_serializable
 class TFDistilBertMainLayer(tf.keras.layers.Layer):
+    config_class = DistilBertConfig
+
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
@@ -467,7 +481,6 @@ class TFDistilBertPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = DistilBertConfig
-    pretrained_model_archive_map = TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "distilbert"
 
 
@@ -545,7 +558,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
     def call(self, inputs, **kwargs):
         r"""
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -619,7 +632,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
         r"""
 
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -662,7 +675,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel):
     the pooled output) e.g. for GLUE tasks. """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
+class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -680,10 +693,18 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
         self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(
+        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
+    ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
+            If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
+
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         logits (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -705,20 +726,32 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
         model = TFDistilBertForSequenceClassification.from_pretrained('distilbert-base-cased')
         input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        logits = outputs[0]
+        labels = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, logits = outputs[:2]
 
         """
-        distilbert_output = self.distilbert(inputs, **kwargs)
+        distilbert_output = self.distilbert(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            training=training,
+        )
 
         hidden_state = distilbert_output[0]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
-        pooled_output = self.dropout(pooled_output, training=kwargs.get("training", False))  # (bs, dim)
+        pooled_output = self.dropout(pooled_output, training=training)  # (bs, dim)
         logits = self.classifier(pooled_output)  # (bs, dim)
 
         outputs = (logits,) + distilbert_output[1:]
-        return outputs  # logits, (hidden_states), (attentions)
+
+        if labels is not None:
+            loss = self.compute_loss(labels, logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
@@ -726,7 +759,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel):
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
+class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -738,10 +771,16 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
         )
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(
+        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
+    ):
         r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the token classification loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+
     Returns:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
@@ -762,20 +801,154 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
         model = TFDistilBertForTokenClassification.from_pretrained('distilbert-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        scores = outputs[0]
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        labels = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
+        outputs = model(input_ids, labels=labels)
+        loss, scores = outputs[:2]
+
         """
-        outputs = self.distilbert(inputs, **kwargs)
+        outputs = self.distilbert(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            training=training,
+        )
 
         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output, training=kwargs.get("training", False))
+        sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(sequence_output)
 
         outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
 
-        return outputs  # scores, (hidden_states), (attentions)
+        if labels is not None:
+            loss = self.compute_loss(labels, logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
+    """DistilBert Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    DISTILBERT_START_DOCSTRING,
+)
+class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoiceLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.pre_classifier = tf.keras.layers.Dense(
+            config.dim,
+            kernel_initializer=get_initializer(config.initializer_range),
+            activation="relu",
+            name="pre_classifier",
+        )
+        self.classifier = tf.keras.layers.Dense(
+            1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+        )
+
+    @property
+    def dummy_inputs(self):
+        """ Dummy inputs to build the network.
+
+        Returns:
+            tf.Tensor with dummy inputs
+        """
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+
+    @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
+    def call(
+        self, inputs, attention_mask=None, head_mask=None, inputs_embeds=None, labels=None, training=False,
+    ):
+        r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the multiple choice classification loss.
+            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
+            of the input tensors. (see `input_ids` above)
+
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        classification_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`:
+            `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
+
+            Classification scores (before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import DistilBertTokenizer, TFDistilBertForMultipleChoice
+
+        tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+        model = TFDistilBertForMultipleChoice.from_pretrained('distilbert-base-uncased')
+        choices = ["Hello, my dog is cute", "Hello, my cat is amazing"]
+
+        input_ids = tf.constant([tokenizer.encode(s, add_special_tokens=True) for s in choices])[None, :] # Batch size 1, 2 choices
+        labels = tf.reshape(tf.constant(1), (-1, 1))
+        outputs = model(input_ids, labels=labels)
+
+        loss, classification_scores = outputs[:2]
+
+        """
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            head_mask = inputs[2] if len(inputs) > 2 else head_mask
+            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
+            assert len(inputs) <= 4, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            input_ids = inputs.get("input_ids")
+            attention_mask = inputs.get("attention_mask", attention_mask)
+            head_mask = inputs.get("head_mask", head_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            assert len(inputs) <= 4, "Too many inputs."
+        else:
+            input_ids = inputs
+
+        if input_ids is not None:
+            num_choices = shape_list(input_ids)[1]
+            seq_length = shape_list(input_ids)[2]
+        else:
+            num_choices = shape_list(inputs_embeds)[1]
+            seq_length = shape_list(inputs_embeds)[2]
+
+        flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
+        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
+
+        flat_inputs = [
+            flat_input_ids,
+            flat_attention_mask,
+            head_mask,
+            inputs_embeds,
+        ]
+
+        distilbert_output = self.distilbert(flat_inputs, training=training)
+        hidden_state = distilbert_output[0]  # (bs, seq_len, dim)
+        pooled_output = hidden_state[:, 0]  # (bs, dim)
+        pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
+        pooled_output = self.dropout(pooled_output, training=training)  # (bs, dim)
+        logits = self.classifier(pooled_output)
+        reshaped_logits = tf.reshape(logits, (-1, num_choices))
+
+        outputs = (reshaped_logits,) + distilbert_output[1:]  # add hidden states and attention if they are here
+
+        if labels is not None:
+            loss = self.compute_loss(labels, reshaped_logits)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
@@ -783,7 +956,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel):
     the hidden-states output to compute `span start logits` and `span end logits`). """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
+class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -795,10 +968,31 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
         self.dropout = tf.keras.layers.Dropout(config.qa_dropout)
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
-    def call(self, inputs, **kwargs):
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        start_positions=None,
+        end_positions=None,
+        cls_index=None,
+        p_mask=None,
+        is_impossible=None,
+        training=False,
+    ):
         r"""
+        start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+        end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
+
     Return:
-        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers,DistilBertConfig`) and inputs:
         start_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
@@ -821,19 +1015,35 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel):
 
         tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
         model = TFDistilBertForQuestionAnswering.from_pretrained('distilbert-base-cased')
-        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
-        outputs = model(input_ids)
-        start_scores, end_scores = outputs[:2]
+        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        input_dict = tokenizer.encode_plus(question, text, return_tensors='tf')
+        start_scores, end_scores = model(input_dict)
+
+        all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
+        answer = ' '.join(all_tokens[tf.math.argmax(start_scores, 1)[0] : tf.math.argmax(end_scores, 1)[0]+1])
 
         """
-        distilbert_output = self.distilbert(inputs, **kwargs)
+        distilbert_output = self.distilbert(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            training=training,
+        )
 
         hidden_states = distilbert_output[0]  # (bs, max_query_len, dim)
-        hidden_states = self.dropout(hidden_states, training=kwargs.get("training", False))  # (bs, max_query_len, dim)
+        hidden_states = self.dropout(hidden_states, training=training)  # (bs, max_query_len, dim)
         logits = self.qa_outputs(hidden_states)  # (bs, max_query_len, 2)
         start_logits, end_logits = tf.split(logits, 2, axis=-1)
         start_logits = tf.squeeze(start_logits, axis=-1)
         end_logits = tf.squeeze(end_logits, axis=-1)
 
         outputs = (start_logits, end_logits,) + distilbert_output[1:]
-        return outputs  # start_logits, end_logits, (hidden_states), (attentions)
+
+        if start_positions is not None and end_positions is not None:
+            labels = {"start_position": start_positions}
+            labels["end_position"] = end_positions
+            loss = self.compute_loss(labels, outputs[:2])
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)

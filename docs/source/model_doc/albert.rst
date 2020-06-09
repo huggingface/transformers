@@ -6,7 +6,7 @@ Overview
 
 The ALBERT model was proposed in `ALBERT: A Lite BERT for Self-supervised Learning of Language Representations <https://arxiv.org/abs/1909.11942>`_
 by Zhenzhong Lan, Mingda Chen, Sebastian Goodman, Kevin Gimpel, Piyush Sharma, Radu Soricut. It presents
-two parameter-reduction techniques to lower memory consumption and increase the trainig speed of BERT:
+two parameter-reduction techniques to lower memory consumption and increase the training speed of BERT:
 
 - Splitting the embedding matrix into two smaller matrices
 - Using repeating layers split among groups
@@ -29,6 +29,8 @@ Tips:
 - ALBERT uses repeating layers which results in a small memory footprint, however the computational cost remains
   similar to a BERT-like architecture with the same number of hidden layers as it has to iterate through the same
   number of (repeating) layers.
+
+The original code can be found `here <https://github.com/google-research/ALBERT>`_.
 
 AlbertConfig
 ~~~~~~~~~~~~~~~~~~~~~
@@ -65,6 +67,12 @@ AlbertForSequenceClassification
 .. autoclass:: transformers.AlbertForSequenceClassification
     :members:
 
+AlbertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AlbertForTokenClassification
+    :members:
+
 
 AlbertForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -91,4 +99,25 @@ TFAlbertForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFAlbertForSequenceClassification
+    :members:
+
+
+TFAlbertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForMultipleChoice
+    :members:
+
+
+TFAlbertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForTokenClassification
+    :members:
+
+
+TFAlbertForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFAlbertForQuestionAnswering
     :members:

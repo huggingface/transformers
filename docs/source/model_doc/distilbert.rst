@@ -1,6 +1,9 @@
 DistilBERT
 ----------------------------------------------------
 
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
 The DistilBERT model was proposed in the blog post
 `Smaller, faster, cheaper, lighter: Introducing DistilBERT, a distilled version of BERT <https://medium.com/huggingface/distilbert-8cf3380435b5>`__,
 and the paper `DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter <https://arxiv.org/abs/1910.01108>`__.
@@ -27,6 +30,8 @@ Tips:
 - DistilBert doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just separate your segments with the separation token `tokenizer.sep_token` (or `[SEP]`)
 - DistilBert doesn't have options to select the input positions (`position_ids` input). This could be added if necessary though, just let's us know if you need this option.
 
+The original code can be found `here <https://github.com/huggingface/transformers/tree/master/examples/distillation>`_.
+
 
 DistilBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -39,6 +44,13 @@ DistilBertTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.DistilBertTokenizer
+    :members:
+
+
+DistilBertTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.DistilBertTokenizerFast
     :members:
 
 
@@ -60,6 +72,13 @@ DistilBertForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.DistilBertForSequenceClassification
+    :members:
+
+
+DistilBertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.DistilBertForTokenClassification
     :members:
 
 
@@ -87,6 +106,22 @@ TFDistilBertForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFDistilBertForSequenceClassification
+    :members:
+
+
+
+TFDistilBertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFDistilBertForMultipleChoice
+    :members:
+
+
+
+TFDistilBertForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFDistilBertForTokenClassification
     :members:
 
 

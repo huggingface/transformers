@@ -147,12 +147,6 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
-        self.max_len_single_sentence = (
-            self.max_len
-        )  # no default special tokens - you can update this value if you add special tokens
-        self.max_len_sentences_pair = (
-            self.max_len
-        )  # no default special tokens - you can update this value if you add special tokens
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -284,6 +278,47 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
 
 class GPT2TokenizerFast(PreTrainedTokenizerFast):
+    """
+    Constructs a "Fast" GPT-2 BPE tokenizer (backed by HuggingFace's `tokenizers` library).
+
+    Peculiarities:
+
+    - Byte-level Byte-Pair-Encoding
+    - Requires a space to start the input string => the encoding methods should be called with the
+      ``add_prefix_space`` flag set to ``True``.
+      Otherwise, this tokenizer ``encode`` and ``decode`` method will not conserve
+      the absence of a space at the beginning of a string:
+
+    ::
+
+        tokenizer.decode(tokenizer.encode("Hello")) = " Hello"
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
+
+    Args:
+        vocab_file (:obj:`str`):
+            Path to the vocabulary file.
+        merges_file (:obj:`str`):
+            Path to the merges file.
+        errors (:obj:`str`, `optional`, defaults to "replace"):
+            Paradigm to follow when decoding bytes to UTF-8. See `bytes.decode
+            <https://docs.python.org/3/library/stdtypes.html#bytes.decode>`__ for more information.
+        unk_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        bos_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The beginning of sequence token.
+        eos_token (:obj:`string`, `optional`, defaults to `<|endoftext|>`):
+            The end of sequence token.
+        add_prefix_space (:obj:`bool`, `optional`, defaults to `False`):
+            Whether to add a leading space to the first word.
+            This allows to treat the leading word just as any other word.
+            (GPT2 tokenizer detect beginning of words by the preceeding space)
+        trim_offsets (:obj:`bool`, `optional`, defaults to `True`):
+            Whether the post processing step should trim offsets to avoid including whitespaces.
+    """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -296,10 +331,16 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         add_prefix_space=False,
+        trim_offsets=True,
         **kwargs
     ):
         super().__init__(
-            ByteLevelBPETokenizer(vocab_file=vocab_file, merges_file=merges_file, add_prefix_space=add_prefix_space),
+            ByteLevelBPETokenizer(
+                vocab_file=vocab_file,
+                merges_file=merges_file,
+                add_prefix_space=add_prefix_space,
+                trim_offsets=trim_offsets,
+            ),
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,

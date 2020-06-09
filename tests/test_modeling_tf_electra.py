@@ -20,7 +20,7 @@ from transformers import ElectraConfig, is_tf_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_tf, slow
+from .utils import require_tf, slow
 
 
 if is_tf_available():
@@ -221,7 +221,7 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        # for model_name in list(TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-        for model_name in ["electra-small-discriminator"]:
-            model = TFElectraModel.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        # for model_name in TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in ["google/electra-small-discriminator"]:
+            model = TFElectraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

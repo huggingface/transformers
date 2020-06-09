@@ -1,7 +1,10 @@
 import dataclasses
+import json
+import sys
 from argparse import ArgumentParser
 from enum import Enum
-from typing import Any, Iterable, NewType, Tuple, Union
+from pathlib import Path
+from typing import Any, Iterable, List, NewType, Tuple, Union
 
 
 DataClass = NewType("DataClass", Any)
@@ -49,9 +52,13 @@ class HfArgumentParser(ArgumentParser):
                     "We will add compatibility when Python 3.9 is released."
                 )
             typestring = str(field.type)
-            for x in (int, float, str):
-                if typestring == f"typing.Union[{x.__name__}, NoneType]":
-                    field.type = x
+            for prim_type in (int, float, str):
+                for collection in (List,):
+                    if typestring == f"typing.Union[{collection[prim_type]}, NoneType]":
+                        field.type = collection[prim_type]
+                if typestring == f"typing.Union[{prim_type.__name__}, NoneType]":
+                    field.type = prim_type
+
             if isinstance(field.type, type) and issubclass(field.type, Enum):
                 kwargs["choices"] = list(field.type)
                 kwargs["type"] = field.type
@@ -62,15 +69,27 @@ class HfArgumentParser(ArgumentParser):
                 if field.default is True:
                     field_name = f"--no-{field.name}"
                     kwargs["dest"] = field.name
+            elif hasattr(field.type, "__origin__") and issubclass(field.type.__origin__, List):
+                kwargs["nargs"] = "+"
+                kwargs["type"] = field.type.__args__[0]
+                assert all(
+                    x == kwargs["type"] for x in field.type.__args__
+                ), "{} cannot be a List of mixed types".format(field.name)
+                if field.default_factory is not dataclasses.MISSING:
+                    kwargs["default"] = field.default_factory()
             else:
                 kwargs["type"] = field.type
                 if field.default is not dataclasses.MISSING:
                     kwargs["default"] = field.default
+                elif field.default_factory is not dataclasses.MISSING:
+                    kwargs["default"] = field.default_factory()
                 else:
                     kwargs["required"] = True
             self.add_argument(field_name, **kwargs)
 
-    def parse_args_into_dataclasses(self, args=None, return_remaining_strings=False) -> Tuple[DataClass, ...]:
+    def parse_args_into_dataclasses(
+        self, args=None, return_remaining_strings=False, look_for_args_file=True
+    ) -> Tuple[DataClass, ...]:
         """
         Parse command-line args into instances of the specified dataclass types.
 
@@ -84,6 +103,10 @@ class HfArgumentParser(ArgumentParser):
                 (same as argparse.ArgumentParser)
             return_remaining_strings:
                 If true, also return a list of remaining argument strings.
+            look_for_args_file:
+                If true, will look for a ".args" file with the same base name
+                as the entry point script for this process, and will append its
+                potential content to the command line args.
 
         Returns:
             Tuple consisting of:
@@ -95,6 +118,13 @@ class HfArgumentParser(ArgumentParser):
                 - The potential list of remaining argument strings.
                   (same as argparse.ArgumentParser.parse_known_args)
         """
+        if look_for_args_file and len(sys.argv):
+            args_file = Path(sys.argv[0]).with_suffix(".args")
+            if args_file.exists():
+                fargs = args_file.read_text().split()
+                args = fargs + args if args is not None else fargs + sys.argv[1:]
+                # in case of duplicate arguments the first one has precedence
+                # so we append rather than prepend.
         namespace, remaining_args = self.parse_known_args(args=args)
         outputs = []
         for dtype in self.dataclass_types:
@@ -110,4 +140,21 @@ class HfArgumentParser(ArgumentParser):
         if return_remaining_strings:
             return (*outputs, remaining_args)
         else:
+            if remaining_args:
+                raise ValueError(f"Some specified arguments are not used by the HfArgumentParser: {remaining_args}")
+
             return (*outputs,)
+
+    def parse_json_file(self, json_file: str) -> Tuple[DataClass, ...]:
+        """
+        Alternative helper method that does not use `argparse` at all,
+        instead loading a json file and populating the dataclass types.
+        """
+        data = json.loads(Path(json_file).read_text())
+        outputs = []
+        for dtype in self.dataclass_types:
+            keys = {f.name for f in dataclasses.fields(dtype)}
+            inputs = {k: v for k, v in data.items() if k in keys}
+            obj = dtype(**inputs)
+            outputs.append(obj)
+        return (*outputs,)

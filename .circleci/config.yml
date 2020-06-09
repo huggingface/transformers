@@ -66,6 +66,16 @@ jobs:
             - run: sudo pip install .[sklearn,torch,testing]
             - run: sudo pip install -r examples/requirements.txt
             - run: python -m pytest -n 8 --dist=loadfile -s -v ./examples/
+    build_doc:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        steps:
+            - checkout
+            - run: sudo pip install .[tf,torch,docs]
+            - run: cd docs && make html
+            - store_artifacts:
+                path: ./docs/_build
     deploy_doc:
         working_directory: ~/transformers
         docker:
@@ -117,4 +127,5 @@ workflows:
             - run_tests_torch_and_tf
             - run_tests_torch
             - run_tests_tf
+            - build_doc
             - deploy_doc: *workflow_filters

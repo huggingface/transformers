@@ -1,6 +1,9 @@
 RoBERTa
 ----------------------------------------------------
 
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
 The RoBERTa model was proposed in `RoBERTa: A Robustly Optimized BERT Pretraining Approach <https://arxiv.org/abs/1907.11692>`_
 by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer,
 Veselin Stoyanov. It is based on Google's BERT model released in 2018.
@@ -28,6 +31,9 @@ Tips:
 - RoBERTa doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just separate your segments with the separation token `tokenizer.sep_token` (or `</s>`)
 - `Camembert <./camembert.html>`__ is a wrapper around RoBERTa. Refer to this page for usage examples.
 
+The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/roberta>`_.
+
+
 RobertaConfig
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -41,6 +47,13 @@ RobertaTokenizer
 .. autoclass:: transformers.RobertaTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
+
+
+RobertaTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.RobertaTokenizerFast
+    :members: build_inputs_with_special_tokens
 
 
 RobertaModel
@@ -64,11 +77,26 @@ RobertaForSequenceClassification
     :members:
 
 
+RobertaForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.RobertaForMultipleChoice
+    :members:
+
+
 RobertaForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RobertaForTokenClassification
     :members:
+
+
+RobertaForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.RobertaForQuestionAnswering
+    :members:
+
 
 TFRobertaModel
 ~~~~~~~~~~~~~~~~~~~~
@@ -91,8 +119,22 @@ TFRobertaForSequenceClassification
     :members:
 
 
+TFRobertaForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFRobertaForMultipleChoice
+    :members:
+
+
 TFRobertaForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFRobertaForTokenClassification
+    :members:
+
+
+TFRobertaForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFRobertaForQuestionAnswering
     :members:

@@ -20,7 +20,7 @@ from transformers import is_torch_available
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .utils import CACHE_DIR, require_torch, slow, torch_device
+from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -28,7 +28,7 @@ if is_torch_available():
     from transformers import (
         GPT2Config,
         GPT2Model,
-        GPT2_PRETRAINED_MODEL_ARCHIVE_MAP,
+        GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         GPT2LMHeadModel,
         GPT2DoubleHeadsModel,
     )
@@ -46,7 +46,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
         def __init__(
             self,
             parent,
-            batch_size=13,
+            batch_size=14,
             seq_length=7,
             is_training=True,
             use_token_type_ids=True,
@@ -268,7 +268,7 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
                 "mc_token_ids": mc_token_ids,
                 "attention_mask": multiple_choice_input_mask,
                 "token_type_ids": multiple_choice_token_type_ids,
-                "lm_labels": multiple_choice_inputs_ids,
+                "labels": multiple_choice_inputs_ids,
             }
 
             loss, lm_logits, mc_logits, _ = model(**inputs)
@@ -334,15 +334,17 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(GPT2_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
-            model = GPT2Model.from_pretrained(model_name, cache_dir=CACHE_DIR)
+        for model_name in GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = GPT2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_torch
 class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gpt2(self):
         model = GPT2LMHeadModel.from_pretrained("gpt2")
+        model.to(torch_device)
         input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
         expected_output_ids = [
             464,
@@ -372,6 +374,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_distilgpt2(self):
         model = GPT2LMHeadModel.from_pretrained("distilgpt2")
+        model.to(torch_device)
         input_ids = torch.tensor([[464, 1893]], dtype=torch.long, device=torch_device)  # The president
         expected_output_ids = [
             464,

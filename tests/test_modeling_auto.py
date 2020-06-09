@@ -40,7 +40,7 @@ if is_torch_available():
         AutoModelForTokenClassification,
         BertForTokenClassification,
     )
-    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.modeling_auto import (
         MODEL_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
@@ -56,7 +56,7 @@ class AutoModelTest(unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
@@ -71,7 +71,7 @@ class AutoModelTest(unittest.TestCase):
     @slow
     def test_model_for_pretraining_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
@@ -80,13 +80,14 @@ class AutoModelTest(unittest.TestCase):
             model, loading_info = AutoModelForPreTraining.from_pretrained(model_name, output_loading_info=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, BertForPreTraining)
-            for value in loading_info.values():
-                self.assertEqual(len(value), 0)
+            for key, value in loading_info.items():
+                # Only one value should not be initialized and in the missing keys.
+                self.assertEqual(len(value), 1 if key == "missing_keys" else 0)
 
     @slow
     def test_lmhead_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
@@ -99,7 +100,7 @@ class AutoModelTest(unittest.TestCase):
     @slow
     def test_sequence_classification_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
@@ -114,7 +115,7 @@ class AutoModelTest(unittest.TestCase):
     @slow
     def test_question_answering_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
@@ -127,7 +128,7 @@ class AutoModelTest(unittest.TestCase):
     @slow
     def test_token_classification_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
             self.assertIsInstance(config, BertConfig)
