@@ -2654,10 +2654,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory: str) -> Tuple[str]:
         if os.path.isdir(save_directory):
-            files = self._tokenizer.save(save_directory)
+            files = self._tokenizer.save_model(save_directory)
         else:
             folder, file = os.path.split(os.path.abspath(save_directory))
-            files = self._tokenizer.save(folder, name=file)
+            files = self._tokenizer.save_model(folder, name=file)
 
         return tuple(files)
 
