@@ -70,6 +70,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
 
         # Check that Rust and Python align
         self.assert_tokenization_python_rust_equals(tokenizer_r, tokenizer_p)
+        self.assert_pretokenized_inputs(tokenizer_r, tokenizer_p)
         self.assert_num_special_tokens_to_add_equal(tokenizer_r, tokenizer_p)
         self.assert_max_length_equal(tokenizer_r, tokenizer_p)
         self.assert_special_tokens_map_equal(tokenizer_r, tokenizer_p)
