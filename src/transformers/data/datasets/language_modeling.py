@@ -4,8 +4,9 @@ import pickle
 import time
 
 import torch
-from filelock import FileLock
 from torch.utils.data.dataset import Dataset
+
+from filelock import FileLock
 
 from ...tokenization_utils import PreTrainedTokenizer
 

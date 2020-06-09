@@ -19,6 +19,9 @@ import logging
 import warnings
 from collections import OrderedDict
 
+from transformers.configuration_mobilebert import MobileBertConfig
+from transformers.modeling_mobilebert import MobileBertForQuestionAnswering, MobileBertForSequenceClassification
+
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
@@ -260,6 +263,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        (MobileBertConfig, MobileBertForSequenceClassification),
         (DistilBertConfig, DistilBertForSequenceClassification),
         (AlbertConfig, AlbertForSequenceClassification),
         (CamembertConfig, CamembertForSequenceClassification),
@@ -277,6 +281,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
+        (MobileBertConfig, MobileBertForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
         (BartConfig, BartForQuestionAnswering),

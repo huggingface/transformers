@@ -18,6 +18,8 @@
 import logging
 from collections import OrderedDict
 
+from transformers.configuration_mobilebert import MobileBertConfig
+
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
@@ -53,6 +55,7 @@ from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer
 from .tokenization_marian import MarianTokenizer
+from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -69,6 +72,7 @@ logger = logging.getLogger(__name__)
 TOKENIZER_MAPPING = OrderedDict(
     [
         (T5Config, (T5Tokenizer, None)),
+        (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, None)),
         (CamembertConfig, (CamembertTokenizer, None)),
