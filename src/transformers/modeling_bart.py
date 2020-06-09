@@ -963,6 +963,15 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
         return outputs
 
+
+    @property
+    def decoder(self):
+        return self.model.decoder
+
+    @property
+    def encoder(self):
+        return self.model.encoder
+
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
 

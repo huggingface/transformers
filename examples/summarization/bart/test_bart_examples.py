@@ -47,7 +47,7 @@ CHEAP_ARGS = {
     "model_type": "bart",
     "model_name_or_path": "sshleifer/bart-tiny-random",
     "config_name": "",
-    "tokenizer_name": "",
+    "tokenizer_name": "facebook/bart-large",
     "cache_dir": "",
     "do_lower_case": False,
     "learning_rate": 3e-05,
@@ -147,7 +147,8 @@ class TestBartExamples(unittest.TestCase):
 
     def test_bdc_checkpointing(self):
 
-        updates = dict(student_encoder_layers=2, student_decoder_layers=1, num_train_epochs=4, val_check_interval=0.25)
+        updates = dict(student_encoder_layers=2, student_decoder_layers=1, num_train_epochs=4, val_check_interval=0.25,
+                       )
         model = self._bart_distiller_cli(updates, check_contents=False)
 
         ckpts = list(Path(model.output_dir).glob("*.ckpt"))
@@ -155,8 +156,8 @@ class TestBartExamples(unittest.TestCase):
         transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(transformer_ckpts), len(ckpts))
         n_extra = 0  # more than 1 checkpoint saved, specified in lightning_base.py
-        removed = clean_output_dir(model.output_dir)
-        self.assertEqual(len(removed), n_extra)
+        #removed = clean_output_dir(model.output_dir)
+        #elf.assertEqual(len(removed), n_extra)
         new_transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(new_transformer_ckpts), 1)
         examples = lmap(str.strip, model.hparams.data_dir.joinpath('test.source').open().readlines())
@@ -167,8 +168,19 @@ class TestBartExamples(unittest.TestCase):
         evaluate_checkpoint(ckpts[0], dest_dir=Path(tempfile.mkdtemp()))
 
     def test_bdc_brewer(self):
-        updates = dict(student_encoder_layers=2, student_decoder_layers=1, alpha_hid=2.0)
+        updates = dict(student_encoder_layers=1, student_decoder_layers=1, alpha_hid=2.0)
         self._bart_distiller_cli(updates)
+
+    def test_bdc_t5(self):
+        updates = dict(student_encoder_layers=1, student_decoder_layers=1, alpha_hid=2.0,
+                       teacher="patrickvonplaten/t5-tiny-random", model_type='t5',
+                       model_name_or_path="patrickvonplaten/t5-tiny-random",
+                       tokenizer_name="t5-small")
+        self._bart_distiller_cli(updates)
+
+    @unittest.skipUnless(False, 'Not implemented')
+    def test_bdc_mbart(self):
+        pass
 
     def test_bdc_enc_only(self):
         updates = dict(alpha_mlm=0.0, alpha_ce=0.0, student_encoder_layers=1, enc_only=True, student_decoder_layers=2,)
@@ -180,7 +192,7 @@ class TestBartExamples(unittest.TestCase):
 
     def _bart_distiller_cli(self, updates, check_contents=True):
         default_updates = dict(
-            model_type="bart",
+            model_type='bart',
             train_batch_size=1,
             eval_batch_size=2,
             num_train_epochs=2,
@@ -189,7 +201,7 @@ class TestBartExamples(unittest.TestCase):
             do_predict=True,
             gpus=0,
             model_name_or_path="sshleifer/tinier_bart",
-            teacher=CHEAP_ARGS["model_name_or_path"],
+            teacher=CHEAP_ARGS['model_name_or_path'],
             val_check_interval=0.5,
             alpha_encoder_loss=0.4,
         )

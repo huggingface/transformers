@@ -706,7 +706,7 @@ class AutoModelWithLMHead:
 
         for config_class, model_class in MODEL_WITH_LM_HEAD_MAPPING.items():
             if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(

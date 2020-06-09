@@ -1115,7 +1115,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         assert past is not None, "past has to be defined for encoder_outputs"
 
         # first step
-        if len(past) < 2:
+        if not past[-1]:
             encoder_outputs, decoder_past_key_value_states = past, None
         else:
             encoder_outputs, decoder_past_key_value_states = past[0], past[1]

@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader
 
 from durbango import lmap, pickle_load, pickle_save
 from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
-from transformers import BartConfig, BartForConditionalGeneration, BartTokenizer
+from transformers import AutoModelWithLMHead, AutoConfig, T5Config, T5ForConditionalGeneration, BartConfig, BartForConditionalGeneration
 from transformers.modeling_bart import invert_mask
 from transformers.optimization import AdamW
 
@@ -96,11 +96,14 @@ class SummarizationTrainer(BaseTransformer):
     mode = "language-modeling"
     loss_names = ["loss"]
 
+    @property
+    def is_t5(self):
+        return self.model.config.model_type == 't5'
+
     def __init__(self, hparams, **kwargs):
-        tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
-        super().__init__(hparams, num_labels=None, mode=self.mode, tokenizer=tokenizer, **kwargs)
+        super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
         save_git_info(self.hparams.output_dir)
-        self.model: BartForConditionalGeneration
+        self.model: AutoModelWithLMHead
         self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
         self.hparams_save_path = Path(self.output_dir) / "hparams.pkl"
         self.step_count = 0
@@ -132,7 +135,7 @@ class SummarizationTrainer(BaseTransformer):
         self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
         self.freeze_embeds()
         if self.hparams.freeze_encoder:
-            freeze_part(self.model.model.encoder)
+            freeze_part(self.model.encoder)
         self.hparams.git_sha = get_git_info()["repo_sha"]
         pickle_save(self.hparams, self.hparams_save_path)
         # self.hparams.
@@ -429,54 +432,13 @@ class SummarizationDistiller(SummarizationTrainer):
     def __init__(self, hparams):
         assert Path(hparams.data_dir).exists()
 
-        # Dump empty student model at a path, then call from_pretrained on it
-        teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher, **self.teacher_kwargs).eval()
-
-        student_updates = {
-            "decoder_layers": hparams.student_decoder_layers,
-            "encoder_layers": hparams.student_encoder_layers,
-        }
-        student_updates.update(self.teacher_kwargs)
-        d_layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
-        e_layers_to_copy: List = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
-        hparams.layer_to_copy = d_layers_to_copy
-        hparams.e_layer_to_copy = e_layers_to_copy
-
-        kw = teacher.config.to_diff_dict()
-        kw.update(student_updates)
-        # Copy weights
-        student_cfg = BartConfig(**kw)
-        student = BartForConditionalGeneration(student_cfg)
-        # student.save_pretrained('student')
-
-        student, _ = init_student(student, teacher)
-        self.different_encoder: bool = hparams.student_encoder_layers != teacher.config.encoder_layers
-        self.different_decoder = hparams.student_decoder_layers != teacher.config.decoder_layers
-        if self.different_decoder:
-            copy_layers(teacher.model.decoder.layers, student.model.decoder.layers, d_layers_to_copy)
-        if self.different_encoder:
-            copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
-        Path(hparams.output_dir).mkdir(exist_ok=True)
+        d_layers_to_copy, student, student_cfg, teacher = self.pre_init(hparams)
 
         super().__init__(hparams, model=student, config=student_cfg)
         self.teacher = teacher
         freeze_part(self.teacher)
 
-        assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
-        assert_all_frozen(self.teacher)
-        assert_all_frozen(self.model.model.decoder.embed_tokens)
-        assert_all_frozen(self.model.model.encoder.embed_tokens)
-
-        if self.different_encoder:
-            assert any(grad_status(self.model.model.encoder))
-        else:
-            freeze_part(self.model.model.encoder)
-            del teacher.model.encoder
-
-        if self.different_decoder:
-            assert any(grad_status(self.model.model.decoder))
-        else:
-            freeze_part(self.model.model.decoder)  # TODO(SS): very suspicious
+        self.freeze_stuff(d_layers_to_copy)
 
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
@@ -487,6 +449,61 @@ class SummarizationDistiller(SummarizationTrainer):
         self.alpha_encoder_loss = self.hparams.alpha_encoder_loss
         gc.collect()
         torch.cuda.empty_cache()
+
+    def freeze_stuff(self, d_layers_to_copy):
+        assert len(self.model.decoder.layers) == len(d_layers_to_copy)
+        assert_all_frozen(self.teacher)
+        assert_all_frozen(self.model.decoder.embed_tokens)
+        assert_all_frozen(self.model.encoder.embed_tokens)
+        if self.different_encoder:
+            assert any(grad_status(self.model.encoder))
+        else:
+            freeze_part(self.model.encoder)
+            del self.teacher.model.encoder
+        if self.different_decoder:
+            assert any(grad_status(self.model.decoder))
+        else:
+            freeze_part(self.model.decoder)  # TODO(SS): very suspicious
+
+    def pre_init(self, hparams):
+        # Dump empty student model at a path, then call from_pretrained on it
+        teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher, **self.teacher_kwargs).eval()
+        student_updates = {
+            "decoder_layers": hparams.student_decoder_layers,
+            "encoder_layers": hparams.student_encoder_layers,
+        }
+        d_layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
+        e_layers_to_copy: List = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
+        student_updates.update(self.teacher_kwargs)
+        hparams.layer_to_copy = d_layers_to_copy
+        hparams.e_layer_to_copy = e_layers_to_copy
+        kw = teacher.config.to_diff_dict()
+        kw.update(student_updates)
+        # Copy weights
+        student_cfg = BartConfig(**kw)
+        student = BartForConditionalGeneration(student_cfg)
+        student, _ = init_student(student, teacher)
+        self.copy_to_student(d_layers_to_copy, e_layers_to_copy, hparams, student, teacher)
+        Path(hparams.output_dir).mkdir(exist_ok=True)
+        return d_layers_to_copy, student, student_cfg, teacher
+
+    def copy_to_student(self, d_layers_to_copy, e_layers_to_copy, hparams, student, teacher):
+        if teacher.config.model_type == 't5':
+            return self.copy_t5_to_student(d_layers_to_copy, e_layers_to_copy, hparams, student, teacher)
+        self.different_encoder: bool = hparams.student_encoder_layers != teacher.config.encoder_layers
+        self.different_decoder = hparams.student_decoder_layers != teacher.config.decoder_layers
+        if self.different_decoder:
+            copy_layers(teacher.model.decoder.layers, student.model.decoder.layers, d_layers_to_copy)
+        if self.different_encoder:
+            copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
+
+    def copy_t5_to_student(self, d_layers_to_copy, e_layers_to_copy, hparams, student, teacher):
+        self.different_encoder: bool = hparams.student_encoder_layers != teacher.config.num_layers
+        self.different_decoder = hparams.student_decoder_layers != teacher.config.num_layers
+        if self.different_decoder:
+            copy_layers(teacher.decoder.block, student.decoder.block, d_layers_to_copy)
+        if self.different_encoder:
+            copy_layers(teacher.encoder.block, student.encoder.block, e_layers_to_copy)
 
     def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
@@ -618,6 +635,7 @@ class SummarizationDistiller(SummarizationTrainer):
         return parser
 
 
+
 class EncoderDistiller(SummarizationDistiller):
     loss_names = ["loss"]
 
@@ -640,7 +658,6 @@ class EncoderDistiller(SummarizationDistiller):
             teacher_enc_outputs = self.teacher_enc(source_ids, attention_mask=source_mask)
         loss_encoder = self.calc_mse_loss(enc_outputs[0], teacher_enc_outputs[0], source_mask)
         return (loss_encoder,)
-
 
 class BrewerDistiller(SummarizationDistiller):
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
@@ -714,6 +731,49 @@ class BrewerDistiller(SummarizationDistiller):
         return sum(hidden_losses)
 
 
+class T5BrewerDistiller(BrewerDistiller):
+
+    def pre_init(self, hparams):
+        teacher = T5ForConditionalGeneration.from_pretrained(hparams.teacher, **self.teacher_kwargs).eval()
+        n_layer = hparams.student_decoder_layers
+        assert n_layer == hparams.student_encoder_layers  # TODO(SS): relax this
+        d_layers_to_copy = get_layers_to_copy(n_layer, len(teacher.decoder.block))
+        e_layers_to_copy: List = get_layers_to_copy(n_layer, len(teacher.encoder.block))
+        student_updates = {'num_layers': n_layer}
+        student_updates.update(self.teacher_kwargs)
+        hparams.layer_to_copy = d_layers_to_copy
+        hparams.e_layer_to_copy = e_layers_to_copy
+        kw = teacher.config.to_diff_dict()
+        kw.update(student_updates)
+        # Copy weights
+        student_cfg = T5Config(**kw)
+        student = T5ForConditionalGeneration(student_cfg)
+        student, _ = init_student(student, teacher)
+        self.copy_to_student(d_layers_to_copy, e_layers_to_copy, hparams, student, teacher)
+        Path(hparams.output_dir).mkdir(exist_ok=True)
+        return d_layers_to_copy, student, student_cfg, teacher
+
+    def freeze_embeds(self):
+        freeze_part(self.model.shared)
+        for d in [self.model.encoder, self.model.decoder]:
+            # freeze_part(d.embed_positions)
+            freeze_part(d.embed_tokens)
+
+    def freeze_stuff(self, d_layers_to_copy):
+        assert len(self.model.decoder.block) == len(d_layers_to_copy)
+        assert_all_frozen(self.teacher)
+        assert_all_frozen(self.model.decoder.embed_tokens)
+        assert_all_frozen(self.model.encoder.embed_tokens)
+        if self.different_encoder:
+            assert any(grad_status(self.model.encoder))
+        else:
+            freeze_part(self.model.encoder)
+            del self.teacher.model.encoder
+        if self.different_decoder:
+            assert any(grad_status(self.model.decoder))
+        else:
+            freeze_part(self.model.decoder)  # TODO(SS): very suspicious
+
 def main(args):
     Path(args.output_dir).mkdir(exist_ok=True)
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
@@ -739,9 +799,12 @@ def main(args):
 
 
 def create_module(args) -> BaseTransformer:
+    t5 = 't5' in args.model_name_or_path
     if args.no_teacher:
         assert not args.enc_only
         module_cls = SummarizationTrainer
+    elif t5:
+        module_cls = T5BrewerDistiller
     elif args.enc_only:
         module_cls = EncoderDistiller
     elif args.alpha_hid > 0:

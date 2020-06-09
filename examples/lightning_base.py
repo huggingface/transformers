@@ -203,7 +203,7 @@ class BaseTransformer(pl.LightningModule):
         )
         parser.add_argument(
             "--tokenizer_name",
-            default="",
+            default="facebook/bart-large",
             type=str,
             help="Pretrained tokenizer name or path if not the same as model_name",
         )
