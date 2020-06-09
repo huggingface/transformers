@@ -69,7 +69,7 @@ try:
         wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
     else:
         _has_wandb = False if os.getenv("WANDB_DISABLED") else True
-except ImportError:
+except (ImportError, AttributeError):
     _has_wandb = False
 
 
