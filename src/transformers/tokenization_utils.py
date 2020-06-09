@@ -1541,7 +1541,11 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 tokens = self.tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
-                return self.convert_tokens_to_ids(text)
+                if is_pretokenized:
+                    tokens = list(itertools.chain(*(self.tokenize(t, add_special_tokens=False, add_prefix_space=True, **kwargs) for t in text)))
+                    return self.convert_tokens_to_ids(tokens)
+                else:
+                    return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
                 return text
             else:
@@ -1702,7 +1706,11 @@ class PreTrainedTokenizer(SpecialTokensMixin):
                 tokens = self.tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
                 return self.convert_tokens_to_ids(tokens)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], str):
-                return self.convert_tokens_to_ids(text)
+                if is_pretokenized:
+                    tokens = list(itertools.chain(*(self.tokenize(t, add_special_tokens=False, add_prefix_space=True, **kwargs) for t in text)))
+                    return self.convert_tokens_to_ids(tokens)
+                else:
+                    return self.convert_tokens_to_ids(text)
             elif isinstance(text, (list, tuple)) and len(text) > 0 and isinstance(text[0], int):
                 return text
             else:
