@@ -70,6 +70,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
 
         # Check that Rust and Python align
         self.assert_tokenization_python_rust_equals(tokenizer_r, tokenizer_p)
+        self.assert_pretokenized_inputs(tokenizer_r, tokenizer_p)
         self.assert_num_special_tokens_to_add_equal(tokenizer_r, tokenizer_p)
         self.assert_max_length_equal(tokenizer_r, tokenizer_p)
         self.assert_special_tokens_map_equal(tokenizer_r, tokenizer_p)
@@ -307,6 +308,103 @@ class CommonFastTokenizerTest(unittest.TestCase):
         for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
             self.assertEqual(len(tokens[key].shape), 2)
             self.assertEqual(tokens[key].shape[-1], 6)
+
+    def assert_pretokenized_inputs(self, tokenizer_r, tokenizer_p):
+        # Input string
+        pretokenized_input_simple = tokenizer_p.tokenize("This is a sample input")
+        pretokenized_input_pair = tokenizer_p.tokenize("This is a sample pair")
+
+        # Test encode for pretokenized inputs
+        output_r = tokenizer_r.encode(pretokenized_input_simple, is_pretokenized=True)
+        output_p = tokenizer_p.encode(pretokenized_input_simple, is_pretokenized=True)
+        self.assertEqual(output_p, output_r)
+
+        # Test encode_plus for pretokenized inputs
+        output_r = tokenizer_r.encode_plus(pretokenized_input_simple,
+                                           is_pretokenized=True,
+                                           return_token_type_ids=True,
+                                           return_attention_mask=True,
+                                           return_overflowing_tokens=True,
+                                           return_special_tokens_mask=True,
+                                           return_offsets_mapping=False,  # Not implemented in python tokenizers
+                                           )
+        output_p = tokenizer_p.encode_plus(pretokenized_input_simple,
+                                           is_pretokenized=True,
+                                           return_token_type_ids=True,
+                                           return_attention_mask=True,
+                                           return_overflowing_tokens=True,
+                                           return_special_tokens_mask=True,
+                                           return_offsets_mapping=False,  # Not implemented in python tokenizers
+                                           )
+        for key in output_p.keys():
+            self.assertEqual(output_p[key], output_r[key])
+
+        # Test batch_encode_plus for pretokenized inputs
+        output_r = tokenizer_r.batch_encode_plus([pretokenized_input_simple] * 4,
+                                           is_pretokenized=True,
+                                           return_token_type_ids=True,
+                                           return_attention_mask=True,
+                                           return_overflowing_tokens=True,
+                                           return_special_tokens_mask=True,
+                                           return_offsets_mapping=False,  # Not implemented in python tokenizers
+                                           )
+        output_p = tokenizer_p.batch_encode_plus([pretokenized_input_simple] * 4,
+                                           is_pretokenized=True,
+                                           return_token_type_ids=True,
+                                           return_attention_mask=True,
+                                           return_overflowing_tokens=True,
+                                           return_special_tokens_mask=True,
+                                           return_offsets_mapping=False,  # Not implemented in python tokenizers
+                                           )
+        for key in output_p.keys():
+            self.assertEqual(output_p[key], output_r[key])
+
+        # Test encode for pretokenized inputs pairs
+        output_r = tokenizer_r.encode(pretokenized_input_simple, pretokenized_input_pair, is_pretokenized=True)
+        output_p = tokenizer_p.encode(pretokenized_input_simple, pretokenized_input_pair, is_pretokenized=True)
+        self.assertEqual(output_p, output_r)
+
+        # Test encode_plus for pretokenized inputs
+        output_r = tokenizer_r.encode_plus(pretokenized_input_simple,
+                                           pretokenized_input_pair,
+                                           is_pretokenized=True,
+                                           return_token_type_ids=True,
+                                           return_attention_mask=True,
+                                           return_overflowing_tokens=True,
+                                           return_special_tokens_mask=True,
+                                           return_offsets_mapping=False,  # Not implemented in python tokenizers
+                                           )
+        output_p = tokenizer_p.encode_plus(pretokenized_input_simple,
+                                           pretokenized_input_pair,
+                                           is_pretokenized=True,
+                                           return_token_type_ids=True,
+                                           return_attention_mask=True,
+                                           return_overflowing_tokens=True,
+                                           return_special_tokens_mask=True,
+                                           return_offsets_mapping=False,  # Not implemented in python tokenizers
+                                           )
+        for key in output_p.keys():
+            self.assertEqual(output_p[key], output_r[key])
+
+        # Test batch_encode_plus for pretokenized inputs
+        output_r = tokenizer_r.batch_encode_plus([pretokenized_input_simple, pretokenized_input_pair] * 4,
+                                           is_pretokenized=True,
+                                           return_token_type_ids=True,
+                                           return_attention_mask=True,
+                                           return_overflowing_tokens=True,
+                                           return_special_tokens_mask=True,
+                                           return_offsets_mapping=False,  # Not implemented in python tokenizers
+                                           )
+        output_p = tokenizer_p.batch_encode_plus([pretokenized_input_simple, pretokenized_input_pair] * 4,
+                                           is_pretokenized=True,
+                                           return_token_type_ids=True,
+                                           return_attention_mask=True,
+                                           return_overflowing_tokens=True,
+                                           return_special_tokens_mask=True,
+                                           return_offsets_mapping=False,  # Not implemented in python tokenizers
+                                           )
+        for key in output_p.keys():
+            self.assertEqual(output_p[key], output_r[key])
 
     def assert_build_inputs_with_special_tokens(self, tokenizer_r, tokenizer_p):
         # Input string
