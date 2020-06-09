@@ -108,7 +108,9 @@ class PyTorchBenchmark(Benchmark):
                         _train()
                 elif not self.args.no_tpu and is_tpu_available():
                     # tpu
-                    raise NotImplementedError("Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `args.no_memory=True`")
+                    raise NotImplementedError(
+                        "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `args.no_memory=True`"
+                    )
                 else:
                     # cpu
                     memory_bytes = measure_peak_memory_cpu(_train)
@@ -217,7 +219,9 @@ class PyTorchBenchmark(Benchmark):
                         _forward()
                 elif not self.args.no_tpu and is_tpu_available():
                     # tpu
-                    raise NotImplementedError("Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `args.no_memory=True`")
+                    raise NotImplementedError(
+                        "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `args.no_memory=True`"
+                    )
                 else:
                     # cpu
                     memory_bytes = measure_peak_memory_cpu(_forward)
