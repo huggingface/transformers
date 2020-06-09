@@ -212,8 +212,17 @@ class BertModelTester:
         )
         self.parent.assertListEqual(list(result["pooled_output"].size()), [self.batch_size, self.hidden_size])
 
-    def create_and_check_bert_for_autoregressive_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    def create_and_check_bert_for_causal_lm(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
     ):
         model = BertLMHeadModel(config=config)
         model.to(torch_device)
@@ -248,7 +257,7 @@ class BertModelTester:
         )
         self.check_loss_output(result)
 
-    def create_and_check_bert_model_for_masked_lm_as_decoder(
+    def create_and_check_bert_model_for_causal_lm_as_decoder(
         self,
         config,
         input_ids,
@@ -260,7 +269,7 @@ class BertModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = BertForMaskedLM(config=config)
+        model = BertLMHeadModel(config=config)
         model.to(torch_device)
         model.eval()
         loss, prediction_scores = model(
@@ -479,17 +488,17 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
             encoder_attention_mask,
         )
 
-    def test_for_autoregressive_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_bert_for_autoregressive_lm(*config_and_inputs)
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_bert_for_causal_lm(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bert_for_masked_lm(*config_and_inputs)
 
-    def test_for_masked_lm_decoder(self):
+    def test_for_causal_lm_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_bert_model_for_masked_lm_as_decoder(*config_and_inputs)
+        self.model_tester.create_and_check_bert_model_for_causal_lm_as_decoder(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

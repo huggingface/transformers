@@ -27,7 +27,7 @@ from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
-    from transformers import BertModel, BertForMaskedLM, EncoderDecoderModel, EncoderDecoderConfig
+    from transformers import BertModel, BertLMHeadModel, EncoderDecoderModel, EncoderDecoderConfig
     import numpy as np
     import torch
 
@@ -115,7 +115,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
         **kwargs
     ):
         encoder_model = BertModel(config)
-        decoder_model = BertForMaskedLM(decoder_config)
+        decoder_model = BertLMHeadModel(decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         self.assertTrue(enc_dec_model.config.decoder.is_decoder)
         self.assertTrue(enc_dec_model.config.is_encoder_decoder)
@@ -152,7 +152,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
         **kwargs
     ):
         encoder_model = BertModel(config)
-        decoder_model = BertForMaskedLM(decoder_config)
+        decoder_model = BertLMHeadModel(decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
         enc_dec_model = EncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
         enc_dec_model.to(torch_device)
@@ -178,7 +178,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
         **kwargs
     ):
         encoder_model = BertModel(config)
-        decoder_model = BertForMaskedLM(decoder_config)
+        decoder_model = BertLMHeadModel(decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         enc_dec_model.eval()
@@ -219,7 +219,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
         **kwargs
     ):
         encoder_model = BertModel(config)
-        decoder_model = BertForMaskedLM(decoder_config)
+        decoder_model = BertLMHeadModel(decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         enc_dec_model.eval()
@@ -268,7 +268,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
         **kwargs
     ):
         encoder_model = BertModel(config)
-        decoder_model = BertForMaskedLM(decoder_config)
+        decoder_model = BertLMHeadModel(decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
         outputs_encoder_decoder = enc_dec_model(
@@ -289,7 +289,7 @@ class EncoderDecoderModelTest(unittest.TestCase):
 
     def create_and_check_bert_encoder_decoder_model_generate(self, input_ids, config, decoder_config, **kwargs):
         encoder_model = BertModel(config)
-        decoder_model = BertForMaskedLM(decoder_config)
+        decoder_model = BertLMHeadModel(decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
         enc_dec_model.to(torch_device)
 

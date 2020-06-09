@@ -858,6 +858,7 @@ class BertForPreTraining(BertPreTrainedModel):
 class BertLMHeadModel(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        assert config.is_decoder, "If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True`."
 
         self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config)
@@ -914,7 +915,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             import torch
 
             tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            model = BertLMHeadModel.from_pretrained('bert-base-uncased')
+            model = BertLMHeadModel.from_pretrained('bert-base-uncased', is_decoder=True)
 
             input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             outputs = model(input_ids, labels=input_ids)
@@ -957,18 +958,6 @@ class BertLMHeadModel(BertPreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        # if model is does not use a causal mask then add a dummy token
-        if self.config.is_decoder is False:
-            assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
-            attention_mask = torch.cat(
-                [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1
-            )
-
-            dummy_token = torch.full(
-                (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
-            )
-            input_ids = torch.cat([input_ids, dummy_token], dim=1)
-
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
@@ -976,7 +965,7 @@ class BertLMHeadModel(BertPreTrainedModel):
 class BertForMaskedLM(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
+        
         self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config)
 
@@ -1076,21 +1065,15 @@ class BertForMaskedLM(BertPreTrainedModel):
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
 
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # if model is does not use a causal mask then add a dummy token
-        if self.config.is_decoder is False:
-            assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
-            attention_mask = torch.cat(
-                [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1
-            )
-
-            dummy_token = torch.full(
-                (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
-            )
-            input_ids = torch.cat([input_ids, dummy_token], dim=1)
+        #  add a dummy token
+        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
+        attention_mask = torch.cat(
+            [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1
+        )
+        dummy_token = torch.full(
+            (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
+        )
+        input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
