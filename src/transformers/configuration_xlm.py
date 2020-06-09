@@ -152,13 +152,8 @@ class XLMConfig(PretrainedConfig):
 
             # Accessing the model configuration
             configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
     """
 
-    pretrained_config_archive_map = XLM_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "xlm"
 
     def __init__(

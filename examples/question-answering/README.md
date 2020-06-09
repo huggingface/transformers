@@ -28,6 +28,7 @@ python run_squad.py \
   --model_name_or_path bert-base-uncased \
   --do_train \
   --do_eval \
+  --do_lower_case \
   --train_file $SQUAD_DIR/train-v1.1.json \
   --predict_file $SQUAD_DIR/dev-v1.1.json \
   --per_gpu_train_batch_size 12 \
@@ -56,6 +57,7 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answer
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --do_train \
     --do_eval \
+    --do_lower_case \
     --train_file $SQUAD_DIR/train-v1.1.json \
     --predict_file $SQUAD_DIR/dev-v1.1.json \
     --learning_rate 3e-5 \
@@ -163,17 +165,15 @@ Larger batch size may improve the performance while costing more memory.
 python run_tf_squad.py \
     --model_name_or_path bert-base-uncased \
     --output_dir model \
-    --max-seq-length 384 \
+    --max_seq_length 384 \
     --num_train_epochs 2 \
     --per_gpu_train_batch_size 8 \
     --per_gpu_eval_batch_size 16 \
     --do_train \
-    --logging_dir logs \
-    --mode question-answering \
+    --logging_dir logs \    
     --logging_steps 10 \
     --learning_rate 3e-5 \
-    --doc_stride 128 \
-    --optimizer_name adamw
+    --doc_stride 128    
 ```
 
 For the moment the evaluation is not available in the Tensorflow Trainer only the training.

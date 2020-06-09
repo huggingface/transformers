@@ -44,8 +44,15 @@ Did not find it? :( So we can act quickly on it, please follow these steps:
 To get the OS and software versions automatically, you can run the following command:
 
 ```bash
-python transformers-cli env
+transformers-cli env
 ```
+
+or from the root of the repository the following command:
+
+```bash
+python src/transformers/commands/transformers_cli.py env
+```
+
 
 ### Do you want to implement a new model?
 

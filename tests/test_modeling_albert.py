@@ -33,7 +33,7 @@ if is_torch_available():
         AlbertForTokenClassification,
         AlbertForQuestionAnswering,
     )
-    from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -162,7 +162,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
                 input_ids,
                 attention_mask=input_mask,
                 token_type_ids=token_type_ids,
-                masked_lm_labels=token_labels,
+                labels=token_labels,
                 sentence_order_label=sequence_labels,
             )
             result = {
@@ -183,7 +183,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
             )
             result = {
                 "loss": loss,
@@ -295,6 +295,6 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = AlbertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

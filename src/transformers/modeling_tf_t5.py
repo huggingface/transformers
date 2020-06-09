@@ -25,18 +25,20 @@ import tensorflow as tf
 
 from .configuration_t5 import T5Config
 from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, shape_list
+from .modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, keras_serializable, shape_list
+from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
 
-TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "t5-small": "https://cdn.huggingface.co/t5-small-tf_model.h5",
-    "t5-base": "https://cdn.huggingface.co/t5-base-tf_model.h5",
-    "t5-large": "https://cdn.huggingface.co/t5-large-tf_model.h5",
-    "t5-3b": "https://cdn.huggingface.co/t5-3b-tf_model.h5",
-    "t5-11b": "https://cdn.huggingface.co/t5-11b-tf_model.h5",
-}
+TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "t5-small",
+    "t5-base",
+    "t5-large",
+    "t5-3b",
+    "t5-11b",
+    # See all T5 models at https://huggingface.co/models?filter=t5
+]
 
 ####################################################
 # TF 2.0 Models are constructed using Keras imperative API by sub-classing
@@ -501,7 +503,10 @@ class _NoLayerEmbedTokens(object):
 # The full model without a specific pretrained or finetuning head is
 # provided as a tf.keras.layers.Layer usually called "TFT5MainLayer"
 ####################################################
+@keras_serializable
 class TFT5MainLayer(tf.keras.layers.Layer):
+    config_class = T5Config
+
     def __init__(self, config, embed_tokens=None, **kwargs):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
@@ -547,12 +552,32 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         use_cache=False,
         training=False,
     ):
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            encoder_hidden_states = inputs[2] if len(inputs) > 2 else encoder_hidden_states
+            encoder_attention_mask = inputs[3] if len(inputs) > 3 else encoder_attention_mask
+            inputs_embeds = inputs[4] if len(inputs) > 4 else inputs_embeds
+            head_mask = inputs[5] if len(inputs) > 5 else head_mask
+            past_key_value_states = inputs[6] if len(inputs) > 6 else past_key_value_states
+            assert len(inputs) <= 7, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            input_ids = inputs.get("decoder_input_ids")
+            attention_mask = inputs.get("decoder_attention_mask", attention_mask)
+            encoder_hidden_states = inputs.get("encoder_hidden_states", encoder_hidden_states)
+            encoder_attention_mask = inputs.get("encoder_attention_mask", encoder_attention_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            head_mask = inputs.get("head_mask", head_mask)
+            past_key_value_states = inputs.get("past_key_value_states", past_key_value_states)
+            assert len(inputs) <= 7, "Too many inputs."
+        else:
+            input_ids = inputs
 
-        if inputs is not None and inputs_embeds is not None:
+        if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both inputs and inputs_embeds at the same time")
-        elif inputs is not None:
-            input_shape = shape_list(inputs)
-            inputs = tf.reshape(inputs, (-1, input_shape[-1]))
+        elif input_ids is not None:
+            input_shape = shape_list(input_ids)
+            input_ids = tf.reshape(input_ids, (-1, input_shape[-1]))
         elif inputs_embeds is not None:
             input_shape = shape_list(inputs_embeds)[:-1]
         else:
@@ -560,7 +585,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
-            inputs_embeds = self.embed_tokens(inputs)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
 
@@ -682,7 +707,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 # layer_outputs = hidden-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
                 position_bias = layer_outputs[3 if self.output_attentions else 2]
                 if self.is_decoder and encoder_hidden_states is not None:
-                    encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 3]
+                    encoder_decoder_position_bias = layer_outputs[5 if self.output_attentions else 3]
             # append next layer key value states
             present_key_value_states = present_key_value_states + (present_key_value_state,)
 
@@ -720,7 +745,6 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = T5Config
-    pretrained_model_archive_map = TF_T5_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "transformer"
 
     @property

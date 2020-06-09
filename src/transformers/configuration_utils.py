@@ -20,7 +20,7 @@ import copy
 import json
 import logging
 import os
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
 
@@ -37,7 +37,6 @@ class PretrainedConfig(object):
             It only affects the model's configuration.
 
         Class attributes (overridden by derived classes):
-            - ``pretrained_config_archive_map``: a python ``dict`` with `shortcut names` (string) as keys and `url` (string) of associated pretrained model configurations as values.
             - ``model_type``: a string that identifies the model type, that we serialize into the JSON file, and that we use to recreate the correct object in :class:`~transformers.AutoConfig`.
 
         Args:
@@ -52,7 +51,6 @@ class PretrainedConfig(object):
             torchscript (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Is the model used with Torchscript (for PyTorch models).
     """
-    pretrained_config_archive_map: Dict[str, str] = {}
     model_type: str = ""
 
     def __init__(self, **kwargs):
@@ -89,6 +87,7 @@ class PretrainedConfig(object):
         self.id2label = kwargs.pop("id2label", None)
         self.label2id = kwargs.pop("label2id", None)
         if self.id2label is not None:
+            kwargs.pop("num_labels", None)
             self.id2label = dict((int(key), value) for key, value in self.id2label.items())
             # Keys are always strings in JSON so convert ids to int here.
         else:
@@ -203,9 +202,7 @@ class PretrainedConfig(object):
         return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
-    def get_config_dict(
-        cls, pretrained_model_name_or_path: str, pretrained_config_archive_map: Optional[Dict] = None, **kwargs
-    ) -> Tuple[Dict, Dict]:
+    def get_config_dict(cls, pretrained_model_name_or_path: str, **kwargs) -> Tuple[Dict, Dict]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used
         for instantiating a Config using `from_dict`.
@@ -213,8 +210,6 @@ class PretrainedConfig(object):
         Parameters:
             pretrained_model_name_or_path (:obj:`string`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
-            pretrained_config_archive_map: (:obj:`Dict[str, str]`, `optional`) Dict:
-                A map of `shortcut names` to `url`. By default, will use the current class attribute.
 
         Returns:
             :obj:`Tuple[Dict, Dict]`: The dictionary that will be used to instantiate the configuration object.
@@ -226,12 +221,7 @@ class PretrainedConfig(object):
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
 
-        if pretrained_config_archive_map is None:
-            pretrained_config_archive_map = cls.pretrained_config_archive_map
-
-        if pretrained_model_name_or_path in pretrained_config_archive_map:
-            config_file = pretrained_config_archive_map[pretrained_model_name_or_path]
-        elif os.path.isdir(pretrained_model_name_or_path):
+        if os.path.isdir(pretrained_model_name_or_path):
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             config_file = pretrained_model_name_or_path
@@ -254,21 +244,11 @@ class PretrainedConfig(object):
             config_dict = cls._dict_from_json_file(resolved_config_file)
 
         except EnvironmentError:
-            if pretrained_model_name_or_path in pretrained_config_archive_map:
-                msg = "Couldn't reach server at '{}' to download pretrained model configuration file.".format(
-                    config_file
-                )
-            else:
-                msg = (
-                    "Can't load '{}'. Make sure that:\n\n"
-                    "- '{}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
-                    "- or '{}' is the correct path to a directory containing a '{}' file\n\n".format(
-                        pretrained_model_name_or_path,
-                        pretrained_model_name_or_path,
-                        pretrained_model_name_or_path,
-                        CONFIG_NAME,
-                    )
-                )
+            msg = (
+                f"Can't load config for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a {CONFIG_NAME} file\n\n"
+            )
             raise EnvironmentError(msg)
 
         except json.JSONDecodeError:

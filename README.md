@@ -63,7 +63,7 @@ Choose the right framework for every part of a model's lifetime
 
 ## Installation
 
-This repo is tested on Python 3.6+, PyTorch 1.0.0+ and TensorFlow 2.0.
+This repo is tested on Python 3.6+, PyTorch 1.0.0+ (PyTorch 1.3.1+ for examples) and TensorFlow 2.0.
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
@@ -340,8 +340,8 @@ python ./examples/text-classification/run_glue.py \
     --do_eval \
     --data_dir $GLUE_DIR/$TASK_NAME \
     --max_seq_length 128 \
-    --per_gpu_eval_batch_size=8   \
-    --per_gpu_train_batch_size=8   \
+    --per_device_eval_batch_size=8   \
+    --per_device_train_batch_size=8   \
     --learning_rate 2e-5 \
     --num_train_epochs 3.0 \
     --output_dir /tmp/$TASK_NAME/
@@ -367,8 +367,8 @@ python ./examples/text-classification/run_glue.py \
     --data_dir=${GLUE_DIR}/STS-B  \
     --output_dir=./proc_data/sts-b-110   \
     --max_seq_length=128   \
-    --per_gpu_eval_batch_size=8   \
-    --per_gpu_train_batch_size=8   \
+    --per_device_eval_batch_size=8   \
+    --per_device_train_batch_size=8   \
     --gradient_accumulation_steps=1 \
     --max_steps=1200  \
     --model_name=xlnet-large-cased   \
@@ -391,8 +391,8 @@ python -m torch.distributed.launch --nproc_per_node 8 ./examples/text-classifica
     --do_eval   \
     --data_dir $GLUE_DIR/MRPC/   \
     --max_seq_length 128   \
-    --per_gpu_eval_batch_size=8   \
-    --per_gpu_train_batch_size=8   \
+    --per_device_eval_batch_size=8   \
+    --per_device_train_batch_size=8   \
     --learning_rate 2e-5   \
     --num_train_epochs 3.0  \
     --output_dir /tmp/mrpc_output/ \
@@ -428,8 +428,8 @@ python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answer
     --max_seq_length 384 \
     --doc_stride 128 \
     --output_dir ../models/wwm_uncased_finetuned_squad/ \
-    --per_gpu_eval_batch_size=3   \
-    --per_gpu_train_batch_size=3   \
+    --per_device_eval_batch_size=3   \
+    --per_device_train_batch_size=3   \
 ```
 
 Training with these hyper-parameters gave us the following results:

@@ -19,6 +19,7 @@ import copy
 import logging
 import math
 import os
+import warnings
 
 import torch
 import torch.nn.functional as F
@@ -27,7 +28,7 @@ from torch.nn import CrossEntropyLoss
 
 from .configuration_t5 import T5Config
 from .file_utils import DUMMY_INPUTS, DUMMY_MASK, add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel, prune_linear_layer
+from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
@@ -36,13 +37,14 @@ logger = logging.getLogger(__name__)
 # This dict contrains shortcut names and associated url
 # for the pretrained weights provided with the models
 ####################################################
-T5_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "t5-small": "https://cdn.huggingface.co/t5-small-pytorch_model.bin",
-    "t5-base": "https://cdn.huggingface.co/t5-base-pytorch_model.bin",
-    "t5-large": "https://cdn.huggingface.co/t5-large-pytorch_model.bin",
-    "t5-3b": "https://cdn.huggingface.co/t5-3b-pytorch_model.bin",
-    "t5-11b": "https://cdn.huggingface.co/t5-11b-pytorch_model.bin",
-}
+T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "t5-small",
+    "t5-base",
+    "t5-large",
+    "t5-3b",
+    "t5-11b",
+    # See all T5 models at https://huggingface.co/models?filter=t5
+]
 
 
 ####################################################
@@ -214,13 +216,7 @@ class T5Attention(nn.Module):
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
-        mask = torch.ones(self.n_heads, self.d_kv)
-        heads = set(heads) - self.pruned_heads
-        for head in heads:
-            head -= sum(1 if h < head else 0 for h in self.pruned_heads)
-            mask[head] = 0
-        mask = mask.view(-1).contiguous().eq(1)
-        index = torch.arange(len(mask))[mask].long()
+        heads, index = find_pruneable_heads_and_indices(heads, self.n_heads, self.d_kv, self.pruned_heads)
         # Prune linear layers
         self.q = prune_linear_layer(self.q, index)
         self.k = prune_linear_layer(self.k, index)
@@ -555,7 +551,6 @@ class T5PreTrainedModel(PreTrainedModel):
     """
 
     config_class = T5Config
-    pretrained_model_archive_map = T5_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
 
@@ -616,10 +611,10 @@ class T5PreTrainedModel(PreTrainedModel):
         shifted_input_ids[..., 0] = decoder_start_token_id
 
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
-        # replace possible -100 values in lm_labels by `pad_token_id`
+        # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
-        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `lm_labels` has only positive values and -100"
+        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `labels` has only positive values and -100"
 
         return shifted_input_ids
 
@@ -745,7 +740,7 @@ class T5Stack(T5PreTrainedModel):
                 # layer_outputs = hidden-states, key-value-states (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
                 position_bias = layer_outputs[3 if self.output_attentions else 2]
                 if self.is_decoder and encoder_hidden_states is not None:
-                    encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 3]
+                    encoder_decoder_position_bias = layer_outputs[5 if self.output_attentions else 3]
             # append next layer key value states
             present_key_value_states = present_key_value_states + (present_key_value_state,)
 
@@ -1008,21 +1003,24 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         decoder_attention_mask=None,
         decoder_past_key_value_states=None,
         use_cache=True,
-        lm_labels=None,
+        labels=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         head_mask=None,
+        **kwargs
     ):
         r"""
-        lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
                 Labels for computing the sequence classification/regression loss.
                 Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
                 All labels set to ``-100`` are ignored (masked), the loss is only
                 computed for labels in ``[0, ..., config.vocab_size]``
+        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+                Used to hide legacy arguments that have been deprecated.
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.T5Config`) and inputs.
-        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`lm_label` is provided):
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Classification loss (cross entropy).
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -1047,7 +1045,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
         model = T5ForConditionalGeneration.from_pretrained('t5-small')
         input_ids = tokenizer.encode("Hello, my dog is cute", return_tensors="pt")  # Batch size 1
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, lm_labels=input_ids)
+        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
         loss, prediction_scores = outputs[:2]
 
         tokenizer = T5Tokenizer.from_pretrained('t5-small')
@@ -1055,6 +1053,14 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         input_ids = tokenizer.encode("summarize: Hello, my dog is cute", return_tensors="pt")  # Batch size 1
         outputs = model.generate(input_ids)
         """
+
+        if "lm_labels" in kwargs:
+            warnings.warn(
+                "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                DeprecationWarning,
+            )
+            labels = kwargs.pop("lm_labels")
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1065,14 +1071,14 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         hidden_states = encoder_outputs[0]
 
-        if lm_labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
+        if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
-            decoder_input_ids = self._shift_right(lm_labels)
+            decoder_input_ids = self._shift_right(labels)
 
         # If decoding with past key value states, only the last tokens
         # should be given as an input
         if decoder_past_key_value_states is not None:
-            assert lm_labels is None, "Decoder should not use cached key value states when training."
+            assert labels is None, "Decoder should not use cached key value states when training."
             if decoder_input_ids is not None:
                 decoder_input_ids = decoder_input_ids[:, -1:]
             if decoder_inputs_embeds is not None:
@@ -1103,9 +1109,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         lm_logits = self.lm_head(sequence_output)
 
         decoder_outputs = (lm_logits,) + decoder_outputs[1:]  # Add hidden states and attention if they are here
-        if lm_labels is not None:
+        if labels is not None:
             loss_fct = CrossEntropyLoss(ignore_index=-100)
-            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), lm_labels.view(-1))
+            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
             # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
             decoder_outputs = (loss,) + decoder_outputs
 

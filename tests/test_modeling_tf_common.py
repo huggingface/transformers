@@ -30,7 +30,7 @@ if is_tf_available():
     import tensorflow as tf
     import numpy as np
 
-    from transformers import tf_top_k_top_p_filtering, TFAdaptiveEmbedding
+    from transformers import tf_top_k_top_p_filtering, TFAdaptiveEmbedding, TFSharedEmbeddings
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
@@ -107,26 +107,45 @@ class TFModelTesterMixin:
             and getattr(module_member, "_keras_serializable", False)
         )
         for main_layer_class in tf_main_layer_classes:
-            main_layer = main_layer_class(config)
+            # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
+            if "T5" in main_layer_class.__name__:
+                # Take the same values than in TFT5ModelTester for this shared layer
+                shared = TFSharedEmbeddings(99, 32, name="shared")
+                main_layer = main_layer_class(config, embed_tokens=shared)
+            else:
+                main_layer = main_layer_class(config)
             symbolic_inputs = {
                 name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
             }
+
             model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
             outputs = model(inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
-                model = tf.keras.models.load_model(
-                    filepath, custom_objects={main_layer_class.__name__: main_layer_class}
-                )
+                if "T5" in main_layer_class.__name__:
+                    model = tf.keras.models.load_model(
+                        filepath,
+                        custom_objects={
+                            main_layer_class.__name__: main_layer_class,
+                            "TFSharedEmbeddings": TFSharedEmbeddings,
+                        },
+                    )
+                else:
+                    model = tf.keras.models.load_model(
+                        filepath, custom_objects={main_layer_class.__name__: main_layer_class}
+                    )
                 assert isinstance(model, tf.keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
     def assert_outputs_same(self, after_outputs, outputs):
         # Make sure we don't have nans
-        out_1 = after_outputs[0].numpy()
+        if isinstance(after_outputs, tf.Tensor):
+            out_1 = after_outputs.numpy()
+        else:
+            out_1 = after_outputs[0].numpy()
         out_2 = outputs[0].numpy()
         self.assertEqual(out_1.shape, out_2.shape)
         out_1 = out_1[~np.isnan(out_1)]
@@ -269,7 +288,6 @@ class TFModelTesterMixin:
             inputs_keywords = copy.deepcopy(inputs_dict)
             input_ids = inputs_keywords.pop("input_ids" if not self.is_encoder_decoder else "inputs", None,)
             outputs_keywords = model(input_ids, **inputs_keywords)
-
             output_dict = outputs_dict[0].numpy()
             output_keywords = outputs_keywords[0].numpy()
 

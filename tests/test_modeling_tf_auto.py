@@ -49,7 +49,7 @@ class TFAutoModelTest(unittest.TestCase):
         self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
 
         logging.basicConfig(level=logging.INFO)
-        # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
         for model_name in ["bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -66,7 +66,7 @@ class TFAutoModelTest(unittest.TestCase):
         self.assertTrue(h5py.version.hdf5_version.startswith("1.10"))
 
         logging.basicConfig(level=logging.INFO)
-        # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
         for model_name in ["bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -79,7 +79,7 @@ class TFAutoModelTest(unittest.TestCase):
     @slow
     def test_lmhead_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
         for model_name in ["bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -92,7 +92,7 @@ class TFAutoModelTest(unittest.TestCase):
     @slow
     def test_sequence_classification_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
         for model_name in ["bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
@@ -105,7 +105,7 @@ class TFAutoModelTest(unittest.TestCase):
     @slow
     def test_question_answering_model_from_pretrained(self):
         logging.basicConfig(level=logging.INFO)
-        # for model_name in list(TF_BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        # for model_name in TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
         for model_name in ["bert-base-uncased"]:
             config = AutoConfig.from_pretrained(model_name)
             self.assertIsNotNone(config)
