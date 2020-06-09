@@ -42,13 +42,14 @@ class DprConfig(PretrainedConfig):
 
     def __init__(
         self,
-        k: int = 100,
+        k: int = 16,
         pretrained_model_cfg: str = "bert-base-uncased",
         projection_dim: int = 0,
         sequence_length: int = 512,
         do_lower_case: bool = True,
         biencoder_model_file: Optional[str] = None,
         reader_model_file: Optional[str] = None,
+        pad_id: int = 0,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -59,3 +60,4 @@ class DprConfig(PretrainedConfig):
         self.do_lower_case = do_lower_case
         self.biencoder_model_file = biencoder_model_file
         self.reader_model_file = reader_model_file
+        self.pad_id = pad_id
