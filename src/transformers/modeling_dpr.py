@@ -87,6 +87,7 @@ class DprBertEncoder(BertModel):
 # Reader
 ###########
 
+
 class Reader(nn.Module):
     def __init__(self, encoder: nn.Module, hidden_size):
         super(Reader, self).__init__()
@@ -211,6 +212,7 @@ class DprPretrainedReader(PreTrainedModel):
             logger.info("Loading DPR reader from {}".format(self.config.reader_model_file))
             saved_state = load_states_from_checkpoint(self.config.reader_model_file)
             self.reader.load_state_dict(saved_state.model_dict)
+
 
 ###############
 # Actual Models
@@ -355,11 +357,7 @@ class DprReader(DprPretrainedReader):
         self.reader = get_bert_reader_components(config)
         self.init_weights()
 
-    def forward(
-        self,
-        question_and_titles_ids: List[T],
-        texts_ids: List[T],
-    ) -> Tuple[T, ...]:
+    def forward(self, question_and_titles_ids: List[T], texts_ids: List[T],) -> Tuple[T, ...]:
         assert len(question_and_titles_ids) == len(texts_ids)
         device = question_and_titles_ids[0].device
         n_contexts = len(question_and_titles_ids)
@@ -371,7 +369,7 @@ class DprReader(DprPretrainedReader):
             _, len_qt = question_and_title_ids.size()
             _, len_txt = text_ids.size()
             input_ids[i, 0:len_qt] = question_and_title_ids
-            input_ids[i, len_qt:len_qt + len_txt] = text_ids
+            input_ids[i, len_qt : len_qt + len_txt] = text_ids
         input_ids = input_ids.unsqueeze(0)
         attention_mask = input_ids != self.config.pad_id
         attention_mask = attention_mask.to(device=device)
@@ -383,7 +381,7 @@ class DprReader(DprPretrainedReader):
         question_and_titles_ids: List[T],
         texts_ids: List[T],
         max_answer_length: int = 64,
-        top_spans_per_passage: int = 10
+        top_spans_per_passage: int = 10,
     ) -> Tuple[T, ...]:
 
         input_ids, start_logits, end_logits, relevance_logits = self.forward(question_and_titles_ids, texts_ids)
