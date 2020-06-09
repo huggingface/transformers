@@ -154,9 +154,7 @@ class TestBartExamples(unittest.TestCase):
         self.assertEqual(1, len(ckpts))
         transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(transformer_ckpts), len(ckpts))
-        matches = pickle_load(model.output_dir / "ckpt_matches.pkl")
         n_extra = 0  # more than 1 checkpoint saved, specified in lightning_base.py
-        self.assertEqual(1+n_extra, len(matches))
         removed = clean_output_dir(model.output_dir)
         self.assertEqual(len(removed), n_extra)
         new_transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
@@ -209,12 +207,11 @@ class TestBartExamples(unittest.TestCase):
         contents = {os.path.basename(p) for p in contents}
         self.assertIn(ckpt_name, contents)
         self.assertIn("metrics.pkl", contents)
-        self.assertIn("ckpt_matches.pkl", contents)
         self.assertIn("test_generations.txt", contents)
         self.assertIn("val_generations_3.txt", contents)
         self.assertIn("val_3_results.txt", contents)
         self.assertIn("test_results.txt", contents)
-        self.assertEqual(len(contents), 16)
+        self.assertEqual(len(contents), 15)
 
         metrics = pickle_load(Path(output_dir) / "metrics.pkl")
         val_df = pd.DataFrame(metrics["val"])
