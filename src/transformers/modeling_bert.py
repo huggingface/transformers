@@ -879,7 +879,6 @@ class BertLMHeadModel(BertPreTrainedModel):
         labels=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        lm_labels=None,
         **kwargs
     ):
         r"""
@@ -998,7 +997,6 @@ class BertForMaskedLM(BertPreTrainedModel):
         labels=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        lm_labels=None,
         **kwargs
     ):
         r"""
