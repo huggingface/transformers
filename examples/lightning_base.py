@@ -225,20 +225,13 @@ class BaseTransformer(pl.LightningModule):
         parser.add_argument("--eval_batch_size", default=8, type=int)
         parser.add_argument("--val_check_interval", default=1.0, type=float)
 
-        # parser.add_argument("--eval_batch_size", default=32, type=int)
-
     @rank_zero_only
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         save_path = self.output_dir.joinpath('best_tfmr')
         save_path.mkdir(exist_ok=True)
         self.model.config.save_step = self.step_count
         self.model.save_pretrained(save_path)
-
         self.tfmr_ckpts[self.step_count] = save_path
-        self.save_resolution_file()
-
-    def on_train_end(self) -> None:
-        self.save_resolution_file()
 
     @property
     def pl_checkpoints(self) -> List[Path]:
@@ -343,7 +336,7 @@ def add_generic_args(parser, root_dir):
     parser.add_argument(
         "--fp16_opt_level",
         type=str,
-        default="O1",
+        default="O2",
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
         "See details at https://nvidia.github.io/apex/amp.html",
     )
@@ -379,7 +372,7 @@ def generic_train(
         args.output_dir.startswith("/var/")
         or args.fast_dev_run
         or args.output_dir.startswith("/tmp/")
-        or args.gpus > 1  # should be fixed in pl 0.8 June 12th
+        #or args.gpus > 1  # should be fixed in pl 0.8 June 12th
     ):
         logger = True
     else:
