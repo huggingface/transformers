@@ -37,6 +37,7 @@ if is_torch_available():
         BertModel,
         BertConfig,
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         top_k_top_p_filtering,
     )
 
@@ -62,6 +63,15 @@ class ModelTesterMixin:
     test_missing_keys = True
     is_encoder_decoder = False
 
+
+    def _prepare_for_class(self, inputs_dict, model_class):
+        if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+            return {
+                k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous() for k,v in inputs_dict.items()
+            }
+        return inputs_dict
+
+
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -70,7 +80,7 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**inputs_dict)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             out_2 = outputs[0].cpu().numpy()
             out_2[np.isnan(out_2)] = 0
 
@@ -79,7 +89,7 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(tmpdirname)
                 model.to(torch_device)
                 with torch.no_grad():
-                    after_outputs = model(**inputs_dict)
+                    after_outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
                 # Make sure we don't have nans
                 out_1 = after_outputs[0].cpu().numpy()
@@ -109,8 +119,8 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                first = model(**inputs_dict)[0]
-                second = model(**inputs_dict)[0]
+                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+                second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
             out_1 = first.cpu().numpy()
             out_2 = second.cpu().numpy()
             out_1 = out_1[~np.isnan(out_1)]
@@ -136,7 +146,7 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**inputs_dict)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
             self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, False)
@@ -178,7 +188,7 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**inputs_dict)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
             self.assertEqual(model.config.output_attentions, True)
             self.assertEqual(model.config.output_hidden_states, True)
@@ -223,7 +233,7 @@ class ModelTesterMixin:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
             model.eval()
-            inputs = inputs_dict["input_ids"]  # Let's keep only input_ids
+            inputs = self._prepare_for_class(inputs_dict, model_class)["input_ids"]  # Let's keep only input_ids
 
             try:
                 traced_gpt2 = torch.jit.trace(model, inputs)
@@ -286,7 +296,7 @@ class ModelTesterMixin:
             head_mask[0, 0] = 0
             head_mask[-1, :-1] = 0
             head_mask.requires_grad_(requires_grad=True)
-            inputs = inputs_dict.copy()
+            inputs = self._prepare_for_class(inputs_dict, model_class).copy()
             inputs["head_mask"] = head_mask
 
             outputs = model(**inputs)
@@ -337,7 +347,7 @@ class ModelTesterMixin:
             }
             model.prune_heads(heads_to_prune)
             with torch.no_grad():
-                outputs = model(**inputs_dict)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             attentions = outputs[-1]
 
@@ -372,7 +382,7 @@ class ModelTesterMixin:
                 model.to(torch_device)
 
             with torch.no_grad():
-                outputs = model(**inputs_dict)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
             self.assertEqual(attentions[0].shape[-3], 1)
             self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
@@ -402,7 +412,7 @@ class ModelTesterMixin:
             model.eval()
 
             with torch.no_grad():
-                outputs = model(**inputs_dict)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
 
             self.assertEqual(attentions[0].shape[-3], 1)
@@ -430,7 +440,7 @@ class ModelTesterMixin:
             model.eval()
 
             with torch.no_grad():
-                outputs = model(**inputs_dict)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
 
             self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 1)
@@ -444,7 +454,7 @@ class ModelTesterMixin:
                 model.to(torch_device)
 
             with torch.no_grad():
-                outputs = model(**inputs_dict)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
 
             self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 1)
@@ -456,7 +466,7 @@ class ModelTesterMixin:
             model.prune_heads(heads_to_prune)
 
             with torch.no_grad():
-                outputs = model(**inputs_dict)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
 
             self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 1)
@@ -476,7 +486,7 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**inputs_dict)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs[-1]
             self.assertEqual(model.config.output_attentions, False)
             self.assertEqual(model.config.output_hidden_states, True)
@@ -517,7 +527,7 @@ class ModelTesterMixin:
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**inputs_dict)
+            model(**self._prepare_for_class(inputs_dict, model_class))
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model_embed = model.resize_token_embeddings(model_vocab_size - 15)
@@ -528,7 +538,7 @@ class ModelTesterMixin:
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
-            model(**inputs_dict)
+            model(**self._prepare_for_class(inputs_dict, model_class))
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
             models_equal = True
@@ -631,6 +641,7 @@ class ModelTesterMixin:
             inputs_dict.pop("decoder_input_ids", None)
 
         for model_class in self.all_model_classes:
+            if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values(): continue
             model = model_class(config)
             model.to(torch_device)
             model.eval()
