@@ -1239,9 +1239,16 @@ class QuestionAnsweringPipeline(Pipeline):
                     {
                         "score": score.item(),
                         "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
-                        "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
+                        "end": np.where(
+                            char_to_word == feature.token_to_orig_map[min(e, len(feature.token_to_orig_map))]
+                        )[0][-1].item(),
                         "answer": " ".join(
-                            example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
+                            example.doc_tokens[
+                                feature.token_to_orig_map[s] : feature.token_to_orig_map[
+                                    min(e, len(feature.token_to_orig_map))
+                                ]
+                                + 1
+                            ]
                         ),
                     }
                     for s, e, score in zip(starts, ends, scores)
