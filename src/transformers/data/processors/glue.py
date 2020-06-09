@@ -113,10 +113,7 @@ if is_tf_available():
             ds = tf.data.Dataset.from_generator(
                 gen,
                 ({"input_ids": tf.int32, "attention_mask": tf.int32}, tf.int64),
-                (
-                    {"input_ids": tf.TensorShape([None]), "attention_mask": tf.TensorShape([None])},
-                    tf.TensorShape([]),
-                ),
+                ({"input_ids": tf.TensorShape([None]), "attention_mask": tf.TensorShape([None])}, tf.TensorShape([]),),
             )
 
         return ds
