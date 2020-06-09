@@ -19,11 +19,12 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import is_torch_available
+from transformers.file_utils import cached_property
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 from .utils import require_torch, slow, torch_device
-from transformers.file_utils import cached_property
+
 
 if is_torch_available():
     import torch
@@ -37,6 +38,7 @@ if is_torch_available():
         BartConfig,
         BartTokenizer,
         MBartTokenizer,
+        BatchEncoding,
     )
     from transformers.modeling_bart import (
         BART_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -221,20 +223,16 @@ class BartTranslationTests(unittest.TestCase):
         """Only load the model if needed."""
 
         model = BartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro").to(torch_device)
-        if 'cuda' in torch_device:
+        if "cuda" in torch_device:
             model = model.half()
         return model
 
     def test_enro_prepare_translation_batch(self):
-        expected_translations = ["Şeful ONU declară că nu există o soluţie militară în Siria",
-                                 "to be padded"]
         expected_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]
-        batch: dict = self.tokenizer.prepare_translation_batch(
-            self.src_text,
-            tgt_texts=self.tgt_text,
-            max_length=len(expected_tokens),
-            return_tensors='pt'
+        batch = self.tokenizer.prepare_translation_batch(
+            self.src_text, tgt_texts=self.tgt_text, max_length=len(expected_tokens), return_tensors="pt"
         )
+        self.assertIsInstance(batch, BatchEncoding)
 
         self.assertEqual((2, 14), batch["input_ids"].shape)
         self.assertEqual((2, 14), batch["attention_mask"].shape)
@@ -270,9 +268,8 @@ class BartTranslationTests(unittest.TestCase):
 
     @slow
     def test_enro_generate(self):
-        model = self.model
-        inputs: dict = self.tokenizer.prepare_translation_batch([self.src_text[0]], return_tensors="pt",).to(torch_device)
-        translated_tokens = model.generate(input_ids=inputs["input_ids"].to(torch_device), num_beams=5,)
+        inputs: dict = self.tokenizer.prepare_translation_batch([self.src_text[0]]).to(torch_device)
+        translated_tokens = self.model.generate(input_ids=inputs["input_ids"].to(torch_device))
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         self.assertEqual(self.tgt_text[0], decoded[0])
 

@@ -14,13 +14,11 @@
 # limitations under the License.
 
 import logging
-from typing import Dict, List, Optional
-
-import torch
+from typing import List, Optional
 
 from .tokenization_roberta import RobertaTokenizer
-from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_utils import BatchEncoding
+from .tokenization_xlm_roberta import XLMRobertaTokenizer
 
 
 logger = logging.getLogger(__name__)
@@ -51,11 +49,25 @@ SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-la
 
 
 class MBartTokenizer(XLMRobertaTokenizer):
+    """
+    This inherits from XLMRobertaTokenizer. ``prepare_translation_batch`` should be used to encode inputs.
+    Other tokenizer methods like encode do not work properly.
+    The tokenization method is <tokens> <eos> <language code>. There is no BOS token.
+
+    Examples::
+        from transformers import MBartTokenizer
+        tokenizer = MBartTokenizer.from_pretrained('mbart-large-en-ro')
+        example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
+        expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
+        batch: dict = tokenizer.prepare_translation_batch(
+            example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
+        )
+    """
 
     vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
-    lang_code_to_id = {  # TODO(SS): resize embeddings will break this
+    lang_code_to_id = {  # NOTE(SS): resize embeddings will break this
         "ar_AR": 250001,
         "cs_CZ": 250002,
         "de_DE": 250003,
@@ -123,10 +135,10 @@ class MBartTokenizer(XLMRobertaTokenizer):
         )
         if tgt_texts is None:
             return model_inputs
-
+        decoder_ids = [self._append_special_tokens_and_truncate(t, tgt_lang, max_length - 2) for t in tgt_texts]
         decoder_inputs: BatchEncoding = self.batch_encode_plus(
-            tgt_texts,
-            add_special_tokens=True,
+            decoder_ids,
+            add_special_tokens=False,
             return_tensors=return_tensors,
             max_length=max_length,
             pad_to_max_length=pad_to_max_length,
