@@ -289,8 +289,7 @@ class BartTranslationTests(unittest.TestCase):
     def test_enro_tokenizer_batch_encode_plus(self):
         raw = "UN Chief Says There Is No Military Solution in Syria"
         ids = self.tokenizer.batch_encode_plus([raw])["input_ids"][0]
-        expected_result = [0, 8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2]
-        # TODO(SS): should be  [8274, ..., 2, 250020]
+        expected_result = [0, 8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250020]
         self.assertListEqual(expected_result, ids)
 
     def test_mbart_fast_forward(self):
