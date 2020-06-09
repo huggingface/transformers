@@ -554,7 +554,8 @@ class Trainer:
             logs["epoch"] = self.epoch
         if self.tb_writer:
             for k, v in logs.items():
-                self.tb_writer.add_scalar(k, v, self.global_step)
+                if isinstance(v, (int, float)):
+                    self.tb_writer.add_scalar(k, v, self.global_step)
             self.tb_writer.flush()
         if is_wandb_available():
             wandb.log(logs, step=self.global_step)
