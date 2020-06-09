@@ -456,7 +456,7 @@ def squad_convert_examples_to_features(
             )
         else:
             train_types = (
-                {"input_ids": tf.int32, "attention_mask": tf.int32, "feature_index": tf.int64, "qas_id": tf.string,},
+                {"input_ids": tf.int32, "attention_mask": tf.int32, "feature_index": tf.int64, "qas_id": tf.string},
                 {
                     "start_positions": tf.int64,
                     "end_positions": tf.int64,
