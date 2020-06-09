@@ -22,6 +22,7 @@ class OnnxConverterArgumentParser(ArgumentParser):
         self.add_argument("--opset", type=int, default=11, help="ONNX opset to use")
         self.add_argument("--check-loading", action="store_true", help="Check ONNX is able to load the model")
         self.add_argument("--use-external-format", action="store_true", help="Allow exporting model >= than 2Gb")
+        
         self.add_argument("output")
 
 
@@ -105,7 +106,7 @@ def load_graph_from_args(framework: str, model: str, tokenizer: Optional[str] = 
     print("Loading pipeline (model: {}, tokenizer: {})".format(model, tokenizer))
 
     # Allocate tokenizer and model
-    return pipeline("feature-extraction", model=model, tokenizer=tokenizer, framework=framework)
+    return pipeline("sentiment-analysis", model=model, tokenizer=tokenizer, framework=framework)
 
 
 def convert_pytorch(nlp: Pipeline, opset: int, output: str, use_external_format: bool):
