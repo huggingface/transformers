@@ -303,7 +303,7 @@ class DprQuestionEncoder(DprPretrainedQuestionEncoder):
     def __init__(self, config: DprConfig):
         super().__init__(config)
         self.config = config
-        self.ctx_encoder = get_bert_ctx_encoder_components(config)
+        self.question_encoder = get_bert_question_encoder_components(config)
         self.init_weights()
 
     def forward(
@@ -312,7 +312,7 @@ class DprQuestionEncoder(DprPretrainedQuestionEncoder):
         if attention_mask is None:
             attention_mask = input_ids != self.config.pad_id
             attention_mask = attention_mask.to(device=input_ids.device)
-        sequence_output, pooled_output, hidden_states = self.ctx_encoder(input_ids, token_type_ids, attention_mask)
+        sequence_output, pooled_output, hidden_states = self.question_encoder(input_ids, token_type_ids, attention_mask)
         return pooled_output
 
 
