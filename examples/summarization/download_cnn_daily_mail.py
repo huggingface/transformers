@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import argparse
 from pathlib import Path
 
@@ -8,8 +9,8 @@ def main(input_path, reference_path, data_dir):
     cnn_ds = tfds.load("cnn_dailymail", split="test", shuffle_files=False, data_dir=data_dir)
     cnn_ds_iter = tfds.as_numpy(cnn_ds)
 
-    test_articles_file = Path(input_path).open("w")
-    test_summaries_file = Path(reference_path).open("w")
+    test_articles_file = Path(input_path).open("w", encoding="utf-8")
+    test_summaries_file = Path(reference_path).open("w", encoding="utf-8")
 
     for example in cnn_ds_iter:
         test_articles_file.write(example["article"].decode("utf-8") + "\n")
