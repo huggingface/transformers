@@ -69,11 +69,6 @@ class PyTorchBenchmark(Benchmark):
 
             if self.args.torchscript:
                 raise NotImplementedError("Training for torchscript is currently not implemented")
-            #                if config.is_encoder_decoder:
-            #                    raise NotImplementedError("Torchscript is currently not supported for EncoderDecoder models")
-            #                else:
-            #                    train_model = torch.jit.trace(model, input_ids)  # HOW TO SET LABELS HERE?
-
             else:
                 train_model = model
 
@@ -134,11 +129,11 @@ class PyTorchBenchmark(Benchmark):
 
                 return memory, summary
             else:
-                if not self.args.no_tpu and is_tpu_available():
-                    # run additional 10 times to stabilize compilation for tpu
-                    logger.info("Do training on TPU. Running model 10 times to stabilize compilation")
+                if (not self.args.no_tpu and is_tpu_available()) or self.args.torchscript:
+                    # run additional 10 times to stabilize compilation for tpu and torchscript
+                    logger.info("Do inference on TPU or torchscript. Running model 5 times to stabilize compilation")
                     timeit.repeat(
-                        _train, repeat=1, number=10,
+                        _train, repeat=1, number=5,
                     )
 
                 # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
@@ -240,11 +235,11 @@ class PyTorchBenchmark(Benchmark):
                 return memory, summary
             else:
 
-                if not self.args.no_tpu and is_tpu_available():
-                    # run additional 10 times to stabilize compilation for tpu
-                    logger.info("Do inference on TPU. Running model 10 times to stabilize compilation")
+                if (not self.args.no_tpu and is_tpu_available()) or self.args.torchscript:
+                    # run additional 10 times to stabilize compilation for tpu and torchscript
+                    logger.info("Do inference on TPU or torchscript. Running model 5 times to stabilize compilation")
                     timeit.repeat(
-                        _forward, repeat=1, number=10,
+                        _forward, repeat=1, number=5,
                     )
 
                 # as written in https://docs.python.org/2/library/timeit.html#timeit.Timer.repeat, min should be taken rather than the average
