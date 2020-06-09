@@ -14,10 +14,7 @@ import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict, namedtuple
 from datetime import datetime
-from multiprocessing import Pipe, Process
-from multiprocessing.connection import Connection
-from signal import SIGKILL
-from typing import Callable, Iterable, List, NamedTuple, Optional, Union
+from typing import Iterable, List, NamedTuple, Optional, Union
 
 from transformers import AutoConfig, PretrainedConfig
 from transformers import __version__ as version
@@ -54,6 +51,65 @@ BenchmarkOutput = namedtuple(
 def is_memory_tracing_enabled():
     global _is_memory_tracing_enabled
     return _is_memory_tracing_enabled
+
+
+def measure_peak_memory_cpu(function, process, interval):
+
+    try:
+        from multiprocessing import Pipe
+        import psutil
+    except (ImportError):
+
+    else:
+
+        def _get_memory():
+            process = psutil.Process(os.getpid())
+            try: 
+                meminfo_attr = 'memory_info' if hasattr(process, 'memory_info') else 'get_memory_info'
+                mem = getattr(process, meminfo_attr)()[0]
+            except psutil.AccessDenied:
+                raise ValueError("Error with psutil.")
+
+        class MemoryMeasureProcess(Process):
+
+            def __init__(self, pid, interval, pipe)
+                super().__init__()
+                self.pid = pid
+                self.interval = interval
+                self.pipe = pipe
+                self.mem_usage = _get_memory()
+
+            def run(self):
+                self.pipe.send(0)
+                stop = False
+                while True:
+                    self.mem_usage = max(self.mem_usage, _get_memory())
+                if stop:
+                    break
+                stop = self.pipe.poll(self.interval)
+
+                # can probs delete this
+                self.pipe.send([self.mem_usage])
+                
+        child_pipe, parent_pipe = Pipe()
+
+        mem_process = MemoryMeasureProcess(os.getpid(), interval, child_pipe)
+        mem_process.start()
+        parent_pipe.recv()
+
+        try:
+            function()
+            parent_pipe.send(0)
+            ret = parent_pipe.recv()[0]
+        except Exception:
+            parent = psutil.Process(os.getpid())
+            for child in parent.children(recursive=True):
+                os.kill(child.pid, SIGKILL)
+            mem_process.join(0)
+            raise RuntimeError("Process killed. Error in Process")
+
+
+
 
 
 class Frame(NamedTuple):
@@ -129,127 +185,6 @@ class MemorySummary(NamedTuple):
 
 
 MemoryTrace = List[UsedMemoryState]
-
-
-def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5) -> int:
-    """
-        measures peak cpu memory consumption of a given `function`
-        running the function for at least interval seconds
-        and at most 20 * interval seconds.
-        This function is heavily inspired by: `memory_usage`
-        of the package `memory_profiler`: https://github.com/pythonprofilers/memory_profiler/blob/895c4ac7a08020d66ae001e24067da6dcea42451/memory_profiler.py#L239
-
-        Args:
-            - `function`: (`callable`): function() -> ...
-                function without any arguments to measure for which to measure the peak memory
-
-            - `interval`: (`float`)
-                interval in second for which to measure the memory usage
-
-        Returns:
-            - `max_memory`: (`int`)
-                cosumed memory peak in Bytes
-    """
-    try:
-        import psutil
-    except (ImportError):
-        logger.warning(
-            "Psutil not installed, we won't log CPU memory usage. "
-            "Install Psutil (pip install psutil) to use CPU memory tracing."
-        )
-        max_memory = "N/A"
-    else:
-
-        def _get_memory(process_id: int) -> int:
-            """
-                measures current cpu memory usage of a given `process_id`
-
-                Args:
-                    - `process_id`: (`int`)
-                        process_id for which to measure memory
-
-                Returns
-                    - `memory`: (`int`)
-                        cosumed memory in Bytes
-            """
-            process = psutil.Process(process_id)
-            try:
-                meminfo_attr = "memory_info" if hasattr(process, "memory_info") else "get_memory_info"
-                memory = getattr(process, meminfo_attr)()[0]
-            except psutil.AccessDenied:
-                raise ValueError("Error with Psutil.")
-            return memory
-
-        class MemoryMeasureProcess(Process):
-
-            """
-                `MemoryMeasureProcess` inherits from `Process` and overwrites
-                its `run()` method. Used to measure the memory usage of a process
-            """
-
-            def __init__(self, process_id: int, child_connection: Connection, interval: float):
-                super().__init__()
-                self.process_id = process_id
-                self.interval = interval
-                self.connection = child_connection
-                self.num_measurements = 1
-                self.mem_usage = _get_memory(process_id)
-
-            def run(self):
-                self.connection.send(0)
-                stop = False
-                while True:
-                    self.mem_usage = max(self.mem_usage, _get_memory(self.process_id))
-                    self.num_measurements += 1
-
-                    if stop:
-                        break
-
-                    stop = self.connection.poll(self.interval)
-
-                # send results to parent pipe
-                self.connection.send(self.mem_usage)
-                self.connection.send(self.num_measurements)
-
-        while True:
-            # create child, parent connection
-            child_connection, parent_connection = Pipe()
-
-            # instantiate process
-            mem_process = MemoryMeasureProcess(os.getpid(), child_connection, interval)
-            mem_process.start()
-
-            # wait until we get memory
-            parent_connection.recv()
-
-            try:
-                # execute function
-                function()
-
-                # start parent connection
-                parent_connection.send(0)
-
-                # receive memory and num measurements
-                max_memory = parent_connection.recv()
-                num_measurements = parent_connection.recv()
-            except Exception:
-                # kill process in a clean way
-                parent = psutil.Process(os.getpid())
-                for child in parent.children(recursive=True):
-                    os.kill(child.pid, SIGKILL)
-                mem_process.join(0)
-                raise RuntimeError("Process killed. Error in Process")
-
-            # run process at least 20 * interval or until it finishes
-            mem_process.join(20 * interval)
-
-            if (num_measurements > 4) or (interval < 1e-6):
-                break
-
-            # reduce interval
-            interval /= 10
-
-        return max_memory
 
 
 def start_memory_tracing(

@@ -19,7 +19,6 @@
 
 
 import logging
-import os
 import timeit
 
 from transformers import (
@@ -30,7 +29,7 @@ from transformers import (
     is_tpu_available,
 )
 
-from .benchmark_utils import Benchmark, Memory, start_memory_tracing, stop_memory_tracing
+from .benchmark_utils import Benchmark, Memory, measure_peak_memory_cpu, start_memory_tracing, stop_memory_tracing
 
 
 if is_torch_available():
@@ -99,6 +98,7 @@ class PyTorchBenchmark(Benchmark):
                     trace = start_memory_tracing("transformers")
 
                 if self.args.n_gpu > 0:
+                    # gpu
                     # clear gpu cache
                     torch.cuda.empty_cache()
                     if hasattr(torch.cuda, "max_memory_reserved"):
@@ -109,8 +109,11 @@ class PyTorchBenchmark(Benchmark):
                         )
                         torch.cuda.reset_max_memory_cached()
 
-                # calculate loss and do backpropagation
-                _train()
+                        # calculate loss and do backpropagation
+                        _train()
+                else:
+                    # cpu and tpu
+                    memory = Memory(measure_peak_memory_cpu(_train))
 
                 if self.args.trace_memory_line_by_line:
                     summary = stop_memory_tracing(trace)
@@ -127,19 +130,6 @@ class PyTorchBenchmark(Benchmark):
                         )
                         memory = Memory(torch.cuda.max_memory_cached())
                     memory = Memory(torch.cuda.max_memory_reserved())
-                else:
-                    # cpu
-                    try:
-                        import psutil
-                    except (ImportError):
-                        logger.warning(
-                            "Psutil not installed, we won't log CPU memory usage. "
-                            "Install psutil (pip install psutil) to use CPU memory tracing."
-                        )
-                        memory = "N/A"
-                    else:
-                        process = psutil.Process(os.getpid())
-                        memory = Memory(process.memory_info().rss)
 
                 return memory, summary
             else:
@@ -213,6 +203,7 @@ class PyTorchBenchmark(Benchmark):
                     trace = start_memory_tracing("transformers")
 
                 if self.args.n_gpu > 0:
+                    # gpu
                     # clear gpu cache
                     torch.cuda.empty_cache()
                     if hasattr(torch.cuda, "max_memory_reserved"):
@@ -223,7 +214,11 @@ class PyTorchBenchmark(Benchmark):
                         )
                         torch.cuda.reset_max_memory_cached()
 
-                _forward()
+                        # run forward
+                        _forward()
+                else:
+                    # cpu and tpu
+                    memory = Memory(measure_peak_memory_cpu(_forward))
 
                 if self.args.trace_memory_line_by_line:
                     summary = stop_memory_tracing(trace)
@@ -239,19 +234,6 @@ class PyTorchBenchmark(Benchmark):
                             "Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage"
                         )
                         memory = Memory(torch.cuda.max_memory_cached())
-                else:
-                    # cpu
-                    try:
-                        import psutil
-                    except (ImportError):
-                        logger.warning(
-                            "Psutil not installed, we won't log CPU memory usage. "
-                            "Install psutil (pip install psutil) to use CPU memory tracing."
-                        )
-                        memory = "N/A"
-                    else:
-                        process = psutil.Process(os.getpid())
-                        memory = Memory(process.memory_info().rss)
 
                 return memory, summary
             else:
