@@ -2679,6 +2679,23 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
         return tuple(files)
 
+    def prepare_seq2seq_batch(
+        self, src_text: List[str], tgt_text: Optional[List[str]] = None, **kwargs
+    ) -> BatchEncoding:
+        model_inputs: BatchEncoding = self.batch_encode_plus(src_text, **kwargs)
+        if tgt_text is None:
+            return model_inputs
+        decoder_inputs: BatchEncoding = self.batch_encode_plus(tgt_text,)
+        for k, v in decoder_inputs.items():
+            model_inputs[f"decoder_{k}"] = v
+        return model_inputs
+
+
+def trim_seq2seq_batch(batch, pad_token_id):
+    y = trim_batch(batch["decoder_input_ids"], pad_token_id)
+    source_ids, source_mask = trim_batch(batch["input_ids"], pad_token_id, attention_mask=batch["attention_mask"])
+    return source_ids, source_mask, y
+
 
 def trim_batch(
     input_ids, pad_token_id, attention_mask=None,
