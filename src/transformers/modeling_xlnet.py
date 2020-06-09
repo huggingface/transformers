@@ -193,7 +193,6 @@ XLNetLayerNorm = nn.LayerNorm
 class XLNetRelativeAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.output_attentions = config.output_attentions
 
         if config.d_model % config.n_head != 0:
             raise ValueError(
@@ -251,7 +250,17 @@ class XLNetRelativeAttention(nn.Module):
 
         return x
 
-    def rel_attn_core(self, q_head, k_head_h, v_head_h, k_head_r, seg_mat=None, attn_mask=None, head_mask=None):
+    def rel_attn_core(
+        self,
+        q_head,
+        k_head_h,
+        v_head_h,
+        k_head_r,
+        seg_mat=None,
+        attn_mask=None,
+        head_mask=None,
+        output_attentions=False,
+    ):
         """Core relative positional attention operations."""
 
         # content based attention score
@@ -288,7 +297,7 @@ class XLNetRelativeAttention(nn.Module):
         # attention output
         attn_vec = torch.einsum("bnij,jbnd->ibnd", attn_prob, v_head_h)
 
-        if self.output_attentions:
+        if output_attentions:
             return attn_vec, torch.einsum("bnij->ijbn", attn_prob)
 
         return attn_vec
@@ -305,7 +314,19 @@ class XLNetRelativeAttention(nn.Module):
 
         return output
 
-    def forward(self, h, g, attn_mask_h, attn_mask_g, r, seg_mat, mems=None, target_mapping=None, head_mask=None):
+    def forward(
+        self,
+        h,
+        g,
+        attn_mask_h,
+        attn_mask_g,
+        r,
+        seg_mat,
+        mems=None,
+        target_mapping=None,
+        head_mask=None,
+        output_attentions=False,
+    ):
         if g is not None:
             # Two-stream attention with relative positional encoding.
             # content based attention score
@@ -329,10 +350,17 @@ class XLNetRelativeAttention(nn.Module):
 
             # core attention ops
             attn_vec_h = self.rel_attn_core(
-                q_head_h, k_head_h, v_head_h, k_head_r, seg_mat=seg_mat, attn_mask=attn_mask_h, head_mask=head_mask
+                q_head_h,
+                k_head_h,
+                v_head_h,
+                k_head_r,
+                seg_mat=seg_mat,
+                attn_mask=attn_mask_h,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
             )
 
-            if self.output_attentions:
+            if output_attentions:
                 attn_vec_h, attn_prob_h = attn_vec_h
 
             # post processing
@@ -346,25 +374,39 @@ class XLNetRelativeAttention(nn.Module):
             if target_mapping is not None:
                 q_head_g = torch.einsum("mbnd,mlb->lbnd", q_head_g, target_mapping)
                 attn_vec_g = self.rel_attn_core(
-                    q_head_g, k_head_h, v_head_h, k_head_r, seg_mat=seg_mat, attn_mask=attn_mask_g, head_mask=head_mask
+                    q_head_g,
+                    k_head_h,
+                    v_head_h,
+                    k_head_r,
+                    seg_mat=seg_mat,
+                    attn_mask=attn_mask_g,
+                    head_mask=head_mask,
+                    output_attentions=output_attentions,
                 )
 
-                if self.output_attentions:
+                if output_attentions:
                     attn_vec_g, attn_prob_g = attn_vec_g
 
                 attn_vec_g = torch.einsum("lbnd,mlb->mbnd", attn_vec_g, target_mapping)
             else:
                 attn_vec_g = self.rel_attn_core(
-                    q_head_g, k_head_h, v_head_h, k_head_r, seg_mat=seg_mat, attn_mask=attn_mask_g, head_mask=head_mask
+                    q_head_g,
+                    k_head_h,
+                    v_head_h,
+                    k_head_r,
+                    seg_mat=seg_mat,
+                    attn_mask=attn_mask_g,
+                    head_mask=head_mask,
+                    output_attentions=output_attentions,
                 )
 
-                if self.output_attentions:
+                if output_attentions:
                     attn_vec_g, attn_prob_g = attn_vec_g
 
             # post processing
             output_g = self.post_attention(g, attn_vec_g)
 
-            if self.output_attentions:
+            if output_attentions:
                 attn_prob = attn_prob_h, attn_prob_g
 
         else:
@@ -384,10 +426,17 @@ class XLNetRelativeAttention(nn.Module):
 
             # core attention ops
             attn_vec = self.rel_attn_core(
-                q_head_h, k_head_h, v_head_h, k_head_r, seg_mat=seg_mat, attn_mask=attn_mask_h, head_mask=head_mask
+                q_head_h,
+                k_head_h,
+                v_head_h,
+                k_head_r,
+                seg_mat=seg_mat,
+                attn_mask=attn_mask_h,
+                head_mask=head_mask,
+                output_attentions=output_attentions,
             )
 
-            if self.output_attentions:
+            if output_attentions:
                 attn_vec, attn_prob = attn_vec
 
             # post processing
@@ -395,7 +444,7 @@ class XLNetRelativeAttention(nn.Module):
             output_g = None
 
         outputs = (output_h, output_g)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (attn_prob,)
         return outputs
 
@@ -431,7 +480,17 @@ class XLNetLayer(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(
-        self, output_h, output_g, attn_mask_h, attn_mask_g, r, seg_mat, mems=None, target_mapping=None, head_mask=None
+        self,
+        output_h,
+        output_g,
+        attn_mask_h,
+        attn_mask_g,
+        r,
+        seg_mat,
+        mems=None,
+        target_mapping=None,
+        head_mask=None,
+        output_attentions=False,
     ):
         outputs = self.rel_attn(
             output_h,
@@ -443,6 +502,7 @@ class XLNetLayer(nn.Module):
             mems=mems,
             target_mapping=target_mapping,
             head_mask=head_mask,
+            output_attentions=output_attentions,
         )
         output_h, output_g = outputs[:2]
 
@@ -568,7 +628,6 @@ XLNET_INPUTS_DOCSTRING = r"""
 class XLNetModel(XLNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
         self.mem_len = config.mem_len
@@ -701,6 +760,7 @@ class XLNetModel(XLNetPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         use_cache=True,
+        output_attentions=None,
     ):
         r"""
     Return:
@@ -717,7 +777,7 @@ class XLNetModel(XLNetPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -738,6 +798,8 @@ class XLNetModel(XLNetPreTrainedModel):
         last_hidden_states = outputs[0]  # The last hidden-state is the first element of the output tuple
 
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
         # so we move here the first dimension (batch) to the end
@@ -883,9 +945,10 @@ class XLNetModel(XLNetPreTrainedModel):
                 mems=mems[i],
                 target_mapping=target_mapping,
                 head_mask=head_mask[i],
+                output_attentions=output_attentions,
             )
             output_h, output_g = outputs[:2]
-            if self.output_attentions:
+            if output_attentions:
                 attentions.append(outputs[2])
 
         # Add last hidden state
@@ -906,7 +969,7 @@ class XLNetModel(XLNetPreTrainedModel):
             else:
                 hidden_states = tuple(hs.permute(1, 0, 2).contiguous() for hs in hidden_states)
             outputs = outputs + (hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             if target_mapping is not None:
                 # when target_mapping is provided, there are 2-tuple of attentions
                 attentions = tuple(
@@ -985,6 +1048,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_predict)`, `optional`, defaults to :obj:`None`):
@@ -1011,7 +1075,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1060,6 +1124,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         logits = self.lm_loss(transformer_outputs[0])
@@ -1105,6 +1170,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`)
@@ -1128,7 +1194,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1160,6 +1226,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         output = transformer_outputs[0]
 
@@ -1210,6 +1277,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1232,7 +1300,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1266,6 +1334,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -1319,6 +1388,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         labels=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1328,7 +1398,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.XLNetConfig`) and inputs:
-        loss (:obj:`torch.FloatTensor`` of shape ``(1,)`, `optional`, returned when :obj:`labels` is provided):
+        loss (:obj:`torch.FloatTensor`` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
             Classification loss.
         classification_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
             `num_choices` is the second dimension of the input tensors. (see `input_ids` above).
@@ -1343,7 +1413,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1384,6 +1454,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         output = transformer_outputs[0]
@@ -1433,6 +1504,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         use_cache=True,
         start_positions=None,
         end_positions=None,
+        output_attentions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1461,7 +1533,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1496,6 +1568,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -1562,6 +1635,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         is_impossible=None,
         cls_index=None,
         p_mask=None,
+        output_attentions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1603,7 +1677,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1636,6 +1710,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
         )
         hidden_states = transformer_outputs[0]
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)

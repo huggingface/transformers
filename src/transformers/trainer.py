@@ -30,7 +30,7 @@ from .trainer_utils import (
     log_metrics,
     setup_wandb,
 )
-from .training_args import TrainingArguments, is_tpu_available
+from .training_args import TrainingArguments, is_torch_tpu_available
 
 
 try:
@@ -45,7 +45,7 @@ def is_apex_available():
     return _has_apex
 
 
-if is_tpu_available():
+if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
     import torch_xla.distributed.parallel_loader as pl
@@ -203,7 +203,7 @@ class Trainer:
         # Create output directory if needed
         if self.is_world_master():
             os.makedirs(self.args.output_dir, exist_ok=True)
-        if is_tpu_available():
+        if is_torch_tpu_available():
             # Set an xla_device flag on the model's config.
             # We'll find a more elegant and not need to do this in the future.
             self.model.config.xla_device = True
@@ -213,7 +213,7 @@ class Trainer:
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
-        if is_tpu_available():
+        if is_torch_tpu_available():
             train_sampler = get_tpu_sampler(self.train_dataset)
         else:
             train_sampler = (
@@ -238,7 +238,7 @@ class Trainer:
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
 
-        if is_tpu_available():
+        if is_torch_tpu_available():
             sampler = SequentialDistributedSampler(
                 eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
             )
@@ -259,7 +259,7 @@ class Trainer:
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
         # We use the same batch_size as for eval.
-        if is_tpu_available():
+        if is_torch_tpu_available():
             sampler = SequentialDistributedSampler(
                 test_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
             )
@@ -370,7 +370,7 @@ class Trainer:
             self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
 
         # Train!
-        if is_tpu_available():
+        if is_torch_tpu_available():
             total_train_batch_size = self.args.train_batch_size * xm.xrt_world_size()
         else:
             total_train_batch_size = (
@@ -418,7 +418,7 @@ class Trainer:
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
 
-            if is_tpu_available():
+            if is_torch_tpu_available():
                 parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
                     self.args.device
                 )
@@ -445,7 +445,7 @@ class Trainer:
                     else:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
-                    if is_tpu_available():
+                    if is_torch_tpu_available():
                         xm.optimizer_step(optimizer)
                     else:
                         optimizer.step()
@@ -488,7 +488,7 @@ class Trainer:
                         if self.is_world_master():
                             self._rotate_checkpoints()
 
-                        if is_tpu_available():
+                        if is_torch_tpu_available():
                             xm.rendezvous("saving_optimizer_states")
                             xm.save(optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                             xm.save(scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
@@ -544,7 +544,7 @@ class Trainer:
         return loss.item()
 
     def is_local_master(self) -> bool:
-        if is_tpu_available():
+        if is_torch_tpu_available():
             return xm.is_master_ordinal(local=True)
         else:
             return self.args.local_rank in [-1, 0]
@@ -554,7 +554,7 @@ class Trainer:
         This will be True only in one process, even in distributed mode,
         even when training on multiple machines.
         """
-        if is_tpu_available():
+        if is_torch_tpu_available():
             return xm.is_master_ordinal(local=False)
         else:
             return self.args.local_rank == -1 or torch.distributed.get_rank() == 0
@@ -567,7 +567,7 @@ class Trainer:
         Will only save from the world_master process (unless in TPUs).
         """
 
-        if is_tpu_available():
+        if is_torch_tpu_available():
             self._save_tpu(output_dir)
         elif self.is_world_master():
             self._save(output_dir)
@@ -702,7 +702,7 @@ class Trainer:
         label_ids: torch.Tensor = None
         model.eval()
 
-        if is_tpu_available():
+        if is_torch_tpu_available():
             dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
 
         for inputs in tqdm(dataloader, desc=description):
@@ -736,7 +736,7 @@ class Trainer:
                 preds = self.distributed_concat(preds, num_total_examples=self.num_examples(dataloader))
             if label_ids is not None:
                 label_ids = self.distributed_concat(label_ids, num_total_examples=self.num_examples(dataloader))
-        elif is_tpu_available():
+        elif is_torch_tpu_available():
             # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
             if preds is not None:
                 preds = xm.mesh_reduce("eval_preds", preds, torch.cat)
