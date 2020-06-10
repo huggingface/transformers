@@ -157,16 +157,8 @@ def train(args, train_dataset, model, tokenizer):
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
             model.train()
-            batch = tuple(t.to(args.device) for t in batch)
-            inputs = {
-                "input_ids": batch["input_ids"],
-                "attention_mask": batch["attention_mask"],
-                "labels": batch["labels"],
-            }
-            if args.model_type != "distilbert":
-                inputs["token_type_ids"] = (
-                    batch["token_type_ids"] if args.model_type in ["bert", "xlnet"] else None
-                )  # XLM, DistilBERT and RoBERTa don't use segment_ids
+            inputs = tuple(t.to(args.device) for t in batch)
+            pair_ids = inputs.pop('pairID', None) 
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
@@ -281,18 +273,9 @@ def evaluate(args, model, tokenizer, label_list, prefix=""):
         out_label_ids = None
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             model.eval()
-            batch = tuple(t.to(args.device) for t in batch)
-
+            inputs = tuple(t.to(args.device) for t in batch)
+            pair_ids = inputs.pop('pairID', None)
             with torch.no_grad():
-                inputs = {
-                    "input_ids": batch["input_ids"],
-                    "attention_mask": batch["attention_mask"],
-                    "labels": batch["labels"],
-                }
-                if args.model_type != "distilbert":
-                    inputs["token_type_ids"] = (
-                        batch["token_type_ids"] if args.model_type in ["bert", "xlnet"] else None
-                    )  # XLM, DistilBERT and RoBERTa don't use segment_ids
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
 
@@ -301,11 +284,11 @@ def evaluate(args, model, tokenizer, label_list, prefix=""):
             if preds is None:
                 preds = logits.detach().cpu().numpy()
                 out_label_ids = inputs["labels"].detach().cpu().numpy()
-                pair_ids = batch["pairID"].detach().cpu().numpy()
+                pair_ids = pair_ids.detach().cpu().numpy()
             else:
                 preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
                 out_label_ids = np.append(out_label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
-                pair_ids = np.append(pair_ids, batch["pairID"].detach().cpu().numpy(), axis=0)
+                pair_ids = np.append(pair_ids, pair_ids.detach().cpu().numpy(), axis=0)
 
         eval_loss = eval_loss / nb_eval_steps
         if args.output_mode == "classification":
