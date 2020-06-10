@@ -78,6 +78,7 @@ from .file_utils import (
     cached_path,
     is_tf_available,
     is_torch_available,
+    is_torch_tpu_available,
 )
 from .hf_argparser import HfArgumentParser
 
@@ -298,6 +299,7 @@ if is_torch_available():
         XLMRobertaForMultipleChoice,
         XLMRobertaForSequenceClassification,
         XLMRobertaForTokenClassification,
+        XLMRobertaForQuestionAnswering,
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_mmbt import ModalEmbeddings, MMBTModel, MMBTForClassification
