@@ -560,8 +560,8 @@ class Trainer:
                     logger.warning(
                         "Trainer is attempting to log a value of "
                         '"%s" of type %s for key "%s" as a scalar. '
-                        "This invocation may cause errors for TensorboardX's "
-                        "writer.add_scalar() function.",
+                        "This invocation of Tensorboard's writer.add_scalar() "
+                        "is incorrect so we dropped this attribute.",
                         v,
                         type(v),
                         k,
