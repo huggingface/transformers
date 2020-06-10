@@ -200,12 +200,15 @@ class SummarizationTrainer(BaseTransformer):
         pickle_save(self.hparams, self.hparams_save_path)
 
     def freeze_embeds(self):
-        freeze_part(self.model.model.shared)
-        for d in [self.model.model.encoder, self.model.model.decoder]:
-            if hasattr(d, 'embed_positions'):
+        if hasattr(self.model, 'model'): #bart
+            freeze_part(self.model.model.shared)
+            for d in [self.model.model.encoder, self.model.model.decoder]:
                 freeze_part(d.embed_positions)
-            freeze_part(d.embed_tokens)
-
+                freeze_part(d.embed_tokens)
+        else:
+            freeze_part(self.model.shared)
+            for d in [self.model.encoder, self.model.decoder]:
+                freeze_part(d.embed_tokens)
     @property
     def metrics_df(self):
         return pd.DataFrame(self.metrics)
@@ -461,7 +464,7 @@ class SummarizationDistiller(SummarizationTrainer):
         torch.cuda.empty_cache()
 
     def freeze_stuff(self, d_layers_to_copy):
-        assert len(self.model.decoder.layers) == len(d_layers_to_copy)
+        assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
         assert_all_frozen(self.teacher)
         assert_all_frozen(self.model.model.decoder.embed_tokens)
         assert_all_frozen(self.model.model.encoder.embed_tokens)
@@ -711,6 +714,7 @@ class T5SummarizationDistiller(SummarizationDistiller):
             freeze_part(d.embed_tokens)
 
     def freeze_stuff(self, d_layers_to_copy):
+        """T5"""
         assert len(self.model.decoder.block) == len(d_layers_to_copy)
         assert_all_frozen(self.teacher)
         assert_all_frozen(self.model.decoder.embed_tokens)
