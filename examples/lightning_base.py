@@ -334,7 +334,7 @@ def add_generic_args(parser, root_dir):
     parser.add_argument(
         "--fp16_opt_level",
         type=str,
-        default="O2",
+        default="O1",
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
         "See details at https://nvidia.github.io/apex/amp.html",
     )
