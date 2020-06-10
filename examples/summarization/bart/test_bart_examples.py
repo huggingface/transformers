@@ -145,6 +145,41 @@ class TestBartExamples(unittest.TestCase):
         )
         self._bart_distiller_cli(updates)
 
+    @unittest.skipUnless(torch.cuda.is_available(), "skipping fp16 test")
+    def test_bdc_t5_eval_fp16(self):
+        updates = dict(
+            #student_encoder_layers=1,
+            #student_decoder_layers=1,
+            #alpha_hid=2.0,
+            #teacher="patrickvonplaten/t5-tiny-random",
+            fp16=True,
+            model_type="t5",
+            model_name_or_path="patrickvonplaten/t5-tiny-random",
+            do_train=False,
+            do_predict=True,
+            tokenizer_name="patrickvonplaten/t5-tiny-random",
+            no_teacher=True,
+        )
+        self._bart_distiller_cli(updates)
+
+
+    @unittest.skipUnless(torch.cuda.is_available(), "skipping fp16 test")
+    def test_bdc_t5_train_fp16(self):
+        updates = dict(
+            #student_encoder_layers=1,
+            #student_decoder_layers=1,
+            #alpha_hid=2.0,
+            #teacher="patrickvonplaten/t5-tiny-random",
+            fp16=True,
+            model_type="t5",
+            model_name_or_path="patrickvonplaten/t5-tiny-random",
+            do_train=True,
+            do_predict=True,
+            tokenizer_name="patrickvonplaten/t5-tiny-random",
+            no_teacher=True,
+        )
+        self._bart_distiller_cli(updates)
+
     def test_bdc_no_teacher(self):
         updates = dict(
             student_encoder_layers=2,
