@@ -14,12 +14,15 @@ import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict, namedtuple
 from datetime import datetime
-from typing import Iterable, List, NamedTuple, Optional, Union
+from multiprocessing import Pipe, Process
+from multiprocessing.connection import Connection
+from signal import SIGKILL
+from typing import Callable, Iterable, List, NamedTuple, Optional, Union
 
 from transformers import AutoConfig, PretrainedConfig
 from transformers import __version__ as version
 
-from ..file_utils import is_tf_available, is_torch_available
+from ..file_utils import is_tf_available, is_torch_available, is_torch_tpu_available
 from .benchmark_args_utils import BenchmarkArguments
 
 
@@ -126,6 +129,127 @@ class MemorySummary(NamedTuple):
 
 
 MemoryTrace = List[UsedMemoryState]
+
+
+def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5) -> int:
+    """
+        measures peak cpu memory consumption of a given `function`
+        running the function for at least interval seconds
+        and at most 20 * interval seconds.
+        This function is heavily inspired by: `memory_usage`
+        of the package `memory_profiler`: https://github.com/pythonprofilers/memory_profiler/blob/895c4ac7a08020d66ae001e24067da6dcea42451/memory_profiler.py#L239
+
+        Args:
+            - `function`: (`callable`): function() -> ...
+                function without any arguments to measure for which to measure the peak memory
+
+            - `interval`: (`float`)
+                interval in second for which to measure the memory usage
+
+        Returns:
+            - `max_memory`: (`int`)
+                cosumed memory peak in Bytes
+    """
+    try:
+        import psutil
+    except (ImportError):
+        logger.warning(
+            "Psutil not installed, we won't log CPU memory usage. "
+            "Install Psutil (pip install psutil) to use CPU memory tracing."
+        )
+        max_memory = "N/A"
+    else:
+
+        def _get_memory(process_id: int) -> int:
+            """
+                measures current cpu memory usage of a given `process_id`
+
+                Args:
+                    - `process_id`: (`int`)
+                        process_id for which to measure memory
+
+                Returns
+                    - `memory`: (`int`)
+                        cosumed memory in Bytes
+            """
+            process = psutil.Process(process_id)
+            try:
+                meminfo_attr = "memory_info" if hasattr(process, "memory_info") else "get_memory_info"
+                memory = getattr(process, meminfo_attr)()[0]
+            except psutil.AccessDenied:
+                raise ValueError("Error with Psutil.")
+            return memory
+
+        class MemoryMeasureProcess(Process):
+
+            """
+                `MemoryMeasureProcess` inherits from `Process` and overwrites
+                its `run()` method. Used to measure the memory usage of a process
+            """
+
+            def __init__(self, process_id: int, child_connection: Connection, interval: float):
+                super().__init__()
+                self.process_id = process_id
+                self.interval = interval
+                self.connection = child_connection
+                self.num_measurements = 1
+                self.mem_usage = _get_memory(process_id)
+
+            def run(self):
+                self.connection.send(0)
+                stop = False
+                while True:
+                    self.mem_usage = max(self.mem_usage, _get_memory(self.process_id))
+                    self.num_measurements += 1
+
+                    if stop:
+                        break
+
+                    stop = self.connection.poll(self.interval)
+
+                # send results to parent pipe
+                self.connection.send(self.mem_usage)
+                self.connection.send(self.num_measurements)
+
+        while True:
+            # create child, parent connection
+            child_connection, parent_connection = Pipe()
+
+            # instantiate process
+            mem_process = MemoryMeasureProcess(os.getpid(), child_connection, interval)
+            mem_process.start()
+
+            # wait until we get memory
+            parent_connection.recv()
+
+            try:
+                # execute function
+                function()
+
+                # start parent connection
+                parent_connection.send(0)
+
+                # receive memory and num measurements
+                max_memory = parent_connection.recv()
+                num_measurements = parent_connection.recv()
+            except Exception:
+                # kill process in a clean way
+                parent = psutil.Process(os.getpid())
+                for child in parent.children(recursive=True):
+                    os.kill(child.pid, SIGKILL)
+                mem_process.join(0)
+                raise RuntimeError("Process killed. Error in Process")
+
+            # run process at least 20 * interval or until it finishes
+            mem_process.join(20 * interval)
+
+            if (num_measurements > 4) or (interval < 1e-6):
+                break
+
+            # reduce interval
+            interval /= 10
+
+        return max_memory
 
 
 def start_memory_tracing(
@@ -425,6 +549,10 @@ class Benchmark(ABC):
         return self.args.n_gpu > 0
 
     @property
+    def is_tpu(self):
+        return is_torch_tpu_available() and not self.args.no_tpu
+
+    @property
     @abstractmethod
     def framework_version(self):
         pass
@@ -486,6 +614,10 @@ class Benchmark(ABC):
                 self.print_fn("======= INFERENCE - SPEED - RESULT =======")
                 self.print_results(inference_result_time)
                 self.save_to_csv(inference_result_time, self.args.inference_time_csv_file)
+                if self.is_tpu:
+                    self.print_fn(
+                        "TPU was used for inference. Note that the time after compilation stabilized (after ~10 inferences model.forward(..) calls) was measured."
+                    )
 
             if not self.args.no_memory:
                 self.print_fn("======= INFERENCE - MEMORY - RESULT =======")
@@ -501,6 +633,10 @@ class Benchmark(ABC):
                 self.print_fn("======= TRAIN - SPEED - RESULT =======")
                 self.print_results(train_result_time)
                 self.save_to_csv(train_result_time, self.args.train_time_csv_file)
+                if self.is_tpu:
+                    self.print_fn(
+                        "TPU was used for training. Note that the time after compilation stabilized (after ~10 train loss=model.forward(...) + loss.backward() calls) was measured."
+                    )
 
             if not self.args.no_memory:
                 self.print_fn("======= TRAIN - MEMORY - RESULT =======")
@@ -538,6 +674,8 @@ class Benchmark(ABC):
             info = {}
             info["transformers_version"] = version
             info["framework"] = self.framework
+            if self.framework == "PyTorch":
+                info["use_torchscript"] = self.args.torchscript
             info["framework_version"] = self.framework_version
             info["python_version"] = platform.python_version()
             info["system"] = platform.system()
@@ -589,6 +727,10 @@ class Benchmark(ABC):
                     info["gpu_power_watts"] = py3nvml.nvmlDeviceGetPowerManagementLimit(handle) / 1000
                     info["gpu_performance_state"] = py3nvml.nvmlDeviceGetPerformanceState(handle)
                     py3nvml.nvmlShutdown()
+
+            info["use_tpu"] = self.is_tpu
+            # TODO(PVP): See if we can add more information about TPU
+            # see: https://github.com/pytorch/xla/issues/2180
 
             self._environment_info = info
         return self._environment_info

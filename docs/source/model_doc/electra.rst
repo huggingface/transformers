@@ -106,6 +106,13 @@ ElectraForTokenClassification
     :members:
 
 
+ElectraForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ElectraForQuestionAnswering
+    :members:
+
+
 TFElectraModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -78,6 +78,7 @@ from .file_utils import (
     cached_path,
     is_tf_available,
     is_torch_available,
+    is_torch_tpu_available,
 )
 from .hf_argparser import HfArgumentParser
 
@@ -319,6 +320,7 @@ if is_torch_available():
         ElectraForTokenClassification,
         ElectraPreTrainedModel,
         ElectraForSequenceClassification,
+        ElectraForQuestionAnswering,
         ElectraModel,
         load_tf_weights_in_electra,
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
