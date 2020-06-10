@@ -146,6 +146,8 @@ from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
 from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_fast import PreTrainedTokenizerFast
+from .tokenization_utils_tools import BatchEncoding, CharSpan, SpecialTokensMixin, TokenSpan
 from .tokenization_xlm import XLMTokenizer
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 from .tokenization_xlnet import SPIECE_UNDERLINE, XLNetTokenizer

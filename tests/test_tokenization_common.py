@@ -637,10 +637,14 @@ class TokenizerTesterMixin:
         ]
 
         encoded_sequences = [tokenizer.encode_plus(sequence, pad_to_max_length=False) for sequence in sequences]
+        encoded_sequences_strat = [
+            tokenizer.encode_plus(sequence, padding_strategy="do_not_pad") for sequence in sequences
+        ]
         encoded_sequences_batch = tokenizer.batch_encode_plus(sequences)
         self.assertListEqual(
             encoded_sequences, self.convert_batch_encode_plus_format_to_encode_plus(encoded_sequences_batch)
         )
+        self.assertListEqual(encoded_sequences, encoded_sequences_strat)
 
         maximum_length = len(max([encoded_sequence["input_ids"] for encoded_sequence in encoded_sequences], key=len))
 

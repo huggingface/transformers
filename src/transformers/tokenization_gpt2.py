@@ -19,11 +19,14 @@ import json
 import logging
 import os
 from functools import lru_cache
+from typing import Optional, Union
 
 import regex as re
 from tokenizers import ByteLevelBPETokenizer
 
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_fast import PreTrainedTokenizerFast
+from .tokenization_utils_tools import BatchEncoding, PaddingStrategy, TruncationStrategy
 
 
 logger = logging.getLogger(__name__)
@@ -344,5 +347,94 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
+            **kwargs,
+        )
+        self.add_prefix_space = add_prefix_space
+
+    def batch_encode_plus(
+        self,
+        batch_text_or_text_pairs,
+        add_special_tokens: bool = True,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
+        padding_strategy: Union[str, PaddingStrategy] = "do_not_pad",
+        pad_to_max_length: bool = False,
+        is_pretokenized: bool = False,
+        return_tensors: Optional[str] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_lengths: bool = False,
+        **kwargs
+    ) -> BatchEncoding:
+
+        assert self.add_prefix_space or not is_pretokenized, (
+            "You need to instantiate GPT2TokenizerFast with add_prefix_space=False "
+            "to use it with pretokenized inputs."
+        )
+
+        return super().batch_encode_plus(
+            batch_text_or_text_pairs=batch_text_or_text_pairs,
+            add_special_tokens=add_special_tokens,
+            max_length=max_length,
+            stride=stride,
+            truncation_strategy=truncation_strategy,
+            padding_strategy=padding_strategy,
+            pad_to_max_length=pad_to_max_length,
+            is_pretokenized=is_pretokenized,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_lengths=return_lengths,
+            **kwargs,
+        )
+
+    def encode_plus(
+        self,
+        text,
+        text_pair=None,
+        add_special_tokens: bool = True,
+        max_length: Optional[int] = None,
+        pad_to_max_length: bool = False,
+        stride: int = 0,
+        truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
+        padding_strategy: Union[str, PaddingStrategy] = "do_not_pad",
+        is_pretokenized: bool = False,
+        return_tensors: Optional[bool] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        **kwargs
+    ) -> BatchEncoding:
+
+        assert self.add_prefix_space or not is_pretokenized, (
+            "You need to instantiate GPT2TokenizerFast with add_prefix_space=False "
+            "to use it with pretokenized inputs."
+        )
+
+        return super().encode_plus(
+            text=text,
+            text_pair=text_pair,
+            add_special_tokens=add_special_tokens,
+            max_length=max_length,
+            stride=stride,
+            truncation_strategy=truncation_strategy,
+            padding_strategy=padding_strategy,
+            pad_to_max_length=pad_to_max_length,
+            is_pretokenized=is_pretokenized,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
             **kwargs,
         )

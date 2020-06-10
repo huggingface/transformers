@@ -27,7 +27,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilingual"]
-Tokenizer = namedtuple("Tokenizer", ["name", "rust_cls", "python_cls", "vocab_key", "filter"])
+Tokenizer = namedtuple("Tokenizer", ["name", "rust_cls", "python_cls", "vocab_key", "filter", "kwargs"])
 
 
 def filter_non_english(_: Tokenizer, pretrained_name: str):
@@ -60,24 +60,22 @@ class CommonFastTokenizerTest(unittest.TestCase):
                         tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name)
                         tokenizer_p = tok_case.python_cls.from_pretrained(pretrained_name)
 
-                        self.fast_align_python(tokenizer_r, tokenizer_p)
+                        self.fast_align_python(tokenizer_r, tokenizer_p, tok_case, pretrained_name)
                         self.fast_only(tokenizer_r)
 
-    def fast_align_python(self, tokenizer_r, tokenizer_p):
+    def fast_align_python(self, tokenizer_r, tokenizer_p, tok_case, pretrained_name):
         # Check is_fast is set correctly
         self.assertFalse(tokenizer_p.is_fast)
         self.assertTrue(tokenizer_r.is_fast)
 
         # Check that Rust and Python align
         self.assert_tokenization_python_rust_equals(tokenizer_r, tokenizer_p)
-        self.assert_pretokenized_inputs(tokenizer_r, tokenizer_p)
         self.assert_num_special_tokens_to_add_equal(tokenizer_r, tokenizer_p)
         self.assert_max_length_equal(tokenizer_r, tokenizer_p)
         self.assert_special_tokens_map_equal(tokenizer_r, tokenizer_p)
         self.assert_embeded_special_tokens(tokenizer_r, tokenizer_p)
         self.assert_padding(tokenizer_r, tokenizer_p)
-        # TODO: enable for v3.0.0
-        # self.assert_empty_output_no_special_tokens(tokenizer_r, tokenizer_p)
+        self.assert_pretokenized_inputs(tokenizer_r, tokenizer_p)
 
     def fast_only(self, tokenizer_r):
         # Ensure None raise an error
@@ -540,8 +538,10 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
 
     TOKENIZERS_CLASSES = frozenset(
         [
-            Tokenizer("Bert", BertTokenizerFast, BertTokenizer, "vocab_file", filter_non_english),
-            Tokenizer("DistilBert", DistilBertTokenizerFast, DistilBertTokenizer, "vocab_file", filter_non_english),
+            Tokenizer("Bert", BertTokenizerFast, BertTokenizer, "vocab_file", filter_non_english, None),
+            Tokenizer(
+                "DistilBert", DistilBertTokenizerFast, DistilBertTokenizer, "vocab_file", filter_non_english, None
+            ),
         ]
     )
 
@@ -589,7 +589,7 @@ class WordPieceFastTokenizerTest(CommonFastTokenizerTest):
 
 class RobertaFastTokenizerTest(CommonFastTokenizerTest):
     TOKENIZERS_CLASSES = frozenset(
-        [Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file", filter_roberta_detectors)]
+        [Tokenizer("Roberta", RobertaTokenizerFast, RobertaTokenizer, "vocab_file", filter_roberta_detectors, None)]
     )
 
     def assert_embeded_special_tokens(self, tokenizer_r, tokenizer_p):
@@ -617,9 +617,29 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
 
 class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
     TOKENIZERS_CLASSES = [
-        Tokenizer("OpenAI GPT", OpenAIGPTTokenizerFast, OpenAIGPTTokenizer, "vocab_file", None),
-        Tokenizer("GPT2", GPT2TokenizerFast, GPT2Tokenizer, "vocab_file", None),
+        Tokenizer("OpenAI GPT", OpenAIGPTTokenizerFast, OpenAIGPTTokenizer, "vocab_file", None, None),
+        Tokenizer("GPT2", GPT2TokenizerFast, GPT2Tokenizer, "vocab_file", None, [('add_prefix_space', True)]),
     ]
+
+    def fast_align_python(self, tokenizer_r, tokenizer_p, tok_case, pretrained_name):
+        # Check is_fast is set correctly
+        self.assertFalse(tokenizer_p.is_fast)
+        self.assertTrue(tokenizer_r.is_fast)
+
+        # Check that Rust and Python align
+        self.assert_tokenization_python_rust_equals(tokenizer_r, tokenizer_p)
+        self.assert_num_special_tokens_to_add_equal(tokenizer_r, tokenizer_p)
+        self.assert_max_length_equal(tokenizer_r, tokenizer_p)
+        self.assert_special_tokens_map_equal(tokenizer_r, tokenizer_p)
+        self.assert_embeded_special_tokens(tokenizer_r, tokenizer_p)
+        self.assert_padding(tokenizer_r, tokenizer_p)
+
+        # Specific for
+        kwargs = {}
+        if tok_case.kwargs is not None:
+            kwargs = dict(tok_case.kwargs)
+        tokenizer_r = tok_case.rust_cls.from_pretrained(pretrained_name, **kwargs)
+        self.assert_pretokenized_inputs(tokenizer_r, tokenizer_p)
 
     def assert_padding(self, tokenizer_r, tokenizer_p, max_length=15):
         # Simple input
@@ -652,7 +672,7 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
 
 class TransfoXLFastTokenizerTest(NoPaddingTokenFastTokenizerMatchingTest):
     TOKENIZERS_CLASSES = frozenset(
-        [Tokenizer("TransfoXL", TransfoXLTokenizerFast, TransfoXLTokenizer, "pretrained_vocab_file", None)]
+        [Tokenizer("TransfoXL", TransfoXLTokenizerFast, TransfoXLTokenizer, "pretrained_vocab_file", None, None)]
     )
 
     @require_torch
