@@ -955,7 +955,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -1008,6 +1008,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         labels=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        output_attentions=None,
         **kwargs
     ):
         r"""
