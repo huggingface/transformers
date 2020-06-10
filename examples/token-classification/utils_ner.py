@@ -42,6 +42,12 @@ class InputExample:
         specified for train and dev examples, but not for test examples.
     """
 
+    __annotations__ = {
+        "guid": str,
+        "words": List[str],
+        "labels": Optional[List[str]],
+    }
+
     guid: str
     words: List[str]
     labels: Optional[List[str]]
@@ -53,6 +59,13 @@ class InputFeatures:
     A single set of features of data.
     Property names are the same names as the corresponding inputs to a model.
     """
+
+    __annotations__ = {
+        "input_ids": List[int],
+        "attention_mask": List[int],
+        "token_type_ids": Optional[List[int]],
+        "label_ids": Optional[List[int]],
+    }
 
     input_ids: List[int]
     attention_mask: List[int]

@@ -48,6 +48,14 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
     """
 
+    __annotations__ = {
+        "model_name_or_path": str,
+        "config_name": Optional[str],
+        "tokenizer_name": Optional[str],
+        "use_fast": bool,
+        "cache_dir": Optional[str],
+    }
+
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
@@ -71,6 +79,12 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
+    __annotations__ = {
+        "data_dir": str,
+        "labels": Optional[str],
+        "max_seq_length": int,
+        "overwrite_cache": bool,
+    }
     data_dir: str = field(
         metadata={"help": "The input data dir. Should contain the .txt files for a CoNLL-2003-formatted task."}
     )
