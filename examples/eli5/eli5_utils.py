@@ -617,6 +617,24 @@ def make_qa_dense_index(qa_embedder, tokenizer, passages_dset,
         if i % 50 == 0:
             print(i, time() - st_time)
 
+def evaluate_retriever(qa_list, retriever_func, scoring_func, n_ret=10, verbose=False):
+    total_retriever_time = 0.
+    total_retriever_score = 0.
+    st_time = time()
+    for i, (question, answer) in enumerate(qa_list):
+        r_time = time()
+        retrieved_passages = retriever_func(question, n_ret)
+        total_retriever_time += time() - r_time
+        total_retriever_score += scoring_func(retrieved_passages, answer)
+        if verbose and ((i+1) % 500 == 0 or i <= 1):
+            print("{:03d}: S-{:.4f} T-{:.4f} | {:.2f}".format(
+                i+1,
+                total_retriever_score / (i+1), total_retriever_time / (i+1),
+                time() - st_time
+            ))
+    return {'idf_recall': total_retriever_score / (i+1),
+            'retrieval_time': total_retriever_time / (i+1)}
+
 # build a support document for the question out of Wikipedia snippets
 def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10, min_length=20):
     q_rep = embed_questions_for_retrieval([question], tokenizer, qa_embedder)
