@@ -138,10 +138,9 @@ class SummarizationTrainer(BaseTransformer):
             freeze_part(self.model.encoder)
         self.hparams.git_sha = get_git_info()["repo_sha"]
         pickle_save(self.hparams, self.hparams_save_path)
-        # self.hparams.
 
     def freeze_embeds(self):
-        freeze_part(self.model.model.shared)
+        freeze_part(self.model.get_input_embeddings())
         for d in [self.model.model.encoder, self.model.model.decoder]:
             freeze_part(d.embed_positions)
             freeze_part(d.embed_tokens)
@@ -754,9 +753,8 @@ class T5BrewerDistiller(BrewerDistiller):
         return d_layers_to_copy, student, student_cfg, teacher
 
     def freeze_embeds(self):
-        freeze_part(self.model.shared)
+        freeze_part(self.model.get_input_embeddings())
         for d in [self.model.encoder, self.model.decoder]:
-            # freeze_part(d.embed_positions)
             freeze_part(d.embed_tokens)
 
     def freeze_stuff(self, d_layers_to_copy):

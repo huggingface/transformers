@@ -1113,7 +1113,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, **kwargs):
         assert past is not None, "past has to be defined for encoder_outputs"
-
+        import ipdb; ipdb.set_trace()
         # first step
         if not past[-1]:
             encoder_outputs, decoder_past_key_value_states = past, None
