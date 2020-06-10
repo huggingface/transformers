@@ -39,7 +39,18 @@ if is_torch_available():
 @require_torch
 class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (AlbertModel, AlbertForPreTraining, AlbertForMaskedLM) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            AlbertModel,
+            AlbertForMaskedLM,
+            AlbertForPreTraining,
+            AlbertForQuestionAnswering,
+            AlbertForSequenceClassification,
+            AlbertForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     class AlbertModelTester(object):
         def __init__(
