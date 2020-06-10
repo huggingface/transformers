@@ -793,7 +793,7 @@ def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
-    parser = BrewerDistiller.add_model_specific_args(parser, os.getcwd())
+    parser = SummarizationDistiller.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
     main(args)
