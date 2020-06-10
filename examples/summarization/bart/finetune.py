@@ -435,7 +435,7 @@ def get_layers_to_copy(n_to_get, tot):
 BART_LARGE_N_LAYERS = 12
 
 
-class BrewerDistiller(SummarizationTrainer):
+class SummarizationDistiller(SummarizationTrainer):
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
 
     def __init__(self, hparams):
@@ -682,7 +682,7 @@ class BrewerDistiller(SummarizationTrainer):
         return sum(hidden_losses)
 
 
-class T5BrewerDistiller(BrewerDistiller):
+class T5SummarizationDistiller(SummarizationDistiller):
     def pre_init(self, hparams):
         teacher = T5ForConditionalGeneration.from_pretrained(hparams.teacher)
         n_layer = hparams.student_decoder_layers
@@ -753,11 +753,11 @@ def create_module(args) -> BaseTransformer:
         assert not args.enc_only
         module_cls = SummarizationTrainer
     elif t5:
-        module_cls = T5BrewerDistiller
+        module_cls = T5SummarizationDistiller
     elif args.enc_only:
         raise ValueError("Deleted that")
     else:
-        module_cls = BrewerDistiller
+        module_cls = SummarizationDistiller
     args.setup_cls: str = module_cls.__name__
     model = module_cls(args)
     return model
@@ -793,7 +793,7 @@ def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_generic_args(parser, os.getcwd())
-    parser = SummarizationDistiller.add_model_specific_args(parser, os.getcwd())
+    parser = BrewerDistiller.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
     main(args)
