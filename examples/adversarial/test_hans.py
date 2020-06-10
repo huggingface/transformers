@@ -157,7 +157,7 @@ def train(args, train_dataset, model, tokenizer):
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
             model.train()
-            inputs = {k: t.to(args.device) for k,t in batch.items() if k != 'pairID'}
+            inputs = {k: t.to(args.device) for k, t in batch.items() if k != "pairID"}
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
@@ -272,7 +272,7 @@ def evaluate(args, model, tokenizer, label_list, prefix=""):
         out_label_ids = None
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             model.eval()
-            inputs = {k: t.to(args.device) for k,t in batch.items() if k != 'pairID'}
+            inputs = {k: t.to(args.device) for k, t in batch.items() if k != "pairID"}
             pair_ids = batch.pop("pairID", None)
             with torch.no_grad():
                 outputs = model(**inputs)
