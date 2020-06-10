@@ -71,9 +71,7 @@ except ImportError:
 
 
 try:
-    import torch_xla.core.xla_model as xm
-
-    tpu_device = xm.xla_device()
+    import torch_xla.core.xla_model as xm  # noqa: F401
 
     if _torch_available:
         _torch_tpu_available = True  # pylint: disable=
