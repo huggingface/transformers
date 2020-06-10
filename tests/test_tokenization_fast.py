@@ -70,16 +70,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
 
         # Check that Rust and Python align
         self.assert_tokenization_python_rust_equals(tokenizer_r, tokenizer_p)
-        self.assert_pretokenized_inputs(tokenizer_r, tokenizer_p)
         self.assert_num_special_tokens_to_add_equal(tokenizer_r, tokenizer_p)
         self.assert_max_length_equal(tokenizer_r, tokenizer_p)
         self.assert_special_tokens_map_equal(tokenizer_r, tokenizer_p)
         self.assert_embeded_special_tokens(tokenizer_r, tokenizer_p)
         self.assert_padding(tokenizer_r, tokenizer_p)
         self.assert_pretokenized_inputs(tokenizer_r, tokenizer_p)
-        self.assert_create_token_type_ids(tokenizer_r, tokenizer_p)
-        # TODO: enable for v3.0.0
-        # self.assert_empty_output_no_special_tokens(tokenizer_r, tokenizer_p)
 
     def fast_only(self, tokenizer_r):
         # Ensure None raise an error
@@ -92,7 +88,6 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assert_offsets_mapping(tokenizer_r)
         self.assert_add_special_tokens(tokenizer_r)
         self.assert_alignement_methods(tokenizer_r)
-        self.assert_batch_encode_dynamic_overflowing(tokenizer_r)
 
     def assert_alignement_methods(self, tokenizer_r):
         words = ["Wonderful", "no", "inspiration", "example", "with", "subtoken"]
@@ -172,7 +167,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assertEqual(batch_encoding.word_to_chars(0, last_word_index).end, last_char_index + 1)
         self.assertEqual(batch_encoding.word_to_chars(last_batch_index, last_word_index).end, last_char_index + 1)
 
-    def assert_tokenization_python_rust_equals(self, tokenizer_r, tokenizer_p):
+    def assert_tokenization_python_rust_equals(self, tokenizer_p, tokenizer_r):
         # Ensure basic input match
         input_p = tokenizer_p.encode_plus(self._data)
         input_r = tokenizer_r.encode_plus(self._data)
@@ -187,22 +182,18 @@ class CommonFastTokenizerTest(unittest.TestCase):
             self.assertSequenceEqual(input_pairs_p[key], input_pairs_r[key])
 
         # Ensure truncation match
-        input_p = tokenizer_p.encode_plus(self._data, max_length=512, truncation=True)
-        input_r = tokenizer_r.encode_plus(self._data, max_length=512, truncation=True)
+        input_p = tokenizer_p.encode_plus(self._data, max_length=512)
+        input_r = tokenizer_r.encode_plus(self._data, max_length=512)
 
         for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
             self.assertSequenceEqual(input_p[key], input_r[key])
 
         # Ensure truncation with stride match
-        input_p = tokenizer_p.encode_plus(
-            self._data, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
-        )
-        input_r = tokenizer_r.encode_plus(
-            self._data, max_length=512, truncation=True, stride=3, return_overflowing_tokens=True
-        )
+        input_p = tokenizer_p.encode_plus(self._data, max_length=512, stride=3, return_overflowing_tokens=True)
+        input_r = tokenizer_r.encode_plus(self._data, max_length=512, stride=3, return_overflowing_tokens=True)
 
         for key in filter(lambda x: x in ["input_ids", "token_type_ids", "attention_mask"], input_p.keys()):
-            self.assertSequenceEqual(input_p[key], input_r[key][0])
+            self.assertSequenceEqual(input_p[key], input_r[key])
 
     def assert_num_special_tokens_to_add_equal(self, tokenizer_r, tokenizer_p):
         # Check we have the same number of added_tokens for both pair and non-pair inputs.
@@ -228,7 +219,6 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assertEqual(len(tokenizer_r), vocab_size + 3)
 
         self.assertEqual(tokenizer_r.add_special_tokens({}), 0)
-        self.assertEqual(tokenizer_r.add_special_tokens({"bos_token": "[BOS]", "eos_token": "[EOS]"}), 2)
         self.assertRaises(
             AssertionError, tokenizer_r.add_special_tokens, {"additional_special_tokens": "<testtoken1>"}
         )
@@ -236,7 +226,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assertEqual(
             tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
         )
-        self.assertEqual(len(tokenizer_r), vocab_size + 8)
+        self.assertEqual(len(tokenizer_r), vocab_size + 6)
 
     def assert_offsets_mapping(self, tokenizer_r):
         text = "Wonderful no inspiration example with subtoken"
@@ -281,14 +271,9 @@ class CommonFastTokenizerTest(unittest.TestCase):
         """
         returned_tensor = "pt" if is_torch_available() else "tf"
 
-        if not tokenizer.pad_token or tokenizer.pad_token_id < 0:
-            return
-
         tokens = tokenizer.encode_plus(
             "HuggingFace is solving NLP one commit at a time",
             max_length=6,
-            padding=True,
-            truncation=True,
             return_tensors=returned_tensor,
             return_overflowing_tokens=True,
         )
@@ -300,8 +285,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         tokens = tokenizer.batch_encode_plus(
             ["HuggingFace is solving NLP one commit at a time"],
             max_length=6,
-            padding=True,
-            truncation="only_first",
+            pad_to_max_len=True,
             return_tensors=returned_tensor,
             return_overflowing_tokens=True,
         )
@@ -314,8 +298,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         tokens = tokenizer.batch_encode_plus(
             ["HuggingFace is solving NLP one commit at a time", "Very tiny input"],
             max_length=6,
-            padding=True,
-            truncation="only_first",
+            pad_to_max_len=True,
             return_tensors=returned_tensor,
             return_overflowing_tokens=True,
         )
@@ -338,7 +321,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
             "is_pretokenized": True,
             "return_token_type_ids": True,
             "return_attention_mask": True,
-            "return_overflowing_tokens": False,
+            "return_overflowing_tokens": True,
             "return_special_tokens_mask": True,
             "return_offsets_mapping": False,  # Not implemented in python tokenizers
         }
@@ -376,20 +359,6 @@ class CommonFastTokenizerTest(unittest.TestCase):
         for key in output_p.keys():
             self.assertEqual(output_p[key], output_r[key])
 
-    def assert_create_token_type_ids(self, tokenizer_r, tokenizer_p):
-        input_simple = [1, 2, 3]
-        input_pair = [1, 2, 3]
-
-        # Generate output
-        output_r = tokenizer_r.create_token_type_ids_from_sequences(input_simple)
-        output_p = tokenizer_p.create_token_type_ids_from_sequences(input_simple)
-        self.assertEqual(output_p, output_r)
-
-        # Generate pair output
-        output_r = tokenizer_r.create_token_type_ids_from_sequences(input_simple, input_pair)
-        output_p = tokenizer_p.create_token_type_ids_from_sequences(input_simple, input_pair)
-        self.assertEqual(output_p, output_r)
-
     def assert_build_inputs_with_special_tokens(self, tokenizer_r, tokenizer_p):
         # Input string
         input_simple = tokenizer_p.tokenize("This is a sample input")
@@ -423,22 +392,17 @@ class CommonFastTokenizerTest(unittest.TestCase):
         def assert_padded_input_match(input_r: list, input_p: list, max_length: int):
 
             # Ensure we match max_length
-            self.assertEqual(len(input_r), max_length)
-            self.assertEqual(len(input_p), max_length)
+            self.assertEqual(len(input_r), max_length), self.assertEqual(len(input_p), max_length)
 
             # Ensure the number of padded tokens is the same
             padded_tokens_r = list(takewhile(lambda i: i == tokenizer_r.pad_token_id, reversed(input_r)))
             padded_tokens_p = list(takewhile(lambda i: i == tokenizer_p.pad_token_id, reversed(input_p)))
             self.assertSequenceEqual(padded_tokens_r, padded_tokens_p)
 
-        def assert_batch_padded_input_match(input_r: dict, input_p: dict, max_length: int):
+        def assert_batch_padded_input_match(input_r: dict, input_p: dict):
             for i_r in input_r.values():
-                self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(
-                    len(i_r[1]), max_length
-                )
-                self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(
-                    len(i_r[1]), max_length
-                )
+                self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), 15), self.assertEqual(len(i_r[1]), 15)
+                self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), 15), self.assertEqual(len(i_r[1]), 15)
 
             for i_r, i_p in zip(input_r["input_ids"], input_p["input_ids"]):
                 assert_padded_input_match(i_r, i_p, max_length)
@@ -446,19 +410,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
             for i_r, i_p in zip(input_r["attention_mask"], input_p["attention_mask"]):
                 self.assertSequenceEqual(i_r, i_p)
 
-        # Encode - Simple input
+        # Simple input
         input_r = tokenizer_r.encode("This is a simple input", max_length=max_length, pad_to_max_length=True)
         input_p = tokenizer_p.encode("This is a simple input", max_length=max_length, pad_to_max_length=True)
         assert_padded_input_match(input_r, input_p, max_length)
-        input_r = tokenizer_r.encode("This is a simple input", max_length=max_length, padding="max_length")
-        input_p = tokenizer_p.encode("This is a simple input", max_length=max_length, padding="max_length")
-        assert_padded_input_match(input_r, input_p, max_length)
 
-        input_r = tokenizer_r.encode("This is a simple input", padding="longest")
-        input_p = tokenizer_p.encode("This is a simple input", padding=True)
-        assert_padded_input_match(input_r, input_p, len(input_r))
-
-        # Encode - Pair input
+        # Pair input
         input_r = tokenizer_r.encode(
             "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
         )
@@ -466,34 +423,14 @@ class CommonFastTokenizerTest(unittest.TestCase):
             "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
         )
         assert_padded_input_match(input_r, input_p, max_length)
-        input_r = tokenizer_r.encode(
-            "This is a simple input", "This is a pair", max_length=max_length, padding="max_length"
-        )
-        input_p = tokenizer_p.encode(
-            "This is a simple input", "This is a pair", max_length=max_length, padding="max_length"
-        )
-        assert_padded_input_match(input_r, input_p, max_length)
-        input_r = tokenizer_r.encode("This is a simple input", "This is a pair", padding=True)
-        input_p = tokenizer_p.encode("This is a simple input", "This is a pair", padding="longest")
-        assert_padded_input_match(input_r, input_p, len(input_r))
 
-        # Encode_plus - Simple input
+        # Simple input
         input_r = tokenizer_r.encode_plus("This is a simple input", max_length=max_length, pad_to_max_length=True)
         input_p = tokenizer_p.encode_plus("This is a simple input", max_length=max_length, pad_to_max_length=True)
         assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length)
         self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-        input_r = tokenizer_r.encode_plus("This is a simple input", max_length=max_length, padding="max_length")
-        input_p = tokenizer_p.encode_plus("This is a simple input", max_length=max_length, padding="max_length")
-        assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length)
-        self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
 
-        input_r = tokenizer_r.encode_plus("This is a simple input", padding="longest")
-        input_p = tokenizer_p.encode_plus("This is a simple input", padding=True)
-        assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]))
-
-        self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-
-        # Encode_plus - Pair input
+        # Pair input
         input_r = tokenizer_r.encode_plus(
             "This is a simple input", "This is a pair", max_length=max_length, pad_to_max_length=True
         )
@@ -502,130 +439,34 @@ class CommonFastTokenizerTest(unittest.TestCase):
         )
         assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length)
         self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-        input_r = tokenizer_r.encode_plus(
-            "This is a simple input", "This is a pair", max_length=max_length, padding="max_length"
-        )
-        input_p = tokenizer_p.encode_plus(
-            "This is a simple input", "This is a pair", max_length=max_length, padding="max_length"
-        )
-        assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length)
-        self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
-        input_r = tokenizer_r.encode_plus("This is a simple input", "This is a pair", padding="longest")
-        input_p = tokenizer_p.encode_plus("This is a simple input", "This is a pair", padding=True)
-        assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]))
-        self.assertSequenceEqual(input_r["attention_mask"], input_p["attention_mask"])
 
-        # Batch_encode_plus - Simple input
+        # Simple input
         input_r = tokenizer_r.batch_encode_plus(
             ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, pad_to_max_length=True
         )
         input_p = tokenizer_p.batch_encode_plus(
             ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, pad_to_max_length=True
         )
-        assert_batch_padded_input_match(input_r, input_p, max_length)
+        assert_batch_padded_input_match(input_r, input_p)
 
-        input_r = tokenizer_r.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding="max_length",
-        )
-        input_p = tokenizer_p.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding="max_length",
-        )
-        assert_batch_padded_input_match(input_r, input_p, max_length)
-
-        input_r = tokenizer_r.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding="longest",
-        )
-        input_p = tokenizer_p.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding=True,
-        )
-        assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
-
-        input_r = tokenizer_r.batch_encode_plus(
-            ["This is a simple input 1", "This is a simple input 2"], padding="longest"
-        )
-        input_p = tokenizer_p.batch_encode_plus(["This is a simple input 1", "This is a simple input 2"], padding=True)
-        assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
-
-        # Batch_encode_plus - Pair input
+        # Pair input
         input_r = tokenizer_r.batch_encode_plus(
             [
                 ("This is a simple input 1", "This is a simple input 2"),
                 ("This is a simple pair 1", "This is a simple pair 2"),
             ],
-            max_length=max_length,
-            truncation=True,
-            padding="max_length",
+            max_length=15,
+            pad_to_max_length=True,
         )
         input_p = tokenizer_p.batch_encode_plus(
             [
                 ("This is a simple input 1", "This is a simple input 2"),
                 ("This is a simple pair 1", "This is a simple pair 2"),
             ],
-            max_length=max_length,
-            truncation=True,
-            padding="max_length",
+            max_length=15,
+            pad_to_max_length=True,
         )
-        assert_batch_padded_input_match(input_r, input_p, max_length)
-
-        input_r = tokenizer_r.batch_encode_plus(
-            [
-                ("This is a simple input 1", "This is a simple input 2"),
-                ("This is a simple pair 1", "This is a simple pair 2"),
-            ],
-            padding=True,
-        )
-        input_p = tokenizer_p.batch_encode_plus(
-            [
-                ("This is a simple input 1", "This is a simple input 2"),
-                ("This is a simple pair 1", "This is a simple pair 2"),
-            ],
-            padding="longest",
-        )
-        assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
-
-        # Using pad on single examples after tokenization
-        input_r = tokenizer_r.encode_plus("This is a input 1")
-        input_r = tokenizer_r.pad(input_r)
-
-        input_p = tokenizer_r.encode_plus("This is a input 1")
-        input_p = tokenizer_r.pad(input_p)
-
-        assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]))
-
-        # Using pad on single examples after tokenization
-        input_r = tokenizer_r.encode_plus("This is a input 1")
-        input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
-
-        input_p = tokenizer_r.encode_plus("This is a input 1")
-        input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
-
-        assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length)
-
-        # Using pad after tokenization
-        input_r = tokenizer_r.batch_encode_plus(
-            ["This is a input 1", "This is a much longer input whilch should be padded"]
-        )
-        input_r = tokenizer_r.pad(input_r)
-
-        input_p = tokenizer_r.batch_encode_plus(
-            ["This is a input 1", "This is a much longer input whilch should be padded"]
-        )
-        input_p = tokenizer_r.pad(input_p)
-
-        assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
-
-        # Using pad after tokenization
-        input_r = tokenizer_r.batch_encode_plus(
-            ["This is a input 1", "This is a much longer input whilch should be padded"]
-        )
-        input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
-
-        input_p = tokenizer_r.batch_encode_plus(
-            ["This is a input 1", "This is a much longer input whilch should be padded"]
-        )
-        input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
-
-        assert_batch_padded_input_match(input_r, input_p, max_length)
+        assert_batch_padded_input_match(input_r, input_p)
 
     def assert_save_pretrained(self, tokenizer_r, tokenizer_p):
         # Checks it save with the same files
@@ -777,7 +618,7 @@ class RobertaFastTokenizerTest(CommonFastTokenizerTest):
 class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
     TOKENIZERS_CLASSES = [
         Tokenizer("OpenAI GPT", OpenAIGPTTokenizerFast, OpenAIGPTTokenizer, "vocab_file", None, None),
-        Tokenizer("GPT2", GPT2TokenizerFast, GPT2Tokenizer, "vocab_file", None, [("add_prefix_space", True)]),
+        Tokenizer("GPT2", GPT2TokenizerFast, GPT2Tokenizer, "vocab_file", None, [('add_prefix_space', True)]),
     ]
 
     def fast_align_python(self, tokenizer_r, tokenizer_p, tok_case, pretrained_name):
@@ -811,26 +652,22 @@ class NoPaddingTokenFastTokenizerMatchingTest(CommonFastTokenizerTest):
         ]
 
         # Simple input tests
-        self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
+        self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, pad_to_max_length=True)
 
         # Simple input
-        self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
+        self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, pad_to_max_length=True)
 
         # Simple input
-        self.assertRaises(
-            ValueError, tokenizer_r.batch_encode_plus, s2, max_length=max_length, padding="max_length",
-        )
+        self.assertRaises(ValueError, tokenizer_r.batch_encode_plus, s2, max_length=max_length, pad_to_max_length=True)
 
         # Pair input
-        self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
+        self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, pad_to_max_length=True)
 
         # Pair input
-        self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
+        self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, pad_to_max_length=True)
 
         # Pair input
-        self.assertRaises(
-            ValueError, tokenizer_r.batch_encode_plus, p2, max_length=max_length, padding="max_length",
-        )
+        self.assertRaises(ValueError, tokenizer_r.batch_encode_plus, p2, max_length=max_length, pad_to_max_length=True)
 
 
 class TransfoXLFastTokenizerTest(NoPaddingTokenFastTokenizerMatchingTest):
