@@ -34,6 +34,7 @@ if is_torch_available():
         BartModel,
         BartForConditionalGeneration,
         BartForSequenceClassification,
+        BartForQuestionAnswering,
         BartConfig,
         BartTokenizer,
         MBartTokenizer,
@@ -353,6 +354,18 @@ class BartHeadTests(unittest.TestCase):
         expected_shape = torch.Size((batch_size, config.num_labels))
         self.assertEqual(logits.shape, expected_shape)
         loss = outputs[0]
+        self.assertIsInstance(loss.item(), float)
+
+    def test_question_answering_forward(self):
+        config, input_ids, batch_size = self._get_config_and_data()
+        sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
+        model = BartForQuestionAnswering(config)
+        model.to(torch_device)
+        loss, start_logits, end_logits = model(
+            input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,
+        )
+        self.assertListEqual(list(start_logits.size()), [batch_size, input_ids.shape[1]])
+        self.assertListEqual(list(end_logits.size()), [batch_size, input_ids.shape[1]])
         self.assertIsInstance(loss.item(), float)
 
     @timeout_decorator.timeout(1)
