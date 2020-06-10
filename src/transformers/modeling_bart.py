@@ -266,7 +266,7 @@ class BartEncoder(nn.Module):
         self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
     def forward(
-        self, input_ids, attention_mask=None,
+        self, input_ids, attention_mask=None, output_hidden_states=False, output_attentions=False
     ):
         """
         Args:
@@ -298,21 +298,21 @@ class BartEncoder(nn.Module):
 
         encoder_states, all_attentions = [], []
         for encoder_layer in self.layers:
-            if self.output_hidden_states:
+            if output_hidden_states:
                 encoder_states.append(x)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 attn = None
             else:
-                x, attn = encoder_layer(x, attention_mask)
+                x, attn = encoder_layer(x, attention_mask, output_attentions=output_attentions)
 
-            if self.output_attentions:
+            if output_attentions:
                 all_attentions.append(attn)
 
         if self.layer_norm:
             x = self.layer_norm(x)
-        if self.output_hidden_states:
+        if output_hidden_states:
             encoder_states.append(x)
 
         # T x B x C -> B x T x C
@@ -326,7 +326,6 @@ class DecoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.output_attentions = config.output_attentions
         self.self_attn = SelfAttention(
             embed_dim=self.embed_dim, num_heads=config.decoder_attention_heads, dropout=config.attention_dropout,
         )
@@ -355,6 +354,7 @@ class DecoderLayer(nn.Module):
         layer_state=None,
         causal_mask=None,
         decoder_padding_mask=None,
+        output_attentions=False,
     ):
         residual = x
 
@@ -370,7 +370,7 @@ class DecoderLayer(nn.Module):
             layer_state=layer_state,  # adds keys to layer state
             key_padding_mask=decoder_padding_mask,
             attn_mask=causal_mask,
-            need_weights=self.output_attentions,
+            output_attentions=output_attentions,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -422,8 +422,6 @@ class BartDecoder(nn.Module):
 
     def __init__(self, config: BartConfig, embed_tokens: nn.Embedding):
         super().__init__()
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = embed_tokens.padding_idx
@@ -453,7 +451,9 @@ class BartDecoder(nn.Module):
         decoder_causal_mask,
         decoder_cached_states=None,
         use_cache=False,
-        **unused
+        output_hidden_states=False,
+        output_attentions=False,
+        **unused,
     ):
         """
         Includes several features from "Jointly Learning to Align and
@@ -500,7 +500,7 @@ class BartDecoder(nn.Module):
         next_decoder_cache = []
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states += (x,)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
@@ -515,6 +515,7 @@ class BartDecoder(nn.Module):
                 decoder_padding_mask=decoder_padding_mask,
                 layer_state=layer_state,
                 causal_mask=decoder_causal_mask,
+                output_attentions=output_attentions,
             )
 
             if use_cache:
@@ -522,7 +523,7 @@ class BartDecoder(nn.Module):
 
             if self.layer_norm and (idx == len(self.layers) - 1):  # last layer of mbart
                 x = self.layer_norm(x)
-            if self.output_attentions:
+            if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
@@ -580,7 +581,7 @@ class SelfAttention(nn.Module):
         key_padding_mask: Optional[Tensor] = None,
         layer_state: Optional[Dict[str, Optional[Tensor]]] = None,
         attn_mask: Optional[Tensor] = None,
-        need_weights=False,
+        output_attentions=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         """Input shape: Time(SeqLen) x Batch x Channel"""
         static_kv: bool = self.encoder_decoder_attention
@@ -652,7 +653,7 @@ class SelfAttention(nn.Module):
         assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn_output = self.out_proj(attn_output)
-        if need_weights:
+        if output_attentions:
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
         else:
             attn_weights = None
@@ -794,14 +795,12 @@ def _get_shape(t):
 class BartModel(PretrainedBartModel):
     def __init__(self, config: BartConfig):
         super().__init__(config)
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
-
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
         self.encoder = BartEncoder(config, self.shared)
         self.decoder = BartDecoder(config, self.shared)
+
         self.init_weights()
 
     @add_start_docstrings_to_callable(BART_INPUTS_DOCSTRING)
@@ -814,7 +813,10 @@ class BartModel(PretrainedBartModel):
         decoder_attention_mask=None,
         decoder_cached_states=None,
         use_cache=False,
+        output_hidden_states=False,
+        output_attentions=None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
         # make masks if user doesn't supply
         if not use_cache:
@@ -830,10 +832,12 @@ class BartModel(PretrainedBartModel):
             decoder_padding_mask, causal_mask = None, None
 
         assert decoder_input_ids is not None
+
         if encoder_outputs is None:
-            encoder_outputs = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
-        if isinstance(encoder_outputs, torch.Tensor):
-            encoder_outputs = (encoder_outputs,)
+            encoder_outputs = self.encoder(
+                input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=output_hidden_states, output_attentions=output_attentions,
+            )
+        assert isinstance(encoder_outputs, tuple)
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             decoder_input_ids,
@@ -842,8 +846,11 @@ class BartModel(PretrainedBartModel):
             decoder_padding_mask,
             decoder_causal_mask=causal_mask,
             decoder_cached_states=decoder_cached_states,
+            output_attentions=output_attentions,
             use_cache=use_cache,
+            output_hidden_states=output_hidden_states,
         )
+
         # Attention and hidden_states will be [] or None if they aren't needed
         decoder_outputs: Tuple = _filter_out_falsey_values(decoder_outputs)
         assert isinstance(decoder_outputs[0], torch.Tensor)
@@ -899,12 +906,14 @@ class BartForConditionalGeneration(PretrainedBartModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         decoder_cached_states=None,
-        lm_labels=None,
+        labels=None,
         use_cache=False,
-        **unused
+        output_hidden_states=False,
+        output_attentions=None,
+        **unused,
     ):
         r"""
-        lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
             Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
@@ -913,16 +922,16 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
-        masked_lm_loss (`optional`, returned when ``lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        masked_lm_loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -944,6 +953,13 @@ class BartForConditionalGeneration(PretrainedBartModel):
             tokenizer.decode(predictions).split()
             # ['good', 'great', 'all', 'really', 'very']
         """
+        if "lm_labels" in unused:
+            warnings.warn(
+                "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                DeprecationWarning,
+            )
+            labels = unused.pop("lm_labels")
+
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
@@ -952,13 +968,15 @@ class BartForConditionalGeneration(PretrainedBartModel):
             decoder_attention_mask=decoder_attention_mask,
             decoder_cached_states=decoder_cached_states,
             use_cache=use_cache,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
         )
         lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
         outputs = (lm_logits,) + outputs[1:]  # Add cache, hidden states and attention if they are here
-        if lm_labels is not None:
+        if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
-            # TODO(SS): do we need to ignore pad tokens in lm_labels?
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), lm_labels.view(-1))
+            # TODO(SS): do we need to ignore pad tokens in labels?
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
             outputs = (masked_lm_loss,) + outputs
 
         return outputs
@@ -1057,6 +1075,8 @@ class BartForSequenceClassification(PretrainedBartModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         labels=None,
+        output_hidden_states=False,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1070,11 +1090,11 @@ class BartForSequenceClassification(PretrainedBartModel):
                 Classification loss (cross entropy)
             logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
                 Classification (or regression if config.num_labels==1) scores (before SoftMax).
-            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True``):
                 Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
                 of shape :obj:`(batch_size, sequence_length, hidden_size)`.
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
                 Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
                 Attentions weights after the attention softmax, used to compute the weighted average in the
                 self-attention
@@ -1100,6 +1120,8 @@ class BartForSequenceClassification(PretrainedBartModel):
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
         )
         x = outputs[0]  # last hidden state
         eos_mask = input_ids.eq(self.config.eos_token_id)

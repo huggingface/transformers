@@ -55,6 +55,20 @@ except ImportError:
             return input
 
 
+def find_pruneable_heads_and_indices(
+    heads: List, n_heads: int, head_size: int, already_pruned_heads: set
+) -> Tuple[set, "torch.LongTensor"]:
+    mask = torch.ones(n_heads, head_size)
+    heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
+    for head in heads:
+        # Compute how many pruned heads are before the head and move the index accordingly
+        head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
+        mask[head] = 0
+    mask = mask.view(-1).contiguous().eq(1)
+    index: torch.LongTensor = torch.arange(len(mask))[mask].long()
+    return heads, index
+
+
 class ModuleUtilsMixin:
     """
     A few utilities for torch.nn.Modules, to be used as a mixin.
@@ -1143,9 +1157,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
                 num_return_sequences=num_return_sequences,
@@ -1170,9 +1182,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
                 encoder_outputs=encoder_outputs,
@@ -1196,10 +1206,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
         eos_token_id,
-        decoder_start_token_id,
         batch_size,
         encoder_outputs,
         attention_mask,
@@ -1318,10 +1326,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
         eos_token_id,
-        decoder_start_token_id,
         batch_size,
         num_return_sequences,
         length_penalty,
@@ -1528,7 +1534,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
 
             # test that beam scores match previously calculated scores if not eos and batch_idx not done
             if eos_token_id is not None and all(
-                (token_id % vocab_size).item() is not eos_token_id for token_id in next_tokens[batch_idx]
+                (token_id % vocab_size).item() != eos_token_id for token_id in next_tokens[batch_idx]
             ):
                 assert torch.all(
                     next_scores[batch_idx, :num_beams] == beam_scores.view(batch_size, num_beams)[batch_idx]
@@ -2188,7 +2194,7 @@ def apply_chunking_to_forward(
         assert (
             input_tensors[0].shape[chunk_dim] % chunk_size == 0
         ), "The dimension to be chunked {} has to be a multiple of the chunk size {}".format(
-            input_tensors[0][chunk_dim], chunk_size
+            input_tensors[0].shape[chunk_dim], chunk_size
         )
 
         num_chunks = input_tensors[0].shape[chunk_dim] // chunk_size
