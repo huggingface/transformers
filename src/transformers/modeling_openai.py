@@ -324,7 +324,7 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
             than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Should the model returns attentions weights.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 

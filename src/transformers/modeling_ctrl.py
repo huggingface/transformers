@@ -266,7 +266,7 @@ CTRL_INPUTS_DOCSTRING = r"""
         use_cache (:obj:`bool`):
             If `use_cache` is True, `past` key value states are returned and
             can be used to speed up decoding (see `past`). Defaults to `True`.
-        output_hidden_states (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
             If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
