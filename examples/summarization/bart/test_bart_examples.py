@@ -202,6 +202,22 @@ class TestBartExamples(unittest.TestCase):
         )
         self._bart_distiller_cli(updates)
 
+
+    def test_bdc_t5_eval(self):
+        updates = dict(
+            #student_encoder_layers=1,
+            #student_decoder_layers=1,
+            #alpha_hid=2.0,
+            #teacher="patrickvonplaten/t5-tiny-random",
+            model_type="t5",
+            model_name_or_path="patrickvonplaten/t5-tiny-random",
+            do_train=False,
+            do_predict=True,
+            tokenizer_name="patrickvonplaten/t5-tiny-random",
+            no_teacher=True,
+        )
+        self._bart_distiller_cli(updates)
+
     @unittest.skipUnless(False, "Not implemented")
     def test_bdc_mbart(self):
         pass

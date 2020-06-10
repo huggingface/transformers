@@ -201,8 +201,9 @@ class SummarizationTrainer(BaseTransformer):
 
     def freeze_embeds(self):
         freeze_part(self.model.get_input_embeddings())
-        for d in [self.model.model.encoder, self.model.model.decoder]:
-            freeze_part(d.embed_positions)
+        for d in [self.model.encoder, self.model.decoder]:
+            if hasattr(d, 'embed_positions'):
+                freeze_part(d.embed_positions)
             freeze_part(d.embed_tokens)
 
     @property
