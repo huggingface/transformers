@@ -557,7 +557,18 @@ class Trainer:
             logs["epoch"] = self.epoch
         if self.tb_writer:
             for k, v in logs.items():
-                self.tb_writer.add_scalar(k, v, self.global_step)
+                if isinstance(v, (int, float)):
+                    self.tb_writer.add_scalar(k, v, self.global_step)
+                else:
+                    logger.warning(
+                        "Trainer is attempting to log a value of "
+                        '"%s" of type %s for key "%s" as a scalar. '
+                        "This invocation of Tensorboard's writer.add_scalar() "
+                        "is incorrect so we dropped this attribute.",
+                        v,
+                        type(v),
+                        k,
+                    )
             self.tb_writer.flush()
         if is_wandb_available():
             if self.is_world_master():
