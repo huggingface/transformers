@@ -140,7 +140,7 @@ class TestBartExamples(unittest.TestCase):
             freeze_encoder=True,
             gpus=1,
             fp16=True,
-            fp16_opt_level="O2",
+            fp16_opt_level="O1",
             #sortish_sampler=False,
         )
         self._bart_distiller_cli(updates)
