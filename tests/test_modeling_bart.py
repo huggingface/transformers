@@ -364,8 +364,9 @@ class BartHeadTests(unittest.TestCase):
         loss, start_logits, end_logits = model(
             input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,
         )
-        self.assertListEqual(list(start_logits.size()), [batch_size, input_ids.shape[1]])
-        self.assertListEqual(list(end_logits.size()), [batch_size, input_ids.shape[1]])
+
+        self.assertEqual(start_logits.shape, input_ids.shape)
+        self.assertEqual(end_logits.shape, input_ids.shape)
         self.assertIsInstance(loss.item(), float)
 
     @timeout_decorator.timeout(1)
