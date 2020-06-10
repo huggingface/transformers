@@ -1159,7 +1159,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
             Positions are clamped to the length of the sequence (`sequence_length`).
             Position outside of the sequence are not taken into account for computing the loss.
-        
+
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BartConfig`) and inputs:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
