@@ -59,7 +59,7 @@ BartForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BartForQuestionAnswering
-    :members: forwar
+    :members: forward
 
 
 BartForConditionalGeneration
