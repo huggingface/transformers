@@ -112,6 +112,7 @@ class TrainingArguments:
             )
         },
     )
+    enable_early_stopping: Optional[bool] = field(default=False, metadata={"help": "whether to use early stopping"})
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     seed: int = field(default=42, metadata={"help": "random seed for initialization"})
 
