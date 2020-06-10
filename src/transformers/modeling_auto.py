@@ -78,6 +78,7 @@ from .modeling_distilbert import (
 from .modeling_electra import (
     ElectraForMaskedLM,
     ElectraForPreTraining,
+    ElectraForQuestionAnswering,
     ElectraForSequenceClassification,
     ElectraForTokenClassification,
     ElectraModel,
@@ -237,6 +238,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (XLNetConfig, XLNetForQuestionAnsweringSimple),
         (FlaubertConfig, FlaubertForQuestionAnsweringSimple),
         (XLMConfig, XLMForQuestionAnsweringSimple),
+        (ElectraConfig, ElectraForQuestionAnswering),
     ]
 )
 
