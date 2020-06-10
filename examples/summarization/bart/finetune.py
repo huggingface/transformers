@@ -195,13 +195,13 @@ class SummarizationTrainer(BaseTransformer):
         self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
         self.freeze_embeds()
         if self.hparams.freeze_encoder:
-            freeze_part(self.model.encoder)
+            freeze_part(self.model.model.encoder)
         self.hparams.git_sha = get_git_info()["repo_sha"]
         pickle_save(self.hparams, self.hparams_save_path)
 
     def freeze_embeds(self):
-        freeze_part(self.model.get_input_embeddings())
-        for d in [self.model.encoder, self.model.decoder]:
+        freeze_part(self.model.model.shared)
+        for d in [self.model.model.encoder, self.model.model.decoder]:
             if hasattr(d, 'embed_positions'):
                 freeze_part(d.embed_positions)
             freeze_part(d.embed_tokens)
@@ -463,17 +463,17 @@ class SummarizationDistiller(SummarizationTrainer):
     def freeze_stuff(self, d_layers_to_copy):
         assert len(self.model.decoder.layers) == len(d_layers_to_copy)
         assert_all_frozen(self.teacher)
-        assert_all_frozen(self.model.decoder.embed_tokens)
-        assert_all_frozen(self.model.encoder.embed_tokens)
+        assert_all_frozen(self.model.model.decoder.embed_tokens)
+        assert_all_frozen(self.model.model.encoder.embed_tokens)
         if self.different_encoder:
-            assert any(grad_status(self.model.encoder))
+            assert any(grad_status(self.model.model.encoder))
         else:
-            freeze_part(self.model.encoder)
+            freeze_part(self.model.model.encoder)
             del self.teacher.model.encoder
         if self.different_decoder:
-            assert any(grad_status(self.model.decoder))
+            assert any(grad_status(self.model.model.decoder))
         else:
-            freeze_part(self.model.decoder)  # TODO(SS): very suspicious
+            freeze_part(self.model.model.decoder)  # TODO(SS): very suspicious
 
     def pre_init(self, hparams):
         # Dump empty student model at a path, then call from_pretrained on it
@@ -706,7 +706,7 @@ class T5SummarizationDistiller(SummarizationDistiller):
         return d_layers_to_copy, student, student_cfg, teacher
 
     def freeze_embeds(self):
-        freeze_part(self.model.get_input_embeddings())
+        freeze_part(self.model.shared)
         for d in [self.model.encoder, self.model.decoder]:
             freeze_part(d.embed_tokens)
 

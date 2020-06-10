@@ -161,7 +161,7 @@ class TestBartExamples(unittest.TestCase):
             tokenizer_name="patrickvonplaten/t5-tiny-random",
             no_teacher=True,
         )
-        self._bart_distiller_cli(updates)
+        self._bart_distiller_cli(updates, check_contents=False)
 
 
     @unittest.skipUnless(torch.cuda.is_available(), "skipping fp16 test")
@@ -289,8 +289,8 @@ class TestBartExamples(unittest.TestCase):
         self.assertIn(ckpt_name, contents)
         self.assertIn("metrics.pkl", contents)
         self.assertIn("test_generations.txt", contents)
-        self.assertIn("val_generations_3.txt", contents)
-        self.assertIn("val_3_results.txt", contents)
+        self.assertIn("val_generations_1.txt", contents)
+        self.assertIn("val_1_results.txt", contents)
         self.assertIn("test_results.txt", contents)
         self.assertEqual(len(contents), 15)
 
