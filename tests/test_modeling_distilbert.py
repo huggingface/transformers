@@ -38,7 +38,13 @@ if is_torch_available():
 class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (DistilBertModel, DistilBertForMaskedLM, DistilBertForQuestionAnswering, DistilBertForSequenceClassification)
+        (
+            DistilBertModel,
+            DistilBertForMaskedLM,
+            DistilBertForQuestionAnswering,
+            DistilBertForSequenceClassification,
+            DistilBertForTokenClassification,
+        )
         if is_torch_available()
         else None
     )

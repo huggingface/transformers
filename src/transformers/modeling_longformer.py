@@ -795,6 +795,8 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         self.longformer = LongformerModel(config)
         self.classifier = LongformerClassificationHead(config)
 
+        self.init_weights()
+
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
@@ -859,6 +861,7 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -917,7 +920,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
     @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
         global_attention_mask=None,
         token_type_ids=None,
@@ -1097,6 +1100,7 @@ class LongformerForTokenClassification(BertPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -1226,6 +1230,7 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
             token_type_ids=flat_token_type_ids,
             attention_mask=flat_attention_mask,
             global_attention_mask=flat_global_attention_mask,
+            output_attentions=output_attentions,
         )
         pooled_output = outputs[1]
 
