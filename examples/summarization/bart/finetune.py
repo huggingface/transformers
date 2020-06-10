@@ -442,9 +442,9 @@ class SummarizationDistiller(SummarizationTrainer):
         assert Path(hparams.data_dir).exists()
 
         d_layers_to_copy, student, student_cfg, teacher = self.pre_init(hparams)
-
-        super().__init__(hparams, model=student, config=student_cfg)
         self.teacher = teacher
+        super().__init__(hparams, model=student, config=student_cfg)
+
         freeze_part(self.teacher)
 
         self.freeze_stuff(d_layers_to_copy)
@@ -622,7 +622,6 @@ class SummarizationDistiller(SummarizationTrainer):
             output_hidden_states=True,
             output_attentions=False,
         )
-        # import ipdb; ipdb.set_trace()
 
         def zero_tensor():
             return torch.tensor(0.0).type_as(sloss)
