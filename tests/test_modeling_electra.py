@@ -32,7 +32,7 @@ if is_torch_available():
         ElectraForPreTraining,
         ElectraForSequenceClassification,
     )
-    from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -180,7 +180,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
             )
             result = {
                 "loss": loss,
@@ -312,6 +312,6 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ElectraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

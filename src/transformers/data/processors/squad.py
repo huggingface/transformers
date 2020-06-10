@@ -394,8 +394,8 @@ def squad_convert_examples_to_features(
                         "qas_id": ex.qas_id,
                     },
                     {
-                        "start_position": ex.start_position,
-                        "end_position": ex.end_position,
+                        "start_positions": ex.start_position,
+                        "end_positions": ex.end_position,
                         "cls_index": ex.cls_index,
                         "p_mask": ex.p_mask,
                         "is_impossible": ex.is_impossible,
@@ -412,8 +412,8 @@ def squad_convert_examples_to_features(
                 "qas_id": tf.string,
             },
             {
-                "start_position": tf.int64,
-                "end_position": tf.int64,
+                "start_positions": tf.int64,
+                "end_positions": tf.int64,
                 "cls_index": tf.int64,
                 "p_mask": tf.int32,
                 "is_impossible": tf.int32,
@@ -429,8 +429,8 @@ def squad_convert_examples_to_features(
                 "qas_id": tf.TensorShape([]),
             },
             {
-                "start_position": tf.TensorShape([]),
-                "end_position": tf.TensorShape([]),
+                "start_positions": tf.TensorShape([]),
+                "end_positions": tf.TensorShape([]),
                 "cls_index": tf.TensorShape([]),
                 "p_mask": tf.TensorShape([None]),
                 "is_impossible": tf.TensorShape([]),

@@ -22,20 +22,25 @@ import tensorflow as tf
 
 from .configuration_flaubert import FlaubertConfig
 from .file_utils import add_start_docstrings
+from .modeling_tf_utils import keras_serializable, shape_list
 from .modeling_tf_xlm import (
+    TFXLMForMultipleChoice,
+    TFXLMForQuestionAnsweringSimple,
     TFXLMForSequenceClassification,
+    TFXLMForTokenClassification,
     TFXLMMainLayer,
     TFXLMModel,
     TFXLMWithLMHeadModel,
     get_masks,
-    shape_list,
 )
 from .tokenization_utils import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
 
-TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {}
+TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    # See all Flaubert models at https://huggingface.co/models?filter=flaubert
+]
 
 FLAUBERT_START_DOCSTRING = r"""
 
@@ -104,13 +109,13 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
 )
 class TFFlaubertModel(TFXLMModel):
     config_class = FlaubertConfig
-    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
 
 
+@keras_serializable
 class TFFlaubertMainLayer(TFXLMMainLayer):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -129,6 +134,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         head_mask=None,
         inputs_embeds=None,
         training=False,
+        output_attentions=False,
     ):
         # removed: src_enc=None, src_len=None
         if isinstance(inputs, (tuple, list)):
@@ -250,7 +256,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             if not self.pre_norm:
                 attn_outputs = self.attentions[i]([tensor, attn_mask, None, cache, head_mask[i]], training=training)
                 attn = attn_outputs[0]
-                if self.output_attentions:
+                if output_attentions:
                     attentions = attentions + (attn_outputs[1],)
                 attn = self.dropout(attn, training=training)
                 tensor = tensor + attn
@@ -261,7 +267,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
                     [tensor_normalized, attn_mask, None, cache, head_mask[i]], training=training
                 )
                 attn = attn_outputs[0]
-                if self.output_attentions:
+                if output_attentions:
                     attentions = attentions + (attn_outputs[1],)
                 attn = self.dropout(attn, training=training)
                 tensor = tensor + attn
@@ -297,7 +303,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         outputs = (tensor,)
         if self.output_hidden_states:
             outputs = outputs + (hidden_states,)
-        if self.output_attentions:
+        if output_attentions:
             outputs = outputs + (attentions,)
         return outputs  # outputs, (hidden_states), (attentions)
 
@@ -309,7 +315,6 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
 )
 class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
     config_class = FlaubertConfig
-    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -323,8 +328,42 @@ class TFFlaubertWithLMHeadModel(TFXLMWithLMHeadModel):
 )
 class TFFlaubertForSequenceClassification(TFXLMForSequenceClassification):
     config_class = FlaubertConfig
-    pretrained_model_archive_map = TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_MAP
 
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.transformer = TFFlaubertMainLayer(config, name="transformer")
+
+
+@add_start_docstrings(
+    """Flaubert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    FLAUBERT_START_DOCSTRING,
+)
+class TFFlaubertForQuestionAnsweringSimple(TFXLMForQuestionAnsweringSimple):
+    config_class = FlaubertConfig
+
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.transformer = TFFlaubertMainLayer(config, name="transformer")
+
+
+@add_start_docstrings(
+    """Flaubert Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    FLAUBERT_START_DOCSTRING,
+)
+class TFFlaubertForTokenClassification(TFXLMForTokenClassification):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.transformer = TFFlaubertMainLayer(config, name="transformer")
+
+
+@add_start_docstrings(
+    """Flaubert Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    FLAUBERT_START_DOCSTRING,
+)
+class TFFlaubertForMultipleChoice(TFXLMForMultipleChoice):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")

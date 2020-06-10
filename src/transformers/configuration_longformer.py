@@ -33,7 +33,7 @@ LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class LongformerConfig(RobertaConfig):
     r"""
-        This is the configuration class to store the configuration of an :class:`~transformers.LongformerModel`.
+        This is the configuration class to store the configuration of a :class:`~transformers.LongformerModel`.
         It is used to instantiate an Longformer model according to the specified arguments, defining the model
         architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
         the RoBERTa `roberta-base <https://huggingface.co/roberta-base>`__ architecture with a sequence length 4,096.
@@ -59,12 +59,7 @@ class LongformerConfig(RobertaConfig):
 
             # Accessing the model configuration
             configuration = model.config
-
-        Attributes:
-            pretrained_config_archive_map (Dict[str, str]):
-                A dictionary containing all the available pre-trained checkpoints.
     """
-    pretrained_config_archive_map = LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "longformer"
 
     def __init__(self, attention_window: Union[List[int], int] = 512, sep_token_id: int = 2, **kwargs):

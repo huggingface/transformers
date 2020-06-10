@@ -61,7 +61,6 @@ class BertAbsConfig(PretrainedConfig):
             the decoder.
     """
 
-    pretrained_config_archive_map = BERTABS_FINETUNED_CONFIG_MAP
     model_type = "bertabs"
 
     def __init__(
