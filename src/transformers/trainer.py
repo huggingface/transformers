@@ -557,10 +557,15 @@ class Trainer:
                 if isinstance(v, (int, float)):
                     self.tb_writer.add_scalar(k, v, self.global_step)
                 else:
-                    logger.warning("Trainer is attempting to log a value of "
-                                   "\"%s\" of type %s for key \"%s\" as a scalar. "
-                                   "This invocation may cause errors for TensorboardX's "
-                                   "writer.add_scalar() function.", v, type(v), k)
+                    logger.warning(
+                        "Trainer is attempting to log a value of "
+                        '"%s" of type %s for key "%s" as a scalar. '
+                        "This invocation may cause errors for TensorboardX's "
+                        "writer.add_scalar() function.",
+                        v,
+                        type(v),
+                        k,
+                    )
             self.tb_writer.flush()
         if is_wandb_available():
             wandb.log(logs, step=self.global_step)
