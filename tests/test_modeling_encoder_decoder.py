@@ -27,7 +27,8 @@ from .utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
-    from transformers import BertModel, BertLMHeadModel, EncoderDecoderModel, EncoderDecoderConfig
+    from transformers import BertModel, EncoderDecoderModel, EncoderDecoderConfig
+    from transformers.modeling_bert import BertLMHeadModel
     import numpy as np
     import torch
 
