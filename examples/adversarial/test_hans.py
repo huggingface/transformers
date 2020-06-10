@@ -158,7 +158,7 @@ def train(args, train_dataset, model, tokenizer):
         for step, batch in enumerate(epoch_iterator):
             model.train()
             inputs = tuple(t.to(args.device) for t in batch)
-            pair_ids = inputs.pop('pairID', None) 
+            _ = inputs.pop("pairID", None)
             outputs = model(**inputs)
             loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
 
@@ -274,7 +274,7 @@ def evaluate(args, model, tokenizer, label_list, prefix=""):
         for batch in tqdm(eval_dataloader, desc="Evaluating"):
             model.eval()
             inputs = tuple(t.to(args.device) for t in batch)
-            pair_ids = inputs.pop('pairID', None)
+            pair_ids = inputs.pop("pairID", None)
             with torch.no_grad():
                 outputs = model(**inputs)
                 tmp_eval_loss, logits = outputs[:2]
