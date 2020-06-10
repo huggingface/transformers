@@ -256,6 +256,7 @@ questions_list = [
     "What's the difference between viruses and bacteria?",
     "Why are flutes classified as woodwinds when most of them are made out of metal ?",
     "What exactly are vitamins ?",
+    "How does nuclear energy provide electricity?",
     "Why do people like drinking coffee even though it tastes so bad?",
     "What happens when wine ages? How does it make the wine taste better?",
     "If an animal is an herbivore, where does it get the protein that it needs to survive if it only eats grass?",
