@@ -75,8 +75,6 @@ class RougeTracker:
         lens = np.mean(lmap(self.tok_len, gens))
         return dict(avg_len=lens, exp_name=k, **rouge_raw)
 
-
-
     @property
     def new_experiments(self):
         possible = set(self.finished_experiments).difference(self.df.index)

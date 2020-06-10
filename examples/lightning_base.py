@@ -41,7 +41,6 @@ MODEL_MODES = {
 }
 
 
-
 def try_load_state_dict(model, sd1):
     sd = {remove_prefix(k, "model."): v for k, v in sd1.items() if k.startswith("model")}
     model.load_state_dict(sd, strict=True)
@@ -227,7 +226,7 @@ class BaseTransformer(pl.LightningModule):
 
     @rank_zero_only
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
-        save_path = self.output_dir.joinpath('best_tfmr')
+        save_path = self.output_dir.joinpath("best_tfmr")
         save_path.mkdir(exist_ok=True)
         self.model.config.save_step = self.step_count
         self.model.save_pretrained(save_path)
@@ -312,7 +311,6 @@ class LoggingCallback(pl.Callback):
         return self._do_work(trainer, pl_module, "test")
 
 
-
 class MyCheckpointer(ModelCheckpoint):
     def _save_model(self, filepath):
         pass
@@ -372,12 +370,11 @@ def generic_train(
         args.output_dir.startswith("/var/")
         or args.fast_dev_run
         or args.output_dir.startswith("/tmp/")
-        #or args.gpus > 1  # should be fixed in pl 0.8 June 12th
+        # or args.gpus > 1  # should be fixed in pl 0.8 June 12th
     ):
         logger = True
     else:
         logger = WandbLogger(name=model.output_dir.name)
-
 
     checkpoint_callback = ModelCheckpoint(
         filepath=str(model.output_dir / "{val_avg_rouge2:.4f}-{step_count}"),

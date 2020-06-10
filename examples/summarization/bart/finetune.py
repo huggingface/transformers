@@ -22,7 +22,14 @@ from torch.utils.data import DataLoader
 
 from durbango import lmap, pickle_load, pickle_save
 from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
-from transformers import AutoModelWithLMHead, AutoConfig, T5Config, T5ForConditionalGeneration, BartConfig, BartForConditionalGeneration
+from transformers import (
+    AutoConfig,
+    AutoModelWithLMHead,
+    BartConfig,
+    BartForConditionalGeneration,
+    T5Config,
+    T5ForConditionalGeneration,
+)
 from transformers.modeling_bart import invert_mask
 from transformers.optimization import AdamW
 
@@ -77,19 +84,25 @@ def calculate_rouge(output_lns: List[str], reference_lns: List[str], all_stats=F
 def dictify(rouge_obj) -> List:
     records = []
     for k, rouge_measurement in rouge_obj.items():
-        if k == 'rouge1': continue
-        for k1 in ['low', 'mid', 'high']:
-            if k1 != 'mid': continue
+        if k == "rouge1":
+            continue
+        for k1 in ["low", "mid", "high"]:
+            if k1 != "mid":
+                continue
             v1 = getattr(rouge_measurement, k1)
-            for k2 in ['precision', 'recall', 'fmeasure']:
+            for k2 in ["precision", "recall", "fmeasure"]:
                 records.append([k, k1, k2, getattr(v1, k2)])
 
     return records
 
 
 def expanded_rouge_df(rouge_all) -> pd.DataFrame:
-    return pd.DataFrame(dictify(rouge_all), columns=['metric', 'k1', 'k2', 'val']).set_index(['metric', 'k2'])[
-        'val'].unstack('metric').rename_axis(None)
+    return (
+        pd.DataFrame(dictify(rouge_all), columns=["metric", "k1", "k2", "val"])
+        .set_index(["metric", "k2"])["val"]
+        .unstack("metric")
+        .rename_axis(None)
+    )
 
 
 class SummarizationTrainer(BaseTransformer):
@@ -98,7 +111,7 @@ class SummarizationTrainer(BaseTransformer):
 
     @property
     def is_t5(self):
-        return self.model.config.model_type == 't5'
+        return self.model.config.model_type == "t5"
 
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
@@ -149,10 +162,8 @@ class SummarizationTrainer(BaseTransformer):
     def metrics_df(self):
         return pd.DataFrame(self.metrics)
 
-    def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
-        return self.model(
-            input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,
-        )
+    def forward(self, input_ids, **kwargs):
+        return self.model(input_ids, **kwargs)
 
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
@@ -160,7 +171,7 @@ class SummarizationTrainer(BaseTransformer):
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,)
+        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, labels=lm_labels,)
 
         loss = outputs[0]
 
@@ -424,9 +435,8 @@ def get_layers_to_copy(n_to_get, tot):
 BART_LARGE_N_LAYERS = 12
 
 
-class SummarizationDistiller(SummarizationTrainer):
-    loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss"]
-    teacher_kwargs = {}
+class BrewerDistiller(SummarizationTrainer):
+    loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
 
     def __init__(self, hparams):
         assert Path(hparams.data_dir).exists()
@@ -466,14 +476,13 @@ class SummarizationDistiller(SummarizationTrainer):
 
     def pre_init(self, hparams):
         # Dump empty student model at a path, then call from_pretrained on it
-        teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher, **self.teacher_kwargs).eval()
+        teacher = BartForConditionalGeneration.from_pretrained(hparams.teacher).eval()
         student_updates = {
             "decoder_layers": hparams.student_decoder_layers,
             "encoder_layers": hparams.student_encoder_layers,
         }
         d_layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
         e_layers_to_copy: List = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
-        student_updates.update(self.teacher_kwargs)
         hparams.layer_to_copy = d_layers_to_copy
         hparams.e_layer_to_copy = e_layers_to_copy
         kw = teacher.config.to_diff_dict()
@@ -487,7 +496,7 @@ class SummarizationDistiller(SummarizationTrainer):
         return d_layers_to_copy, student, student_cfg, teacher
 
     def copy_to_student(self, d_layers_to_copy, e_layers_to_copy, hparams, student, teacher):
-        if teacher.config.model_type == 't5':
+        if teacher.config.model_type == "t5":
             return self.copy_t5_to_student(d_layers_to_copy, e_layers_to_copy, hparams, student, teacher)
         self.different_encoder: bool = hparams.student_encoder_layers != teacher.config.encoder_layers
         self.different_decoder = hparams.student_decoder_layers != teacher.config.decoder_layers
@@ -510,43 +519,6 @@ class SummarizationDistiller(SummarizationTrainer):
             self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs
         )
         return dataset
-
-    def _step(self, batch):
-        # assert is_frozen(self.teacher)
-        pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
-        y_ids = y[:, :-1].contiguous()
-        lm_labels = y[:, 1:].clone()
-        lm_labels[y[:, 1:] == pad_token_id] = -100
-        # noinspection PyCallingNonCallable
-        sloss, slogits, enc_outputs = self(
-            source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,
-        )
-        loss_encoder = torch.tensor(0.0).type_as(sloss)
-        loss_ce = torch.tensor(0.0).type_as(sloss)
-
-        if self.different_encoder:
-            with torch.no_grad():
-                teacher_enc_outputs = self.teacher.model.encoder(source_ids, attention_mask=source_mask)
-            if self.hparams.alpha_encoder_loss > 0:
-                loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs[0], source_mask)
-        else:
-            teacher_enc_outputs = (enc_outputs,)
-        with torch.no_grad():
-            tloss, tlogits, *trash = self.teacher(
-                source_ids,
-                attention_mask=source_mask,
-                encoder_outputs=teacher_enc_outputs,
-                decoder_input_ids=y_ids,
-                lm_labels=lm_labels,
-            )
-        dec_mask = invert_mask(self.model.model.last_padding_mask)
-        if self.alpha_ce > 0:
-            loss_ce, *_ = self.calc_ce_loss(dec_mask, slogits, tlogits)
-        blended_loss = (
-            loss_ce * self.alpha_ce + self.alpha_mlm * sloss + self.hparams.alpha_encoder_loss * loss_encoder
-        )
-        return blended_loss, loss_ce, sloss, loss_encoder
 
     def calc_mse_loss(self, teacher_outputs: torch.Tensor, student_outputs: torch.Tensor, mask) -> torch.FloatTensor:
         if mask is not None:
@@ -633,47 +605,24 @@ class SummarizationDistiller(SummarizationTrainer):
 
         return parser
 
-
-
-class EncoderDistiller(SummarizationDistiller):
-    loss_names = ["loss"]
-
-    def __init__(self, hparams):
-        assert hparams.enc_only
-        assert not hparams.no_teacher
-        super().__init__(hparams)
-        self.teacher_enc = self.teacher.model.encoder
-        del self.teacher
-        gc.collect()
-        torch.cuda.empty_cache()
-
-    def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
-        return self.model.model.encoder(input_ids, attention_mask=attention_mask)
-
-    def _step(self, batch):
-        source_ids, source_mask, _ = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
-        enc_outputs = self(source_ids, source_mask)
-        with torch.no_grad():
-            teacher_enc_outputs = self.teacher_enc(source_ids, attention_mask=source_mask)
-        loss_encoder = self.calc_mse_loss(enc_outputs[0], teacher_enc_outputs[0], source_mask)
-        return (loss_encoder,)
-
-class BrewerDistiller(SummarizationDistiller):
-    loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
-    teacher_kwargs = {"output_hidden_states": True}
-
     def _step(self, batch):
         # assert is_frozen(self.teacher)
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
         decoder_input_ids = y[:, :-1].contiguous()
-        lm_labels = y[:, 1:].clone()
-        lm_labels[y[:, 1:] == pad_token_id] = -100
+        labels = y[:, 1:].clone()
+        labels[y[:, 1:] == pad_token_id] = -100
         # noinspection PyCallingNonCallable
 
         sloss, slogits, dec_hidden, enc_outputs, enc_hidden_state = self(
-            source_ids, attention_mask=source_mask, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,
+            source_ids,
+            attention_mask=source_mask,
+            decoder_input_ids=decoder_input_ids,
+            labels=labels,
+            output_hidden_states=True,
+            output_attentions=False,
         )
+        # import ipdb; ipdb.set_trace()
 
         def zero_tensor():
             return torch.tensor(0.0).type_as(sloss)
@@ -682,15 +631,17 @@ class BrewerDistiller(SummarizationDistiller):
         if self.different_encoder:
             with torch.no_grad():
                 teacher_enc_outputs, teacher_enc_hid, _ = self.teacher.model.encoder(
-                    source_ids, attention_mask=source_mask
+                    source_ids, attention_mask=source_mask, output_hidden_states=True
                 )
             if self.hparams.alpha_encoder_loss > 0:
                 loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, source_mask)
+
             hid_loss_enc = self.calc_hidden_loss(
                 source_mask, enc_hidden_state, teacher_enc_hid, self.hparams.e_layer_to_copy
             )
-        else:
-            teacher_enc_outputs = (enc_outputs,)
+
+        teacher_enc_outputs = (enc_outputs,)
+        assert isinstance(teacher_enc_outputs, tuple), type(teacher_enc_outputs)
 
         with torch.no_grad():
             tloss, tlogits, tdec_hidden, _ = self.teacher(
@@ -698,7 +649,8 @@ class BrewerDistiller(SummarizationDistiller):
                 attention_mask=source_mask,
                 encoder_outputs=teacher_enc_outputs,
                 decoder_input_ids=decoder_input_ids,
-                lm_labels=lm_labels,
+                lm_labels=labels,
+                output_hidden_states=True,
             )
         dec_mask = invert_mask(self.model.model.last_padding_mask)
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
@@ -706,7 +658,7 @@ class BrewerDistiller(SummarizationDistiller):
             hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.layer_to_copy)
 
         blended_loss = (
-            loss_ce * self.alpha_ce
+            self.alpha_ce * loss_ce
             + self.alpha_mlm * sloss
             + self.hparams.alpha_encoder_loss * loss_encoder
             + self.hparams.alpha_hid * (hid_loss_enc + hid_loss_dec)
@@ -731,15 +683,13 @@ class BrewerDistiller(SummarizationDistiller):
 
 
 class T5BrewerDistiller(BrewerDistiller):
-
     def pre_init(self, hparams):
-        teacher = T5ForConditionalGeneration.from_pretrained(hparams.teacher, **self.teacher_kwargs).eval()
+        teacher = T5ForConditionalGeneration.from_pretrained(hparams.teacher)
         n_layer = hparams.student_decoder_layers
         assert n_layer == hparams.student_encoder_layers  # TODO(SS): relax this
         d_layers_to_copy = get_layers_to_copy(n_layer, len(teacher.decoder.block))
         e_layers_to_copy: List = get_layers_to_copy(n_layer, len(teacher.encoder.block))
-        student_updates = {'num_layers': n_layer}
-        student_updates.update(self.teacher_kwargs)
+        student_updates = {"num_layers": n_layer}
         hparams.layer_to_copy = d_layers_to_copy
         hparams.e_layer_to_copy = e_layers_to_copy
         kw = teacher.config.to_diff_dict()
@@ -772,6 +722,7 @@ class T5BrewerDistiller(BrewerDistiller):
         else:
             freeze_part(self.model.decoder)  # TODO(SS): very suspicious
 
+
 def main(args):
     Path(args.output_dir).mkdir(exist_ok=True)
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
@@ -781,13 +732,13 @@ def main(args):
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
     if not args.do_predict:
         return model
-    #return model  # hack
+    # return model  # hack
 
     model.hparams.test_checkpoint = ""
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
     if checkpoints:
         model.hparams.test_checkpoint = checkpoints[-1]
-        #model = model.load_from_checkpoint(checkpoints[-1],
+        # model = model.load_from_checkpoint(checkpoints[-1],
         #                                   #hparams_file=str(model.output_dir/'hparams.pkl')
         #                                   )
         trainer.resume_from_checkpoint = checkpoints[-1]
@@ -797,18 +748,16 @@ def main(args):
 
 
 def create_module(args) -> BaseTransformer:
-    t5 = 't5' in args.model_name_or_path
+    t5 = "t5" in args.model_name_or_path
     if args.no_teacher:
         assert not args.enc_only
         module_cls = SummarizationTrainer
     elif t5:
         module_cls = T5BrewerDistiller
     elif args.enc_only:
-        module_cls = EncoderDistiller
-    elif args.alpha_hid > 0:
-        module_cls = BrewerDistiller
+        raise ValueError("Deleted that")
     else:
-        module_cls = SummarizationDistiller
+        module_cls = BrewerDistiller
     args.setup_cls: str = module_cls.__name__
     model = module_cls(args)
     return model
@@ -825,21 +774,20 @@ def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
     exp_dir = ckpt_path.parent
     if dest_dir is None:
         dest_dir = exp_dir
-    clash = list(dest_dir.glob('test_generations*'))
+    clash = list(dest_dir.glob("test_generations*"))
     if clash:
-        print(f'SKIPPING to avoid overwriting {clash}')
-    ckpt = torch.load(ckpt_path, map_location='cpu')
-    if 'hparams' in ckpt:
-        args = argparse.Namespace(**ckpt['hparams'])
+        print(f"SKIPPING to avoid overwriting {clash}")
+    ckpt = torch.load(ckpt_path, map_location="cpu")
+    if "hparams" in ckpt:
+        args = argparse.Namespace(**ckpt["hparams"])
     else:
-        args = argparse.Namespace(**pickle_load(exp_dir/'hparams.pkl'))
+        args = argparse.Namespace(**pickle_load(exp_dir / "hparams.pkl"))
     args.resume_from_checkpoint = str(ckpt_path)
     args.do_train = False
     args.output_dir = str(dest_dir)
     args.n_gpu = 1
     args.eval_batch_size = 16
     return eval_and_fix(args)
-
 
 
 if __name__ == "__main__":

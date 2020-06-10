@@ -16,6 +16,7 @@
 import logging
 import math
 import random
+import warnings
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -193,7 +194,7 @@ class EncoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = LayerNorm(self.embed_dim)
 
-    def forward(self, x, encoder_padding_mask):
+    def forward(self, x, encoder_padding_mask, output_attentions=False):
         """
         Args:
             x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -209,7 +210,7 @@ class EncoderLayer(nn.Module):
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
         x, attn_weights = self.self_attn(
-            query=x, key=x, key_padding_mask=encoder_padding_mask, need_weights=self.output_attentions
+            query=x, key=x, key_padding_mask=encoder_padding_mask, output_attentions=output_attentions
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -265,9 +266,7 @@ class BartEncoder(nn.Module):
         # mbart has one extra layer_norm
         self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
-    def forward(
-        self, input_ids, attention_mask=None, output_hidden_states=False, output_attentions=False
-    ):
+    def forward(self, input_ids, attention_mask=None, output_hidden_states=False, output_attentions=False):
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
@@ -279,7 +278,7 @@ class BartEncoder(nn.Module):
                   shape `(src_len, batch, embed_dim)`
                 - **encoder_states** (List[Tensor]): all intermediate
                   hidden states of shape `(src_len, batch, embed_dim)`.
-                  Only populated if *self.output_hidden_states:* is True.
+                  Only populated if *output_hidden_states:* is True.
                 - **all_attentions** (List[Tensor]): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
@@ -835,7 +834,10 @@ class BartModel(PretrainedBartModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=output_hidden_states, output_attentions=output_attentions,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_hidden_states=output_hidden_states,
+                output_attentions=output_attentions,
             )
         assert isinstance(encoder_outputs, tuple)
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -980,7 +982,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
             outputs = (masked_lm_loss,) + outputs
 
         return outputs
-
 
     @property
     def decoder(self):

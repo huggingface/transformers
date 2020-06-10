@@ -11,13 +11,13 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from durbango import DEFAULT_DEVICE, pickle_load, pickle_save
+from durbango import DEFAULT_DEVICE, lmap, pickle_load, pickle_save
 from transformers import BartTokenizer
 
-from .evaluate_cnn import run_generate, generate_summaries
-from .finetune import eval_and_fix, main, evaluate_checkpoint
-from .utils import PSEUDO_ID_SUFFIX, SummarizationDataset, summaries_for_file, clean_output_dir
-from durbango import lmap
+from .evaluate_cnn import generate_summaries, run_generate
+from .finetune import eval_and_fix, evaluate_checkpoint, main
+from .utils import PSEUDO_ID_SUFFIX, SummarizationDataset, clean_output_dir, summaries_for_file
+
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -147,8 +147,13 @@ class TestBartExamples(unittest.TestCase):
 
     def test_bdc_checkpointing(self):
 
-        updates = dict(student_encoder_layers=2, student_decoder_layers=1, num_train_epochs=4, val_check_interval=0.25,
-                       )
+        updates = dict(
+            student_encoder_layers=2,
+            student_decoder_layers=1,
+            num_train_epochs=4,
+            val_check_interval=0.25,
+            alpha_hid=2.0,
+        )
         model = self._bart_distiller_cli(updates, check_contents=False)
 
         ckpts = list(Path(model.output_dir).glob("*.ckpt"))
@@ -156,11 +161,11 @@ class TestBartExamples(unittest.TestCase):
         transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(transformer_ckpts), len(ckpts))
         n_extra = 0  # more than 1 checkpoint saved, specified in lightning_base.py
-        #removed = clean_output_dir(model.output_dir)
-        #elf.assertEqual(len(removed), n_extra)
+        # removed = clean_output_dir(model.output_dir)
+        # elf.assertEqual(len(removed), n_extra)
         new_transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(new_transformer_ckpts), 1)
-        examples = lmap(str.strip, model.hparams.data_dir.joinpath('test.source').open().readlines())
+        examples = lmap(str.strip, model.hparams.data_dir.joinpath("test.source").open().readlines())
         out_path = tempfile.mktemp()
         generate_summaries(examples, out_path, model_name=new_transformer_ckpts[0].parent)
         self.assertTrue(Path(out_path).exists())
@@ -172,27 +177,24 @@ class TestBartExamples(unittest.TestCase):
         self._bart_distiller_cli(updates)
 
     def test_bdc_t5(self):
-        updates = dict(student_encoder_layers=1, student_decoder_layers=1, alpha_hid=2.0,
-                       teacher="patrickvonplaten/t5-tiny-random", model_type='t5',
-                       model_name_or_path="patrickvonplaten/t5-tiny-random",
-                       tokenizer_name="t5-small")
+        updates = dict(
+            student_encoder_layers=1,
+            student_decoder_layers=1,
+            alpha_hid=2.0,
+            teacher="patrickvonplaten/t5-tiny-random",
+            model_type="t5",
+            model_name_or_path="patrickvonplaten/t5-tiny-random",
+            tokenizer_name="t5-small",
+        )
         self._bart_distiller_cli(updates)
 
-    @unittest.skipUnless(False, 'Not implemented')
+    @unittest.skipUnless(False, "Not implemented")
     def test_bdc_mbart(self):
         pass
 
-    def test_bdc_enc_only(self):
-        updates = dict(alpha_mlm=0.0, alpha_ce=0.0, student_encoder_layers=1, enc_only=True, student_decoder_layers=2,)
-        model = self._bart_distiller_cli(updates)
-        self.assertFalse(model.different_decoder)
-        ckpt_path = list(model.output_dir.glob("*.ckpt"))[0]
-        evaluate_checkpoint(ckpt_path, dest_dir=Path(tempfile.mkdtemp(prefix="output_v2")))
-
-
     def _bart_distiller_cli(self, updates, check_contents=True):
         default_updates = dict(
-            model_type='bart',
+            model_type="bart",
             train_batch_size=1,
             eval_batch_size=2,
             num_train_epochs=2,
@@ -201,7 +203,7 @@ class TestBartExamples(unittest.TestCase):
             do_predict=True,
             gpus=0,
             model_name_or_path="sshleifer/tinier_bart",
-            teacher=CHEAP_ARGS['model_name_or_path'],
+            teacher=CHEAP_ARGS["model_name_or_path"],
             val_check_interval=0.5,
             alpha_encoder_loss=0.4,
         )
@@ -215,7 +217,7 @@ class TestBartExamples(unittest.TestCase):
         if not check_contents:
             return model
         contents = os.listdir(output_dir)
-        ckpt_name = 'val_avg_rouge2=0.0000-step_count=2.ckpt' #"val_avg_rouge2=0.0000-epoch=1.ckpt"  # "epoch=1-val_avg_rouge2=0.0000.ckpt"
+        ckpt_name = "val_avg_rouge2=0.0000-step_count=2.ckpt"  # "val_avg_rouge2=0.0000-epoch=1.ckpt"  # "epoch=1-val_avg_rouge2=0.0000.ckpt"
         contents = {os.path.basename(p) for p in contents}
         self.assertIn(ckpt_name, contents)
         self.assertIn("metrics.pkl", contents)

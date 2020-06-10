@@ -29,7 +29,7 @@ def generate_summaries(
     fout = Path(out_file).open("w")
     if model is None:
         model = BartForConditionalGeneration.from_pretrained(model_name).to(device)
-    if 'cuda' in device:
+    if "cuda" in device:
         model = model.half()
     tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
     if n_obs is not None:
@@ -37,9 +37,7 @@ def generate_summaries(
     for batch in tqdm(list(chunks(examples, batch_size))):
         dct = tokenizer.batch_encode_plus(batch, max_length=1024, return_tensors="pt", pad_to_max_length=True)
         summaries = model.generate(
-            input_ids=dct["input_ids"].to(device),
-            attention_mask=dct["attention_mask"].to(device),
-            **generate_kwargs,
+            input_ids=dct["input_ids"].to(device), attention_mask=dct["attention_mask"].to(device), **generate_kwargs,
         )
         dec = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         for hypothesis in dec:
