@@ -25,14 +25,19 @@ def load_pt(path):
         return torch.load(f)
 
 
+T5_PREFIX = "summarize: "
+
+
 def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return_tensors="pt", overwrite_cache=False):
-    tok_name = tokenizer.__class__.__name__ if not isinstance(tokenizer, BartTokenizer) else ''
+    tok_name = tokenizer.__class__.__name__ if not isinstance(tokenizer, BartTokenizer) else ""
     cache_path = f"{data_path}_{tok_name}{max_length}.pkl"
     if not overwrite_cache and Path(cache_path).exists():
         return load_pt(cache_path)
     data_path = Path(data_path)
     examples = []
     lns = lmap(str.strip, list(data_path.open().readlines()))
+    if "T5" in tok_name:
+        lns = [T5_PREFIX + " " + text for text in lns]
     for text in tqdm_nice(lns, desc=f"Tokenizing {data_path.name}"):
         tokenized = tokenizer.batch_encode_plus(
             [text],  # DONT ADD SPACES
@@ -267,8 +272,6 @@ class SortishSampler(Sampler):
         sort_idx = np.concatenate(np.random.permutation(ck_idx[1:])) if len(ck_idx) > 1 else np.array([], dtype=np.int)
         sort_idx = np.concatenate((ck_idx[0], sort_idx))
         return iter(sort_idx)
-
-
 
 
 def clean_output_dir(odir: Path, dry_run=False, best_match=None):

@@ -136,12 +136,12 @@ class TestBartExamples(unittest.TestCase):
         updates = dict(
             student_encoder_layers=2,
             student_decoder_layers=1,
-            alpha_hid=3.,
+            alpha_hid=3.0,
             freeze_encoder=True,
             gpus=1,
             fp16=True,
             fp16_opt_level="O1",
-            #sortish_sampler=False,
+            # sortish_sampler=False,
         )
         self._bart_distiller_cli(updates)
 

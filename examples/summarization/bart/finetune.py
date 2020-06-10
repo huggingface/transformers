@@ -105,9 +105,6 @@ def expanded_rouge_df(rouge_all) -> pd.DataFrame:
     )
 
 
-
-
-
 def freeze_part(model: nn.Module):
     for par in model.parameters():
         par.requires_grad = False
@@ -153,6 +150,7 @@ def get_layers_to_copy(n_to_get, tot):
 
 
 BART_LARGE_N_LAYERS = 12
+
 
 class SummarizationTrainer(BaseTransformer):
     mode = "language-modeling"
@@ -435,6 +433,8 @@ class SummarizationTrainer(BaseTransformer):
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
 
         return parser
+
+
 class SummarizationDistiller(SummarizationTrainer):
     loss_names = ["loss", "ce_loss", "mlm_loss", "enc_mse_loss", "hid_loss_enc", "hid_loss_dec"]
 
@@ -608,15 +608,14 @@ class SummarizationDistiller(SummarizationTrainer):
     def _step(self, batch):
         # assert is_frozen(self.teacher)
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
+        input_ids, src_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
         decoder_input_ids = y[:, :-1].contiguous()
         labels = y[:, 1:].clone()
         labels[y[:, 1:] == pad_token_id] = -100
         # noinspection PyCallingNonCallable
-
         sloss, slogits, dec_hidden, enc_outputs, enc_hidden_state = self(
-            source_ids,
-            attention_mask=source_mask,
+            input_ids,
+            attention_mask=src_mask,
             decoder_input_ids=decoder_input_ids,
             labels=labels,
             output_hidden_states=True,
@@ -630,13 +629,13 @@ class SummarizationDistiller(SummarizationTrainer):
         if self.different_encoder:
             with torch.no_grad():
                 teacher_enc_outputs, teacher_enc_hid, _ = self.teacher.model.encoder(
-                    source_ids, attention_mask=source_mask, output_hidden_states=True
+                    input_ids, attention_mask=src_mask, output_hidden_states=True
                 )
             if self.hparams.alpha_encoder_loss > 0:
-                loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, source_mask)
+                loss_encoder = self.calc_mse_loss(enc_outputs, teacher_enc_outputs, src_mask)
 
             hid_loss_enc = self.calc_hidden_loss(
-                source_mask, enc_hidden_state, teacher_enc_hid, self.hparams.e_layer_to_copy
+                src_mask, enc_hidden_state, teacher_enc_hid, self.hparams.e_layer_to_copy
             )
 
         teacher_enc_outputs = (enc_outputs,)
@@ -644,8 +643,8 @@ class SummarizationDistiller(SummarizationTrainer):
 
         with torch.no_grad():
             tloss, tlogits, tdec_hidden, _ = self.teacher(
-                source_ids,
-                attention_mask=source_mask,
+                input_ids,
+                attention_mask=src_mask,
                 encoder_outputs=teacher_enc_outputs,
                 decoder_input_ids=decoder_input_ids,
                 lm_labels=labels,
@@ -692,6 +691,7 @@ class T5SummarizationDistiller(SummarizationDistiller):
         hparams.layer_to_copy = d_layers_to_copy
         hparams.e_layer_to_copy = e_layers_to_copy
         kw = teacher.config.to_diff_dict()
+
         kw.update(student_updates)
         # Copy weights
         student_cfg = T5Config(**kw)
@@ -699,6 +699,9 @@ class T5SummarizationDistiller(SummarizationDistiller):
         student, _ = init_student(student, teacher)
         self.copy_to_student(d_layers_to_copy, e_layers_to_copy, hparams, student, teacher)
         Path(hparams.output_dir).mkdir(exist_ok=True)
+        task_specific_params = student.config.task_specific_params
+        if task_specific_params is not None:
+            student.config.update(task_specific_params.get("summarization", {}))
         return d_layers_to_copy, student, student_cfg, teacher
 
     def freeze_embeds(self):
@@ -729,16 +732,20 @@ class T5SummarizationDistiller(SummarizationDistiller):
         labels = y[:, 1:].clone()
         labels[y[:, 1:] == pad_token_id] = -100
         # noinspection PyCallingNonCallable
-        dec_mask = y.eq(self.tokenizer.pad_token_id)
+        dec_mask = decoder_input_ids.eq(self.tokenizer.pad_token_id)
 
-        sloss, slogits, dec_hidden, enc_outputs, enc_hidden_state = self(source_ids, attention_mask=source_mask,
-                                                                         decoder_input_ids=decoder_input_ids,
-                                                                         labels=labels, output_hidden_states=True,
-                                                                         output_attentions=False, use_cache=False, )
+        sloss, slogits, dec_hidden, enc_outputs, enc_hidden_state = self(
+            source_ids,
+            attention_mask=source_mask,
+            decoder_input_ids=decoder_input_ids,
+            labels=labels,
+            output_hidden_states=True,
+            output_attentions=False,
+            use_cache=False,
+        )
 
         def zero_tensor():
             return torch.tensor(0.0).type_as(sloss)
-
 
         loss_encoder, hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor(), zero_tensor()
         if self.different_encoder:
@@ -766,7 +773,7 @@ class T5SummarizationDistiller(SummarizationDistiller):
                 output_hidden_states=True,
                 use_cache=False,
             )
-        dec_mask = invert_mask(self.model.model.last_padding_mask)
+
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
         if not self.hparams.freeze_decoder and self.alpha_hid > 0:
             hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.layer_to_copy)
@@ -778,6 +785,7 @@ class T5SummarizationDistiller(SummarizationDistiller):
             + self.hparams.alpha_hid * (hid_loss_enc + hid_loss_dec)
         )
         return blended_loss, loss_ce, sloss, loss_encoder, hid_loss_enc, hid_loss_dec
+
 
 def main(args):
     Path(args.output_dir).mkdir(exist_ok=True)
