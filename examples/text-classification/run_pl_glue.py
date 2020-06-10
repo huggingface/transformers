@@ -2,6 +2,7 @@ import glob
 import logging
 import os
 from argparse import ArgumentParser, Namespace
+from pathlib import Path
 from typing import List, Union
 
 import nlp
@@ -67,7 +68,7 @@ class GLUETransformer(BaseTransformer):
             logger.info("No cache file found. Creating one at", cached_dataset_file)
 
             # Make the directory to hold cached dataset if it doesn't already exist
-            os.makedirs(os.path.dirname(cached_dataset_file), exist_ok=True)
+            Path(cached_dataset_file).parent.mkdir(exist_ok=True)
 
             # We don't know names of text field(s) so we find that here. If multiple, we tokenize text pairs.
             text_fields = [field.name for field in self.dataset["train"].schema if pyarrow.types.is_string(field.type)]
@@ -84,7 +85,7 @@ class GLUETransformer(BaseTransformer):
 
                 # Either encode single sentence or sentence pairs
                 if len(text_fields) > 1:
-                    texts_or_text_pairs = list(zip(example_batch[text_fields[0]], example_batch[text_fields[1]]))
+                    texts_or_text_pairs = zip(example_batch[text_fields[0]], example_batch[text_fields[1]])
                 else:
                     texts_or_text_pairs = example_batch[text_fields[0]]
 
