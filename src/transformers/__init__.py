@@ -243,6 +243,7 @@ if is_torch_available():
         BartForSequenceClassification,
         BartModel,
         BartForConditionalGeneration,
+        BartForQuestionAnswering,
         BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_marian import MarianMTModel
