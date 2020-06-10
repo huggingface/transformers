@@ -636,8 +636,8 @@ def evaluate_retriever(qa_list, retriever_func, scoring_func, n_ret=10, verbose=
             'retrieval_time': total_retriever_time / (i+1)}
 
 # build a support document for the question out of Wikipedia snippets
-def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10, min_length=20):
-    q_rep = embed_questions_for_retrieval([question], tokenizer, qa_embedder)
+def query_qa_dense_index(question, qa_embedder, tokenizer, wiki_passages, wiki_index, n_results=10, min_length=20, device='cuda:0'):
+    q_rep = embed_questions_for_retrieval([question], tokenizer, qa_embedder, device=device)
     D, I = wiki_index.search(q_rep, 2 * n_results)
     res_passages = [wiki_passages[int(i)] for i in I[0]]
     support_doc = '<P> ' + ' <P> '.join([p['passage_text'] for p in res_passages])
