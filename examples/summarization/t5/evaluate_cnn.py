@@ -18,7 +18,7 @@ def generate_summaries(lns, output_file_path, model_size, batch_size, device):
     output_file = Path(output_file_path).open("w")
 
     model = T5ForConditionalGeneration.from_pretrained(model_size)
-    model.to(device)
+    model.to(device).half()
 
     tokenizer = T5Tokenizer.from_pretrained(model_size)
 
