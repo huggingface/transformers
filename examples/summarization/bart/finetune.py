@@ -442,9 +442,9 @@ class SummarizationDistiller(SummarizationTrainer):
         assert Path(hparams.data_dir).exists()
 
         d_layers_to_copy, student, student_cfg, teacher = self.pre_init(hparams)
-        self.teacher = teacher
-        super().__init__(hparams, model=student, config=student_cfg)
 
+        super().__init__(hparams, model=student, config=student_cfg)
+        self.teacher = teacher
         freeze_part(self.teacher)
 
         self.freeze_stuff(d_layers_to_copy)
