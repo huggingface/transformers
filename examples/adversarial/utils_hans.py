@@ -329,15 +329,7 @@ def hans_convert_examples_to_features(
 
         pairID = int(example.pairID)
 
-        features.append(
-            InputFeatures(
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                token_type_ids=inputs.get("token_type_ids", None),
-                label=label,
-                pairID=pairID,
-            )
-        )
+        features.append(InputFeatures(**inputs, label=label, pairID=pairID))
 
     for i, example in enumerate(examples[:5]):
         logger.info("*** Example ***")
