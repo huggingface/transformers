@@ -300,6 +300,8 @@ class RobertaForSequenceClassification(BertPreTrainedModel):
         self.roberta = RobertaModel(config)
         self.classifier = RobertaClassificationHead(config)
 
+        self.init_weights()
+
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
@@ -618,7 +620,7 @@ class RobertaForQuestionAnswering(BertPreTrainedModel):
     @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,

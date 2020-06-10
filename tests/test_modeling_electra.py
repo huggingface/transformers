@@ -40,7 +40,14 @@ if is_torch_available():
 class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (ElectraModel, ElectraForMaskedLM, ElectraForTokenClassification, ElectraForQuestionAnswering)
+        (
+            ElectraModel,
+            ElectraForPreTraining,
+            ElectraForMaskedLM,
+            ElectraForTokenClassification,
+            ElectraForSequenceClassification,
+            ElectraForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )

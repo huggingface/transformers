@@ -435,7 +435,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
         sequence_output = discriminator_hidden_states[0]
         logits = self.classifier(sequence_output)
 
-        outputs = (logits,) + discriminator_hidden_states[2:]  # add hidden states and attention if they are here
+        outputs = (logits,) + discriminator_hidden_states[1:]  # add hidden states and attention if they are here
 
         if labels is not None:
             if self.num_labels == 1:
