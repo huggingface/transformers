@@ -25,30 +25,6 @@ def load_pt(path):
         return torch.load(f)
 
 
-T5_PREFIX = "summarize: "
-
-
-def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return_tensors="pt", overwrite_cache=False):
-    tok_name = 'T5'  if not isinstance(tokenizer, BartTokenizer) else ""
-    cache_path = f"{data_path}_{tok_name}{max_length}.pkl"
-    if not overwrite_cache and Path(cache_path).exists():
-        return load_pt(cache_path)
-    data_path = Path(data_path)
-    examples = []
-    lns = lmap(str.strip, list(data_path.open().readlines()))
-    if "T5" in tok_name:
-        lns = [T5_PREFIX + " " + text for text in lns]
-    for text in tqdm_nice(lns, desc=f"Tokenizing {data_path.name}"):
-        tokenized = tokenizer.batch_encode_plus(
-            [text],  # DONT ADD SPACES
-            max_length=max_length,
-            pad_to_max_length=pad_to_max_length,
-            add_prefix_space=True,
-            return_tensors=return_tensors,
-        )
-        examples.append(tokenized)
-    torch.save(lmap(dict, examples), cache_path)
-    return examples
 
 
 DATA_DIR = Path("/home/shleifer/transformers_fork/examples/summarization/bart/cnn_dm")
@@ -108,6 +84,29 @@ def flatten_list(summary_ids: List[List]):
 
 
 PSEUDO_ID_SUFFIX = "pseudo_target.pkl"
+T5_PREFIX = "summarize: "
+
+
+def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return_tensors="pt", overwrite_cache=False,
+                prefix='', tok_name=''):
+    cache_path = f"{data_path}_{tok_name}{max_length}.pkl"
+    if not overwrite_cache and Path(cache_path).exists():
+        return load_pt(cache_path)
+    data_path = Path(data_path)
+    examples = []
+    lns = lmap(str.strip, list(data_path.open().readlines()))
+    lns = [prefix + text for text in lns]
+    for text in tqdm_nice(lns, desc=f"Tokenizing {data_path.name}"):
+        tokenized = tokenizer.batch_encode_plus(
+            [text],  # DONT ADD SPACES
+            max_length=max_length,
+            pad_to_max_length=pad_to_max_length,
+            add_prefix_space=True,
+            return_tensors=return_tensors,
+        )
+        examples.append(tokenized)
+    torch.save(lmap(dict, examples), cache_path)
+    return examples
 
 
 class SummarizationDataset(Dataset):
@@ -125,19 +124,22 @@ class SummarizationDataset(Dataset):
         overwrite_cache=False,
         tgt_suffix="",
     ):
-
+        tok_name = 'T5' if not isinstance(tokenizer, BartTokenizer) else ""
+        prefix = T5_PREFIX if tok_name == 'T5' else ""
         source = encode_file(
             tokenizer,
             os.path.join(data_dir, type_path + ".source"),
             max_source_length,
             overwrite_cache=overwrite_cache,
+            prefix=prefix,
+            tok_name=tok_name,
         )
         if type_path == "train":
             tgt_path = os.path.join(data_dir, type_path + ".target" + tgt_suffix)
         else:
             tgt_path = os.path.join(data_dir, type_path + ".target")
 
-        target = encode_file(tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache,)
+        target = encode_file(tokenizer, tgt_path, max_target_length, overwrite_cache=overwrite_cache, tok_name=tok_name)
 
         return cls(
             source, target, n_obs=n_obs, max_target_length=max_target_length, max_source_length=max_source_length
