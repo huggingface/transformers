@@ -101,7 +101,7 @@ class TFModelTesterMixin:
             outputs = model(inputs_dict)
             serialized = pickle.dumps(model)
 
-            model = pickle.loads(serialized) 
+            model = pickle.loads(serialized)
             after_outputs = model(inputs_dict)
 
             self.assert_outputs_same(after_outputs, outputs)

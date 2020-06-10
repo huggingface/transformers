@@ -187,6 +187,13 @@ class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
         self.model_tester = TFCTRLModelTest.TFCTRLModelTester(self)
         self.config_tester = ConfigTester(self, config_class=CTRLConfig, n_embd=37)
 
+    @unittest.skip("known to fail")
+    def test_base_pickle(self):
+        # the test from base class is known to fail for TFCTRLModel
+        # it need a fix in keras.Sequential implementation
+        # https://github.com/tensorflow/tensorflow/issues/34697
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
