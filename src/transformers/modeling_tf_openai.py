@@ -429,6 +429,8 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
         training (:obj:`boolean`, `optional`, defaults to :obj:`False`):
             Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
             (if set to :obj:`False`) for evaluation.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
