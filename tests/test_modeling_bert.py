@@ -34,9 +34,8 @@ if is_torch_available():
         BertForSequenceClassification,
         BertForTokenClassification,
         BertForMultipleChoice,
-        BertLMHeadModel,
     )
-    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST, BertLMHeadModel
 
 
 class BertModelTester:
