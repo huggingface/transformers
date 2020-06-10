@@ -486,6 +486,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
             return False
         return True
 
+    def __getstate__(self):
+        """Remove unpickable objects"""
+
+        state = super().__getstate__()
+        state.pop("_trackable_saver", None)
+        state.pop("_compiled_trainable_state", None)
+        return state
+
     def generate(
         self,
         input_ids=None,

@@ -92,6 +92,20 @@ class TFModelTesterMixin:
 
                 self.assert_outputs_same(after_outputs, outputs)
 
+    def test_base_pickle(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        import pickle
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            outputs = model(inputs_dict)
+            serialized = pickle.dumps(model)
+
+            model = pickle.loads(serialized) 
+            after_outputs = model(inputs_dict)
+
+            self.assert_outputs_same(after_outputs, outputs)
+
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -271,7 +285,7 @@ class TFModelTesterMixin:
             outputs_dict = model(input_ids)
             hidden_states = outputs_dict[0]
 
-            # Add a dense layer on top to test intetgration with other keras modules
+            ## Add a dense layer on top to test intetgration with other keras modules
             outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
 
             # Compile extended model
