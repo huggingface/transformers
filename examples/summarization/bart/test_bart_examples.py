@@ -198,7 +198,7 @@ class TestBartExamples(unittest.TestCase):
             teacher="patrickvonplaten/t5-tiny-random",
             model_type="t5",
             model_name_or_path="patrickvonplaten/t5-tiny-random",
-            tokenizer_name="t5-small",
+            tokenizer_name="patrickvonplaten/t5-tiny-random",
         )
         self._bart_distiller_cli(updates)
 

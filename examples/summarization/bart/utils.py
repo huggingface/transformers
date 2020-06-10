@@ -26,7 +26,8 @@ def load_pt(path):
 
 
 def encode_file(tokenizer, data_path, max_length, pad_to_max_length=True, return_tensors="pt", overwrite_cache=False):
-    cache_path = f"{data_path}_{max_length}.pkl"
+    tok_name = tokenizer.__class__.__name__ if not isinstance(tokenizer, BartTokenizer) else ''
+    cache_path = f"{data_path}_{tok_name}{max_length}.pkl"
     if not overwrite_cache and Path(cache_path).exists():
         return load_pt(cache_path)
     data_path = Path(data_path)
@@ -119,6 +120,7 @@ class SummarizationDataset(Dataset):
         overwrite_cache=False,
         tgt_suffix="",
     ):
+
         source = encode_file(
             tokenizer,
             os.path.join(data_dir, type_path + ".source"),
