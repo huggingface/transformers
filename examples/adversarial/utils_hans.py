@@ -329,25 +329,20 @@ def hans_convert_examples_to_features(
 
         pairID = int(example.pairID)
 
-        if ex_index < 10:
-            logger.info("*** Example ***")
-            logger.info("text_a: %s" % (example.text_a))
-            logger.info("text_b: %s" % (example.text_b))
-            logger.info("guid: %s" % (example.guid))
-            logger.info("input_ids: %s" % " ".join([str(x) for x in inputs["input_ids"]]))
-            logger.info("attention_mask: %s" % " ".join([str(x) for x in inputs["attention_mask"]]))
-            logger.info("token_type_ids: %s" % " ".join([str(x) for x in inputs["token_type_ids"]]))
-            logger.info("label: %s (id = %d)" % (example.label, label))
-
         features.append(
             InputFeatures(
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
-                token_type_ids=inputs["token_type_ids"],
+                token_type_ids=inputs.get("token_type_ids", None),
                 label=label,
                 pairID=pairID,
             )
         )
+
+    for i, example in enumerate(examples[:5]):
+        logger.info("*** Example ***")
+        logger.info(f"guid: {example}")
+        logger.info(f"features: {features[i]}")
 
     return features
 
