@@ -132,7 +132,7 @@ class TestBartExamples(unittest.TestCase):
         self._bart_distiller_cli(updates)
 
     @unittest.skipUnless(torch.cuda.is_available(), "skipping fp16 test")
-    def test_fp16(self):
+    def test_bdc_fp16(self):
         updates = dict(
             student_encoder_layers=2,
             student_decoder_layers=1,
@@ -140,6 +140,7 @@ class TestBartExamples(unittest.TestCase):
             freeze_encoder=True,
             gpus=1,
             fp16=True,
+            fp16_opt_level="O2",
             #sortish_sampler=False,
         )
         self._bart_distiller_cli(updates)
