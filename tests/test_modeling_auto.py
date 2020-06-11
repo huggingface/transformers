@@ -59,7 +59,7 @@ if is_torch_available():
         MODEL_WITH_LM_HEAD_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
-        MODEL_FOR_ENCODER_DECODER_LM_MAPPING,
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     )
 
 
@@ -216,7 +216,7 @@ class AutoModelTest(unittest.TestCase):
             MODEL_WITH_LM_HEAD_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
-            MODEL_FOR_ENCODER_DECODER_LM_MAPPING,
+            MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         )
 
         for mapping in mappings:
