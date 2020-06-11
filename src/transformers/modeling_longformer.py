@@ -1202,6 +1202,8 @@ class LongformerForMultipleChoice(BertPreTrainedModel):
         loss, classification_scores = outputs[:2]
 
         """
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+
         # set global attention on question tokens
         if global_attention_mask is None:
             logger.info("Initializing global attention on multiple choice...")
