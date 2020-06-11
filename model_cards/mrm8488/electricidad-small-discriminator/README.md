@@ -43,8 +43,8 @@ import torch
 discriminator = ElectraForPreTraining.from_pretrained("mrm8488/electricidad-small-discriminator")
 tokenizer = ElectraTokenizerFast.from_pretrained("mrm8488/electricidad-small-discriminator")
 
-sentence = "El rápido zorro marrón salta sobre el perro perezoso"
-fake_sentence = "El rápido zorro marrón falsea sobre el perro perezoso"
+sentence = "el zorro rojo es muy rápido"
+fake_sentence = "el zorro rojo es muy ser"
 
 fake_tokens = tokenizer.tokenize(sentence)
 fake_inputs = tokenizer.encode(sentence, return_tensors="pt")
@@ -53,8 +53,15 @@ predictions = torch.round((torch.sign(discriminator_outputs[0]) + 1) / 2)
 
 [print("%7s" % token, end="") for token in fake_tokens]
 
-[print("%7s" % prediction, end="") for prediction in predictions.tolist()]
+[print("%7s" % int(prediction), end="") for prediction in predictions.tolist()[1:-1]]
+
+# Output:
+'''
+el  zorro   rojo     es    muy    ser      0      0      0      0      0      1[None, None, None, None, None, None]
+'''
 ```
+
+As you can see there is a **1** in the place where the model detected the fake token (**ser**). So, it works! 🎉
 
 ## Acknowledgments
 

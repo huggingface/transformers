@@ -141,6 +141,8 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
             is used in the cross-attention if the model is configured as a decoder.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -149,7 +151,7 @@ MMBT_INPUTS_DOCSTRING = r"""    Inputs:
     MMBT_START_DOCSTRING,
     MMBT_INPUTS_DOCSTRING,
 )
-class MMBTModel(ModuleUtilsMixin):
+class MMBTModel(nn.Module, ModuleUtilsMixin):
     r"""
         Outputs: `Tuple` comprising various elements depending on the configuration (config) and inputs:
             **last_hidden_state**: ``torch.FloatTensor`` of shape ``(batch_size, sequence_length, hidden_size)``
@@ -165,7 +167,7 @@ class MMBTModel(ModuleUtilsMixin):
                 list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
                 of shape ``(batch_size, sequence_length, hidden_size)``:
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            **attentions**: (`optional`, returned when ``output_attentions=True``)
                 list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
                 Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 
@@ -295,7 +297,7 @@ class MMBTForClassification(nn.Module):
                 list of ``torch.FloatTensor`` (one for the output of each layer + the output of the embeddings)
                 of shape ``(batch_size, sequence_length, hidden_size)``:
                 Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-            **attentions**: (`optional`, returned when ``config.output_attentions=True``)
+            **attentions**: (`optional`, returned when ``output_attentions=True``)
                 list of ``torch.FloatTensor`` (one for each layer) of shape ``(batch_size, num_heads, sequence_length, sequence_length)``:
                 Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
 

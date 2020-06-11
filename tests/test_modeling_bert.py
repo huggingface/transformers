@@ -35,7 +35,7 @@ if is_torch_available():
         BertForTokenClassification,
         BertForMultipleChoice,
     )
-    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BertModelTester:
@@ -218,7 +218,7 @@ class BertModelTester:
         model.to(torch_device)
         model.eval()
         loss, prediction_scores = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
         )
         result = {
             "loss": loss,
@@ -248,7 +248,7 @@ class BertModelTester:
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            masked_lm_labels=token_labels,
+            labels=token_labels,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
         )
@@ -256,7 +256,7 @@ class BertModelTester:
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            masked_lm_labels=token_labels,
+            labels=token_labels,
             encoder_hidden_states=encoder_hidden_states,
         )
         result = {
@@ -294,7 +294,7 @@ class BertModelTester:
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            masked_lm_labels=token_labels,
+            labels=token_labels,
             next_sentence_label=sequence_labels,
         )
         result = {
@@ -407,6 +407,7 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
         (
             BertModel,
             BertForMaskedLM,
+            BertForMultipleChoice,
             BertForNextSentencePrediction,
             BertForPreTraining,
             BertForQuestionAnswering,
@@ -494,6 +495,6 @@ class BertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(BERT_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = BertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

@@ -33,9 +33,10 @@ from .modeling_utils import PreTrainedModel
 
 logger = logging.getLogger(__name__)
 
-TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "transfo-xl-wt103": "https://cdn.huggingface.co/transfo-xl-wt103-pytorch_model.bin",
-}
+TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "transfo-xl-wt103",
+    # See all Transformer XL models at https://huggingface.co/models?filter=transfo-xl
+]
 
 
 def build_tf_to_pytorch_map(model, config):
@@ -233,12 +234,10 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         pre_lnorm=False,
         r_r_bias=None,
         r_w_bias=None,
-        output_attentions=False,
         layer_norm_epsilon=1e-5,
     ):
         super().__init__()
 
-        self.output_attentions = output_attentions
         self.n_head = n_head
         self.d_model = d_model
         self.d_head = d_head
@@ -277,7 +276,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
         return x
 
-    def forward(self, w, r, attn_mask=None, mems=None, head_mask=None):
+    def forward(self, w, r, attn_mask=None, mems=None, head_mask=None, output_attentions=False):
         qlen, rlen, bsz = w.size(0), r.size(0), w.size(1)
 
         if mems is not None:
@@ -360,7 +359,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
             # residual connection + layer normalization
             outputs = [self.layer_norm(w + attn_out)]
 
-        if self.output_attentions:
+        if output_attentions:
             outputs.append(attn_prob)
 
         return outputs
@@ -377,9 +376,11 @@ class RelPartialLearnableDecoderLayer(nn.Module):
             d_model, d_inner, dropout, pre_lnorm=kwargs.get("pre_lnorm"), layer_norm_epsilon=layer_norm_epsilon
         )
 
-    def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, head_mask=None):
+    def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, head_mask=None, output_attentions=False):
 
-        attn_outputs = self.dec_attn(dec_inp, r, attn_mask=dec_attn_mask, mems=mems, head_mask=head_mask)
+        attn_outputs = self.dec_attn(
+            dec_inp, r, attn_mask=dec_attn_mask, mems=mems, head_mask=head_mask, output_attentions=output_attentions,
+        )
         ff_output = self.pos_ff(attn_outputs[0])
 
         outputs = [ff_output] + attn_outputs[1:]
@@ -453,7 +454,6 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
     """
 
     config_class = TransfoXLConfig
-    pretrained_model_archive_map = TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_transfo_xl
     base_model_prefix = "transformer"
 
@@ -538,10 +538,12 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the self-attention modules.
             Mask values selected in ``[0, 1]``:
             :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
-        input_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
+        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -552,7 +554,6 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
 class TransfoXLModel(TransfoXLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
 
         self.n_token = config.vocab_size
@@ -598,7 +599,6 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                         pre_lnorm=config.pre_lnorm,
                         r_w_bias=None if config.untie_r else self.r_w_bias,
                         r_r_bias=None if config.untie_r else self.r_r_bias,
-                        output_attentions=self.output_attentions,
                         layer_norm_epsilon=config.layer_norm_epsilon,
                     )
                 )
@@ -670,7 +670,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         return new_mems
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None):
+    def forward(self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None, output_attentions=None):
         r"""
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.TransfoXLConfig`) and inputs:
@@ -685,7 +685,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -704,6 +704,8 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
         last_hidden_states, mems = outputs[:2]
 
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
         if input_ids is not None and inputs_embeds is not None:
@@ -772,10 +774,15 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                 hids.append(core_out)
                 mems_i = None if mems is None else mems[i]
                 layer_outputs = layer(
-                    core_out, pos_emb, dec_attn_mask=dec_attn_mask, mems=mems_i, head_mask=head_mask[i]
+                    core_out,
+                    pos_emb,
+                    dec_attn_mask=dec_attn_mask,
+                    mems=mems_i,
+                    head_mask=head_mask[i],
+                    output_attentions=output_attentions,
                 )
                 core_out = layer_outputs[0]
-                if self.output_attentions:
+                if output_attentions:
                     attentions.append(layer_outputs[1])
         else:  # learnable embeddings and absolute embeddings
             raise NotImplementedError  # Removed these to avoid maintaining dead code - They are not used in our pretrained checkpoint
@@ -791,7 +798,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             hids.append(core_out)
             hids = list(t.transpose(0, 1).contiguous() for t in hids)
             outputs.append(hids)
-        if self.output_attentions:
+        if output_attentions:
             # Transpose to library standard shape [bsz, n_heads, query_seq_len, key_seq_len]
             attentions = list(t.permute(2, 3, 0, 1).contiguous() for t in attentions)
             outputs.append(attentions)
@@ -848,11 +855,13 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         return self.transformer.init_mems(bsz)
 
     @add_start_docstrings_to_callable(TRANSFO_XL_INPUTS_DOCSTRING)
-    def forward(self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None, labels=None):
+    def forward(
+        self, input_ids=None, mems=None, head_mask=None, inputs_embeds=None, labels=None, output_attentions=None
+    ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for language modeling.
-            Note that the labels **are shifted** inside the model, i.e. you can set ``lm_labels = input_ids``
+            Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
             Indices are selected in ``[-100, 0, ..., config.vocab_size]``
             All labels set to ``-100`` are ignored (masked), the loss is only
             computed for labels in ``[0, ..., config.vocab_size]``
@@ -872,7 +881,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -898,7 +907,9 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        transformer_outputs = self.transformer(input_ids, mems=mems, head_mask=head_mask, inputs_embeds=inputs_embeds)
+        transformer_outputs = self.transformer(
+            input_ids, mems=mems, head_mask=head_mask, inputs_embeds=inputs_embeds, output_attentions=output_attentions
+        )
 
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]

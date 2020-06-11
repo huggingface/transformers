@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import PreTrainedTokenizer
+from transformers import PreTrainedTokenizer, TensorType
 from transformers.tokenization_gpt2 import GPT2Tokenizer
 
 from .utils import slow
@@ -39,3 +39,8 @@ class TokenizerUtilsTest(unittest.TestCase):
     @slow
     def test_pretrained_tokenizers(self):
         self.check_tokenizer_from_pretrained(GPT2Tokenizer)
+
+    def check_tensor_type_from_str(self):
+        self.assertEqual(TensorType("tf"), TensorType.TENSORFLOW)
+        self.assertEqual(TensorType("pt"), TensorType.PYTORCH)
+        self.assertEqual(TensorType("np"), TensorType.NUMPY)

@@ -31,11 +31,12 @@ if is_torch_available():
         XLNetConfig,
         XLNetModel,
         XLNetLMHeadModel,
+        XLNetForMultipleChoice,
         XLNetForSequenceClassification,
         XLNetForTokenClassification,
         XLNetForQuestionAnswering,
     )
-    from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -48,6 +49,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             XLNetForTokenClassification,
             XLNetForSequenceClassification,
             XLNetForQuestionAnswering,
+            XLNetForMultipleChoice,
         )
         if is_torch_available()
         else ()
@@ -61,7 +63,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         def __init__(
             self,
             parent,
-            batch_size=13,
+            batch_size=14,
             seq_length=7,
             mem_len=10,
             clamp_len=-1,
@@ -84,6 +86,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             bos_token_id=1,
             eos_token_id=2,
             pad_token_id=5,
+            num_choices=4,
         ):
             self.parent = parent
             self.batch_size = batch_size
@@ -110,6 +113,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             self.bos_token_id = bos_token_id
             self.pad_token_id = pad_token_id
             self.eos_token_id = eos_token_id
+            self.num_choices = num_choices
 
         def prepare_config_and_inputs(self):
             input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -238,7 +242,7 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
 
-            _, _, attentions = model(input_ids_1, target_mapping=target_mapping)
+            _, _, attentions = model(input_ids_1, target_mapping=target_mapping, output_attentions=True)
 
             self.parent.assertEqual(len(attentions), config.n_layer)
             self.parent.assertIsInstance(attentions[0], tuple)
@@ -483,7 +487,6 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_xlnet_base_model_with_att_output(self):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config_and_inputs[0].output_attentions = True
         self.model_tester.create_and_check_xlnet_base_model_with_att_output(*config_and_inputs)
 
     def test_xlnet_lm_head(self):
@@ -508,15 +511,17 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(XLNET_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = XLNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
+@require_torch
 class XLNetModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlnet_base_cased(self):
         model = XLNetLMHeadModel.from_pretrained("xlnet-base-cased")
+        model.to(torch_device)
         input_ids = torch.tensor(
             [
                 [

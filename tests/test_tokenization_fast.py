@@ -75,6 +75,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assert_special_tokens_map_equal(tokenizer_r, tokenizer_p)
         self.assert_embeded_special_tokens(tokenizer_r, tokenizer_p)
         self.assert_padding(tokenizer_r, tokenizer_p)
+        self.assert_create_token_type_ids(tokenizer_r, tokenizer_p)
         # TODO: enable for v3.0.0
         # self.assert_empty_output_no_special_tokens(tokenizer_r, tokenizer_p)
 
@@ -220,6 +221,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assertEqual(len(tokenizer_r), vocab_size + 3)
 
         self.assertEqual(tokenizer_r.add_special_tokens({}), 0)
+        self.assertEqual(tokenizer_r.add_special_tokens({"bos_token": "[BOS]", "eos_token": "[EOS]"}), 2)
         self.assertRaises(
             AssertionError, tokenizer_r.add_special_tokens, {"additional_special_tokens": "<testtoken1>"}
         )
@@ -227,7 +229,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         self.assertEqual(
             tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
         )
-        self.assertEqual(len(tokenizer_r), vocab_size + 6)
+        self.assertEqual(len(tokenizer_r), vocab_size + 8)
 
     def assert_offsets_mapping(self, tokenizer_r):
         text = "Wonderful no inspiration example with subtoken"
@@ -307,6 +309,20 @@ class CommonFastTokenizerTest(unittest.TestCase):
         for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
             self.assertEqual(len(tokens[key].shape), 2)
             self.assertEqual(tokens[key].shape[-1], 6)
+
+    def assert_create_token_type_ids(self, tokenizer_r, tokenizer_p):
+        input_simple = [1, 2, 3]
+        input_pair = [1, 2, 3]
+
+        # Generate output
+        output_r = tokenizer_r.create_token_type_ids_from_sequences(input_simple)
+        output_p = tokenizer_p.create_token_type_ids_from_sequences(input_simple)
+        self.assertEqual(output_p, output_r)
+
+        # Generate pair output
+        output_r = tokenizer_r.create_token_type_ids_from_sequences(input_simple, input_pair)
+        output_p = tokenizer_p.create_token_type_ids_from_sequences(input_simple, input_pair)
+        self.assertEqual(output_p, output_r)
 
     def assert_build_inputs_with_special_tokens(self, tokenizer_r, tokenizer_p):
         # Input string
