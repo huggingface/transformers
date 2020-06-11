@@ -44,7 +44,9 @@ from .modeling_utils import PreTrainedModel
 
 
 logger = logging.getLogger(__name__)
-MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = []
+MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "mobilebert-uncased"
+]
 
 
 def load_tf_weights_in_mobilebert(model, config, tf_checkpoint_path):

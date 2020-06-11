@@ -19,7 +19,9 @@ from .configuration_utils import PretrainedConfig
 
 logger = logging.getLogger(__name__)
 
-MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "mobilebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/google/mobilebert-uncased/config.json"
+}
 
 
 class MobileBertConfig(PretrainedConfig):
