@@ -448,18 +448,25 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
         loss, classification_scores = outputs[:2]
 
         """
-        num_choices = input_ids.shape[1]
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
-        flat_input_ids = input_ids.view(-1, input_ids.size(-1))
+        flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
         flat_position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
         flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        flat_inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
+            else None
+        )
+
         outputs = self.roberta(
             flat_input_ids,
             position_ids=flat_position_ids,
             token_type_ids=flat_token_type_ids,
             attention_mask=flat_attention_mask,
             head_mask=head_mask,
+            inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
         )
         pooled_output = outputs[1]
