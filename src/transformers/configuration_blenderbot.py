@@ -47,48 +47,68 @@ class BlenderbotConfig(PretrainedConfig):
     model_type = "blenderbot"
 
     def __init__(self,
-                 embedding_size=512,
-                 n_layers=8,
-                 ffn_size=2048,
+                 hidden_size=512,
                  dropout=0.1,
-                 n_heads=16,
-                 n_positions=512,
-                 activation='gelu',
-                 vocab_size=54944,
-                 learn_positional_embeddings=True,
+                 encoder_ffn_dim=2048,
+                 encoder_layers=8,
+                 encoder_attention_heads=16,
+                 decoder_ffn_dim=2048,
+                 decoder_layers=8,
+                 decoder_attention_heads=16,
+                 encoder_layerdrop=0.0,
+                 decoder_layerdrop=0.0,
                  attention_dropout=0.0,
-                 relu_dropout=0.0,
+                 max_position_embeddings=512,
+                 vocab_size=54944,
+                 activation_dropout=0.0,
+                 initializer_range=0.02,
+                 pad_token_id=0,
+                 bos_token_id=1,
+                 eos_token_id=2,
+                 unk_token_id=3,
+                 activation_function='gelu',
+                 normalize_before=False,
+                 add_final_layer_norm=False,
+                 scale_embedding=False,
+                 normalize_embedding=True,
+                 static_position_embeddings=False,
                  **kwargs):
-        super().__init__(**kwargs)
-        self.embedding_size = embedding_size
-        self.n_layers = n_layers
-        self.ffn_size = ffn_size
-        self.n_heads = n_heads
-        self.n_positions = n_positions
-        self.dropout = dropout
-        self.activation = activation
-        self.attention_dropout = attention_dropout
-        self.relu_dropout = relu_dropout
+        super().__init__(pad_token_id=0,
+                        bos_token_id=1,
+                        eos_token_id=2,
+                        unk_token_id=3,
+                        **kwargs)
+        self.d_model =hidden_size
+        self.max_position_embeddings = max_position_embeddings
+        self.static_position_embeddings = static_position_embeddings
         self.vocab_size = vocab_size
-        self.learn_positional_embeddings = learn_positional_embeddings
-
-        @property
-        def n_layers(self):
-            return self.n_layers
-
-        @property
-        def n_heads(self):
-            return self.n_heads
-
-        @property
-        def n_positions(self):
-            return self.n_positions
-
-        @property
-        def ffn_size(self):
-            return self.ffn_size
-
-        @property
-        def embedding_size(self):
-            return self.embedding_size
-
+        
+        self.encoder_layers = encoder_layers
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.encoder_attention_heads = encoder_attention_heads
+        self.encoder_layerdrop = encoder_layerdrop
+        
+        self.decoder_layers = decoder_layers
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.decoder_attention_heads = decoder_attention_heads
+        self.decoder_layerdrop = decoder_layerdrop
+        
+        
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
+        
+        self.activation_function = activation_function
+        
+        self.initializer_range = initializer_range
+        self.normalize_before = normalize_before
+        self.scale_embedding = scale_embedding
+        self.normalize_embedding = normalize_embedding
+        self.add_final_layer_norm = add_final_layer_norm
+        
+        self.pad_token_id = pad_token_id
+        self.bos_token_id =bos_token_id
+        self.eos_token_id = eos_token_id
+        self.unk_token_id = unk_token_id
+        
+        
