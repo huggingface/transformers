@@ -449,28 +449,28 @@ class TFModelTesterMixin:
 
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.is_encoder_decoder:
-            input_ids = inputs_dict["input_ids"]
-            del inputs_dict["input_ids"]
-        else:
-            encoder_input_ids = inputs_dict["inputs"]
-            decoder_input_ids = inputs_dict["decoder_input_ids"]
-            del inputs_dict["inputs"]
-            del inputs_dict["decoder_input_ids"]
 
         for model_class in self.all_model_classes:
-            if model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
-                continue
             model = model_class(config)
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
 
             wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
-                inputs_dict["inputs_embeds"] = self._get_embeds(wte, input_ids)
+                inputs["inputs_embeds"] = self._get_embeds(wte, input_ids)
             else:
-                inputs_dict["inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
-                inputs_dict["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
+                inputs["inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
 
-            model(inputs_dict)
+            model(inputs)
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
