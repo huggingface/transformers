@@ -315,11 +315,6 @@ class LoggingCallback(pl.Callback):
         return self._do_work(trainer, pl_module, "test")
 
 
-class MyCheckpointer(ModelCheckpoint):
-    def _save_model(self, filepath):
-        pass
-
-
 def add_generic_args(parser, root_dir):
     parser.add_argument(
         "--output_dir",
