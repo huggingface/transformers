@@ -664,7 +664,7 @@ class AutoModelWithLMHead:
         """
         warnings.warn(
             "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqLM` for encoder-decoder models.",
-            DeprecationWarning,
+            FutureWarning,
         )
         for config_class, model_class in MODEL_WITH_LM_HEAD_MAPPING.items():
             if isinstance(config, config_class):
@@ -752,7 +752,7 @@ class AutoModelWithLMHead:
         """
         warnings.warn(
             "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqLM` for encoder-decoder models.",
-            DeprecationWarning,
+            FutureWarning,
         )
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
