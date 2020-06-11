@@ -68,7 +68,7 @@ class TFTrainer:
         ds = (
             self.train_dataset.cache()
             .shuffle(self.num_train_examples)
-            .batch(self.args.train_batch_size)
+            .batch(self.args.train_batch_size, drop_remainder=self.args.dataloader_drop_last)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
 
@@ -82,12 +82,16 @@ class TFTrainer:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
-        ds = eval_dataset.cache().batch(self.args.eval_batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+        ds = (
+            eval_dataset.cache()
+            .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
+            .prefetch(tf.data.experimental.AUTOTUNE)
+        )
 
         return self.args.strategy.experimental_distribute_dataset(ds)
 
     def get_test_tfdataset(self, test_dataset: tf.data.Dataset) -> tf.data.Dataset:
-        ds = test_dataset.batch(self.args.eval_batch_size)
+        ds = test_dataset.batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
 
         return self.args.strategy.experimental_distribute_dataset(ds)
 

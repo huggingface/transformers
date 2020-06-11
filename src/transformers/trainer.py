@@ -286,6 +286,7 @@ class Trainer:
             sampler=sampler,
             batch_size=self.args.eval_batch_size,
             collate_fn=self.data_collator.collate_batch,
+            drop_last=self.args.dataloader_drop_last,
         )
 
         return data_loader
