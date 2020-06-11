@@ -104,8 +104,8 @@ class PyTorchBenchmark(Benchmark):
                         )
                         torch.cuda.reset_max_memory_cached()
 
-                        # calculate loss and do backpropagation
-                        _train()
+                    # calculate loss and do backpropagation
+                    _train()
                 elif not self.args.no_tpu and is_torch_tpu_available():
                     # tpu
                     raise NotImplementedError(
@@ -129,8 +129,7 @@ class PyTorchBenchmark(Benchmark):
                         logger.info(
                             "Please consider updating PyTorch to version 1.4 to get more accuracy on GPU memory usage"
                         )
-                        memory = Memory(torch.cuda.max_memory_cached())
-                    memory = Memory(torch.cuda.max_memory_reserved())
+                        memory = Memory(torch.cuda.max_memory_reserved())
 
                 return memory, summary
             else:
@@ -215,8 +214,8 @@ class PyTorchBenchmark(Benchmark):
                         )
                         torch.cuda.reset_max_memory_cached()
 
-                        # run forward
-                        _forward()
+                    # run forward
+                    _forward()
                 elif not self.args.no_tpu and is_torch_tpu_available():
                     # tpu
                     raise NotImplementedError(
