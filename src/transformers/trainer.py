@@ -1,4 +1,3 @@
-import json
 import logging
 import math
 import os
@@ -556,6 +555,9 @@ class Trainer:
     def _log(self, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
         if self.epoch is not None:
             logs["epoch"] = self.epoch
+        if self.global_step is None:
+            # when logging evaluation metrics without training
+            self.global_step = 0
         if self.tb_writer:
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
@@ -574,11 +576,11 @@ class Trainer:
         if is_wandb_available():
             if self.is_world_master():
                 wandb.log(logs, step=self.global_step)
-        output = json.dumps({**logs, **{"step": self.global_step}})
+        output = {**logs, **{"step": self.global_step}}
         if iterator is not None:
             iterator.write(output)
         else:
-            print(output)
+            logger.info(output)
 
     def _training_step(
         self, model: nn.Module, inputs: Dict[str, torch.Tensor], optimizer: torch.optim.Optimizer
