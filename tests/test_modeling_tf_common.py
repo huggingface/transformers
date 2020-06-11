@@ -458,9 +458,9 @@ class TFModelTesterMixin:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
             else:
-                encoder_input_ids = inputs["input_ids"]
+                encoder_input_ids = inputs["inputs"]
                 decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                del inputs["input_ids"]
+                del inputs["inputs"]
                 inputs.pop("decoder_input_ids", None)
 
             wte = model.get_input_embeddings()
