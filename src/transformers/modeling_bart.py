@@ -1149,6 +1149,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
         decoder_attention_mask=None,
         start_positions=None,
         end_positions=None,
+        output_attentions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1206,6 +1207,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -1215,7 +1217,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
-        outputs = (start_logits, end_logits,) + outputs[2:]
+        outputs = (start_logits, end_logits,) + outputs[1:]
         if start_positions is not None and end_positions is not None:
             # If we are on multi-GPU, split add a dimension
             if len(start_positions.size()) > 1:
