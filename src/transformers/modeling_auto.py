@@ -1045,7 +1045,7 @@ class AutoModelForMaskedLM:
 
 class AutoModelForSeq2SeqCausalLM:
     r"""
-        :class:`~transformers.AutoModelWithLMHead` is a generic model class
+        :class:`~transformers.AutoModelForSeq2SeqCausalLM` is a generic model class
         that will be instantiated as one of the language modeling model classes of the library
         when created with the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)`
         class method.
