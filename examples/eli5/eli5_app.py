@@ -163,7 +163,7 @@ st.sidebar.markdown(
 
 #### Long Form QA with ELI5 and Wikipedia
 description = """
-This demo presents a model trained to provide long-form answers to open-domain questions. 
+This demo presents a [model trained to provide long-form answers to open-domain questions](https://yjernite.github.io/lfqa.html). 
 First, a document retriever fetches a set of relevant Wikipedia passages given the question from the [Wiki40b](https://research.google/pubs/pub49029/) dataset,
 a pre-processed fixed snapshot of Wikipedia.
 The **sparse** retriever uses ElasticSearch, while the **dense** retriever uses max-inner-product search between a question and passage embedding
