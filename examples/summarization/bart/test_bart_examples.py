@@ -121,7 +121,6 @@ class TestBartExamples(unittest.TestCase):
 
     @unittest.skipUnless(torch.cuda.device_count() > 1, "skipping multiGPU test")
     def test_bdc_multigpu(self):
-        return
         updates = dict(
             student_encoder_layers=2,
             student_decoder_layers=1,
