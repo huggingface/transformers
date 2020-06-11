@@ -38,7 +38,7 @@ if is_torch_available():
         AutoModelForMaskedLM,
         BertForMaskedLM,
         RobertaForMaskedLM,
-        AutoModelForEncoderDecoderLM,
+        AutoModelForSeq2SeqCausalLM,
         T5ForConditionalGeneration,
         AutoModelForSequenceClassification,
         BertForSequenceClassification,
@@ -143,8 +143,8 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsNotNone(config)
             self.assertIsInstance(config, T5Config)
 
-            model = AutoModelForEncoderDecoderLM.from_pretrained(model_name)
-            model, loading_info = AutoModelForEncoderDecoderLM.from_pretrained(model_name, output_loading_info=True)
+            model = AutoModelForSeq2SeqCausalLM.from_pretrained(model_name)
+            model, loading_info = AutoModelForSeq2SeqCausalLM.from_pretrained(model_name, output_loading_info=True)
             self.assertIsNotNone(model)
             self.assertIsInstance(model, T5ForConditionalGeneration)
 

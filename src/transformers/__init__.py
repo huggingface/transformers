@@ -168,7 +168,7 @@ if is_torch_available():
         AutoModelWithLMHead,
         AutoModelForCausalLM,
         AutoModelForMaskedLM,
-        AutoModelForEncoderDecoderLM,
+        AutoModelForSeq2SeqCausalLM,
         AutoModelForTokenClassification,
         AutoModelForMultipleChoice,
         MODEL_MAPPING,

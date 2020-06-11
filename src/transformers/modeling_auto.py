@@ -659,7 +659,7 @@ class AutoModelWithLMHead:
             model = AutoModelWithLMHead.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         warnings.warn(
-            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForEncoderDecoderLM` for encoder-decoder models.",
+            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqCausalLM` for encoder-decoder models.",
             DeprecationWarning,
         )
         for config_class, model_class in MODEL_WITH_LM_HEAD_MAPPING.items():
@@ -747,7 +747,7 @@ class AutoModelWithLMHead:
 
         """
         warnings.warn(
-            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForEncoderDecoderLM` for encoder-decoder models.",
+            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqCausalLM` for encoder-decoder models.",
             DeprecationWarning,
         )
         config = kwargs.pop("config", None)
@@ -1039,7 +1039,7 @@ class AutoModelForMaskedLM:
         )
 
 
-class AutoModelForEncoderDecoderLM:
+class AutoModelForSeq2SeqCausalLM:
     r"""
         :class:`~transformers.AutoModelWithLMHead` is a generic model class
         that will be instantiated as one of the language modeling model classes of the library
@@ -1051,9 +1051,9 @@ class AutoModelForEncoderDecoderLM:
 
     def __init__(self):
         raise EnvironmentError(
-            "AutoModelForEncoderDecoderLM is designed to be instantiated "
-            "using the `AutoModelForEncoderDecoderLM.from_pretrained(pretrained_model_name_or_path)` or "
-            "`AutoModelForEncoderDecoderLM.from_config(config)` methods."
+            "AutoModelForSeq2SeqCausalLM is designed to be instantiated "
+            "using the `AutoModelForSeq2SeqCausalLM.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForSeq2SeqCausalLM.from_config(config)` methods."
         )
 
     @classmethod
@@ -1078,7 +1078,7 @@ class AutoModelForEncoderDecoderLM:
         Examples::
 
             config = T5Config.from_pretrained('t5')
-            model = AutoModelForEncoderDecoderLM.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = AutoModelForSeq2SeqCausalLM.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in MODEL_FOR_ENCODER_DECODER_LM_MAPPING.items():
             if isinstance(config, config_class):
@@ -1144,12 +1144,12 @@ class AutoModelForEncoderDecoderLM:
 
         Examples::
 
-            model = AutoModelForEncoderDecoderLM.from_pretrained('t5-base')    # Download model and configuration from S3 and cache.
-            model = AutoModelForEncoderDecoderLM.from_pretrained('./test/t5_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = AutoModelForSeq2SeqCausalLM.from_pretrained('t5-base')    # Download model and configuration from S3 and cache.
+            model = AutoModelForSeq2SeqCausalLM.from_pretrained('./test/t5_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
             assert model.config.output_attention == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/t5_tf_model_config.json')
-            model =  AutoModelForEncoderDecoderLM.from_pretrained('./tf_model/t5_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            model =  AutoModelForSeq2SeqCausalLM.from_pretrained('./tf_model/t5_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
         config = kwargs.pop("config", None)

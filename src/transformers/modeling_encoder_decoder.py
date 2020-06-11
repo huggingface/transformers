@@ -61,9 +61,9 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
-            from transformers import AutoModelWithLMHead
+            from transformers import AutoModelForCausalLM
 
-            decoder = AutoModelWithLMHead.from_config(config.decoder)
+            decoder = AutoModelForCausalLM.from_config(config.decoder)
 
         self.encoder = encoder
         self.decoder = decoder
