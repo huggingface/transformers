@@ -110,7 +110,9 @@ def prepare_bart_inputs_dict(
 @require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (BartModel, BartForConditionalGeneration, BartForSequenceClassification) if is_torch_available() else ()
+        (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering)
+        if is_torch_available()
+        else ()
     )
     all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
@@ -361,7 +363,7 @@ class BartHeadTests(unittest.TestCase):
         sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
         model = BartForQuestionAnswering(config)
         model.to(torch_device)
-        loss, start_logits, end_logits = model(
+        loss, start_logits, end_logits, _ = model(
             input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,
         )
 
