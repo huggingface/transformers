@@ -271,6 +271,33 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             self.idx2sym.append(sym)
             self.sym2idx[sym] = len(self.idx2sym) - 1
 
+    def move_added_token(self, sym: str, target_idx: int):
+        """
+        Moves and added token to a specific position in the vocab.
+        This method should be used when resizing an embedding layer other than the last one in the `AdaptiveEmbedding`
+        in order to move the token in the tokenizer from the default position (at the very end) to the desired one.
+
+        Args:
+            sym: The symbol/token to move to a specific position in the vocab.
+            target_idx: The position where the token should be moved to.
+        """
+        assert sym in self.added_tokens_encoder, "Token which should be moved has to be an added token"
+        assert sym not in self.idx2sym, "Token which should be moved is already in vocab"
+
+        # Insert sym into vocab
+        self.idx2sym.insert(target_idx, sym)
+        self.sym2idx[sym] = target_idx
+
+        # Shift following indices in sym2idx
+        for idx in range(target_idx + 1, len(self.idx2sym)):
+            current_sym = self.idx2sym[idx]
+            self.sym2idx[current_sym] = idx
+
+        # Delete token from added_tokens
+        old_index = self.added_tokens_encoder[sym]
+        del self.added_tokens_decoder[old_index]
+        del self.added_tokens_encoder[sym]
+
     def _convert_id_to_token(self, idx):
         """Converts an id in a token (BPE) using the vocab."""
         assert 0 <= idx < len(self), "Index {} out of vocabulary range".format(idx)
