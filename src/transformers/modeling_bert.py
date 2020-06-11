@@ -420,7 +420,7 @@ class BertEncoder(nn.Module):
                     head_mask[i],
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    output_attentions
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
