@@ -44,7 +44,7 @@ class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
             return tf.cond(
                 global_step_float < warmup_steps_float,
                 lambda: warmup_learning_rate,
-                lambda: self.decay_schedule_fn(step),
+                lambda: self.decay_schedule_fn(step - self.warmup_steps),
                 name=name,
             )
 
