@@ -197,12 +197,13 @@ class Trainer:
             logger.warning(
                 "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
             )
-        if is_wandb_available():
-            setup_wandb(self)
         set_seed(self.args.seed)
-        # Create output directory if needed
         if self.is_world_master():
+            # Create output directory if needed
             os.makedirs(self.args.output_dir, exist_ok=True)
+            # Create a W&B run
+            if is_wandb_available():
+                setup_wandb(self)
         if is_torch_tpu_available():
             # Set an xla_device flag on the model's config.
             # We'll find a more elegant and not need to do this in the future.
@@ -468,7 +469,8 @@ class Trainer:
                         )
                         logging_loss = tr_loss
 
-                        log_metrics(self, logs)
+                        if self.is_world_master:
+                            log_metrics(self, logs)
 
                         if self.args.evaluate_during_training:
                             self.evaluate()
@@ -665,7 +667,8 @@ class Trainer:
 
         output = self._prediction_loop(eval_dataloader, description="Evaluation")
 
-        log_metrics(self, output.metrics)
+        if self.is_world_master:
+            log_metrics(self, output.metrics)
 
         if self.args.tpu_metrics_debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
