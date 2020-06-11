@@ -522,6 +522,7 @@ class XLNetPreTrainedModel(PreTrainedModel):
     config_class = XLNetConfig
     load_tf_weights = load_tf_weights_in_xlnet
     base_model_prefix = "transformer"
+    _has_pool = False
 
     def _init_weights(self, module):
         """ Initialize the weights.
@@ -1438,47 +1439,20 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         loss, classification_scores = outputs[:2]
 
         """
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-
-        flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        flat_input_mask = input_mask.view(-1, input_mask.size(-1)) if input_mask is not None else None
-        flat_inputs_embeds = (
-            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
-            if inputs_embeds is not None
-            else None
-        )
-
-        transformer_outputs = self.transformer(
-            flat_input_ids,
-            token_type_ids=flat_token_type_ids,
-            input_mask=flat_input_mask,
-            attention_mask=flat_attention_mask,
+        return self.apply_for_multiple_choice(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            input_mask=input_mask,
             mems=mems,
             perm_mask=perm_mask,
             target_mapping=target_mapping,
             head_mask=head_mask,
-            inputs_embeds=flat_inputs_embeds,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            labels=labels,
             output_attentions=output_attentions,
         )
-
-        output = transformer_outputs[0]
-
-        output = self.sequence_summary(output)
-        logits = self.logits_proj(output)
-        reshaped_logits = logits.view(-1, num_choices)
-        outputs = (reshaped_logits,) + transformer_outputs[
-            1:
-        ]  # Keep mems, hidden states, attentions if there are in it
-
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(reshaped_logits, labels.view(-1))
-            outputs = (loss,) + outputs
-
-        return outputs  # return (loss), logits, (mems), (hidden states), (attentions)
 
 
 @add_start_docstrings(

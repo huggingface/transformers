@@ -1588,6 +1588,68 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
     def _reorder_cache(past: Tuple, beam_idx: Tensor) -> Tuple[Tensor]:
         return tuple(layer_past.index_select(1, beam_idx) for layer_past in past)
 
+    def apply_for_multiple_choice(
+        self, 
+        input_ids=None, 
+        attention_mask=None, 
+        token_type_ids=None, 
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        **kwargs
+    ):
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+
+        flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
+        for key in ['position_idx', 'input_mask', 'global_attention_mask']:
+            if key in kwargs and kwargs[key] is not None:
+                kwargs[key] = kwargs[key].view(-1, kwargs[key].size(-1))
+        flat_inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
+            else None
+        )
+    
+        outputs = self.base_model(
+            flat_input_ids,
+            attention_mask=flat_attention_mask,
+            token_type_ids=flat_token_type_ids,
+            inputs_embeds=flat_inputs_embeds,
+            output_attentions=output_attentions,
+            **kwargs
+        )
+
+        if self.base_model._has_pool:
+            pooled_output = outputs[1]
+            hidden_and_attentions = outputs[2:]
+            pooled_output = self.dropout(pooled_output)
+        else:
+            hidden_state = outputs[0]
+            # If our model has a SequenceSummary, let's use it
+            if hasattr(self, 'sequence_summary'):
+                pooled_output = self.sequence_summary(hidden_state)
+            else:
+                pooled_output = hidden_state[:, 0]
+                pooled_output = self.pre_classifier(pooled_output)
+                pooled_output = self.dropout(pooled_output)
+            hidden_and_attentions = outputs[1:]
+        
+        # classifier is named logits_proj in some models.
+        classifier = self.classifier if hasattr(self, 'classifier') else self.logits_proj
+        logits = classifier(pooled_output)
+        reshaped_logits = logits.view(-1, num_choices)
+
+        outputs = (reshaped_logits,) + hidden_and_attentions  # add hidden states and attention if they are here
+
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)
+
 
 def calc_banned_ngram_tokens(prev_input_ids: Tensor, num_hypos: int, no_repeat_ngram_size: int, cur_len: int) -> None:
     """Copied from fairseq for no_repeat_ngram in beam_search"""

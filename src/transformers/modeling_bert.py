@@ -526,6 +526,7 @@ class BertPreTrainedModel(PreTrainedModel):
     config_class = BertConfig
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
+    _has_pool = True
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -1359,42 +1360,16 @@ class BertForMultipleChoice(BertPreTrainedModel):
         # the linear classifier still needs to be trained
         loss, logits = outputs[:2]
         """
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
-        inputs_embeds = (
-            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
-            if inputs_embeds is not None
-            else None
-        )
-
-        outputs = self.bert(
+        return self.apply_for_multiple_choice(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            labels=labels,
             output_attentions=output_attentions,
         )
-
-        pooled_output = outputs[1]
-
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-        reshaped_logits = logits.view(-1, num_choices)
-
-        outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
-
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(reshaped_logits, labels)
-            outputs = (loss,) + outputs
-
-        return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
