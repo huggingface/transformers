@@ -59,6 +59,7 @@ from .modeling_bert import (
     BertForQuestionAnswering,
     BertForSequenceClassification,
     BertForTokenClassification,
+    BertLMHeadModel,
     BertModel,
 )
 from .modeling_camembert import (
@@ -213,7 +214,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
-        (BertConfig, BertForMaskedLM),
+        (BertConfig, BertLMHeadModel),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
         (TransfoXLConfig, TransfoXLLMHeadModel),
