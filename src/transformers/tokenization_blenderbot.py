@@ -17,6 +17,7 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
+# will update paths once uploded files on S3
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "facebook/blenderbot-3B": "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json",
