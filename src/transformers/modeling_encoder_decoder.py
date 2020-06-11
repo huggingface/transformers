@@ -32,7 +32,7 @@ class EncoderDecoderModel(PreTrainedModel):
         instantiated as a transformer architecture with one of the base model
         classes of the library as encoder and another one as
         decoder when created with the `AutoModel.from_pretrained(pretrained_model_name_or_path)`
-        class method for the encoder and `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
+        class method for the encoder and `AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)` class method for the decoder.
     """
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
@@ -157,7 +157,7 @@ class EncoderDecoderModel(PreTrainedModel):
             assert (
                 decoder_pretrained_model_name_or_path is not None
             ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
-            from .modeling_auto import AutoModelWithLMHead
+            from .modeling_auto import AutoModelForCausalLM
 
             if "config" not in kwargs_decoder:
                 from transformers import AutoConfig
@@ -176,7 +176,7 @@ class EncoderDecoderModel(PreTrainedModel):
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attribute `is_decoder` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` is set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
-            decoder = AutoModelWithLMHead.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         return cls(encoder=encoder, decoder=decoder)
 

@@ -987,6 +987,9 @@ class BertLMHeadModel(BertPreTrainedModel):
 class BertForMaskedLM(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        assert (
+            not config.is_decoder
+        ), "If you want to use `BertForMaskedLM` make sure `config.is_decoder=True` to allow bi-directional self-attention."
 
         self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config)
