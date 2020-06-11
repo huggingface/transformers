@@ -515,6 +515,9 @@ class AutoModelForPreTraining:
             config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
             model = AutoModelForPreTraining.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
+        for config_class, model_class in MODEL_FOR_PRETRAINING_MAPPING.items():
+            if isinstance(config, config_class):
+                return model_class(config)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(
