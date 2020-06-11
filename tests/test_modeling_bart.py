@@ -110,9 +110,7 @@ def prepare_bart_inputs_dict(
 @require_torch
 class BARTModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering)
-        if is_torch_available()
-        else ()
+        (BartModel, BartForConditionalGeneration, BartForSequenceClassification) if is_torch_available() else ()
     )
     all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
