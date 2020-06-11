@@ -17,7 +17,7 @@ try:
         wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
     else:
         _has_wandb = False if os.getenv("WANDB_DISABLED") else True
-except ImportError:
+except (ImportError, AttributeError):
     _has_wandb = False
     logger.info(
         "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
@@ -45,33 +45,35 @@ def setup_wandb(trainer):
         WANDB_DISABLED:
             (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
     """
-    logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
+    if trainer.is_world_master():
+        logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
 
-    wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(trainer.args))
-    # keep track of model topology and gradients (only with Pytorch)
-    if os.getenv("WANDB_WATCH") != "false" and trainer.__class__.__name__ == "Trainer":
-        wandb.watch(
-            trainer.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, trainer.args.logging_steps)
-        )
-    # give access to wandb module
-    trainer._wandb = wandb
+        wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(trainer.args))
+        # keep track of model topology and gradients (only with Pytorch)
+        if os.getenv("WANDB_WATCH") != "false" and trainer.__class__.__name__ == "Trainer":
+            wandb.watch(
+                trainer.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, trainer.args.logging_steps)
+            )
+        # give access to wandb module
+        trainer._wandb = wandb
 
 
 def log_metrics(trainer, logs: Dict[str, float], iterator: Optional[tqdm] = None) -> None:
     """
     Log metrics with available loggers.
     """
-    if trainer.epoch_logging is not None:
-        logs["epoch"] = trainer.epoch_logging
-    if trainer.tb_writer:
-        trainer._log_tb(logs)
-    if is_wandb_available():
-        trainer._wandb.log(logs, step=trainer.global_step)
-    output = {**logs, **{"step": trainer.global_step}}
-    if iterator is not None:
-        iterator.write(output)
-    else:
-        logger.info(output)
+    if self.is_world_master():
+        if trainer.epoch_logging is not None:
+            logs["epoch"] = trainer.epoch_logging
+        if trainer.tb_writer:
+            trainer._log_tb(logs)
+        if is_wandb_available():
+            trainer._wandb.log(logs, step=trainer.global_step)
+        output = {**logs, **{"step": trainer.global_step}}
+        if iterator is not None:
+            iterator.write(output)
+        else:
+            logger.info(output)
 
 
 class EvalPrediction(NamedTuple):

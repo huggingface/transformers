@@ -517,7 +517,18 @@ class Trainer:
         Log data to tensorboard. Called by `log_metrics`.
         """
         for k, v in logs.items():
-            self.tb_writer.add_scalar(k, v, self.global_step)
+            if isinstance(v, (int, float)):
+                self.tb_writer.add_scalar(k, v, self.global_step)
+            else:
+                logger.warning(
+                    "Trainer is attempting to log a value of "
+                    '"%s" of type %s for key "%s" as a scalar. '
+                    "This invocation of Tensorboard's writer.add_scalar() "
+                    "is incorrect so we dropped this attribute.",
+                    v,
+                    type(v),
+                    k,
+                )
         self.tb_writer.flush()
 
     def _training_step(

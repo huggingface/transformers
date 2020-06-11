@@ -44,8 +44,10 @@ class PretrainedConfig(object):
                 Name of the task used to fine-tune the model. This can be used when converting from an original (TensorFlow or PyTorch) checkpoint.
             num_labels (:obj:`int`, `optional`, defaults to `2`):
                 Number of classes to use when the model is a classification model (sequences/tokens)
-            output_hidden_states (:obj:`string`, `optional`, defaults to :obj:`False`):
+            output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Should the model returns all hidden-states.
+            output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Should the model returns all attentions.
             torchscript (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Is the model used with Torchscript (for PyTorch models).
     """
