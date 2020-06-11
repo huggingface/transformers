@@ -68,6 +68,19 @@ except ImportError:
     torch_cache_home = os.path.expanduser(
         os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
     )
+
+
+try:
+    import torch_xla.core.xla_model as xm  # noqa: F401
+
+    if _torch_available:
+        _torch_tpu_available = True  # pylint: disable=
+    else:
+        _torch_tpu_available = False
+except ImportError:
+    _torch_tpu_available = False
+
+
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
 
@@ -96,6 +109,10 @@ def is_torch_available():
 
 def is_tf_available():
     return _tf_available
+
+
+def is_torch_tpu_available():
+    return _torch_tpu_available
 
 
 def add_start_docstrings(*docstr):

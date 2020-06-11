@@ -31,15 +31,25 @@ if is_torch_available():
         ElectraForTokenClassification,
         ElectraForPreTraining,
         ElectraForSequenceClassification,
+        ElectraForQuestionAnswering,
     )
-    from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP
+    from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
 class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (ElectraModel, ElectraForMaskedLM, ElectraForTokenClassification,) if is_torch_available() else ()
+        (
+            ElectraModel,
+            ElectraForPreTraining,
+            ElectraForMaskedLM,
+            ElectraForTokenClassification,
+            ElectraForSequenceClassification,
+            ElectraForQuestionAnswering,
+        )
+        if is_torch_available()
+        else ()
     )
 
     class ElectraModelTester(object):
@@ -180,7 +190,7 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
             )
             result = {
                 "loss": loss,
@@ -268,6 +278,36 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
             self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
             self.check_loss_output(result)
 
+        def create_and_check_electra_for_question_answering(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            fake_token_labels,
+        ):
+            model = ElectraForQuestionAnswering(config=config)
+            model.to(torch_device)
+            model.eval()
+            loss, start_logits, end_logits = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
+            )
+            result = {
+                "loss": loss,
+                "start_logits": start_logits,
+                "end_logits": end_logits,
+            }
+            self.parent.assertListEqual(list(result["start_logits"].size()), [self.batch_size, self.seq_length])
+            self.parent.assertListEqual(list(result["end_logits"].size()), [self.batch_size, self.seq_length])
+            self.check_loss_output(result)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -310,8 +350,12 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_electra_for_sequence_classification(*config_and_inputs)
 
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_electra_for_question_answering(*config_and_inputs)
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in list(ELECTRA_PRETRAINED_MODEL_ARCHIVE_MAP.keys())[:1]:
+        for model_name in ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ElectraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

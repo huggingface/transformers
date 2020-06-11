@@ -1,6 +1,9 @@
 ELECTRA
 ----------------------------------------------------
 
+Overview
+~~~~~~~~~~~~~~~~~~~~~
+
 The ELECTRA model was proposed in the paper.
 `ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators <https://openreview.net/pdf?id=r1xMH1BtvB>`__.
 ELECTRA is a new pre-training approach which trains two transformer models: the generator and the discriminator. The
@@ -89,10 +92,24 @@ ElectraForMaskedLM
     :members:
 
 
+ElectraForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ElectraForSequenceClassification
+    :members:
+
+
 ElectraForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.ElectraForTokenClassification
+    :members:
+
+
+ElectraForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.ElectraForQuestionAnswering
     :members:
 
 
@@ -121,4 +138,11 @@ TFElectraForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFElectraForTokenClassification
+    :members:
+
+
+TFElectraForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFElectraForQuestionAnswering
     :members:

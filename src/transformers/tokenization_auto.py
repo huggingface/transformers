@@ -97,27 +97,24 @@ class AutoTokenizer:
         when created with the `AutoTokenizer.from_pretrained(pretrained_model_name_or_path)`
         class method.
 
-        The `from_pretrained()` method take care of returning the correct tokenizer class instance
+        The `from_pretrained()` method takes care of returning the correct tokenizer class instance
         based on the `model_type` property of the config object, or when it's missing,
-        falling back to using pattern matching on the `pretrained_model_name_or_path` string.
-
-        The tokenizer class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: T5Tokenizer (T5 model)
-            - contains `distilbert`: DistilBertTokenizer (DistilBert model)
-            - contains `albert`: AlbertTokenizer (ALBERT model)
-            - contains `camembert`: CamembertTokenizer (CamemBERT model)
-            - contains `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
-            - contains `longformer`: LongformerTokenizer (AllenAI Longformer model)
-            - contains `roberta`: RobertaTokenizer (RoBERTa model)
-            - contains `bert`: BertTokenizer (Bert model)
-            - contains `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
-            - contains `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
-            - contains `xlnet`: XLNetTokenizer (XLNet model)
-            - contains `xlm`: XLMTokenizer (XLM model)
-            - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
-            - contains `electra`: ElectraTokenizer (Google ELECTRA model)
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+            - `t5`: T5Tokenizer (T5 model)
+            - `distilbert`: DistilBertTokenizer (DistilBert model)
+            - `albert`: AlbertTokenizer (ALBERT model)
+            - `camembert`: CamembertTokenizer (CamemBERT model)
+            - `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
+            - `longformer`: LongformerTokenizer (AllenAI Longformer model)
+            - `roberta`: RobertaTokenizer (RoBERTa model)
+            - `bert`: BertTokenizer (Bert model)
+            - `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
+            - `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
+            - `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
+            - `xlnet`: XLNetTokenizer (XLNet model)
+            - `xlm`: XLMTokenizer (XLM model)
+            - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
+            - `electra`: ElectraTokenizer (Google ELECTRA model)
 
         This class cannot be instantiated using `__init__()` (throw an error).
     """
@@ -133,24 +130,25 @@ class AutoTokenizer:
         r""" Instantiate one of the tokenizer classes of the library
         from a pre-trained model vocabulary.
 
-        The tokenizer class to instantiate is selected as the first pattern matching
-        in the `pretrained_model_name_or_path` string (in the following order):
-            - contains `t5`: T5Tokenizer (T5 model)
-            - contains `distilbert`: DistilBertTokenizer (DistilBert model)
-            - contains `albert`: AlbertTokenizer (ALBERT model)
-            - contains `camembert`: CamembertTokenizer (CamemBERT model)
-            - contains `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
-            - contains `longformer`: LongformerTokenizer (AllenAI Longformer model)
-            - contains `roberta`: RobertaTokenizer (RoBERTa model)
-            - contains `bert-base-japanese`: BertJapaneseTokenizer (Bert model)
-            - contains `bert`: BertTokenizer (Bert model)
-            - contains `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
-            - contains `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
-            - contains `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
-            - contains `xlnet`: XLNetTokenizer (XLNet model)
-            - contains `xlm`: XLMTokenizer (XLM model)
-            - contains `ctrl`: CTRLTokenizer (Salesforce CTRL model)
-            - contains `electra`: ElectraTokenizer (Google ELECTRA model)
+        The tokenizer class to instantiate is selected
+        based on the `model_type` property of the config object, or when it's missing,
+        falling back to using pattern matching on the `pretrained_model_name_or_path` string:
+            - `t5`: T5Tokenizer (T5 model)
+            - `distilbert`: DistilBertTokenizer (DistilBert model)
+            - `albert`: AlbertTokenizer (ALBERT model)
+            - `camembert`: CamembertTokenizer (CamemBERT model)
+            - `xlm-roberta`: XLMRobertaTokenizer (XLM-RoBERTa model)
+            - `longformer`: LongformerTokenizer (AllenAI Longformer model)
+            - `roberta`: RobertaTokenizer (RoBERTa model)
+            - `bert-base-japanese`: BertJapaneseTokenizer (Bert model)
+            - `bert`: BertTokenizer (Bert model)
+            - `openai-gpt`: OpenAIGPTTokenizer (OpenAI GPT model)
+            - `gpt2`: GPT2Tokenizer (OpenAI GPT-2 model)
+            - `transfo-xl`: TransfoXLTokenizer (Transformer-XL model)
+            - `xlnet`: XLNetTokenizer (XLNet model)
+            - `xlm`: XLMTokenizer (XLM model)
+            - `ctrl`: CTRLTokenizer (Salesforce CTRL model)
+            - `electra`: ElectraTokenizer (Google ELECTRA model)
 
         Params:
             pretrained_model_name_or_path: either:

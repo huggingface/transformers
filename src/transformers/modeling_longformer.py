@@ -16,6 +16,7 @@
 
 import logging
 import math
+import warnings
 
 import torch
 import torch.nn as nn
@@ -30,13 +31,52 @@ from .modeling_roberta import RobertaLMHead, RobertaModel
 
 logger = logging.getLogger(__name__)
 
-LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "allenai/longformer-base-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096/pytorch_model.bin",
-    "allenai/longformer-large-4096": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096/pytorch_model.bin",
-    "allenai/longformer-large-4096-finetuned-triviaqa": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096-finetuned-triviaqa/pytorch_model.bin",
-    "allenai/longformer-base-4096-extra.pos.embd.only": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-base-4096-extra.pos.embd.only/pytorch_model.bin",
-    "allenai/longformer-large-4096-extra.pos.embd.only": "https://s3.amazonaws.com/models.huggingface.co/bert/allenai/longformer-large-4096-extra.pos.embd.only/pytorch_model.bin",
-}
+LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "allenai/longformer-base-4096",
+    "allenai/longformer-large-4096",
+    "allenai/longformer-large-4096-finetuned-triviaqa",
+    "allenai/longformer-base-4096-extra.pos.embd.only",
+    "allenai/longformer-large-4096-extra.pos.embd.only",
+    # See all Longformer models at https://huggingface.co/models?filter=longformer
+]
+
+
+def _get_question_end_index(input_ids, sep_token_id):
+    """
+        Computes the index of the first occurance of `sep_token_id`.
+    """
+
+    sep_token_indices = (input_ids == sep_token_id).nonzero()
+    batch_size = input_ids.shape[0]
+
+    assert sep_token_indices.shape[1] == 2, "`input_ids` should have two dimensions"
+    assert (
+        sep_token_indices.shape[0] == 3 * batch_size
+    ), f"There should be exactly three separator tokens: {sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this error."
+
+    return sep_token_indices.view(batch_size, 3, 2)[:, 0, 1]
+
+
+def _compute_global_attention_mask(input_ids, sep_token_id, before_sep_token=True):
+    """
+        Computes global attention mask by putting attention on all tokens
+        before `sep_token_id` if `before_sep_token is True` else after
+        `sep_token_id`.
+    """
+
+    question_end_index = _get_question_end_index(input_ids, sep_token_id)
+    question_end_index = question_end_index.unsqueeze(dim=1)  # size: batch_size x 1
+    # bool attention mask with True in locations of global attention
+    attention_mask = torch.arange(input_ids.shape[1], device=input_ids.device)
+    if before_sep_token is True:
+        attention_mask = (attention_mask.expand_as(input_ids) < question_end_index).to(torch.uint8)
+    else:
+        # last token is separation token and should not be counted and in the middle are two separation tokens
+        attention_mask = (attention_mask.expand_as(input_ids) > (question_end_index + 1)).to(torch.uint8) * (
+            attention_mask.expand_as(input_ids) < input_ids.shape[-1]
+        ).to(torch.uint8)
+
+    return attention_mask
 
 
 class LongformerSelfAttention(nn.Module):
@@ -47,7 +87,6 @@ class LongformerSelfAttention(nn.Module):
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads)
             )
-        self.output_attentions = config.output_attentions
         self.num_heads = config.num_attention_heads
         self.head_dim = int(config.hidden_size / config.num_attention_heads)
         self.embed_dim = config.hidden_size
@@ -113,12 +152,11 @@ class LongformerSelfAttention(nn.Module):
         beginning_mask_2d = input_tensor.new_ones(w, w + 1).tril().flip(dims=[0])
         beginning_mask = beginning_mask_2d[None, :, None, :]
         ending_mask = beginning_mask.flip(dims=(1, 3))
-        seqlen = input_tensor.size(1)
         beginning_input = input_tensor[:, :affected_seqlen, :, : w + 1]
-        beginning_mask = beginning_mask[:, :seqlen].expand(beginning_input.size())
+        beginning_mask = beginning_mask.expand(beginning_input.size())
         beginning_input.masked_fill_(beginning_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
         ending_input = input_tensor[:, -affected_seqlen:, :, -(w + 1) :]
-        ending_mask = ending_mask[:, -seqlen:].expand(ending_input.size())
+        ending_mask = ending_mask.expand(ending_input.size())
         ending_input.masked_fill_(ending_mask == 1, -float("inf"))  # `== 1` converts to bool or uint8
 
     def _sliding_chunks_matmul_qk(self, q: torch.Tensor, k: torch.Tensor, w: int):
@@ -203,6 +241,7 @@ class LongformerSelfAttention(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        output_attentions=False,
     ):
         """
         LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`.
@@ -261,7 +300,6 @@ class LongformerSelfAttention(nn.Module):
         k = k.view(seqlen, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
         # attn_weights = (batch_size, seqlen, num_heads, window*2+1)
         attn_weights = self._sliding_chunks_matmul_qk(q, k, self.one_sided_attention_window_size)
-        self._mask_invalid_locations(attn_weights, self.one_sided_attention_window_size)
         if remove_from_windowed_attention_mask is not None:
             # This implementation is fast and takes very little memory because num_heads x hidden_size = 1
             # from (batch_size x seqlen) to (batch_size x seqlen x num_heads x hidden_size)
@@ -289,7 +327,7 @@ class LongformerSelfAttention(nn.Module):
             selected_k[selection_padding_mask_nonzeros] = k[extra_attention_mask_nonzeros]
             # (batch_size, seqlen, num_heads, max_num_extra_indices_per_batch)
             selected_attn_weights = torch.einsum("blhd,bshd->blhs", (q, selected_k))
-            selected_attn_weights[selection_padding_mask_zeros[0], :, :, selection_padding_mask_zeros[1]] = -10000
+            selected_attn_weights[selection_padding_mask_zeros[0], :, :, selection_padding_mask_zeros[1]] = -10000.0
             # concat to attn_weights
             # (batch_size, seqlen, num_heads, extra attention count + 2*window+1)
             attn_weights = torch.cat((selected_attn_weights, attn_weights), dim=-1)
@@ -310,9 +348,7 @@ class LongformerSelfAttention(nn.Module):
             selected_v[selection_padding_mask_nonzeros] = v[extra_attention_mask_nonzeros]
             # use `matmul` because `einsum` crashes sometimes with fp16
             # attn = torch.einsum('blhs,bshd->blhd', (selected_attn_probs, selected_v))
-            attn = torch.matmul(
-                selected_attn_probs.transpose(1, 2), selected_v.transpose(1, 2).type_as(selected_attn_probs)
-            ).transpose(1, 2)
+            attn = torch.matmul(selected_attn_probs.transpose(1, 2), selected_v.transpose(1, 2)).transpose(1, 2)
             attn_probs = attn_probs.narrow(
                 -1, max_num_extra_indices_per_batch, attn_probs.size(-1) - max_num_extra_indices_per_batch
             ).contiguous()
@@ -376,10 +412,10 @@ class LongformerSelfAttention(nn.Module):
             ]
             attn[extra_attention_mask_nonzeros[::-1]] = nonzero_selected_attn.view(
                 len(selection_padding_mask_nonzeros[0]), -1
-            ).type_as(hidden_states)
+            )
 
         context_layer = attn.transpose(0, 1)
-        if self.output_attentions:
+        if output_attentions:
             if extra_attention_mask is not None:
                 # With global attention, return global attention probabilities only
                 # batch_size x num_heads x max_num_global_attention_tokens x sequence_length
@@ -393,7 +429,7 @@ class LongformerSelfAttention(nn.Module):
                 # batch_size x num_heads x sequence_length x window_size
                 # which is the attention weights of every token attending to its neighbours
                 attn_weights = attn_weights.permute(0, 2, 1, 3)
-        outputs = (context_layer, attn_weights) if self.output_attentions else (context_layer,)
+        outputs = (context_layer, attn_weights) if output_attentions else (context_layer,)
         return outputs
 
 
@@ -411,7 +447,7 @@ LONGFORMER_START_DOCSTRING = r"""
 
 LONGFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`transformers.LonmgformerTokenizer`.
@@ -419,25 +455,30 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Mask to decide the attention given on each token, local attention, global attenion, or no attention (for padding tokens).
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+
+        global_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
+            Mask to decide the attention given on each token, local attention or global attenion.
             Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is important for
             task-specific finetuning because it makes the model more flexible at representing the task. For example,
             for classification, the <s> token should be given global attention. For QA, all question tokens should also have
             global attention. Please refer to the Longformer paper https://arxiv.org/abs/2004.05150 for more details.
-            Mask values selected in ``[0, 1, 2]``:
-            ``0`` for no attention (padding tokens),
-            ``1`` for local attention (a sliding window attention),
-            ``2`` for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
+            Mask values selected in ``[0, 1]``:
+            ``0`` for local attention (a sliding window attention),
+            ``1`` for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
 
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Segment token indices to indicate first and second portions of the inputs.
             Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
             corresponds to a `sentence B` token
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`, defaults to :obj:`None`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
@@ -446,6 +487,8 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
+        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -456,9 +499,10 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
 class LongformerModel(RobertaModel):
     """
     This class overrides :class:`~transformers.RobertaModel` to provide the ability to process
-    long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer`_by
-    Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention combines a local (sliding window)
-    and global attention to extend to long documents without the O(n^2) increase in memory and compute.
+    long sequences following the selfattention approach described in `Longformer: the Long-Document Transformer
+    <https://arxiv.org/abs/2004.05150>`_ by Iz Beltagy, Matthew E. Peters, and Arman Cohan. Longformer selfattention
+    combines a local (sliding window) and global attention to extend to long documents without the O(n^2) increase in
+    memory and compute.
 
     The selfattention module `LongformerSelfAttention` implemented here supports the combination of local and
     global attention but it lacks support for autoregressive attention and dilated attention. Autoregressive
@@ -466,13 +510,9 @@ class LongformerModel(RobertaModel):
     tasks. Future release will add support for autoregressive attention, but the support for dilated attention
     requires a custom CUDA kernel to be memory and compute efficient.
 
-    .. _`Longformer: the Long-Document Transformer`:
-        https://arxiv.org/abs/2004.05150
-
     """
 
     config_class = LongformerConfig
-    pretrained_model_archive_map = LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "longformer"
 
     def __init__(self, config):
@@ -537,22 +577,21 @@ class LongformerModel(RobertaModel):
 
         return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
+        output_attentions=None,
     ):
         r"""
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
-        masked_lm_loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
-            Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
@@ -560,7 +599,7 @@ class LongformerModel(RobertaModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -572,8 +611,8 @@ class LongformerModel(RobertaModel):
         import torch
         from transformers import LongformerModel, LongformerTokenizer
 
-        model = LongformerModel.from_pretrained('longformer-base-4096')
-        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
+        model = LongformerModel.from_pretrained('allenai/longformer-base-4096')
+        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
         SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
         input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
@@ -587,12 +626,27 @@ class LongformerModel(RobertaModel):
         sequence_output, pooled_output = model(input_ids, attention_mask=attention_mask)
         """
 
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
         # padding
         attention_window = (
             self.config.attention_window
             if isinstance(self.config.attention_window, int)
             else max(self.config.attention_window)
         )
+
+        # merge `global_attention_mask` and `attention_mask`
+        if global_attention_mask is not None:
+            # longformer self attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
+            # (global_attention_mask + 1) => 1 for local attention, 2 for global attention
+            # => final attention_mask => 0 for no attention, 1 for local attention 2 for global attention
+            if attention_mask is not None:
+                attention_mask = attention_mask * (global_attention_mask + 1)
+            else:
+                # simply use `global_attention_mask` as `attention_mask`
+                # if no `attention_mask` is given
+                attention_mask = global_attention_mask + 1
+
         padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_window_size(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -613,6 +667,7 @@ class LongformerModel(RobertaModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
+            output_attentions=output_attentions,
         )
 
         # undo padding
@@ -630,7 +685,6 @@ class LongformerModel(RobertaModel):
 @add_start_docstrings("""Longformer Model with a `language modeling` head on top. """, LONGFORMER_START_DOCSTRING)
 class LongformerForMaskedLM(BertPreTrainedModel):
     config_class = LongformerConfig
-    pretrained_model_archive_map = LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "longformer"
 
     def __init__(self, config):
@@ -641,26 +695,31 @@ class LongformerForMaskedLM(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
+        labels=None,
+        output_attentions=None,
+        **kwargs
     ):
         r"""
-        masked_lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
+        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Used to hide legacy arguments that have been deprecated.
 
     Returns:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
-        masked_lm_loss (`optional`, returned when ``masked_lm_labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
+        masked_lm_loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Masked language modeling loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
@@ -669,7 +728,7 @@ class LongformerForMaskedLM(BertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -681,32 +740,42 @@ class LongformerForMaskedLM(BertPreTrainedModel):
         import torch
         from transformers import LongformerForMaskedLM, LongformerTokenizer
 
-        model = LongformerForMaskedLM.from_pretrained('longformer-base-4096')
-        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
+        model = LongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096')
+        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
         SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
         input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
 
         attention_mask = None  # default is local attention everywhere, which is a good choice for MaskedLM
                                # check ``LongformerModel.forward`` for more details how to set `attention_mask`
-        loss, prediction_scores = model(input_ids, attention_mask=attention_mask, masked_lm_labels=input_ids)
+        loss, prediction_scores = model(input_ids, attention_mask=attention_mask, labels=input_ids)
         """
+
+        if "masked_lm_labels" in kwargs:
+            warnings.warn(
+                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                DeprecationWarning,
+            )
+            labels = kwargs.pop("masked_lm_labels")
+        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
 
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
 
-        if masked_lm_labels is not None:
+        if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             outputs = (masked_lm_loss,) + outputs
 
         return outputs  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
@@ -719,7 +788,6 @@ class LongformerForMaskedLM(BertPreTrainedModel):
 )
 class LongformerForSequenceClassification(BertPreTrainedModel):
     config_class = LongformerConfig
-    pretrained_model_archive_map = LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "longformer"
 
     def __init__(self, config):
@@ -729,15 +797,19 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         self.longformer = LongformerModel(config)
         self.classifier = LongformerClassificationHead(config)
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+        self.init_weights()
+
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -757,7 +829,7 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -769,8 +841,8 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
         from transformers import LongformerTokenizer, LongformerForSequenceClassification
         import torch
 
-        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
-        model = LongformerForSequenceClassification.from_pretrained('longformer-base-4096')
+        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        model = LongformerForSequenceClassification.from_pretrained('allenai/longformer-base-4096')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
@@ -778,18 +850,20 @@ class LongformerForSequenceClassification(BertPreTrainedModel):
 
         """
 
-        if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
-
-        # global attention on cls token
-        attention_mask[:, 0] = 2
+        if global_attention_mask is None:
+            logger.info("Initializing global attention on CLS token...")
+            global_attention_mask = torch.zeros_like(input_ids)
+            # global attention on cls token
+            global_attention_mask[:, 0] = 1
 
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
@@ -834,7 +908,6 @@ class LongformerClassificationHead(nn.Module):
 )
 class LongformerForQuestionAnswering(BertPreTrainedModel):
     config_class = LongformerConfig
-    pretrained_model_archive_map = LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "longformer"
 
     def __init__(self, config):
@@ -846,36 +919,18 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
 
         self.init_weights()
 
-    def _compute_global_attention_mask(self, input_ids):
-        question_end_index = self._get_question_end_index(input_ids)
-        question_end_index = question_end_index.unsqueeze(dim=1)  # size: batch_size x 1
-        # bool attention mask with True in locations of global attention
-        attention_mask = torch.arange(input_ids.shape[1], device=input_ids.device)
-        attention_mask = attention_mask.expand_as(input_ids) < question_end_index
-
-        return attention_mask.long() + 1  # True => global attention; False => local attention
-
-    def _get_question_end_index(self, input_ids):
-        sep_token_indices = (input_ids == self.config.sep_token_id).nonzero()
-        batch_size = input_ids.shape[0]
-
-        assert sep_token_indices.shape[1] == 2, "`input_ids` should have two dimensions"
-        assert (
-            sep_token_indices.shape[0] == 3 * batch_size
-        ), f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for questions answering"
-
-        return sep_token_indices.view(batch_size, 3, 2)[:, 0, 1]
-
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
         start_positions=None,
         end_positions=None,
+        output_attentions=None,
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -898,7 +953,7 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
@@ -909,8 +964,8 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         from transformers import LongformerTokenizer, LongformerForQuestionAnswering
         import torch
 
-        tokenizer = LongformerTokenizer.from_pretrained("longformer-large-4096-finetuned-triviaqa")
-        model = LongformerForQuestionAnswering.from_pretrained("longformer-large-4096-finetuned-triviaqa")
+        tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
 
         question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         encoding = tokenizer.encode_plus(question, text, return_tensors="pt")
@@ -929,20 +984,19 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
         """
 
         # set global attention on question tokens
-        global_attention_mask = self._compute_global_attention_mask(input_ids)
-        if attention_mask is None:
-            attention_mask = global_attention_mask
-        else:
-            # combine global_attention_mask with attention_mask
-            # global attention on question tokens, no attention on padding tokens
-            attention_mask = global_attention_mask * attention_mask
+        if global_attention_mask is None:
+            logger.info("Initializing global attention on question tokens...")
+            # put global attention on all tokens until `config.sep_token_id` is reached
+            global_attention_mask = _compute_global_attention_mask(input_ids, self.config.sep_token_id)
 
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -980,7 +1034,6 @@ class LongformerForQuestionAnswering(BertPreTrainedModel):
 )
 class LongformerForTokenClassification(BertPreTrainedModel):
     config_class = LongformerConfig
-    pretrained_model_archive_map = LONGFORMER_PRETRAINED_MODEL_ARCHIVE_MAP
     base_model_prefix = "longformer"
 
     def __init__(self, config):
@@ -993,15 +1046,17 @@ class LongformerForTokenClassification(BertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
         inputs_embeds=None,
         labels=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -1019,7 +1074,7 @@ class LongformerForTokenClassification(BertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1031,8 +1086,8 @@ class LongformerForTokenClassification(BertPreTrainedModel):
         from transformers import LongformerTokenizer, LongformerForTokenClassification
         import torch
 
-        tokenizer = LongformerTokenizer.from_pretrained('longformer-base-4096')
-        model = LongformerForTokenClassification.from_pretrained('longformer-base-4096')
+        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        model = LongformerForTokenClassification.from_pretrained('allenai/longformer-base-4096')
         input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
         labels = torch.tensor([1] * input_ids.size(1)).unsqueeze(0)  # Batch size 1
         outputs = model(input_ids, labels=labels)
@@ -1043,9 +1098,11 @@ class LongformerForTokenClassification(BertPreTrainedModel):
         outputs = self.longformer(
             input_ids,
             attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
         )
 
         sequence_output = outputs[0]
@@ -1070,3 +1127,130 @@ class LongformerForTokenClassification(BertPreTrainedModel):
             outputs = (loss,) + outputs
 
         return outputs  # (loss), scores, (hidden_states), (attentions)
+
+
+@add_start_docstrings(
+    """Longformer Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    LONGFORMER_START_DOCSTRING,
+)
+class LongformerForMultipleChoice(BertPreTrainedModel):
+    config_class = LongformerConfig
+    base_model_prefix = "longformer"
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.longformer = LongformerModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, 1)
+
+        self.init_weights()
+
+    @add_start_docstrings_to_callable(LONGFORMER_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
+    def forward(
+        self,
+        input_ids=None,
+        token_type_ids=None,
+        attention_mask=None,
+        global_attention_mask=None,
+        labels=None,
+        position_ids=None,
+        inputs_embeds=None,
+        output_attentions=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the multiple choice classification loss.
+            Indices should be in ``[0, ..., num_choices]`` where `num_choices` is the size of the second dimension
+            of the input tensors. (see `input_ids` above)
+
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.RobertaConfig`) and inputs:
+        loss (:obj:`torch.FloatTensor`` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Classification loss.
+        classification_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
+            `num_choices` is the second dimension of the input tensors. (see `input_ids` above).
+
+            Classification scores (before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
+
+        from transformers import LongformerTokenizer, LongformerForMultipleChoice
+        import torch
+
+        tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
+        model = LongformerForMultipleChoice.from_pretrained('allenai/longformer-base-4096')
+        # context = "The dog is cute" | choice = "the dog" / "the cat"
+        choices = [("The dog is cute", "the dog"), ("The dog is cute", "the cat")]
+        input_ids = torch.tensor([tokenizer.encode(s[0], s[1], add_special_tokens=True) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
+        labels = torch.tensor(1).unsqueeze(0)  # Batch size 1
+
+        # global attention is automatically put on "the dog" and "the cat"
+        outputs = model(input_ids, labels=labels)
+        loss, classification_scores = outputs[:2]
+
+        """
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+
+        # set global attention on question tokens
+        if global_attention_mask is None:
+            logger.info("Initializing global attention on multiple choice...")
+            # put global attention on all tokens after `config.sep_token_id`
+            global_attention_mask = torch.stack(
+                [
+                    _compute_global_attention_mask(input_ids[:, i], self.config.sep_token_id, before_sep_token=False)
+                    for i in range(num_choices)
+                ],
+                dim=1,
+            )
+
+        flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        flat_position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
+        flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
+        flat_global_attention_mask = (
+            global_attention_mask.view(-1, global_attention_mask.size(-1))
+            if global_attention_mask is not None
+            else None
+        )
+        flat_inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
+            else None
+        )
+
+        outputs = self.longformer(
+            flat_input_ids,
+            position_ids=flat_position_ids,
+            token_type_ids=flat_token_type_ids,
+            attention_mask=flat_attention_mask,
+            global_attention_mask=flat_global_attention_mask,
+            inputs_embeds=flat_inputs_embeds,
+            output_attentions=output_attentions,
+        )
+        pooled_output = outputs[1]
+
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+        reshaped_logits = logits.view(-1, num_choices)
+
+        outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels)
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)
