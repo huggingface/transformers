@@ -198,6 +198,7 @@ class SummarizationTrainer(BaseTransformer):
             freeze_part(self.model.model.encoder)
         self.hparams.git_sha = get_git_info()["repo_sha"]
         pickle_save(self.hparams, self.hparams_save_path)
+        self.num_workers = 4 if self.hparams.gpus <= 1 else None
 
     def freeze_embeds(self):
         if hasattr(self.model, 'model'): #bart
@@ -329,7 +330,7 @@ class SummarizationTrainer(BaseTransformer):
             batch_size=batch_size,
             collate_fn=dataset.collate_fn,
             shuffle=shuffle,
-            # num_workers=4,
+            num_workers=self.num_workers,
             sampler=sampler,
         )
         return dataloader
