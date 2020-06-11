@@ -35,7 +35,7 @@ CHEAP_ARGS = {
     "fp16": False,
     "no_teacher": False,
     "fp16_opt_level": "O1",
-    "gpus": 0,
+    "gpus": 1 if torch.cuda.is_available() else 0,
     "n_tpu_cores": 0,
     "max_grad_norm": 1.0,
     "do_train": True,
@@ -262,6 +262,9 @@ class TestBartExamples(unittest.TestCase):
             do_predict=True,
             tokenizer_name="patrickvonplaten/t5-tiny-random",
             no_teacher=True,
+            fp16=FP16_EVER,
+            gpus=1,
+            fp16_opt_level="O1",
         )
         self._bart_distiller_cli(updates, check_contents=False)
 
