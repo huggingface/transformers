@@ -62,7 +62,7 @@ def log_metrics(trainer, logs: Dict[str, float], iterator: Optional[tqdm] = None
     """
     Log metrics with available loggers.
     """
-    if self.is_world_master():
+    if trainer.is_world_master():
         if trainer.epoch_logging is not None:
             logs["epoch"] = trainer.epoch_logging
         if trainer.tb_writer:
