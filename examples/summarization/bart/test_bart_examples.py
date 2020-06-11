@@ -262,12 +262,25 @@ class TestBartExamples(unittest.TestCase):
             do_predict=True,
             tokenizer_name="patrickvonplaten/t5-tiny-random",
             no_teacher=True,
-            fp16=FP16_EVER,
+            fp16=False,
             gpus=1,
-            fp16_opt_level="O1",
+            fp16_opt_level="O1"
         )
         self._bart_distiller_cli(updates, check_contents=False)
 
+    def test_t5_base_eval_fp16(self):
+        updates = dict(
+            model_type="t5",
+            model_name_or_path="t5-base",
+            do_train=False,
+            do_predict=True,
+            tokenizer_name="patrickvonplaten/t5-tiny-random",
+            no_teacher=True,
+            fp16=True,
+            gpus=1,
+            fp16_opt_level="O1"
+        )
+        self._bart_distiller_cli(updates, check_contents=False)
     @unittest.skipUnless(False, "Not implemented")
     def test_bdc_mbart(self):
         pass
