@@ -28,8 +28,14 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
-from transformers.modeling_bert import BertIntermediate, BertEncoder, BertPredictionHeadTransform, BertOnlyMLMHead, \
-    BertPreTrainingHeads
+
+from transformers.modeling_bert import (
+    BertEncoder,
+    BertIntermediate,
+    BertOnlyMLMHead,
+    BertPredictionHeadTransform,
+    BertPreTrainingHeads,
+)
 
 from .activations import gelu, gelu_new, swish
 from .configuration_mobilebert import MobileBertConfig
@@ -70,6 +76,7 @@ def load_tf_weights_in_mobilebert(model, config, tf_checkpoint_path):
         name = name.replace("ffn_layer", "ffn")
         name = name.replace("FakeLayerNorm", "LayerNorm")
         name = name.replace("extra_output_weights", "dense/kernel")
+        name = name.replace("bert", "mobilebert")
         name = name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model

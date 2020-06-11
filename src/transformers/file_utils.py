@@ -21,9 +21,8 @@ from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
 import requests
-from tqdm.auto import tqdm
-
 from filelock import FileLock
+from tqdm.auto import tqdm
 
 from . import __version__
 

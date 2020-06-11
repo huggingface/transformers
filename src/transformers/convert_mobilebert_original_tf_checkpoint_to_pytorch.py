@@ -1,8 +1,10 @@
-
 import argparse
 import logging
+
 import torch
+
 from transformers import MobileBertConfig, MobileBertForPreTraining, load_tf_weights_in_mobilebert
+
 
 logging.basicConfig(level=logging.INFO)
 
@@ -38,5 +40,3 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     convert_tf_checkpoint_to_pytorch(args.tf_checkpoint_path, args.mobilebert_config_file, args.pytorch_dump_path)
-
-
