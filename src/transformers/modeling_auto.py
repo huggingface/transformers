@@ -663,7 +663,7 @@ class AutoModelWithLMHead:
             model = AutoModelWithLMHead.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         warnings.warn(
-            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqCausalLM` for encoder-decoder models.",
+            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqLM` for encoder-decoder models.",
             DeprecationWarning,
         )
         for config_class, model_class in MODEL_WITH_LM_HEAD_MAPPING.items():
@@ -751,7 +751,7 @@ class AutoModelWithLMHead:
 
         """
         warnings.warn(
-            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqCausalLM` for encoder-decoder models.",
+            "The class `AutoModelWithLMHead` is deprecated and will be removed in a future version. Please use `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqLM` for encoder-decoder models.",
             DeprecationWarning,
         )
         config = kwargs.pop("config", None)
@@ -771,9 +771,9 @@ class AutoModelWithLMHead:
 
 class AutoModelForCausalLM:
     r"""
-        :class:`~transformers.AutoModelWithLMHead` is a generic model class
+        :class:`~transformers.AutoModelForCausalLM` is a generic model class
         that will be instantiated as one of the language modeling model classes of the library
-        when created with the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)`
+        when created with the `AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path)`
         class method.
 
         This class cannot be instantiated using `__init__()` (throws an error).
@@ -1043,11 +1043,11 @@ class AutoModelForMaskedLM:
         )
 
 
-class AutoModelForSeq2SeqCausalLM:
+class AutoModelForSeq2SeqLM:
     r"""
-        :class:`~transformers.AutoModelForSeq2SeqCausalLM` is a generic model class
+        :class:`~transformers.AutoModelForSeq2SeqLM` is a generic model class
         that will be instantiated as one of the language modeling model classes of the library
-        when created with the `AutoModelWithLMHead.from_pretrained(pretrained_model_name_or_path)`
+        when created with the `AutoModelForSeq2SeqLM.from_pretrained(pretrained_model_name_or_path)`
         class method.
 
         This class cannot be instantiated using `__init__()` (throws an error).
@@ -1055,9 +1055,9 @@ class AutoModelForSeq2SeqCausalLM:
 
     def __init__(self):
         raise EnvironmentError(
-            "AutoModelForSeq2SeqCausalLM is designed to be instantiated "
-            "using the `AutoModelForSeq2SeqCausalLM.from_pretrained(pretrained_model_name_or_path)` or "
-            "`AutoModelForSeq2SeqCausalLM.from_config(config)` methods."
+            "AutoModelForSeq2SeqLM is designed to be instantiated "
+            "using the `AutoModelForSeq2SeqLM.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForSeq2SeqLM.from_config(config)` methods."
         )
 
     @classmethod
@@ -1082,7 +1082,7 @@ class AutoModelForSeq2SeqCausalLM:
         Examples::
 
             config = T5Config.from_pretrained('t5')
-            model = AutoModelForSeq2SeqCausalLM.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = AutoModelForSeq2SeqLM.from_config(config)  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
         for config_class, model_class in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.items():
             if isinstance(config, config_class):
@@ -1150,12 +1150,12 @@ class AutoModelForSeq2SeqCausalLM:
 
         Examples::
 
-            model = AutoModelForSeq2SeqCausalLM.from_pretrained('t5-base')    # Download model and configuration from S3 and cache.
-            model = AutoModelForSeq2SeqCausalLM.from_pretrained('./test/t5_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
+            model = AutoModelForSeq2SeqLM.from_pretrained('t5-base')    # Download model and configuration from S3 and cache.
+            model = AutoModelForSeq2SeqLM.from_pretrained('./test/t5_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
             assert model.config.output_attention == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
             config = AutoConfig.from_json_file('./tf_model/t5_tf_model_config.json')
-            model =  AutoModelForSeq2SeqCausalLM.from_pretrained('./tf_model/t5_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+            model =  AutoModelForSeq2SeqLM.from_pretrained('./tf_model/t5_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
         config = kwargs.pop("config", None)
