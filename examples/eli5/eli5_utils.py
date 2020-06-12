@@ -5,9 +5,7 @@ from random import choice, randint
 from time import time
 
 import faiss  # noqa: F401
-import nlp  # noqa: F401
 import numpy as np
-import pandas as pd
 import torch
 import torch.utils.checkpoint as checkpoint
 from elasticsearch import Elasticsearch  # noqa: F401
@@ -15,6 +13,8 @@ from elasticsearch.helpers import bulk, streaming_bulk  # noqa: F401
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 from tqdm import tqdm
 
+import nlp  # noqa: F401
+import pandas as pd
 from transformers import AdamW, AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer, get_linear_schedule_with_warmup
 
 
