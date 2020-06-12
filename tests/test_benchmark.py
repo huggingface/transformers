@@ -33,6 +33,21 @@ class BenchmarkTest(unittest.TestCase):
         self.check_results_dict_not_empty(results.time_inference_result)
         self.check_results_dict_not_empty(results.memory_inference_result)
 
+    def test_inference_torchscript(self):
+        MODEL_ID = "sshleifer/tiny-gpt2"
+        benchmark_args = PyTorchBenchmarkArguments(
+            models=[MODEL_ID],
+            training=False,
+            no_inference=False,
+            torchscript=True,
+            sequence_lengths=[8],
+            batch_sizes=[1],
+        )
+        benchmark = PyTorchBenchmark(benchmark_args)
+        results = benchmark.run()
+        self.check_results_dict_not_empty(results.time_inference_result)
+        self.check_results_dict_not_empty(results.memory_inference_result)
+
     def test_train_no_configs(self):
         MODEL_ID = "sshleifer/tiny-gpt2"
         benchmark_args = PyTorchBenchmarkArguments(
@@ -70,6 +85,22 @@ class BenchmarkTest(unittest.TestCase):
         config = AutoConfig.from_pretrained(MODEL_ID)
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID], training=True, no_inference=True, sequence_lengths=[8], batch_sizes=[1]
+        )
+        benchmark = PyTorchBenchmark(benchmark_args, configs=[config])
+        results = benchmark.run()
+        self.check_results_dict_not_empty(results.time_train_result)
+        self.check_results_dict_not_empty(results.memory_train_result)
+
+    def test_train_with_configs_torchscript(self):
+        MODEL_ID = "sshleifer/tiny-gpt2"
+        config = AutoConfig.from_pretrained(MODEL_ID)
+        benchmark_args = PyTorchBenchmarkArguments(
+            models=[MODEL_ID],
+            training=True,
+            no_inference=True,
+            torchscript=True,
+            sequence_lengths=[8],
+            batch_sizes=[1],
         )
         benchmark = PyTorchBenchmark(benchmark_args, configs=[config])
         results = benchmark.run()

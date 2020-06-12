@@ -18,24 +18,15 @@ import logging
 from dataclasses import dataclass, field
 from typing import Tuple
 
-from ..file_utils import cached_property, is_torch_available, torch_required
+from ..file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
 from .benchmark_args_utils import BenchmarkArguments
 
 
 if is_torch_available():
     import torch
 
-try:
+if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
-
-    _has_tpu = True
-except ImportError:
-    _has_tpu = False
-
-
-@torch_required
-def is_tpu_available():
-    return _has_tpu
 
 
 logger = logging.getLogger(__name__)
@@ -45,7 +36,9 @@ logger = logging.getLogger(__name__)
 class PyTorchBenchmarkArguments(BenchmarkArguments):
     no_cuda: bool = field(default=False, metadata={"help": "Whether to run on available cuda devices"})
     torchscript: bool = field(default=False, metadata={"help": "Trace the models using torchscript"})
+    no_tpu: bool = field(default=False, metadata={"help": "Whether to run on available tpu devices"})
     fp16: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
+    tpu_print_metrics: bool = field(default=False, metadata={"help": "Use FP16 to accelerate inference."})
 
     @cached_property
     @torch_required
@@ -54,7 +47,7 @@ class PyTorchBenchmarkArguments(BenchmarkArguments):
         if self.no_cuda:
             device = torch.device("cpu")
             n_gpu = 0
-        elif is_tpu_available():
+        elif is_torch_tpu_available():
             device = xm.xla_device()
             n_gpu = 0
         else:

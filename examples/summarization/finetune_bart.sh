@@ -6,7 +6,7 @@ export OUTPUT_DIR=${CURRENT_DIR}/${OUTPUT_DIR_NAME}
 mkdir -p $OUTPUT_DIR
 
 # Add parent directory to python path to access lightning_base.py
-export PYTHONPATH="../../":"${PYTHONPATH}"
+export PYTHONPATH="../":"${PYTHONPATH}"
 
 python finetune.py \
 --data_dir=./cnn-dailymail/cnn_dm \
