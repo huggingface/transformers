@@ -152,6 +152,7 @@ logger = logging.getLogger(__name__)
 
 MODEL_MAPPING = OrderedDict(
     [
+        (RetriBertConfig, RetriBertModel),
         (T5Config, T5Model),
         (DistilBertConfig, DistilBertModel),
         (AlbertConfig, AlbertModel),
@@ -170,12 +171,12 @@ MODEL_MAPPING = OrderedDict(
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
         (ReformerConfig, ReformerModel),
-        (RetriBertConfig, RetriBertModel),
     ]
 )
 
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
+        (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForPreTraining),
@@ -193,7 +194,6 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (XLMConfig, XLMWithLMHeadModel),
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
-        (RetriBertConfig, RetriBertModel),
     ]
 )
 
