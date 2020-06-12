@@ -129,7 +129,7 @@ def mish(x):
 
 class ManualLayerNorm(nn.Module):
     def __init__(self, feat_size, eps=1e-6):
-        super(ManualLayerNorm, self).__init__()
+        super().__init__()
         self.bias = nn.Parameter(torch.zeros(feat_size))
         self.weight = nn.Parameter(torch.ones(feat_size))
         self.eps = eps
@@ -141,8 +141,8 @@ class ManualLayerNorm(nn.Module):
 
 
 class NoNorm(nn.Module):
-    def __init__(self, feat_size):
-        super(NoNorm, self).__init__()
+    def __init__(self, feat_size, eps=None):
+        super().__init__()
         self.bias = nn.Parameter(torch.zeros(feat_size))
         self.weight = nn.Parameter(torch.ones(feat_size))
 
@@ -277,7 +277,7 @@ class MobileBertSelfOutput(nn.Module):
         super().__init__()
         self.use_bottleneck = config.use_bottleneck
         self.dense = nn.Linear(config.true_hidden_size, config.true_hidden_size)
-        self.LayerNorm = NORM2FN[config.normalization_type](config.true_hidden_size)
+        self.LayerNorm = NORM2FN[config.normalization_type](config.true_hidden_size, eps=config.layer_norm_eps)
         if self.use_bottleneck:
             self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -335,7 +335,7 @@ class OutputBottleneck(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.true_hidden_size, config.hidden_size)
-        self.LayerNorm = NORM2FN[config.normalization_type](config.hidden_size)
+        self.LayerNorm = NORM2FN[config.normalization_type](config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, residual_tensor):
@@ -371,7 +371,7 @@ class BottleneckLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intra_bottleneck_size)
-        self.LayerNorm = NORM2FN[config.normalization_type](config.intra_bottleneck_size)
+        self.LayerNorm = NORM2FN[config.normalization_type](config.intra_bottleneck_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
         layer_input = self.dense(hidden_states)
@@ -403,7 +403,7 @@ class FFNOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.true_hidden_size)
-        self.LayerNorm = NORM2FN[config.normalization_type](config.true_hidden_size)
+        self.LayerNorm = NORM2FN[config.normalization_type](config.true_hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, residual_tensor):
         layer_outputs = self.dense(hidden_states)
@@ -417,9 +417,9 @@ class FFNLayer(nn.Module):
         self.intermediate = MobileBertIntermediate(config)
         self.output = FFNOutput(config)
 
-    def forward(self, hidden_sites):
-        intermediate_output = self.intermediate(hidden_sites)
-        layer_outputs = self.output(intermediate_output, hidden_sites)
+    def forward(self, hidden_states):
+        intermediate_output = self.intermediate(hidden_states)
+        layer_outputs = self.output(intermediate_output, hidden_states)
         return layer_outputs
 
 
@@ -461,15 +461,30 @@ class MobileBertLayer(nn.Module):
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
+        s = (attention_output,)
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         if self.num_feedforward_networks != 1:
             for i, ffn_module in enumerate(self.ffn):
                 attention_output = ffn_module(attention_output)
+                s += (attention_output,)
 
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output, hidden_states)
-        outputs = (layer_output,) + outputs
+        outputs = (
+            (layer_output,)
+            + outputs
+            + (
+                torch.tensor(1000),
+                query_tensor,
+                key_tensor,
+                value_tensor,
+                layer_input,
+                attention_output,
+                intermediate_output,
+            )
+            + s
+        )
         return outputs
 
 
@@ -501,7 +516,7 @@ class MobileBertPooler(nn.Module):
 class MobileBertPredictionHeadTransform(BertPredictionHeadTransform):
     def __init__(self, config):
         super().__init__(config)
-        self.LayerNorm = NORM2FN["layer_norm"](config.hidden_size)
+        self.LayerNorm = NORM2FN["layer_norm"](config.hidden_size, eps=config.layer_norm_eps)
 
 
 class MobileBertLMPredictionHead(nn.Module):
@@ -869,7 +884,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.mobilebert = MobileBertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob + 0.1)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, self.num_labels)
         self.init_weights()
 

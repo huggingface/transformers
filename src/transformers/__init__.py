@@ -129,6 +129,7 @@ from .tokenization_electra import ElectraTokenizer, ElectraTokenizerFast
 from .tokenization_flaubert import FlaubertTokenizer
 from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
+from .tokenization_mobilebert import MobileBertTokenizer, MobileBertTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
@@ -492,6 +493,15 @@ if is_tf_available():
         TFGPT2MainLayer,
         TFGPT2Model,
         TFGPT2PreTrainedModel,
+    )
+
+    from .modeling_tf_mobilebert import (
+        TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFMobileBertModel,
+        TFMobileBertPreTrainedModel,
+        TFMobileBertForPreTraining,
+        TFMobileBertForSequenceClassification,
+        TFMobileBertForQuestionAnswering,
     )
 
     from .modeling_tf_openai import (
