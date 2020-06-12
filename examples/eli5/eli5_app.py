@@ -17,8 +17,8 @@ def load_models():
     else:
         qar_tokenizer, qar_model = (None, None)
     if MODEL_TYPE == "bart":
-        qa_s2s_tokenizer = AutoTokenizer.from_pretrained('yjernite/bart_eli5')
-        qa_s2s_model = AutoModelForSeq2SeqLM.from_pretrained('yjernite/bart_eli5').to('cuda:0')
+        s2s_tokenizer = AutoTokenizer.from_pretrained('yjernite/bart_eli5')
+        s2s_model = AutoModelForSeq2SeqLM.from_pretrained('yjernite/bart_eli5').to('cuda:0')
         _ = qa_s2s_model.eval()
     else:
         s2s_tokenizer, s2s_model = make_qa_s2s_model(
