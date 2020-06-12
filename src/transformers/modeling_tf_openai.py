@@ -28,7 +28,9 @@ from .modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceSummary,
     TFSharedEmbeddings,
+    cast_bool_to_primitive,
     get_initializer,
+    keras_serializable,
     shape_list,
 )
 from .tokenization_utils import BatchEncoding
@@ -69,7 +71,6 @@ ACT_FNS = {
 class TFAttention(tf.keras.layers.Layer):
     def __init__(self, nx, n_ctx, config, scale=False, **kwargs):
         super().__init__(**kwargs)
-        self.output_attentions = config.output_attentions
 
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
@@ -99,7 +100,7 @@ class TFAttention(tf.keras.layers.Layer):
         return tf.cast(m, dtype)
 
     def _attn(self, inputs, training=False):
-        q, k, v, attention_mask, head_mask = inputs
+        q, k, v, attention_mask, head_mask, output_attentions = inputs
         # q, k, v have shape [batch, heads, sequence, features]
         w = tf.matmul(q, k, transpose_b=True)
         if self.scale:
@@ -124,7 +125,7 @@ class TFAttention(tf.keras.layers.Layer):
             w = w * head_mask
 
         outputs = [tf.matmul(w, v)]
-        if self.output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             outputs.append(w)
         return outputs
 
@@ -141,7 +142,7 @@ class TFAttention(tf.keras.layers.Layer):
         return tf.transpose(x, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
 
     def call(self, inputs, training=False):
-        x, attention_mask, head_mask = inputs
+        x, attention_mask, head_mask, output_attentions = inputs
 
         x = self.c_attn(x)
         query, key, value = tf.split(x, 3, axis=2)
@@ -149,7 +150,7 @@ class TFAttention(tf.keras.layers.Layer):
         key = self.split_heads(key)
         value = self.split_heads(value)
 
-        attn_outputs = self._attn([query, key, value, attention_mask, head_mask], training=training)
+        attn_outputs = self._attn([query, key, value, attention_mask, head_mask, output_attentions], training=training)
         a = attn_outputs[0]
 
         a = self.merge_heads(a)
@@ -186,9 +187,9 @@ class TFBlock(tf.keras.layers.Layer):
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
 
     def call(self, inputs, training=False):
-        x, attention_mask, head_mask = inputs
+        x, attention_mask, head_mask, output_attentions = inputs
 
-        output_attn = self.attn([x, attention_mask, head_mask], training=training)
+        output_attn = self.attn([x, attention_mask, head_mask, output_attentions], training=training)
         a = output_attn[0]  # output_attn: a, (attentions)
 
         n = self.ln_1(x + a)
@@ -199,7 +200,10 @@ class TFBlock(tf.keras.layers.Layer):
         return outputs  # x, (attentions)
 
 
+@keras_serializable
 class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
+    config_class = OpenAIGPTConfig
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
         self.output_hidden_states = config.output_hidden_states
@@ -240,6 +244,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        output_attentions=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -249,7 +254,8 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             position_ids = inputs[3] if len(inputs) > 3 else position_ids
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            assert len(inputs) <= 6, "Too many inputs."
+            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
+            assert len(inputs) <= 7, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -257,9 +263,12 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             position_ids = inputs.get("position_ids", position_ids)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            assert len(inputs) <= 6, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
+
+        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -325,9 +334,9 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             if self.output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
-            outputs = block([hidden_states, attention_mask, head_mask[i]], training=training)
+            outputs = block([hidden_states, attention_mask, head_mask[i], output_attentions], training=training)
             hidden_states = outputs[0]
-            if self.output_attentions:
+            if cast_bool_to_primitive(output_attentions) is True:
                 all_attentions.append(outputs[1])
 
         hidden_states = tf.reshape(hidden_states, output_shape)
@@ -338,7 +347,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         outputs = (hidden_states,)
         if self.output_hidden_states:
             outputs = outputs + (all_hidden_states,)
-        if self.output_attentions:
+        if cast_bool_to_primitive(output_attentions) is True:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
@@ -420,6 +429,8 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
         training (:obj:`boolean`, `optional`, defaults to :obj:`False`):
             Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
             (if set to :obj:`False`) for evaluation.
+        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -444,7 +455,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -492,7 +503,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -551,6 +562,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         mc_token_ids=None,
+        output_attentions=None,
         training=False,
     ):
         r"""
@@ -573,7 +585,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_attentions=True``):
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`tf.Tensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -613,7 +625,8 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             mc_token_ids = inputs[6] if len(inputs) > 6 else mc_token_ids
-            assert len(inputs) <= 7, "Too many inputs."
+            output_attentions = inputs[7] if len(inputs) > 7 else output_attentions
+            assert len(inputs) <= 8, "Too many inputs."
         elif isinstance(inputs, dict):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -622,7 +635,8 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             mc_token_ids = inputs.get("mc_token_ids", mc_token_ids)
-            assert len(inputs) <= 7, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            assert len(inputs) <= 8, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -645,6 +659,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             flat_position_ids,
             head_mask,
             inputs_embeds,
+            output_attentions,
         ]
 
         transformer_outputs = self.transformer(flat_inputs, training=training)

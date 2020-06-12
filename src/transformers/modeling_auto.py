@@ -78,6 +78,7 @@ from .modeling_distilbert import (
 from .modeling_electra import (
     ElectraForMaskedLM,
     ElectraForPreTraining,
+    ElectraForQuestionAnswering,
     ElectraForSequenceClassification,
     ElectraForTokenClassification,
     ElectraModel,
@@ -121,6 +122,7 @@ from .modeling_xlm import (
 from .modeling_xlm_roberta import (
     XLMRobertaForMaskedLM,
     XLMRobertaForMultipleChoice,
+    XLMRobertaForQuestionAnswering,
     XLMRobertaForSequenceClassification,
     XLMRobertaForTokenClassification,
     XLMRobertaModel,
@@ -230,11 +232,13 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
         (LongformerConfig, LongformerForQuestionAnswering),
+        (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
         (RobertaConfig, RobertaForQuestionAnswering),
         (BertConfig, BertForQuestionAnswering),
         (XLNetConfig, XLNetForQuestionAnsweringSimple),
         (FlaubertConfig, FlaubertForQuestionAnsweringSimple),
         (XLMConfig, XLMForQuestionAnsweringSimple),
+        (ElectraConfig, ElectraForQuestionAnswering),
     ]
 )
 
@@ -706,7 +710,7 @@ class AutoModelWithLMHead:
 
         for config_class, model_class in MODEL_WITH_LM_HEAD_MAPPING.items():
             if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config)
+                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
             "Model type should be one of {}.".format(

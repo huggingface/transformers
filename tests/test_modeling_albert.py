@@ -162,7 +162,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
                 input_ids,
                 attention_mask=input_mask,
                 token_type_ids=token_type_ids,
-                masked_lm_labels=token_labels,
+                labels=token_labels,
                 sentence_order_label=sequence_labels,
             )
             result = {
@@ -183,7 +183,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
             model.to(torch_device)
             model.eval()
             loss, prediction_scores = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, masked_lm_labels=token_labels
+                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
             )
             result = {
                 "loss": loss,

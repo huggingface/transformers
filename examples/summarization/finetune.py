@@ -1,242 +1,93 @@
 import argparse
-import json
+import glob
 import logging
 import os
 import time
-from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
 
-import funcy
-import git
-import numpy as np
-import pandas as pd
 import torch
-from rouge_score import rouge_scorer, scoring
-from torch import nn
 from torch.utils.data import DataLoader
 
-from durbango import pickle_save
-from lightning_base import BaseTransformer, add_generic_args, get_linear_schedule_with_warmup
-from transformers import AutoModelWithLMHead
+from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
 
 
 try:
-    from .utils import SummarizationDataset, lmap
-    from .initialization_utils import init_student, copy_layers
+    from .utils import SummarizationDataset
 except ImportError:
-    from utils import SummarizationDataset, lmap
-    from initialization_utils import init_student, copy_layers
+    from utils import SummarizationDataset
+
 
 logger = logging.getLogger(__name__)
 
-ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
-
-
-def save_git_info(folder_path: str):
-    """
-    Log commit info.
-    """
-    repo_infos = get_git_info()
-
-    with open(os.path.join(folder_path, "git_log.json"), "w") as f:
-        json.dump(repo_infos, f, indent=4)
-
-
-def get_git_info():
-    repo = git.Repo(search_parent_directories=True)
-    repo_infos = {
-        "repo_id": str(repo),
-        "repo_sha": str(repo.head.object.hexsha),
-        "repo_branch": str(repo.active_branch),
-    }
-    return repo_infos
-
-
-def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
-    scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=True)
-    aggregator = scoring.BootstrapAggregator()
-
-    for reference_ln, output_ln in zip(reference_lns, output_lns):
-        scores = scorer.score(reference_ln, output_ln)
-        aggregator.add_scores(scores)
-
-    result = aggregator.aggregate()
-    return {k: v.mid.fmeasure for k, v in result.items()}
-
-
-def dictify(rouge_obj) -> List:
-    records = []
-    for k, rouge_measurement in rouge_obj.items():
-        if k == "rouge1":
-            continue
-        for k1 in ["low", "mid", "high"]:
-            if k1 != "mid":
-                continue
-            v1 = getattr(rouge_measurement, k1)
-            for k2 in ["precision", "recall", "fmeasure"]:
-                records.append([k, k1, k2, getattr(v1, k2)])
-
-    return records
-
-
-def expanded_rouge_df(rouge_all) -> pd.DataFrame:
-    return (
-        pd.DataFrame(dictify(rouge_all), columns=["metric", "k1", "k2", "val"])
-        .set_index(["metric", "k2"])["val"]
-        .unstack("metric")
-        .rename_axis(None)
-    )
-
-
-def freeze_part(model: nn.Module):
-    for par in model.parameters():
-        par.requires_grad = False
-
-
-def grad_status(model: nn.Module) -> Iterable:
-    return (par.requires_grad for par in model.parameters())
-
-
-def assert_all_frozen(model):
-    model_grads: List[bool] = list(grad_status(model))
-    n_require_grad = sum(lmap(int, model_grads))
-    npars = len(model_grads)
-    assert not any(model_grads), f"{n_require_grad/npars:.1%} of {npars} weights require grad"
-
-
-def assert_not_all_frozen(model):
-    model_grads: List[bool] = list(grad_status(model))
-    n_require_grad = sum(lmap(int, model_grads))
-    npars = len(model_grads)
-    assert any(model_grads), f"none of {npars} weights require grad"
-
 
 class SummarizationTrainer(BaseTransformer):
+
     mode = "language-modeling"
-    loss_names = ["loss"]
 
-    def __init__(self, hparams, **kwargs):
-        super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
-        save_git_info(self.hparams.output_dir)
-        self.model: AutoModelWithLMHead
-        self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
-        self.hparams_save_path = Path(self.output_dir) / "hparams.pkl"
-        self.step_count = 0
-        self.metrics = {"train": [], "val": [], "test": []}
-
+    def __init__(self, hparams):
+        super().__init__(hparams, num_labels=None, mode=self.mode)
         self.dataset_kwargs: dict = dict(
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
-            overwrite_cache=self.hparams.no_cache,
-            tgt_suffix=self.hparams.tgt_suffix,
+            max_target_length=self.hparams.max_target_length,
         )
-        base_nobs = {
-            "train": self.hparams.n_train,
-            "val": self.hparams.n_val,
-            "test": self.hparams.n_test,
-        }
 
-        self.target_lens = {
-            "train": self.hparams.max_target_length,
-            "val": self.hparams.val_mtl,
-            "test": self.hparams.test_mtl,
-        }
-        assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
-        assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
-        self.n_obs = {k: v if v >= 0 else None for k, v in base_nobs.items()}
-        if self.hparams.freeze_embeds:
-            self.freeze_embeds()
-        if self.hparams.freeze_encoder:
-            freeze_part(self.model.model.encoder)
-        self.hparams.git_sha = get_git_info()["repo_sha"]
-        pickle_save(self.hparams, self.hparams_save_path)
-        self.num_workers = 4 if self.hparams.gpus <= 1 else None
+    def forward(self, input_ids, attention_mask=None, decoder_input_ids=None, lm_labels=None):
+        return self.model(
+            input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids, lm_labels=lm_labels,
+        )
 
-    def freeze_embeds(self):
-        if self.model.config.model_type == "bart":
-            freeze_part(self.model.model.shared)
-            for d in [self.model.model.encoder, self.model.model.decoder]:
-                freeze_part(d.embed_positions)
-                freeze_part(d.embed_tokens)
-        else:
-            freeze_part(self.model.shared)
-            for d in [self.model.encoder, self.model.decoder]:
-                freeze_part(d.embed_tokens)
-
-    @property
-    def metrics_df(self):
-        return pd.DataFrame(self.metrics)
-
-    def forward(self, input_ids, **kwargs):
-        return self.model(input_ids, **kwargs)
-
-    def _step(self, batch: dict) -> Tuple:
+    def _step(self, batch):
         pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
+        source_ids, source_mask, y = batch["source_ids"], batch["source_mask"], batch["target_ids"]
         y_ids = y[:, :-1].contiguous()
         lm_labels = y[:, 1:].clone()
         lm_labels[y[:, 1:] == pad_token_id] = -100
-        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, labels=lm_labels,)
+        outputs = self(source_ids, attention_mask=source_mask, decoder_input_ids=y_ids, lm_labels=lm_labels,)
+
         loss = outputs[0]
-        return (loss,)
 
-    def training_step(self, batch, batch_idx) -> Dict:
-        loss_tensors = self._step(batch)
-        logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
-        return {"loss": loss_tensors[0], "log": logs}
+        return loss
 
-    def validation_step(self, batch, batch_idx) -> Dict:
-        return self._generative_step(batch)
+    def training_step(self, batch, batch_idx):
+        loss = self._step(batch)
 
-    def validation_end(self, outputs, prefix="val") -> Dict:
-        self.step_count += 1
-        losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
-        loss = losses["loss"]
-        rouges = {k: np.array([x[k] for x in outputs]).mean() for k in ROUGE_KEYS + ["gen_time"]}
-        rouge: torch.FloatTensor = torch.tensor(rouges["rouge2"]).type_as(loss)
-        rouges.update({k: v.item() for k, v in losses.items()})
-        losses.update(rouges)
-        metrics = {f"{prefix}_avg_{k}": x for k, x in losses.items()}
-        metrics["step_count"] = self.step_count
-        self.save_metrics(metrics, prefix)
-        preds = flatten_list([x["preds"] for x in outputs])
-        ret_dict = {"log": metrics, "preds": preds}
-        ret_dict[f"{prefix}_loss"] = loss
-        ret_dict[f"{prefix}_rouge"] = rouge
-        return ret_dict
+        tensorboard_logs = {"train_loss": loss}
+        return {"loss": loss, "log": tensorboard_logs}
 
-    def save_metrics(self, metrics, prefix) -> None:
-        self.metrics[prefix].append(metrics)
-        pickle_save(self.metrics, self.metrics_save_path)
+    def validation_step(self, batch, batch_idx):
+        loss = self._step(batch)
+        return {"val_loss": loss}
 
-    def ids_to_clean_text(self, generated_ids: List[int]):
-        gen_text = self.tokenizer.batch_decode(
-            generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
-        )
-        return lmap(str.strip, gen_text)
-
-    def _generative_step(self, batch):
-        pad_token_id = self.tokenizer.pad_token_id
-        source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
-        # TODO(SS): task specific params
-
-        t0 = time.time()
-        generated_ids = self.model.generate(input_ids=source_ids, attention_mask=source_mask, use_cache=True,)
-        gen_time = time.time() - t0
-        preds = self.ids_to_clean_text(generated_ids)
-        target = self.ids_to_clean_text(y)
-        loss_tensors = self._step(batch)
-        base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
-        rouge: Dict = calculate_rouge(preds, target)
-        summ_len = np.mean(lmap(len, generated_ids))
-        base_metrics.update(gen_time=gen_time, summ_len=summ_len, preds=preds, target=target, **rouge)
-        return base_metrics
+    def validation_end(self, outputs):
+        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
+        tensorboard_logs = {"val_loss": avg_loss}
+        return {"avg_val_loss": avg_loss, "log": tensorboard_logs}
 
     def test_step(self, batch, batch_idx):
-        return self._generative_step(batch)
+        pad_token_id = self.tokenizer.pad_token_id
+        source_ids, source_mask, y = SummarizationDataset.trim_seq2seq_batch(batch, pad_token_id)
+        # NOTE: the following kwargs get more speed and lower quality summaries than those in evaluate_cnn.py
+        generated_ids = self.model.generate(
+            input_ids=source_ids,
+            attention_mask=source_mask,
+            num_beams=1,
+            max_length=80,
+            repetition_penalty=2.5,
+            length_penalty=1.0,
+            early_stopping=True,
+            use_cache=True,
+        )
+        preds = [
+            self.tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+            for g in generated_ids
+        ]
+        target = [self.tokenizer.decode(t, skip_special_tokens=True, clean_up_tokenization_spaces=True) for t in y]
+        loss = self._step(batch)
+
+        return {"val_loss": loss, "preds": preds, "target": target}
 
     def test_end(self, outputs):
-        return self.validation_end(outputs, prefix="test")
+        return self.validation_end(outputs)
 
     def test_epoch_end(self, outputs):
         output_test_predictions_file = os.path.join(self.hparams.output_dir, "test_predictions.txt")
@@ -251,43 +102,15 @@ class SummarizationTrainer(BaseTransformer):
 
         return self.test_end(outputs)
 
-    def validation_epoch_end(self, outputs):
-        self.validation_end(outputs, "val")
-
-    def get_dataset(self, type_path) -> SummarizationDataset:
-        n_obs = self.n_obs[type_path]
-        max_target_length = self.target_lens[type_path]
-        dataset = SummarizationDataset.from_raw_data(
-            self.tokenizer,
-            type_path=type_path,
-            n_obs=n_obs,
-            max_target_length=max_target_length,
-            **self.dataset_kwargs,
-        )
-        return dataset
-
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
-        dataset = self.get_dataset(type_path)
-        sampler = None
-        if self.hparams.sortish_sampler and type_path == "train":
-            assert self.hparams.gpus <= 1
-            sampler = dataset.make_sortish_sampler(batch_size)
-            shuffle = False
-
-        dataloader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            collate_fn=dataset.collate_fn,
-            shuffle=shuffle,
-            num_workers=self.num_workers,
-            sampler=sampler,
-        )
+        dataset = SummarizationDataset(self.tokenizer, type_path=type_path, **self.dataset_kwargs)
+        dataloader = DataLoader(dataset, batch_size=batch_size, collate_fn=dataset.collate_fn, shuffle=shuffle)
         return dataloader
 
     def train_dataloader(self) -> DataLoader:
         dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
         t_total = (
-            (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.gpus)))
+            (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.n_gpu)))
             // self.hparams.gradient_accumulation_steps
             * float(self.hparams.num_train_epochs)
         )
@@ -306,60 +129,50 @@ class SummarizationTrainer(BaseTransformer):
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         BaseTransformer.add_model_specific_args(parser, root_dir)
+        # Add BART specific options
         parser.add_argument(
             "--max_source_length",
             default=1024,
             type=int,
-            help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated, sequences shorter will be padded.",
+            help="The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded.",
         )
         parser.add_argument(
             "--max_target_length",
-            default=142,
+            default=56,
             type=int,
-            help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated, sequences shorter will be padded.",
+            help="The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded.",
         )
-        parser.add_argument("--val_mtl", default=142, type=int, help="Max target length for validation data")
-        parser.add_argument("--test_mtl", default=142, type=int)
+
         parser.add_argument(
             "--data_dir",
             default=None,
             type=str,
             required=True,
-            help="The input data dir. Should contain train.source, train.target, val.source, val.target, test.source, test.target",
+            help="The input data dir. Should contain the dataset files for the CNN/DM summarization task.",
         )
-        parser.add_argument(
-            "--no_cache", action="store_true",
-        )
-        parser.add_argument(
-            "--freeze_encoder", action="store_true",
-        )
-        parser.add_argument("--n_train", type=int, default=-1, required=False)
-        parser.add_argument("--n_val", type=int, default=500, required=False)
-        parser.add_argument("--n_test", type=int, default=-1, required=False)
-        parser.add_argument("--sortish_sampler", action="store_true", default=False)
-
         return parser
 
 
 def main(args):
-    Path(args.output_dir).mkdir(exist_ok=True)
-    if len(os.listdir(args.output_dir)) > 3 and args.do_train:
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
 
-    model: BaseTransformer = SummarizationTrainer(args)
-    trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
-    if not args.do_predict:
-        return model
-    # return model  # hack
+    # If output_dir not provided, a folder will be generated in pwd
+    if not args.output_dir:
+        args.output_dir = os.path.join("./results", f"{args.task}_{time.strftime('%Y%m%d_%H%M%S')}",)
+        os.makedirs(args.output_dir)
+    model = SummarizationTrainer(args)
+    trainer = generic_train(model, args)
 
-    model.hparams.test_checkpoint = ""
-    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
-    if checkpoints:
-        model.hparams.test_checkpoint = checkpoints[-1]
-        trainer.resume_from_checkpoint = checkpoints[-1]
-    trainer.logger.log_hyperparams(model.hparams)
-    trainer.test(model)
-    return model
+    # Optionally, predict on dev set and write to output_dir
+    if args.do_predict:
+        # See https://github.com/huggingface/transformers/issues/3159
+        # pl use this format to create a checkpoint:
+        # https://github.com/PyTorchLightning/pytorch-lightning/blob/master\
+        # /pytorch_lightning/callbacks/model_checkpoint.py#L169
+        checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpointepoch=*.ckpt"), recursive=True)))
+        model = model.load_from_checkpoint(checkpoints[-1])
+        trainer.test(model)
 
 
 if __name__ == "__main__":
@@ -369,7 +182,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args)
-
-
-def flatten_list(summary_ids: List[List]):
-    return [x for x in funcy.flatten(summary_ids)]

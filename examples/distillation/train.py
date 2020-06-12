@@ -25,10 +25,9 @@ import shutil
 import numpy as np
 import torch
 
+from distiller import Distiller
+from lm_seqs_dataset import LmSeqsDataset
 from transformers import (
-    BartConfig,
-    BartForConditionalGeneration,
-    BartTokenizer,
     BertConfig,
     BertForMaskedLM,
     BertTokenizer,
@@ -42,10 +41,7 @@ from transformers import (
     RobertaForMaskedLM,
     RobertaTokenizer,
 )
-
-from .distiller import Distiller
-from .lm_seqs_dataset import LmSeqsDataset
-from .utils import git_log, init_gpu_params, logger, set_seed
+from utils import git_log, init_gpu_params, logger, set_seed
 
 
 MODEL_CLASSES = {
@@ -221,11 +217,8 @@ def main():
     parser.add_argument("--log_interval", type=int, default=500, help="Tensorboard logging interval.")
     parser.add_argument("--checkpoint_interval", type=int, default=4000, help="Checkpoint interval.")
     args = parser.parse_args()
-    train(args)
-
-
-def train(args):
     sanity_checks(args)
+
     # ARGS #
     init_gpu_params(args)
     set_seed(args)

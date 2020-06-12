@@ -21,8 +21,6 @@ import sys
 import unittest
 from unittest.mock import patch
 
-import examples.summarization.distillation
-
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
@@ -73,7 +71,7 @@ class ExamplesTests(unittest.TestCase):
             --max_seq_length=128
             """.split()
         with patch.object(sys, "argv", testargs):
-            result = examples.summarization.distillation.main()
+            result = run_glue.main()
             del result["eval_loss"]
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
@@ -98,7 +96,7 @@ class ExamplesTests(unittest.TestCase):
             --no_cuda
             """.split()
         with patch.object(sys, "argv", testargs):
-            result = examples.summarization.distillation.main()
+            result = run_language_modeling.main()
             self.assertLess(result["perplexity"], 35)
 
     def test_run_squad(self):
@@ -124,7 +122,7 @@ class ExamplesTests(unittest.TestCase):
             --seed=42
         """.split()
         with patch.object(sys, "argv", testargs):
-            result = examples.summarization.distillation.main()
+            result = run_squad.main()
             self.assertGreaterEqual(result["f1"], 30)
             self.assertGreaterEqual(result["exact"], 30)
 
@@ -135,5 +133,5 @@ class ExamplesTests(unittest.TestCase):
         testargs = ["run_generation.py", "--prompt=Hello", "--length=10", "--seed=42"]
         model_type, model_name = ("--model_type=openai-gpt", "--model_name_or_path=openai-gpt")
         with patch.object(sys, "argv", testargs + [model_type, model_name]):
-            result = examples.summarization.distillation.main()
+            result = run_generation.main()
             self.assertGreaterEqual(len(result[0]), 10)

@@ -29,5 +29,5 @@ class ExamplesTests(unittest.TestCase):
             --do_eval
             """.split()
         with patch.object(sys, "argv", ["run.py"] + testargs):
-            result = finetune.main()
+            result = run_ner.main()
             self.assertLess(result["eval_loss"], 1.5)

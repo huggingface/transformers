@@ -1,30 +1,32 @@
 import dataclasses
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 
-from .file_utils import cached_property, is_torch_available, torch_required
+from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
 
 
 if is_torch_available():
     import torch
 
-
-try:
+if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
-
-    _has_tpu = True
-except ImportError:
-    _has_tpu = False
-
-
-@torch_required
-def is_tpu_available():
-    return _has_tpu
 
 
 logger = logging.getLogger(__name__)
+
+
+def default_logdir() -> str:
+    """
+    Same default as PyTorch
+    """
+    import socket
+    from datetime import datetime
+
+    current_time = datetime.now().strftime("%b%d_%H-%M-%S")
+    return os.path.join("runs", current_time + "_" + socket.gethostname())
 
 
 @dataclass
@@ -97,7 +99,7 @@ class TrainingArguments:
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
-    logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
+    logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
     logging_first_step: bool = field(default=False, metadata={"help": "Log and eval the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
     save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
@@ -133,6 +135,10 @@ class TrainingArguments:
     )
     tpu_metrics_debug: bool = field(default=False, metadata={"help": "TPU: Whether to print debug metrics"})
 
+    dataloader_drop_last: bool = field(
+        default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
+    )
+
     @property
     def train_batch_size(self) -> int:
         if self.per_gpu_train_batch_size:
@@ -160,7 +166,7 @@ class TrainingArguments:
         if self.no_cuda:
             device = torch.device("cpu")
             n_gpu = 0
-        elif is_tpu_available():
+        elif is_torch_tpu_available():
             device = xm.xla_device()
             n_gpu = 0
         elif self.local_rank == -1:

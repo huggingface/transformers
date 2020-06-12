@@ -4,10 +4,13 @@
 __pycache__/
 *.py[cod]
 *$py.class
-dbart
 
 # C extensions
 *.so
+
+# tests and logs
+tests/fixtures
+logs/
 
 # Distribution / packaging
 .Python
@@ -117,6 +120,7 @@ dmypy.json
 .pyre/
 
 # vscode
+.vs
 .vscode
 
 # Pycharm

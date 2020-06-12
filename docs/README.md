@@ -7,6 +7,14 @@ you can install them with the following command, at the root of the code reposit
 pip install -e ".[docs]"
 ```
 
+---
+**NOTE**
+
+You only need to generate the documentation to inspect it locally (if you're planning changes and want to 
+check how they look like before committing for instance). You don't have to commit the built documentation.
+
+---
+
 ## Packages installed
 
 Here's an overview of all the packages installed. If you ran the previous command installing all packages from
@@ -67,6 +75,18 @@ It should build the static app that will be available under `/docs/_build/html`
 
 Accepted files are reStructuredText (.rst) and Markdown (.md). Create a file with its extension and put it
 in the source directory. You can then link it to the toc-tree by putting the filename without the extension.
+
+## Preview the documentation in a pull request
+
+Once you have made your pull request, you can check what the documentation will look like after it's merged by
+following these steps:
+
+- Look at the checks at the bottom of the conversation page of your PR (you may need to click on "show all checks" to
+  expand them).
+- Click on "details" next to the `ci/circleci: build_doc` check.
+- In the new window, click on the "Artifacts" tab.
+- Locate the file "docs/_build/html/index.html" (or any specific page you want to check) and click on it to get a 
+  preview.
 
 ## Writing Documentation - Specification
 
