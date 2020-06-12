@@ -93,6 +93,7 @@ CONFIG_MAPPING = OrderedDict(
         ("ctrl", CTRLConfig,),
         ("electra", ElectraConfig,),
         ("encoder-decoder", EncoderDecoderConfig,),
+        ("retribert", RetriBertConfig,),
     ]
 )
 

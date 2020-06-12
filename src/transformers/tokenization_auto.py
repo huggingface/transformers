@@ -32,6 +32,7 @@ from .configuration_auto import (
     LongformerConfig,
     OpenAIGPTConfig,
     ReformerConfig,
+    RetriBertConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -54,6 +55,7 @@ from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer
 from .tokenization_marian import MarianTokenizer
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
@@ -87,6 +89,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FlaubertConfig, (FlaubertTokenizer, None)),
         (XLMConfig, (XLMTokenizer, None)),
         (CTRLConfig, (CTRLTokenizer, None)),
+        (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
     ]
 )
 
