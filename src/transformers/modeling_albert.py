@@ -1220,7 +1220,6 @@ class AlbertForMultipleChoice(AlbertPreTrainedModel):
             if inputs_embeds is not None
             else None
         )
-
         outputs = self.albert(
             input_ids,
             attention_mask=attention_mask,
