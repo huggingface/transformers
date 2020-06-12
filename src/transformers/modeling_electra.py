@@ -10,6 +10,7 @@ from .activations import get_activation
 from .configuration_electra import ElectraConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_bert import BertEmbeddings, BertEncoder, BertLayerNorm, BertPreTrainedModel
+from .modeling_utils import SequenceSummary
 
 
 logger = logging.getLogger(__name__)
@@ -860,22 +861,6 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         return outputs  # (loss), start_logits, end_logits, (hidden_states), (attentions)
 
 
-class ElectraPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0, :]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = get_activation("gelu")(
-            pooled_output
-        )  # although BERT uses tanh here, it seems Electra authors used gelu here
-        return pooled_output
-
-
 @add_start_docstrings(
     """ELECTRA Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
@@ -886,8 +871,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
         super().__init__(config)
 
         self.electra = ElectraModel(config)
-        self.pooler = ElectraPooler(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.summary = SequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
@@ -973,8 +957,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
 
         sequence_output = discriminator_hidden_states[0]
 
-        pooled_output = self.pooler(sequence_output)
-        pooled_output = self.dropout(pooled_output)
+        pooled_output = self.summary(sequence_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 
