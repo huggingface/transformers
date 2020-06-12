@@ -32,6 +32,7 @@ _all_bart_models = [
     "facebook/bart-large-mnli",
     "facebook/bart-large-cnn",
     "facebook/bart-large-xsum",
+    "yjernite/bart_eli5",
 ]
 
 
