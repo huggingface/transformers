@@ -77,6 +77,7 @@ from .modeling_distilbert import (
 )
 from .modeling_electra import (
     ElectraForMaskedLM,
+    ElectraForMultipleChoice,
     ElectraForPreTraining,
     ElectraForQuestionAnswering,
     ElectraForSequenceClassification,
@@ -261,6 +262,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         (CamembertConfig, CamembertForMultipleChoice),
+        (ElectraConfig, ElectraForMultipleChoice),
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),
         (LongformerConfig, LongformerForMultipleChoice),
         (RobertaConfig, RobertaForMultipleChoice),
