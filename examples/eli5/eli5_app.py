@@ -19,7 +19,7 @@ def load_models():
     if MODEL_TYPE == "bart":
         s2s_tokenizer = AutoTokenizer.from_pretrained('yjernite/bart_eli5')
         s2s_model = AutoModelForSeq2SeqLM.from_pretrained('yjernite/bart_eli5').to('cuda:0')
-        _ = qa_s2s_model.eval()
+        _ = s2s_model.eval()
     else:
         s2s_tokenizer, s2s_model = make_qa_s2s_model(
             model_name="t5-small", from_file="seq2seq_models/eli5_t5_model_1024_4.pth", device="cuda:0"
