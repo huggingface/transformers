@@ -45,6 +45,7 @@ from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .modeling_albert import (
     AlbertForMaskedLM,
+    AlbertForMultipleChoice,
     AlbertForPreTraining,
     AlbertForQuestionAnswering,
     AlbertForSequenceClassification,
@@ -308,6 +309,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForMultipleChoice),
         (BertConfig, BertForMultipleChoice),
         (XLNetConfig, XLNetForMultipleChoice),
+        (AlbertConfig, AlbertForMultipleChoice),
     ]
 )
 
