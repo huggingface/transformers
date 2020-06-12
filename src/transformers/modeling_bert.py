@@ -413,14 +413,20 @@ class BertEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if getattr(self.config, "gradient_checkpointing", False):
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    layer_module,
+                    create_custom_forward(layer_module),
                     hidden_states,
                     attention_mask,
                     head_mask[i],
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
