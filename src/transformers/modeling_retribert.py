@@ -62,6 +62,7 @@ class RetriBertPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
+
 RETRIBERT_START_DOCSTRING = r"""
 
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
@@ -74,9 +75,9 @@ RETRIBERT_START_DOCSTRING = r"""
             Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
+
 @add_start_docstrings(
-    """Bert Based model to embed queries or document for document retreival. """,
-    RETRIBERT_START_DOCSTRING,
+    """Bert Based model to embed queries or document for document retreival. """, RETRIBERT_START_DOCSTRING,
 )
 class RetriBertModel(RetriBertPreTrainedModel):
     def __init__(self, config):
@@ -89,16 +90,12 @@ class RetriBertModel(RetriBertPreTrainedModel):
         self.project_query = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
         self.project_doc = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
-        self.ce_loss = nn.CrossEntropyLoss(reduction='mean')
+        self.ce_loss = nn.CrossEntropyLoss(reduction="mean")
 
         self.init_weights()
 
     def embed_sentences_checkpointed(
-        self,
-        input_ids,
-        attention_mask,
-        sent_encoder,
-        checkpoint_batch_size=-1,
+        self, input_ids, attention_mask, sent_encoder, checkpoint_batch_size=-1,
     ):
         sent_encoder
         # reproduces BERT forward pass with checkpointing
@@ -115,51 +112,32 @@ class RetriBertModel(RetriBertPreTrainedModel):
             )
             # define function for cehckpointing
             def partial_encode(*inputs):
-                encoder_outputs = sent_encoder.encoder(
-                    inputs[0],
-                    attention_mask=inputs[1],
-                    head_mask=head_mask,
-                )
+                encoder_outputs = sent_encoder.encoder(inputs[0], attention_mask=inputs[1], head_mask=head_mask,)
                 sequence_output = encoder_outputs[0]
                 pooled_output = sent_encoder.pooler(sequence_output)
                 return pooled_output
+
             # run embedding layer on everything at once
             embedding_output = sent_encoder.embeddings(
-                input_ids=input_ids,
-                position_ids=None,
-                token_type_ids=token_type_ids,
-                inputs_embeds=None
+                input_ids=input_ids, position_ids=None, token_type_ids=token_type_ids, inputs_embeds=None
             )
             # run encoding and pooling on one mini-batch at a time
             pooled_output_list = []
             for b in range(math.ceil(input_ids.shape[0] / checkpoint_batch_size)):
-                b_embedding_output = embedding_output[b*checkpoint_batch_size:(b+1)*checkpoint_batch_size]
-                b_attention_mask = extended_attention_mask[b*checkpoint_batch_size:(b+1)*checkpoint_batch_size]
-                pooled_output = checkpoint.checkpoint(
-                    partial_encode, b_embedding_output, b_attention_mask
-                )
+                b_embedding_output = embedding_output[b * checkpoint_batch_size : (b + 1) * checkpoint_batch_size]
+                b_attention_mask = extended_attention_mask[b * checkpoint_batch_size : (b + 1) * checkpoint_batch_size]
+                pooled_output = checkpoint.checkpoint(partial_encode, b_embedding_output, b_attention_mask)
                 pooled_output_list.append(pooled_output)
             return torch.cat(pooled_output_list, dim=0)
 
     def embed_questions(
-        self,
-        input_ids,
-        attention_mask=None,
-        checkpoint_batch_size=-1,
+        self, input_ids, attention_mask=None, checkpoint_batch_size=-1,
     ):
-        q_reps = self.embed_sentences_checkpointed(
-            input_ids,
-            attention_mask,
-            self.bert_query,
-            checkpoint_batch_size,
-        )
+        q_reps = self.embed_sentences_checkpointed(input_ids, attention_mask, self.bert_query, checkpoint_batch_size,)
         return self.project_query(q_reps)
 
     def embed_answers(
-        self,
-        input_ids,
-        attention_mask=None,
-        checkpoint_batch_size=-1,
+        self, input_ids, attention_mask=None, checkpoint_batch_size=-1,
     ):
         a_reps = self.embed_sentences_checkpointed(
             input_ids,
@@ -170,24 +148,11 @@ class RetriBertModel(RetriBertPreTrainedModel):
         return self.project_doc(a_reps)
 
     def forward(
-        self,
-        input_ids_query,
-        attention_mask_query,
-        input_ids_doc,
-        attention_mask_doc,
-        checkpoint_batch_size=-1
+        self, input_ids_query, attention_mask_query, input_ids_doc, attention_mask_doc, checkpoint_batch_size=-1
     ):
         device = input_ids_query.device
-        q_reps = self.embed_questions(
-            input_ids_query,
-            attention_mask_query,
-            checkpoint_batch_size
-        )
-        a_reps = self.embed_answers(
-            input_ids_doc,
-            attention_mask_doc,
-            checkpoint_batch_size
-        )
+        q_reps = self.embed_questions(input_ids_query, attention_mask_query, checkpoint_batch_size)
+        a_reps = self.embed_answers(input_ids_doc, attention_mask_doc, checkpoint_batch_size)
         compare_scores = torch.mm(q_reps, a_reps.t())
         loss_qa = self.ce_loss(compare_scores, torch.arange(compare_scores.shape[1]).to(device))
         loss_aq = self.ce_loss(compare_scores.t(), torch.arange(compare_scores.shape[0]).to(device))

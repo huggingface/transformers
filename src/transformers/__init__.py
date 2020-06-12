@@ -359,7 +359,6 @@ if is_torch_available():
         RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 
-
     # Optimization
     from .optimization import (
         AdamW,
