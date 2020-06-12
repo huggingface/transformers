@@ -1,36 +1,31 @@
+import faiss  # noqa: F401
 import functools
-import json
-import logging
 import math
+import nlp  # noqa: F401
 import numpy as np
-import os
+import os  # noqa: F401
 import pandas as pd
-import pickle
-import sys
 
-from os.path import join as pjoin
 from random import choice, randint
 from time import time
-from tqdm import tqdm, trange
+from tqdm import tqdm
 
-from elasticsearch import Elasticsearch
-from elasticsearch.helpers import bulk, streaming_bulk
+from elasticsearch import Elasticsearch  # noqa: F401
+from elasticsearch.helpers import bulk, streaming_bulk  # noqa: F401
 
 import torch
 import torch.utils.checkpoint as checkpoint
-
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 
-import faiss
-import nlp
 
 from transformers import AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
 
 pd.set_option("display.max_colwidth", None)
 
+
 ###############
-### Sparse index
+# Sparse index
 ###############
 def make_es_index_snippets(es_client, passages_dset, index_name="english_wiki_kilt_snippets_100w"):
     index_config = {
@@ -91,7 +86,7 @@ def query_es_index(question, es_client, index_name="english_wiki_kilt_snippets_1
 
 
 ###############
-### ELI5 retriever training
+# ELI5 retriever training
 ###############
 class ELI5DatasetQARetriver(Dataset):
     def __init__(self, examples_array, extra_answer_threshold=3, min_answer_length=64, training=True, n_samples=None):
@@ -142,7 +137,8 @@ class RetrievalQAEmbedder(torch.nn.Module):
             extended_attention_mask: torch.Tensor = self.sent_encoder.get_extended_attention_mask(
                 attention_mask, input_shape, device
             )
-            # define function for cehckpointing
+
+            # define function for checkpointing
             def partial_encode(*inputs):
                 encoder_outputs = self.sent_encoder.encoder(inputs[0], attention_mask=inputs[1], head_mask=head_mask,)
                 sequence_output = encoder_outputs[0]
@@ -326,7 +322,7 @@ def train_qa_retriever(qar_model, qar_tokenizer, qar_train_dset, qar_valid_dset,
 
 
 ###############
-### ELI5 seq2seq model training
+# ELI5 seq2seq model training
 ###############
 class ELI5DatasetS2S(Dataset):
     def __init__(
@@ -535,7 +531,7 @@ def qa_s2s_generate(
 
 
 ###############
-### ELI5-trained retrieval model usage
+# ELI5-trained retrieval model usage
 ###############
 def embed_passages_for_retrieval(passages, tokenizer, qa_embedder, max_length=128, device="cuda:0"):
     a_toks = tokenizer.batch_encode_plus(passages, max_length=max_length, pad_to_max_length=True)

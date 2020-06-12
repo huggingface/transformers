@@ -1,6 +1,23 @@
-import time
-import pyarrow
-from eli5_utils import *
+import base64
+import faiss
+import nlp
+import numpy as np
+import torch
+
+from pathlib import Path
+
+from elasticsearch import Elasticsearch
+
+from eli5_utils import (
+    make_qa_s2s_model,
+    embed_questions_for_retrieval,
+    query_qa_dense_index,
+    query_es_index,
+    qa_s2s_generate,
+)
+
+import transformers
+from transformers import AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer
 
 import streamlit as st
 
@@ -11,14 +28,14 @@ LOAD_DENSE_INDEX = True
 @st.cache(allow_output_mutation=True)
 def load_models():
     if LOAD_DENSE_INDEX:
-        qar_tokenizer = AutoTokenizer.from_pretrained('yjernite/retribert-base-uncased')
-        qar_model = AutoModel.from_pretrained('yjernite/retribert-base-uncased').to('cuda:0')
+        qar_tokenizer = AutoTokenizer.from_pretrained("yjernite/retribert-base-uncased")
+        qar_model = AutoModel.from_pretrained("yjernite/retribert-base-uncased").to("cuda:0")
         _ = qar_model.eval()
     else:
         qar_tokenizer, qar_model = (None, None)
     if MODEL_TYPE == "bart":
-        s2s_tokenizer = AutoTokenizer.from_pretrained('yjernite/bart_eli5')
-        s2s_model = AutoModelForSeq2SeqLM.from_pretrained('yjernite/bart_eli5').to('cuda:0')
+        s2s_tokenizer = AutoTokenizer.from_pretrained("yjernite/bart_eli5")
+        s2s_model = AutoModelForSeq2SeqLM.from_pretrained("yjernite/bart_eli5").to("cuda:0")
         _ = s2s_model.eval()
     else:
         s2s_tokenizer, s2s_model = make_qa_s2s_model(
@@ -31,9 +48,7 @@ def load_models():
 def load_indexes():
     if LOAD_DENSE_INDEX:
         faiss_res = faiss.StandardGpuResources()
-        wiki40b_passages = nlp.load_dataset(
-            path="wiki_snippets", name="wiki40b_en_100_0"
-        )["train"]
+        wiki40b_passages = nlp.load_dataset(path="wiki_snippets", name="wiki40b_en_100_0")["train"]
         wiki40b_passage_reps = np.memmap(
             "wiki40b_passages_reps_32_l-8_h-768_b-512-512.dat",
             dtype="float32",
@@ -92,13 +107,7 @@ def make_support(question, source="wiki40b", method="dense", n_results=10):
     return question_doc, support_list
 
 
-# @st.cache(allow_output_mutation=True)
-import transformers
-
-
-@st.cache(
-    hash_funcs={torch.Tensor: (lambda _: None), transformers.tokenization_bart.BartTokenizer: (lambda _: None),}
-)
+@st.cache(hash_funcs={torch.Tensor: (lambda _: None), transformers.tokenization_bart.BartTokenizer: (lambda _: None)})
 def answer_question(
     question_doc, s2s_model, s2s_tokenizer, min_len=64, max_len=256, sampling=False, n_beams=4, top_p=0.95, temp=0.8
 ):
@@ -122,11 +131,8 @@ def answer_question(
 
 st.title("Long Form Question Answering with ELI5")
 
+
 # Start sidebar
-import base64
-from pathlib import Path
-
-
 def img_to_bytes(img_path):
     img_bytes = Path(img_path).read_bytes()
     encoded = base64.b64encode(img_bytes).decode()
@@ -160,11 +166,11 @@ st.sidebar.markdown(
     header_full, unsafe_allow_html=True,
 )
 
-#### Long Form QA with ELI5 and Wikipedia
+# Long Form QA with ELI5 and Wikipedia
 description = """
-This demo presents a model trained to [provide long-form answers to open-domain questions](https://yjernite.github.io/lfqa.html). 
+This demo presents a model trained to [provide long-form answers to open-domain questions](https://yjernite.github.io/lfqa.html).
 First, a document retriever fetches a set of relevant Wikipedia passages given the question from the [Wiki40b](https://research.google/pubs/pub49029/) dataset,
-a pre-processed fixed snapshot of Wikipedia.  
+a pre-processed fixed snapshot of Wikipedia.
 
 The **sparse** retriever uses ElasticSearch, while the **dense** retriever uses max-inner-product search between a question and passage embedding
 trained using the [ELI5](https://arxiv.org/abs/1907.09190) questions-answer pairs.
@@ -174,7 +180,6 @@ weights and fine-tuned on the ELI5 QA pairs and retrieved documents.
 """
 st.sidebar.markdown(description, unsafe_allow_html=True)
 
-#####
 action_list = [
     "Answer the question",
     "View the retrieved document only",
