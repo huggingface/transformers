@@ -43,6 +43,7 @@ from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from .data import (
     DataProcessor,
     InputExample,
@@ -130,6 +131,7 @@ from .tokenization_gpt2 import GPT2Tokenizer, GPT2TokenizerFast
 from .tokenization_longformer import LongformerTokenizer, LongformerTokenizerFast
 from .tokenization_openai import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
 from .tokenization_reformer import ReformerTokenizer
+from .tokenization_retribert import RetriBertTokenizer, RetriBertTokenizerFast
 from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_t5 import T5Tokenizer
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer, TransfoXLTokenizerFast
@@ -166,11 +168,17 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForQuestionAnswering,
         AutoModelWithLMHead,
+        AutoModelForCausalLM,
+        AutoModelForMaskedLM,
+        AutoModelForSeq2SeqLM,
         AutoModelForTokenClassification,
         AutoModelForMultipleChoice,
         MODEL_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_WITH_LM_HEAD_MAPPING,
+        MODEL_FOR_CAUSAL_LM_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
@@ -182,6 +190,7 @@ if is_torch_available():
         BertModel,
         BertForPreTraining,
         BertForMaskedLM,
+        BertLMHeadModel,
         BertForNextSentencePrediction,
         BertForSequenceClassification,
         BertForMultipleChoice,
@@ -287,6 +296,7 @@ if is_torch_available():
         AlbertModel,
         AlbertForPreTraining,
         AlbertForMaskedLM,
+        AlbertForMultipleChoice,
         AlbertForSequenceClassification,
         AlbertForQuestionAnswering,
         AlbertForTokenClassification,
@@ -319,6 +329,7 @@ if is_torch_available():
         ElectraForTokenClassification,
         ElectraPreTrainedModel,
         ElectraForSequenceClassification,
+        ElectraForQuestionAnswering,
         ElectraModel,
         load_tf_weights_in_electra,
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -341,6 +352,13 @@ if is_torch_available():
         LongformerForQuestionAnswering,
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
+
+    from .modeling_retribert import (
+        RetriBertPreTrainedModel,
+        RetriBertModel,
+        RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
+
 
     # Optimization
     from .optimization import (

@@ -286,6 +286,7 @@ class Trainer:
             sampler=sampler,
             batch_size=self.args.eval_batch_size,
             collate_fn=self.data_collator.collate_batch,
+            drop_last=self.args.dataloader_drop_last,
         )
 
         return data_loader
@@ -336,13 +337,16 @@ class Trainer:
             WANDB_DISABLED:
                 (Optional): boolean - defaults to false, set to "true" to disable wandb entirely
         """
-        logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
-        wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
-        # keep track of model topology and gradients
-        if os.getenv("WANDB_WATCH") != "false":
-            wandb.watch(
-                self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
+        if self.is_world_master():
+            logger.info(
+                'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
+            wandb.init(project=os.getenv("WANDB_PROJECT", "huggingface"), config=vars(self.args))
+            # keep track of model topology and gradients
+            if os.getenv("WANDB_WATCH") != "false":
+                wandb.watch(
+                    self.model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, self.args.logging_steps)
+                )
 
     def num_examples(self, dataloader: DataLoader) -> int:
         """
@@ -554,10 +558,22 @@ class Trainer:
             logs["epoch"] = self.epoch
         if self.tb_writer:
             for k, v in logs.items():
-                self.tb_writer.add_scalar(k, v, self.global_step)
+                if isinstance(v, (int, float)):
+                    self.tb_writer.add_scalar(k, v, self.global_step)
+                else:
+                    logger.warning(
+                        "Trainer is attempting to log a value of "
+                        '"%s" of type %s for key "%s" as a scalar. '
+                        "This invocation of Tensorboard's writer.add_scalar() "
+                        "is incorrect so we dropped this attribute.",
+                        v,
+                        type(v),
+                        k,
+                    )
             self.tb_writer.flush()
         if is_wandb_available():
-            wandb.log(logs, step=self.global_step)
+            if self.is_world_master():
+                wandb.log(logs, step=self.global_step)
         output = json.dumps({**logs, **{"step": self.global_step}})
         if iterator is not None:
             iterator.write(output)

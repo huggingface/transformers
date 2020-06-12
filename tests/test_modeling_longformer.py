@@ -296,7 +296,19 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False  # head masking is not supported
     test_torchscript = False
 
-    all_model_classes = (LongformerModel, LongformerForMaskedLM,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            LongformerModel,
+            LongformerForMaskedLM,
+            # TODO: make tests pass for those models
+            # LongformerForSequenceClassification,
+            # LongformerForQuestionAnswering,
+            # LongformerForTokenClassification,
+            # LongformerForMultipleChoice,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     def setUp(self):
         self.model_tester = LongformerModelTester(self)

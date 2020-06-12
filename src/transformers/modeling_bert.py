@@ -594,6 +594,8 @@ BERT_INPUTS_DOCSTRING = r"""
             is used in the cross-attention if the model is configured as a decoder.
             Mask values selected in ``[0, 1]``:
             ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+        output_attentions (:obj:`bool`, `optional`, defaults to `:obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
 """
 
 
@@ -674,7 +676,7 @@ class BertModel(BertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -814,7 +816,7 @@ class BertForPreTraining(BertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -871,11 +873,13 @@ class BertForPreTraining(BertPreTrainedModel):
         return outputs  # (loss), prediction_scores, seq_relationship_score, (hidden_states), (attentions)
 
 
-# TODO: Split with a different BertWithLMHead to get rid of `lm_labels` here and in encoder_decoder.
-@add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
-class BertForMaskedLM(BertPreTrainedModel):
+@add_start_docstrings(
+    """Bert Model with a `language modeling` head on top for CLM fine-tuning. """, BERT_START_DOCSTRING
+)
+class BertLMHeadModel(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        assert config.is_decoder, "If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True`."
 
         self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config)
@@ -897,18 +901,122 @@ class BertForMaskedLM(BertPreTrainedModel):
         labels=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        lm_labels=None,
+        output_attentions=None,
+        **kwargs
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the left-to-right language modeling loss (next word prediction).
+            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``
+        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Used to hide legacy arguments that have been deprecated.
+
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        ltr_lm_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Next token prediction loss.
+        prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+        Examples::
+
+            from transformers import BertTokenizer, BertLMHeadModel
+            import torch
+
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            model = BertLMHeadModel.from_pretrained('bert-base-uncased', is_decoder=True)
+
+            input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            outputs = model(input_ids, labels=input_ids)
+
+            loss, prediction_scores = outputs[:2]
+
+        """
+
+        outputs = self.bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_attentions=output_attentions,
+        )
+
+        sequence_output = outputs[0]
+        prediction_scores = self.cls(sequence_output)
+
+        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
+
+        if labels is not None:
+            # we are doing next-token prediction; shift prediction scores and input ids by one
+            prediction_scores = prediction_scores[:, :-1, :].contiguous()
+            labels = labels[:, 1:].contiguous()
+            loss_fct = CrossEntropyLoss()
+            ltr_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            outputs = (ltr_lm_loss,) + outputs
+
+        return outputs  # (ltr_lm_loss), prediction_scores, (hidden_states), (attentions)
+
+    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
+        input_shape = input_ids.shape
+
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = input_ids.new_ones(input_shape)
+
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+
+@add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
+class BertForMaskedLM(BertPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        assert (
+            not config.is_decoder
+        ), "If you want to use `BertForMaskedLM` make sure `config.is_decoder=False` for bi-directional self-attention."
+
+        self.bert = BertModel(config)
+        self.cls = BertOnlyMLMHead(config)
+
+        self.init_weights()
+
+    def get_output_embeddings(self):
+        return self.cls.predictions.decoder
+
+    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
         output_attentions=None,
         **kwargs
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
             Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
-        lm_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Labels for computing the left-to-right language modeling loss (next word prediction).
             Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
             Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
             in ``[0, ..., config.vocab_size]``
@@ -919,8 +1027,6 @@ class BertForMaskedLM(BertPreTrainedModel):
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         masked_lm_loss (`optional`, returned when ``labels`` is provided) ``torch.FloatTensor`` of shape ``(1,)``:
             Masked language modeling loss.
-        ltr_lm_loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`lm_labels` is provided):
-                Next token prediction loss.
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
@@ -928,7 +1034,7 @@ class BertForMaskedLM(BertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -955,6 +1061,7 @@ class BertForMaskedLM(BertPreTrainedModel):
                 DeprecationWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
+        assert "lm_labels" not in kwargs, "Use `BertWithLMHead` for autoregressive language modeling task."
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         outputs = self.bert(
@@ -974,46 +1081,24 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
 
-        # Although this may seem awkward, BertForMaskedLM supports two scenarios:
-        # 1. If a tensor that contains the indices of masked labels is provided,
-        #    the cross-entropy is the MLM cross-entropy that measures the likelihood
-        #    of predictions for masked words.
-        # 2. If `lm_labels` is provided we are in a causal scenario where we
-        #    try to predict the next token for each input in the decoder.
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             outputs = (masked_lm_loss,) + outputs
 
-        if lm_labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            lm_labels = lm_labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            ltr_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), lm_labels.view(-1))
-            outputs = (ltr_lm_loss,) + outputs
-
-        return outputs  # (ltr_lm_loss), (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
+        return outputs  # (masked_lm_loss), prediction_scores, (hidden_states), (attentions)
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
 
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # if model is does not use a causal mask then add a dummy token
-        if self.config.is_decoder is False:
-            assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
-            attention_mask = torch.cat(
-                [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1
-            )
-
-            dummy_token = torch.full(
-                (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
-            )
-            input_ids = torch.cat([input_ids, dummy_token], dim=1)
+        #  add a dummy token
+        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
+        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
+        dummy_token = torch.full(
+            (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
+        )
+        input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
@@ -1060,7 +1145,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1152,7 +1237,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1251,7 +1336,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1269,7 +1354,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         choice0 = "It is eaten with a fork and a knife."
         choice1 = "It is eaten while held in the hand."
-        labels = torch.tensor(0) # choice0 is correct (according to Wikipedia ;))
+        labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
         encoding = tokenizer.batch_encode_plus([[prompt, choice0], [prompt, choice1]], return_tensors='pt', pad_to_max_length=True)
         outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1
@@ -1277,12 +1362,17 @@ class BertForMultipleChoice(BertPreTrainedModel):
         # the linear classifier still needs to be trained
         loss, logits = outputs[:2]
         """
-        num_choices = input_ids.shape[1]
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
-        input_ids = input_ids.view(-1, input_ids.size(-1))
+        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
         attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
         token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
         position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
+            else None
+        )
 
         outputs = self.bert(
             input_ids,
@@ -1354,7 +1444,7 @@ class BertForTokenClassification(BertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
@@ -1461,7 +1551,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True``):
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
             :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
