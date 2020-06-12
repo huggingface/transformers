@@ -165,6 +165,7 @@ MODEL_MAPPING = OrderedDict(
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
         (ReformerConfig, ReformerModel),
+        (RetriBertConfig, RetriBertModel),
     ]
 )
 
