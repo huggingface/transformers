@@ -1,25 +1,23 @@
 import base64
+from pathlib import Path
+
 import faiss
 import nlp
 import numpy as np
+import streamlit as st
 import torch
-
-from pathlib import Path
-
 from elasticsearch import Elasticsearch
 
-from eli5_utils import (
-    make_qa_s2s_model,
-    embed_questions_for_retrieval,
-    query_qa_dense_index,
-    query_es_index,
-    qa_s2s_generate,
-)
-
 import transformers
+from eli5_utils import (
+    embed_questions_for_retrieval,
+    make_qa_s2s_model,
+    qa_s2s_generate,
+    query_es_index,
+    query_qa_dense_index,
+)
 from transformers import AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer
 
-import streamlit as st
 
 MODEL_TYPE = "bart"
 LOAD_DENSE_INDEX = True

@@ -28,10 +28,9 @@ from os.path import isfile
 from os.path import join as pjoin
 from time import time
 
+import nlp
 import zstandard as zstd
 from bs4 import BeautifulSoup
-
-import nlp
 
 
 _SUB_REDDITS = ["explainlikeimfive", "askscience", "AskHistorians"]
@@ -126,8 +125,8 @@ def _download_and_select_lines(dl_manager, f_url, mode, st_time):
     if f_url.split(".")[-1] == "zst":
         fh.close()
     os.remove(f_downloaded_path)
-    os.remove(f_downloaded_path + '.json')
-    os.remove(f_downloaded_path + '.lock')
+    os.remove(f_downloaded_path + ".json")
+    os.remove(f_downloaded_path + ".lock")
     print("tokenizing and selecting {} {:.2f}".format(f_url, time() - st_time))
     processed_items = dict([(name, []) for name in _SUB_REDDITS])
     if mode == "submissions":
@@ -243,6 +242,7 @@ _CITATION = """\
 }
 """
 
+
 class ExplainLikeImFiveConfig(nlp.BuilderConfig):
     """BuilderConfig for ExplainLikeImFive."""
 
@@ -263,7 +263,9 @@ class ExplainLikeImFive(nlp.GeneratorBasedBuilder):
 
     name = "ELI5_LFQA"
     BUILDER_CONFIGS = [
-        ExplainLikeImFiveConfig(name="LFQA_reddit", version=nlp.Version("1.0.0"), description="long from QA subreddits"),
+        ExplainLikeImFiveConfig(
+            name="LFQA_reddit", version=nlp.Version("1.0.0"), description="long from QA subreddits"
+        ),
     ]
 
     def _info(self):
@@ -307,40 +309,33 @@ class ExplainLikeImFive(nlp.GeneratorBasedBuilder):
         self.data_split = json.load(open(fpath_splits))
         return [
             nlp.SplitGenerator(
-                name=nlp.Split('train_eli5'),
-                gen_kwargs={"split": "train", "subreddit_name": "explainlikeimfive"},
+                name=nlp.Split("train_eli5"), gen_kwargs={"split": "train", "subreddit_name": "explainlikeimfive"},
             ),
             nlp.SplitGenerator(
-                name=nlp.Split('validation_eli5'),
+                name=nlp.Split("validation_eli5"),
                 gen_kwargs={"split": "validation", "subreddit_name": "explainlikeimfive"},
             ),
             nlp.SplitGenerator(
-                name=nlp.Split('test_eli5'),
-                gen_kwargs={"split": "test", "subreddit_name": "explainlikeimfive"},
+                name=nlp.Split("test_eli5"), gen_kwargs={"split": "test", "subreddit_name": "explainlikeimfive"},
             ),
             nlp.SplitGenerator(
-                name=nlp.Split('train_asks'),
-                gen_kwargs={"split": "train", "subreddit_name": "askscience"},
+                name=nlp.Split("train_asks"), gen_kwargs={"split": "train", "subreddit_name": "askscience"},
             ),
             nlp.SplitGenerator(
-                name=nlp.Split('validation_asks'),
-                gen_kwargs={"split": "validation", "subreddit_name": "askscience"},
+                name=nlp.Split("validation_asks"), gen_kwargs={"split": "validation", "subreddit_name": "askscience"},
             ),
             nlp.SplitGenerator(
-                name=nlp.Split('test_asks'),
-                gen_kwargs={"split": "test", "subreddit_name": "askscience"},
+                name=nlp.Split("test_asks"), gen_kwargs={"split": "test", "subreddit_name": "askscience"},
             ),
             nlp.SplitGenerator(
-                name=nlp.Split('train_askh'),
-                gen_kwargs={"split": "train", "subreddit_name": "AskHistorians"},
+                name=nlp.Split("train_askh"), gen_kwargs={"split": "train", "subreddit_name": "AskHistorians"},
             ),
             nlp.SplitGenerator(
-                name=nlp.Split('validation_askh'),
+                name=nlp.Split("validation_askh"),
                 gen_kwargs={"split": "validation", "subreddit_name": "AskHistorians"},
             ),
             nlp.SplitGenerator(
-                name=nlp.Split('test_askh'),
-                gen_kwargs={"split": "test", "subreddit_name": "AskHistorians"},
+                name=nlp.Split("test_askh"), gen_kwargs={"split": "test", "subreddit_name": "AskHistorians"},
             ),
         ]
 
@@ -348,7 +343,11 @@ class ExplainLikeImFive(nlp.GeneratorBasedBuilder):
         logging.info("generating examples from = {}, {} set".format(subreddit_name, split))
         if split in self.data_split.get(subreddit_name, []):
             id_list = self.data_split[subreddit_name][split]
-            data = [self.filtered_reddit[subreddit_name][q_id] for q_id in id_list if q_id in self.filtered_reddit[subreddit_name]]
+            data = [
+                self.filtered_reddit[subreddit_name][q_id]
+                for q_id in id_list
+                if q_id in self.filtered_reddit[subreddit_name]
+            ]
         elif split == "train":
             data = [
                 self.filtered_reddit[subreddit_name][q_id]

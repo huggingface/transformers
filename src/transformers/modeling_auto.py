@@ -110,8 +110,8 @@ from .modeling_longformer import (
 )
 from .modeling_marian import MarianMTModel
 from .modeling_openai import OpenAIGPTLMHeadModel, OpenAIGPTModel
-from .modeling_retribert import RetriBertModel
 from .modeling_reformer import ReformerModel, ReformerModelWithLMHead
+from .modeling_retribert import RetriBertModel
 from .modeling_roberta import (
     RobertaForMaskedLM,
     RobertaForMultipleChoice,

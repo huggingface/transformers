@@ -1,9 +1,11 @@
-from train_ft_eli5 import *
+from time import time
 
 from nltk import PorterStemmer
 from rouge import Rouge
 from spacy.lang.en import English
-from time import time
+
+from train_ft_eli5 import *
+
 
 stemmer = PorterStemmer()
 rouge = Rouge()
