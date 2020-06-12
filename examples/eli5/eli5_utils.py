@@ -1,4 +1,3 @@
-import argparse
 import functools
 import json
 import logging
@@ -7,7 +6,6 @@ import numpy as np
 import os
 import pandas as pd
 import pickle
-import time
 import sys
 
 from os.path import join as pjoin
