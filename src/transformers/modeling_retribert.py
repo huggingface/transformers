@@ -18,19 +18,15 @@
 """
 
 
-import copy
 import logging
 import math
-import warnings
 
-import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
+import torch.utils.checkpoint as checkpoint
 
-from .activations import gelu
 from .configuration_retribert import RetriBertConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_start_docstrings
 from .modeling_bert import BertLayerNorm, BertModel
 from .modeling_utils import PreTrainedModel
 
@@ -41,6 +37,7 @@ RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "yjernite/retribert-base-uncased",
     # See all DistilBERT models at https://huggingface.co/models?filter=retribert
 ]
+
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
 class RetriBertPreTrainedModel(PreTrainedModel):
@@ -110,6 +107,7 @@ class RetriBertModel(RetriBertPreTrainedModel):
             extended_attention_mask: torch.Tensor = sent_encoder.get_extended_attention_mask(
                 attention_mask, input_shape, device
             )
+
             # define function for cehckpointing
             def partial_encode(*inputs):
                 encoder_outputs = sent_encoder.encoder(inputs[0], attention_mask=inputs[1], head_mask=head_mask,)

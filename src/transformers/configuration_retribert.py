@@ -32,7 +32,7 @@ class RetriBertConfig(PretrainedConfig):
     r"""
         This is the configuration class to store the configuration of a :class:`~transformers.RetriBertModel`.
         It is used to instantiate a RetriBertModel model according to the specified arguments, defining the model
-        architecture. 
+        architecture.
 
         Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
         to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
