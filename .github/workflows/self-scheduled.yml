@@ -13,46 +13,46 @@ jobs:
   run_all_tests_torch_and_tf_gpu:
     runs-on: self-hosted
     steps:
-    - name: slack - GitHub Actions Slack integration
-    - uses: act10ns/slack@v1.0.9
-        with: 
-          status: ${{ job.status }}
-          channel: '#self-scheduled-runner-status'
-        if: always()
-    - uses: actions/checkout@v2
-    - name: Python version
-      run: |
-        which python
-        python --version
-        pip --version
-    - name: Current dir
-      run: pwd
-    - run: nvidia-smi
-    - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
-      run: |
-        python -m venv .env
-        source .env/bin/activate
-        which python
-        python --version
-        pip --version
-    - name: Install dependencies
-      run: |
-        source .env/bin/activate
-        pip install .[sklearn,torch,testing]
+      - uses: act10ns/slack@v1.0.9
+      - name: slack - GitHub Actions Slack integration
+          with:
+            status: ${{ job.status }}
+            channel: '#self-scheduled-runner-status'
+          if: always()
+      - uses: actions/checkout@v2
+      - name: Python version
+        run: |
+          which python
+          python --version
+          pip --version
+      - name: Current dir
+        run: pwd
+      - run: nvidia-smi
+      - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+        run: |
+          python -m venv .env
+          source .env/bin/activate
+          which python
+          python --version
+          pip --version
+      - name: Install dependencies
+        run: |
+          source .env/bin/activate
+          pip install .[sklearn,torch,testing]
 
-    - name: Are GPUs recognized by our DL frameworks
-      run: |
-        source .env/bin/activate
-        python -c "import torch; print(torch.cuda.is_available())"
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          source .env/bin/activate
+          python -c "import torch; print(torch.cuda.is_available())"
 
-    - name: Run all tests on GPU
-      env:
-        TF_FORCE_GPU_ALLOW_GROWTH: "true"
-        OMP_NUM_THREADS: 1
-        RUN_SLOW: yes
-        USE_CUDA: yes
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      run: |
-        source .env/bin/activate
-        python -m pytest -n 1 --dist=loadfile -s -v ./tests/
+      - name: Run all tests on GPU
+        env:
+          TF_FORCE_GPU_ALLOW_GROWTH: "true"
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+          USE_CUDA: yes
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s -v ./tests/
         
