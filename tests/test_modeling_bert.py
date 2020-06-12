@@ -27,6 +27,7 @@ if is_torch_available():
     from transformers import (
         BertConfig,
         BertModel,
+        BertLMHeadModel,
         BertForMaskedLM,
         BertForNextSentencePrediction,
         BertForPreTraining,
@@ -35,7 +36,7 @@ if is_torch_available():
         BertForTokenClassification,
         BertForMultipleChoice,
     )
-    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST, BertLMHeadModel
+    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class BertModelTester:
