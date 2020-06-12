@@ -46,7 +46,7 @@ class PretrainedConfig(object):
             num_labels (:obj:`int`, `optional`, defaults to `2`):
                 Number of classes to use when the model is a classification model (sequences/tokens)
             output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Should the model returns attentions weights.
+                Should the model return attentions weights.
             torchscript (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Is the model used with Torchscript (for PyTorch models).
     """
