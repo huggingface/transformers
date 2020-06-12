@@ -218,10 +218,11 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         self.h = [TFBlock(config.n_ctx, config, scale=True, name="h_._{}".format(i)) for i in range(config.n_layer)]
 
     def get_input_embeddings(self):
-        return self.tokens_embed
+        return self.tokens_embed.weight
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+    def set_input_embeddings(self, value):
+        self.tokens_embed.weight = value
+        self.tokens_embed.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         """ Prunes heads of the model.

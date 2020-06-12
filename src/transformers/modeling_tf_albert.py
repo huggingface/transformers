@@ -49,6 +49,7 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.config = config
+        self.vocab_size = config.vocab_size
         self.position_embeddings = tf.keras.layers.Embedding(
             config.max_position_embeddings,
             config.embedding_size,
@@ -496,7 +497,11 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         )
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+        self.embeddings.vocab_size = value.shape[0]
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
@@ -730,9 +735,6 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         self.albert = TFAlbertMainLayer(config, name="albert")
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
         self.sop_classifier = TFAlbertSOPHead(config, name="sop_classifier")
-
-    def get_output_embeddings(self):
-        return self.albert.embeddings
 
     @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def call(self, inputs, **kwargs):

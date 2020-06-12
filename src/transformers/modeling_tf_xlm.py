@@ -289,7 +289,11 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                     self.prune_heads({int(layer): list(map(int, heads))})
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.weight
+
+    def set_input_embeddings(self, value):
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = value.shape[0]
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError

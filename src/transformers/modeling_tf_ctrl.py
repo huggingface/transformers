@@ -213,7 +213,11 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="layernorm")
 
     def get_input_embeddings(self):
-        return self.w
+        return self.w.weight
+
+    def set_input_embeddings(self, value):
+        self.w.weight = value
+        self.w.vocab_size = value.shape[0]
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError

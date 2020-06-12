@@ -198,27 +198,27 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         Return: ``tf.Variable``
             Pointer to the input tokens Embeddings Module of the model
         """
-        base_model = getattr(self, self.base_model_prefix, self)
-        model_embeds = base_model._resize_token_embeddings(new_num_tokens)
+        model_embeds = self._resize_token_embeddings(new_num_tokens)
         if new_num_tokens is None:
             return model_embeds
-
-        # Update base model and current model config
-        self.config.vocab_size = new_num_tokens
-        base_model.vocab_size = new_num_tokens
 
         return model_embeds
 
     def _resize_token_embeddings(self, new_num_tokens):
-        old_embeddings = self.get_input_embeddings()
+        # get_input_embeddings and set_input_embeddings need to be implemented in base layer.
+        base_model = getattr(self, self.base_model_prefix, self)
+        old_embeddings = base_model.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
-        self.set_input_embeddings(new_embeddings)
-        return self.get_input_embeddings()
+        base_model.set_input_embeddings(new_embeddings)
+        # Update base model and current model config
+        self.config.vocab_size = new_num_tokens
+        base_model.vocab_size = new_num_tokens
+        return base_model.get_input_embeddings()
 
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None):
         """ Build a resized Embedding Variable from a provided token Embedding Module.
             Increasing the size will add newly initialized vectors at the end
-            Reducing the size will remove vectors from the end
+            Reducing the size will remove vectors from the end.
 
         Args:
             new_num_tokens: (`optional`) int
@@ -232,7 +232,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
         if new_num_tokens is None:
             return old_embeddings
 
-        old_num_tokens, old_embedding_dim = old_embeddings.weight.shape
+        old_num_tokens, old_embedding_dim = old_embeddings.shape
         if old_num_tokens == new_num_tokens:
             return self.get_input_embeddings()
 
@@ -249,8 +249,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin):
 
         # Copy token embeddings from the previous weights
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        _weights_to_carry_over = old_embeddings.weight[:num_tokens_to_copy, :]
-        init_weights[:num_tokens_to_copy] = _weights_to_carry_over
+        init_weights[:num_tokens_to_copy] = old_embeddings[:num_tokens_to_copy, :]
         new_embeddings.assign(init_weights)
 
         return new_embeddings

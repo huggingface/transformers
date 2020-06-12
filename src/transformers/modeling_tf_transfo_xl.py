@@ -464,6 +464,9 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.word_emb
 
+    def set_input_embeddings(self, value):
+        raise ValueError("Not implemented")
+
     def _resize_token_embeddings(self, new_num_tokens):
         return self.word_emb
 
