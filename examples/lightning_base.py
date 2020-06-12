@@ -9,10 +9,8 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities import rank_zero_only
 
-from durbango import pickle_save, remove_prefix
 from transformers import (
     AdamW,
     AutoConfig,
@@ -31,6 +29,7 @@ from transformers import (
 
 logger = logging.getLogger(__name__)
 
+
 MODEL_MODES = {
     "base": AutoModel,
     "sequence-classification": AutoModelForSequenceClassification,
@@ -39,15 +38,6 @@ MODEL_MODES = {
     "token-classification": AutoModelForTokenClassification,
     "language-modeling": AutoModelWithLMHead,
 }
-
-
-def try_load_state_dict(model, sd1):
-    sd = {remove_prefix(k, "model."): v for k, v in sd1.items() if k.startswith("model")}
-    model.load_state_dict(sd, strict=True)
-    return model
-
-
-# def strip_ckpt(in_path,)
 
 
 def set_seed(args: argparse.Namespace):
@@ -76,13 +66,10 @@ class BaseTransformer(pl.LightningModule):
         **config_kwargs
     ):
         "Initialize a model."
-        if isinstance(hparams, dict):
-            hparams = argparse.Namespace(**hparams)
 
         super().__init__()
         self.hparams = hparams
         self.step_count = 0
-        self.tfmr_ckpts = {}
         self.output_dir = Path(self.hparams.output_dir)
         cache_dir = self.hparams.cache_dir if self.hparams.cache_dir else None
         if config is None:
@@ -228,33 +215,11 @@ class BaseTransformer(pl.LightningModule):
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
         save_path = self.output_dir.joinpath("best_tfmr")
         save_path.mkdir(exist_ok=True)
-        self.model.config.save_step = self.step_count
         self.model.save_pretrained(save_path)
-        self.tfmr_ckpts[self.step_count] = save_path
 
     @property
     def pl_checkpoints(self) -> List[Path]:
         return list(sorted(Path(self.output_dir).glob("*.ckpt")))
-
-    def save_resolution_file(self):
-        "Can be deleted"
-        resolved = self.resolve_checkpoints()
-        resolve_path = self.output_dir / "ckpt_matches.pkl"
-        if len(resolved) > 0:
-            pickle_save(resolved, resolve_path)
-
-    @rank_zero_only
-    def resolve_checkpoints(self) -> Dict[Path, Path]:
-        """Maps transformers save directories to lightning ckpt paths"""
-        matches = {}
-        for step, path in self.tfmr_ckpts.items():
-            for pl_path in self.pl_checkpoints:
-                if f"step_count={step}" in str(pl_path.name):
-                    matches[path] = pl_path
-                    break
-            else:
-                matches[path] = None
-        return matches
 
 
 class LoggingCallback(pl.Callback):
@@ -391,7 +356,6 @@ def generic_train(
 
     if args.n_tpu_cores > 0:
         global xm
-
         train_params["num_tpu_cores"] = args.n_tpu_cores
         train_params["gpus"] = 0
 
