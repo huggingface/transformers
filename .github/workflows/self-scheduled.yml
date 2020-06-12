@@ -1,5 +1,10 @@
 name: Self-hosted runner (scheduled)
-
+env:
+  TF_FORCE_GPU_ALLOW_GROWTH: "true"
+  OMP_NUM_THREADS: 1
+  RUN_SLOW: yes
+  USE_CUDA: yes
+  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 on:
   push:
     branches:
@@ -13,12 +18,6 @@ jobs:
   run_all_tests_torch_and_tf_gpu:
     runs-on: self-hosted
     steps:
-      - uses: act10ns/slack@v1.0.9
-      - name: slack - GitHub Actions Slack integration
-          with:
-            status: ${{ job.status }}
-            channel: '#self-scheduled-runner-status'
-          if: always()
       - uses: actions/checkout@v2
       - name: Python version
         run: |
@@ -55,4 +54,11 @@ jobs:
         run: |
           source .env/bin/activate
           python -m pytest -n 1 --dist=loadfile -s -v ./tests/
-        
+      - if: failure()
+        name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          author_name: Failure in building provider prerequisites
+          fields: repo,commit,author,action
+          status: ${{ job.status }}
+          channel: '#self-scheduled-runner-status'
