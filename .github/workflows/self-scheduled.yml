@@ -13,7 +13,11 @@ jobs:
     runs-on: self-hosted
     steps:
     - name: slack - GitHub Actions Slack integration
-      uses: act10ns/slack@v1.0.9
+    - uses: act10ns/slack@v1.0.9
+        with: 
+          status: ${{ job.status }}
+          channel: '#self-scheduled-runner-status'
+        if: always()
     - uses: actions/checkout@v2
     - name: Python version
       run: |
@@ -46,6 +50,7 @@ jobs:
         OMP_NUM_THREADS: 1
         RUN_SLOW: yes
         USE_CUDA: yes
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       run: |
         source .env/bin/activate
         python -m pytest -n 1 --dist=loadfile -s -v ./tests/
