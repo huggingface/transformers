@@ -193,6 +193,7 @@ if is_torch_available():
         MobileBertForQuestionAnswering,
         MobileBertForMaskedLM,
         MobileBertForNextSentencePrediction,
+        MobileBertForMultipleChoice,
         load_tf_weights_in_mobilebert,
         MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MobileBertLayer,
@@ -506,6 +507,7 @@ if is_tf_available():
         TFMobileBertForQuestionAnswering,
         TFMobileBertForMaskedLM,
         TFMobileBertForNextSentencePrediction,
+        TFMobileBertForMultipleChoice,
         TFMobileBertMainLayer
     )
 
