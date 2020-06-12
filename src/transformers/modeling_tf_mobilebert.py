@@ -25,11 +25,10 @@ from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
 from .modeling_tf_bert import (
     TFBertEncoder,
     TFBertIntermediate,
-    TFBertMLMHead,
     TFBertPredictionHeadTransform,
     gelu,
     gelu_new,
-    swish,
+    swish
 )
 from .modeling_tf_utils import (
     TFPreTrainedModel,
@@ -579,7 +578,7 @@ class TFMobileBertMLMHead(tf.keras.layers.Layer):
     def call(self, sequence_output):
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
-    
+
 
 class TFMobileBertPreTrainingHeads(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -945,6 +944,69 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel):
         outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
 
         return outputs  # prediction_scores, (hidden_states), (attentions)
+
+
+class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.seq_relationship = tf.keras.layers.Dense(2, name="seq_relationship")
+
+    def call(self, pooled_output):
+        seq_relationship_score = self.seq_relationship(pooled_output)
+        return seq_relationship_score
+
+
+@add_start_docstrings(
+    """MobileBert Model with a `next sentence prediction (classification)` head on top. """, MOBILEBERT_START_DOCSTRING,
+)
+class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
+        self.cls = TFMobileBertOnlyNSPHead(config, name="cls")
+
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    def call(self, inputs, **kwargs):
+        r"""
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.MobileBertConfig`) and inputs:
+        seq_relationship_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, 2)`)
+            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import MobileBertTokenizer, TFMobileBertForNextSentencePrediction
+
+        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
+        model = TFMobileBertForNextSentencePrediction.from_pretrained('mobilebert-uncased')
+
+        prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
+        next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        encoding = tokenizer.encode_plus(prompt, next_sentence, return_tensors='tf')
+
+        logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
+        assert logits[0][0] < logits[0][1] # the next sentence was random
+        """
+        outputs = self.mobilebert(inputs, **kwargs)
+
+        pooled_output = outputs[1]
+        seq_relationship_score = self.cls(pooled_output)
+
+        outputs = (seq_relationship_score,) + outputs[2:]  # add hidden states and attention if they are here
+
+        return outputs  # seq_relationship_score, (hidden_states), (attentions)
 
 
 @add_start_docstrings(

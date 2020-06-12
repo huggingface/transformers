@@ -191,6 +191,8 @@ if is_torch_available():
         MobileBertForPreTraining,
         MobileBertForSequenceClassification,
         MobileBertForQuestionAnswering,
+        MobileBertForMaskedLM,
+        MobileBertForNextSentencePrediction,
         load_tf_weights_in_mobilebert,
         MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MobileBertLayer,
@@ -502,6 +504,9 @@ if is_tf_available():
         TFMobileBertForPreTraining,
         TFMobileBertForSequenceClassification,
         TFMobileBertForQuestionAnswering,
+        TFMobileBertForMaskedLM,
+        TFMobileBertForNextSentencePrediction,
+        TFMobileBertMainLayer
     )
 
     from .modeling_tf_openai import (
