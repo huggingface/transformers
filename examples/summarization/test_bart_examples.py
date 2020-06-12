@@ -14,9 +14,9 @@ from torch.utils.data import DataLoader
 from durbango import DEFAULT_DEVICE, lmap, pickle_load, pickle_save
 from transformers import BartTokenizer
 
+from .distillation import evaluate_checkpoint, main
 from .evaluate_cnn import generate_summaries, run_generate
-from .finetune import eval_and_fix, evaluate_checkpoint, main
-from .utils import PSEUDO_ID_SUFFIX, SummarizationDataset, clean_output_dir, summaries_for_file
+from .utils import PSEUDO_ID_SUFFIX, SummarizationDataset
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -147,10 +147,10 @@ class TestBartExamples(unittest.TestCase):
     @unittest.skipUnless(torch.cuda.is_available(), "skipping fp16 test")
     def test_bdc_t5_eval_fp16(self):
         updates = dict(
-            #student_encoder_layers=1,
-            #student_decoder_layers=1,
-            #alpha_hid=2.0,
-            #teacher="patrickvonplaten/t5-tiny-random",
+            # student_encoder_layers=1,
+            # student_decoder_layers=1,
+            # alpha_hid=2.0,
+            # teacher="patrickvonplaten/t5-tiny-random",
             fp16=FP16_EVER,
             gpus=1,
             model_type="t5",
@@ -162,14 +162,13 @@ class TestBartExamples(unittest.TestCase):
         )
         self._bart_distiller_cli(updates, check_contents=False)
 
-
     @unittest.skipUnless(torch.cuda.is_available(), "skipping fp16 test")
     def test_bdc_t5_train_fp16(self):
         updates = dict(
-            #student_encoder_layers=1,
-            #student_decoder_layers=1,
-            #alpha_hid=2.0,
-            #teacher="patrickvonplaten/t5-tiny-random",
+            # student_encoder_layers=1,
+            # student_decoder_layers=1,
+            # alpha_hid=2.0,
+            # teacher="patrickvonplaten/t5-tiny-random",
             fp16=FP16_EVER,
             gpus=1,
             model_type="t5",
@@ -187,7 +186,7 @@ class TestBartExamples(unittest.TestCase):
             student_decoder_layers=1,
             no_teacher=True,
             tgt_suffix=".pseudo",
-            #freeze_decoder=True,
+            # freeze_decoder=True,
         )
         self._bart_distiller_cli(updates)
 
@@ -238,13 +237,12 @@ class TestBartExamples(unittest.TestCase):
         )
         self._bart_distiller_cli(updates)
 
-
     def test_bdc_t5_eval(self):
         updates = dict(
-            #student_encoder_layers=1,
-            #student_decoder_layers=1,
-            #alpha_hid=2.0,
-            #teacher="patrickvonplaten/t5-tiny-random",
+            # student_encoder_layers=1,
+            # student_decoder_layers=1,
+            # alpha_hid=2.0,
+            # teacher="patrickvonplaten/t5-tiny-random",
             model_type="t5",
             model_name_or_path="patrickvonplaten/t5-tiny-random",
             do_train=False,
@@ -253,7 +251,6 @@ class TestBartExamples(unittest.TestCase):
             no_teacher=True,
         )
         self._bart_distiller_cli(updates, check_contents=False)
-
 
     @unittest.skipUnless(False, "Not implemented")
     def test_bdc_mbart(self):
@@ -292,7 +289,7 @@ class TestBartExamples(unittest.TestCase):
         self.assertIn("val_generations_1.txt", contents)
         self.assertIn("val_1_results.txt", contents)
         self.assertIn("test_results.txt", contents)
-        #self.assertEqual(len(contents), 15)
+        # self.assertEqual(len(contents), 15)
 
         metrics = pickle_load(Path(output_dir) / "metrics.pkl")
         val_df = pd.DataFrame(metrics["val"])
@@ -344,23 +341,6 @@ class TestBartExamples(unittest.TestCase):
             self.assertEqual(batch["target_ids"].shape[1], trunc_target)  # Truncated
             self.assertGreater(max_len_target, trunc_target)  # Truncated
 
-    def test_summaries_for_file(self):
-
-        tmp_dir = Path(tempfile.gettempdir())
-
-        self.needs_remove = tmp_dir
-        articles = [" Sam ate lunch today", "Sams lunch ingredients"]
-        summaries = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
-        _dump_articles((tmp_dir / "train.source"), articles)
-        _dump_articles((tmp_dir / "train.target"), summaries)
-
-        summary_ids, summary_text = summaries_for_file(
-            "sshleifer/bart-tiny-random", "train", data_dir=tmp_dir, bs=1, max_source_length=10, max_target_length=4,
-        )
-
-        self.assertEqual(len(summary_ids), len(articles))
-        # self.assertEqual(summary_ids.shape, len(articles))
-
     def tearDown(self) -> None:
         import shutil
 
@@ -379,7 +359,7 @@ def list_to_text_file(lst, path):
     dest.open("w+").writelines(lst)
 
 
-@unittest.skip('t5 base tests too slow')
+@unittest.skip("t5 base tests too slow")
 class T5BaseTests(TestBartExamples):
     def test_t5_base_eval(self):
         updates = dict(
@@ -391,7 +371,7 @@ class T5BaseTests(TestBartExamples):
             no_teacher=True,
             fp16=False,
             gpus=1,
-            fp16_opt_level="O1"
+            fp16_opt_level="O1",
         )
         self._bart_distiller_cli(updates, check_contents=False)
 
@@ -405,10 +385,9 @@ class T5BaseTests(TestBartExamples):
             no_teacher=True,
             fp16=True,
             gpus=1,
-            fp16_opt_level="O1"
+            fp16_opt_level="O1",
         )
         self._bart_distiller_cli(updates, check_contents=False)
-
 
     def test_t5_base_fp16(self):
         updates = dict(
@@ -420,11 +399,11 @@ class T5BaseTests(TestBartExamples):
             no_teacher=True,
             fp16=True,
             gpus=1,
-            fp16_opt_level="O1"
+            fp16_opt_level="O1",
         )
         self._bart_distiller_cli(updates, check_contents=False)
 
-    @unittest.skip('one sec')
+    @unittest.skip("one sec")
     def test_t5_base_eval_fp16_real_data(self):
         updates = dict(
             model_type="t5",
@@ -435,6 +414,6 @@ class T5BaseTests(TestBartExamples):
             no_teacher=True,
             fp16=True,
             gpus=1,
-            fp16_opt_level="O1"
+            fp16_opt_level="O1",
         )
         self._bart_distiller_cli(updates, check_contents=False)
