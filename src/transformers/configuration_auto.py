@@ -73,6 +73,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 
 CONFIG_MAPPING = OrderedDict(
     [
+        ("retribert", RetriBertConfig,),
         ("t5", T5Config,),
         ("distilbert", DistilBertConfig,),
         ("albert", AlbertConfig,),
@@ -93,7 +94,6 @@ CONFIG_MAPPING = OrderedDict(
         ("ctrl", CTRLConfig,),
         ("electra", ElectraConfig,),
         ("encoder-decoder", EncoderDecoderConfig,),
-        ("retribert", RetriBertConfig,),
     ]
 )
 
