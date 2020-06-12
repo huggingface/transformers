@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - ci_*
+      - sshleifer:ci*
   repository_dispatch:
   schedule:
     - cron: "0 0 * * *"
