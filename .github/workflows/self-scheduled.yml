@@ -12,6 +12,8 @@ jobs:
   run_all_tests_torch_and_tf_gpu:
     runs-on: self-hosted
     steps:
+    - name: slack - GitHub Actions Slack integration
+      uses: act10ns/slack@v1.0.9
     - uses: actions/checkout@v2
     - name: Python version
       run: |
