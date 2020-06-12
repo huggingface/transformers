@@ -85,6 +85,9 @@ class EncoderDecoderConfig(PretrainedConfig):
         Returns:
             :class:`EncoderDecoderConfig`: An instance of a configuration object
         """
+        logger.info("Set `config.is_decoder=True` for decoder_config")
+        decoder_config.is_decoder = True
+
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict())
 
     def to_dict(self):

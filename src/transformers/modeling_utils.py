@@ -55,6 +55,20 @@ except ImportError:
             return input
 
 
+def find_pruneable_heads_and_indices(
+    heads: List, n_heads: int, head_size: int, already_pruned_heads: set
+) -> Tuple[set, "torch.LongTensor"]:
+    mask = torch.ones(n_heads, head_size)
+    heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
+    for head in heads:
+        # Compute how many pruned heads are before the head and move the index accordingly
+        head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
+        mask[head] = 0
+    mask = mask.view(-1).contiguous().eq(1)
+    index: torch.LongTensor = torch.arange(len(mask))[mask].long()
+    return heads, index
+
+
 class ModuleUtilsMixin:
     """
     A few utilities for torch.nn.Modules, to be used as a mixin.
@@ -1143,9 +1157,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
                 num_return_sequences=num_return_sequences,
@@ -1170,9 +1182,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
                 repetition_penalty=repetition_penalty,
                 no_repeat_ngram_size=no_repeat_ngram_size,
                 bad_words_ids=bad_words_ids,
-                bos_token_id=bos_token_id,
                 pad_token_id=pad_token_id,
-                decoder_start_token_id=decoder_start_token_id,
                 eos_token_id=eos_token_id,
                 batch_size=effective_batch_size,
                 encoder_outputs=encoder_outputs,
@@ -1196,10 +1206,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
         eos_token_id,
-        decoder_start_token_id,
         batch_size,
         encoder_outputs,
         attention_mask,
@@ -1318,10 +1326,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin):
         repetition_penalty,
         no_repeat_ngram_size,
         bad_words_ids,
-        bos_token_id,
         pad_token_id,
         eos_token_id,
-        decoder_start_token_id,
         batch_size,
         num_return_sequences,
         length_penalty,

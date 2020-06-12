@@ -38,7 +38,13 @@ if is_torch_available():
 class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (DistilBertModel, DistilBertForMaskedLM, DistilBertForQuestionAnswering, DistilBertForSequenceClassification)
+        (
+            DistilBertModel,
+            DistilBertForMaskedLM,
+            DistilBertForQuestionAnswering,
+            DistilBertForSequenceClassification,
+            DistilBertForTokenClassification,
+        )
         if is_torch_available()
         else None
     )
@@ -151,7 +157,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
             model = DistilBertForMaskedLM(config=config)
             model.to(torch_device)
             model.eval()
-            loss, prediction_scores = model(input_ids, attention_mask=input_mask, masked_lm_labels=token_labels)
+            loss, prediction_scores = model(input_ids, attention_mask=input_mask, labels=token_labels)
             result = {
                 "loss": loss,
                 "prediction_scores": prediction_scores,

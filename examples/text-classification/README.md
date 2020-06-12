@@ -61,7 +61,6 @@ export GLUE_DIR=/path/to/glue
 export TASK_NAME=MRPC
 
 python run_glue.py \
-  --model_type bert \
   --model_name_or_path bert-base-cased \
   --task_name $TASK_NAME \
   --do_train \
