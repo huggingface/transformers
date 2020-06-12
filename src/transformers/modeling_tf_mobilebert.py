@@ -571,11 +571,15 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFMobileBertMLMHead(TFBertMLMHead):
+class TFMobileBertMLMHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.predictions = TFMobileBertLMPredictionHead(config, name="predictions")
 
+    def call(self, sequence_output):
+        prediction_scores = self.predictions(sequence_output)
+        return prediction_scores
+    
 
 class TFMobileBertPreTrainingHeads(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -890,6 +894,57 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         ]  # add hidden states and attention if they are here
 
         return outputs  # prediction_scores, seq_relationship_score, (hidden_states), (attentions)
+
+
+@add_start_docstrings("""MobileBert Model with a `language modeling` head on top. """, MOBILEBERT_START_DOCSTRING)
+class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
+        self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
+
+    def get_output_embeddings(self):
+        return self.mobilebert.embeddings
+
+    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    def call(self, inputs, **kwargs):
+        r"""
+    Return:
+        :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.MobileBertConfig`) and inputs:
+        prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+            tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`:
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
+
+    Examples::
+
+        import tensorflow as tf
+        from transformers import MobileBertTokenizer, TFMobileBertForMaskedLM
+
+        tokenizer = MobileBertTokenizer.from_pretrained('mobilebert-uncased')
+        model = TFMobileBertForMaskedLM.from_pretrained('mobilebert-uncased')
+        input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
+        outputs = model(input_ids)
+        prediction_scores = outputs[0]
+
+        """
+        outputs = self.mobilebert(inputs, **kwargs)
+
+        sequence_output = outputs[0]
+        prediction_scores = self.mlm(sequence_output, training=kwargs.get("training", False))
+
+        outputs = (prediction_scores,) + outputs[2:]  # Add hidden states and attention if they are here
+
+        return outputs  # prediction_scores, (hidden_states), (attentions)
 
 
 @add_start_docstrings(
