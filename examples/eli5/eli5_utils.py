@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampl
 import faiss
 import nlp
 
-from transformers import AutoModel, AutoModelWithLMHead, AutoTokenizer
+from transformers import AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
 
 pd.set_option('display.max_colwidth', None)
@@ -398,7 +398,7 @@ class ELI5DatasetS2S(Dataset):
 
 def make_qa_s2s_model(model_name="facebook/bart-large", from_file=None, device="cuda:0"):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelWithLMHead.from_pretrained(model_name).to(device)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
     if from_file is not None:
         param_dict = torch.load(from_file) # has model weights, optimizer, and scheduler states
         model.load_state_dict(param_dict['model'])
