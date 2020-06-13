@@ -1256,7 +1256,7 @@ class _ReversibleFunction(Function):
         num_hashes,
         all_hidden_states,
         all_attentions,
-        do_output_hidden_states,
+        output_hidden_states,
         output_attentions,
     ):
         all_buckets = ()
@@ -1265,7 +1265,7 @@ class _ReversibleFunction(Function):
         hidden_states, attn_output = torch.chunk(hidden_states, 2, dim=-1)
 
         for layer, layer_head_mask in zip(layers, head_mask):
-            if do_output_hidden_states is True:
+            if output_hidden_states is True:
                 all_hidden_states.append(hidden_states)
 
             layer_outputs = layer(
@@ -1284,7 +1284,7 @@ class _ReversibleFunction(Function):
                 all_attentions.append(layer_outputs.attention_probs)
 
         # Add last layer
-        if do_output_hidden_states is True:
+        if output_hidden_states is True:
             all_hidden_states.append(hidden_states)
 
         # attach params to ctx for backward
@@ -1360,7 +1360,7 @@ class ReformerEncoder(nn.Module):
         attention_mask=None,
         head_mask=None,
         num_hashes=None,
-        do_output_hidden_states=False,
+        output_hidden_states=False,
         output_attentions=False,
     ):
         # hidden_states and attention lists to be filled if wished
@@ -1377,7 +1377,7 @@ class ReformerEncoder(nn.Module):
             num_hashes,
             all_hidden_states,
             all_attentions,
-            do_output_hidden_states,
+            output_hidden_states,
             output_attentions,
         )
 
@@ -1550,7 +1550,7 @@ class ReformerModel(ReformerPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         num_hashes=None,
-        do_output_hidden_states=False,
+        output_hidden_states=False,
         output_attentions=None,
     ):
         r"""
@@ -1558,7 +1558,7 @@ class ReformerModel(ReformerPreTrainedModel):
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1585,7 +1585,7 @@ class ReformerModel(ReformerPreTrainedModel):
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        do_output_hidden_states = self.config.output_hidden_states
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1643,7 +1643,7 @@ class ReformerModel(ReformerPreTrainedModel):
             head_mask=head_mask,
             attention_mask=attention_mask,
             num_hashes=num_hashes,
-            do_output_hidden_states=do_output_hidden_states,
+            output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
         sequence_output = encoder_outputs.hidden_states
@@ -1654,7 +1654,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
         outputs = (sequence_output,)
         # TODO(PVP): Replace by named tuple after namedtuples are introduced in the library.
-        if do_output_hidden_states is True:
+        if output_hidden_states is True:
             outputs = outputs + (encoder_outputs.all_hidden_states,)
         if output_attentions is True:
             outputs = outputs + (encoder_outputs.all_attentions,)
@@ -1744,7 +1744,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         inputs_embeds=None,
         num_hashes=None,
         labels=None,
-        do_output_hidden_states=False,
+        output_hidden_states=False,
         output_attentions=None,
     ):
         r"""
@@ -1760,7 +1760,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             Classification loss (cross entropy).
         prediction_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`)
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        all_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1793,7 +1793,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             num_hashes=num_hashes,
-            do_output_hidden_states=do_output_hidden_states,
+            output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
         )
 
