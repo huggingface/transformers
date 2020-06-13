@@ -65,6 +65,7 @@ class TFTrainer:
         self.prediction_loss_only = prediction_loss_only
         self.optimizers = optimizers
         self.gradient_accumulator = GradientAccumulator()
+        self.global_step = 0
 
         if tb_writer is not None:
             self.tb_writer = tb_writer
@@ -249,11 +250,6 @@ class TFTrainer:
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
     def _log(self, logs: Dict[str, float]) -> None:
-        if self.epoch_logging is not None:
-            logs["epoch"] = self.epoch_logging
-        if self.global_step is None:
-            # when logging evaluation metrics without training
-            self.global_step = 0
         if self.tb_writer:
             with self.tb_writer.as_default():
                 for k, v in logs.items():
@@ -274,7 +270,11 @@ class TFTrainer:
 
         output = self._prediction_loop(eval_ds, description="Evaluation")
 
-        self._log(output.metrics)
+        logs = {**output.metrics}
+        # add epoch when running evaluate from training loop
+        if self.epoch_logging is not None:
+            logs["epoch"] = self.epoch_logging
+        self._log(logs)
 
         return output.metrics
 
@@ -327,7 +327,6 @@ class TFTrainer:
         logger.info("  Num Epochs = %d", epochs)
         logger.info("  Total optimization steps = %d", self.train_steps)
 
-        self.global_step = 0
         self.epoch_logging = 0
 
         for epoch_iter in range(start_epoch, int(epochs + 1)):
@@ -336,7 +335,9 @@ class TFTrainer:
                 self.epoch_logging = epoch_iter - 1 + (step + 1) / self.train_steps
 
                 if self.args.debug:
-                    logs = {"loss": training_loss.numpy()}
+                    logs = {}
+                    logs["loss"] = training_loss.numpy()
+                    logs["epoch"] = self.epoch_logging
                     self._log(logs)
 
                 if self.global_step == 1 and self.args.debug:
@@ -352,6 +353,7 @@ class TFTrainer:
                     logs = {}
                     logs["loss"] = training_loss.numpy()
                     logs["learning_rate"] = lr_scheduler(self.global_step).numpy()
+                    logs["epoch"] = self.epoch_logging
                     self._log(logs)
 
                 if self.global_step % self.args.save_steps == 0:
