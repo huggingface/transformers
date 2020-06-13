@@ -196,10 +196,10 @@ class SummarizationDistiller(SummarizationTrainer):
         parser.add_argument(
             "--no_teacher", action="store_true", default=False,
         )
-        parser.add_argument(
+        parser.add_argument(  # TODO: remove
             "--enc_only", action="store_true", default=False,
         )
-        parser.add_argument(
+        parser.add_argument( # TODO: remove
             "--freeze_decoder", action="store_true",
         )
 
