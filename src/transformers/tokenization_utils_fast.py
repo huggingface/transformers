@@ -16,28 +16,21 @@
     For slow (python) tokenizers see tokenization_utils.py
 """
 
-<<<<<<< HEAD
 import logging
 import os
+import warnings
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
-=======
-import functools
-import logging
-import operator
-import os
-from collections import defaultdict
-from contextlib import contextmanager
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
->>>>>>> tokenizers clean up - new padding_strategy - split the files
 
 from tokenizers import AddedToken as AddedTokenFast
 from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
 
-<<<<<<< HEAD
-from .tokenization_utils_base import (
+from .file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from .tokenization_utils import ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
+from .tokenization_utils_tools import (
+    LARGE_INTEGER,
     BatchEncoding,
     PaddingStrategy,
     PreTokenizedInput,
@@ -49,16 +42,6 @@ from .tokenization_utils_base import (
 )
 
 
-logger = logging.getLogger(__name__)
-
-
-class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
-=======
-from .file_utils import is_tf_available, is_torch_available
-from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_utils_tools import BatchEncoding, PaddingStrategy, TruncationStrategy
-
-
 if is_tf_available():
     import tensorflow as tf
 if is_torch_available():
@@ -66,103 +49,8 @@ if is_torch_available():
 
 logger = logging.getLogger(__name__)
 
-SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
-ADDED_TOKENS_FILE = "added_tokens.json"
-TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
-VERY_LARGE_INTEGER = int(1e30)  # This is used to set the max input length for a model with infinite size input
-LARGE_INTEGER = int(1e20)  # This is used when we need something big but slightly smaller than VERY_LARGE_INTEGER
-
-# Define type aliases and NamedTuples
-TextInput = str
-PreTokenizedInput = List[str]
-EncodedInput = List[int]
-TextInputPair = Tuple[str, str]
-PreTokenizedInputPair = Tuple[List[str], List[str]]
-EncodedInputPair = Tuple[List[int], List[int]]
-
-
-def flatten(x: Sequence):
-    """
-    Flatten the provided (potentially nested) sequence
-
-    Args:
-        x (Sequence): Potentially nested sequence to flatten
-
-    Returns:
-        list: Flattened sequence
-    """
-
-    return functools.reduce(operator.iconcat, x, [])
-
-
-@contextmanager
-def truncate_and_pad(
-    tokenizer: BaseTokenizerFast,
-    max_length: int,
-    stride: int,
-    strategy: str,
-    pad_to_max_length: bool,
-    padding_side: str,
-    pad_token_id: int,
-    pad_token_type_id: int,
-    pad_token: str,
-):
-    """ This contextmanager is in charge of defining the truncation and the padding strategies for fast tokenizers
-        (provided by HuggingFace tokenizers library) and restore the tokenizer settings afterwards.
-
-        This contextmanager assumes the provider tokenizer has no padding / truncation strategy
-        before the managed section. If your tokenizer set a padding / truncation strategy before,
-        then it will be reset to no padding/truncation when exiting the managed section.
-
-        Args:
-            tokenizer (BaseTokenizerFast): The tokenizer which will be used
-            max_length (int): The maximum size of the sequence
-            stride (int): The stride to use when handling overflow
-            strategy (str): Overflowing logic to use
-            pad_to_max_length (bool): Boolean indicating if the output needs to be padded up to max_length
-            padding_side (str): "left" or "right" indicating the direction the output sequence will be padded
-            pad_token_id (int): The integer representation of the padding token to use
-            pad_token_type_id (int): The integer representation of the padding token type to use
-            pad_token (str): The string representation of the padding token to use
-
-    """
-
-    # Handle all the truncation and padding stuff
-    if max_length is not None:
-        tokenizer.enable_truncation(max_length, stride=stride, strategy=strategy)
-
-    if pad_to_max_length and (pad_token and pad_token_id >= 0):
-        tokenizer.enable_padding(
-            max_length=max_length,
-            direction=padding_side,
-            pad_id=pad_token_id,
-            pad_type_id=pad_token_type_id,
-            pad_token=pad_token,
-        )
-    elif pad_to_max_length:
-        logger.warning(
-            "Disabled padding because no padding token set (pad_token: {}, pad_token_id: {}).\n"
-            "To remove this error, you can add a new pad token and then resize model embedding:\n"
-            "\ttokenizer.pad_token = '<PAD>'\n\tmodel.resize_token_embeddings(len(tokenizer))".format(
-                pad_token, pad_token_id
-            )
-        )
-
-    yield
-
-    # TODO(morgan, anthony): once we have a simple way to serialize tokenizers maybe store and restore the state afterward
-    # to avoid destructing the padding / truncation strategy as we do now.
-
-    if max_length is not None:
-        tokenizer.no_truncation()
-
-    if pad_to_max_length and (pad_token and pad_token_id >= 0):
-        tokenizer.no_padding()
-
-
-class PreTrainedTokenizerFast(PreTrainedTokenizer):
->>>>>>> tokenizers clean up - new padding_strategy - split the files
+class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """ Base class for all fast tokenizers (wrapping HuggingFace tokenizers library).
 
     Inherit from PreTrainedTokenizer.
@@ -176,21 +64,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     Class attributes (overridden by derived classes):
 
-<<<<<<< HEAD
-    - ``vocab_files_names``: a python ``dict`` with, as keys, the ``__init__`` keyword name of each vocabulary file
-      required by the model, and as associated values, the filename for saving the associated file (string).
-    - ``pretrained_vocab_files_map``: a python ``dict of dict`` the high-level keys
-      being the ``__init__`` keyword name of each vocabulary file required by the model, the low-level being the
-      `short-cut-names` (string) of the pretrained models with, as associated values, the `url` (string) to the
-      associated pretrained vocabulary file.
-    - ``max_model_input_sizes``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the pretrained
-      models, and as associated values, the maximum length of the sequence inputs of this model, or None if the
-      model has no maximum input size.
-    - ``pretrained_init_configuration``: a python ``dict`` with, as keys, the `short-cut-names` (string) of the
-      pretrained models, and as associated values, a dictionnary of specific arguments to pass to the
-      ``__init__``method of the tokenizer class for this pretrained model when loading the tokenizer with the
-      ``from_pretrained()`` method.
-=======
         - ``vocab_files_names``: a python ``dict`` with, as keys, the ``__init__`` keyword name of each vocabulary file
             required by the model, and as associated values, the filename for saving the associated file (string).
         - ``pretrained_vocab_files_map``: a python ``dict of dict`` the high-level keys
@@ -204,7 +77,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             pretrained models, and as associated values, a dictionnary of specific arguments to pass to the
             ``__init__``method of the tokenizer class for this pretrained model when loading the tokenizer with the
             ``from_pretrained()`` method.
->>>>>>> tokenizers clean up - new padding_strategy - split the files
 
     Args:
         - ``tokenizer`` (`BaseTokenizerFast`): A Fast tokenizer from the HuggingFace tokenizer library (in low level Rust language)
@@ -234,12 +106,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         - ``additional_special_tokens``: (`Optional`) list: a list of additional special tokens.
             Adding all special tokens here ensure they won't be split by the tokenization process.
             Will be associated to ``self.additional_special_tokens`` and ``self.additional_special_tokens_ids``
-<<<<<<< HEAD
-
-
-    .. automethod:: __call__
-=======
->>>>>>> tokenizers clean up - new padding_strategy - split the files
     """
 
     def __init__(self, tokenizer: BaseTokenizerFast, **kwargs):
@@ -249,25 +115,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             )
         self._tokenizer: BaseTokenizerFast = tokenizer
 
-<<<<<<< HEAD
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
     @property
-=======
-        # Initialize all the rest of the kwargs
-        super().__init__(**kwargs)
-
-    @property
-    def backend_tokenizer(self) -> BaseTokenizerFast:
-        return self._tokenizer
-
-    @property
-    def decoder(self) -> DecoderFast:
-        return self._tokenizer._tokenizer.decoder
-
-    @property
->>>>>>> tokenizers clean up - new padding_strategy - split the files
     def is_fast(self) -> bool:
         return True
 
@@ -275,7 +126,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return self._tokenizer.get_vocab_size(with_added_tokens=False)
 
-<<<<<<< HEAD
     def get_vocab(self) -> Dict[str, int]:
         return self._tokenizer.get_vocab(with_added_tokens=True)
 
@@ -290,11 +140,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def decoder(self) -> DecoderFast:
         return self._tokenizer._tokenizer.decoder
 
-=======
-    def __len__(self) -> int:
-        return self._tokenizer.get_vocab_size(with_added_tokens=True)
-
->>>>>>> tokenizers clean up - new padding_strategy - split the files
     def _maybe_update_backend(self, value):
         """ Update the backend fast tokenizer.
             Override method from base class SpecialTokensMixin """
@@ -303,30 +148,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
     def _convert_encoding(
         self,
         encoding: EncodingFast,
-<<<<<<< HEAD
-=======
         return_tensors: Optional[bool] = None,
->>>>>>> tokenizers clean up - new padding_strategy - split the files
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
-<<<<<<< HEAD
-        verbose: bool = True,
-=======
->>>>>>> tokenizers clean up - new padding_strategy - split the files
     ) -> Dict[str, Any]:
         """ Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
 
             Overflowing tokens are converted to additional examples (like batches) so the output values of
             the dict are lists (overflows) of lists (tokens).
 
-<<<<<<< HEAD
-=======
             If return_tensors is not None, these lists of lists are converted to 2-D tensors
             for input_ids, token_type_ids and attention_mask.
->>>>>>> tokenizers clean up - new padding_strategy - split the files
             Output shape: (overflows, sequence length)
         """
         if return_token_type_ids is None:
@@ -352,7 +187,24 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             if return_offsets_mapping:
                 encoding_dict["offset_mapping"].append(e.offsets)
 
-<<<<<<< HEAD
+        if return_tensors is not None:
+            try:
+                for key, value in encoding_dict.items():
+                    if return_tensors == "tf" and is_tf_available():
+                        encoding_dict[key] = tf.constant(value)
+                    elif return_tensors == "pt" and is_torch_available():
+                        encoding_dict[key] = torch.tensor(value)
+                    elif return_tensors is not None:
+                        logger.warning(
+                            "Unable to convert output to tensors format {}, "
+                            "PyTorch or TensorFlow is not available.".format(return_tensors)
+                        )
+            except:  # noqa E722
+                raise ValueError(
+                    "Unable to create tensor, you should probably activate truncation and/or padding "
+                    "with 'pad=True' 'truncation=True' to have batched tensors with the same length."
+                )
+
         return encoding_dict
 
     def convert_tokens_to_ids(self, tokens):
@@ -369,21 +221,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         for token in tokens:
             ids.append(self._convert_token_to_id_with_added_voc(token))
         return ids
-=======
-        if return_tensors is not None:
-            for key, value in encoding_dict.items():
-                if return_tensors == "tf" and is_tf_available():
-                    encoding_dict[key] = tf.constant(value)
-                elif return_tensors == "pt" and is_torch_available():
-                    encoding_dict[key] = torch.tensor(value)
-                elif return_tensors is not None:
-                    logger.warning(
-                        "Unable to convert output to tensors format {}, "
-                        "PyTorch or TensorFlow is not available.".format(return_tensors)
-                    )
-
-        return encoding_dict
->>>>>>> tokenizers clean up - new padding_strategy - split the files
 
     def _convert_token_to_id_with_added_voc(self, token: int) -> str:
         index = self._tokenizer.token_to_id(token)
@@ -403,19 +240,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         vocabulary, they are added to it with indices starting from length of the current vocabulary.
 
         Args:
-<<<<<<< HEAD
-            new_tokens: string or list of string or :class:`~transformers.AddedTokenFast`. Each string is a token to add.
-                Tokens are only added if they are not already in the vocabulary. AddedTokenFast wrap a string token to
-                let you personnalize it's behavior (Whether this token should only match against single word, whether
-                this token should strip all potential whitespaces on the left side, Whether this token should strip
-                all potential whitespaces on the right side...).
-
-                See details for :class:`~transformers.AddedToken` in HuggingFace tokenizers library.
-=======
             new_tokens: string or list of string or AddedTokenFast. Each string is a token to add.
             Tokens are only added if they are not already in the vocabulary. AddedTokenFast wrap a string token to let you personnalize it's behavior (Whether this token should only match against single word, whether this token should strip all potential whitespaces on the left side, Whether this token should strip all potential whitespaces on the right side...).
             See details for AddedToken in HuggingFace tokenizers library.
->>>>>>> tokenizers clean up - new padding_strategy - split the files
 
         Returns:
             Number of tokens added to the vocabulary.
@@ -432,16 +259,34 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         """
         if isinstance(new_tokens, str):
             new_tokens = [new_tokens]
-<<<<<<< HEAD
-        # TODO This should be done in tokenizers to be really clean.
-        # Removing for now
-        # tokens = []
-        # for token in new_tokens:
-        #     if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
-        #         token = token.lower()
-        #     if token not in tokens:
-        #         tokens.append(token)
-        return self._tokenizer.add_tokens(new_tokens)
+        tokens = []
+        for token in new_tokens:
+            if self.init_kwargs.get("do_lower_case", False) and token not in self.all_special_tokens:
+                token = token.lower()
+            if token not in tokens:
+                tokens.append(token)
+        return self._tokenizer.add_tokens(tokens)
+
+    def add_special_tokens(self, special_tokens_dict: Dict[str, Union[str, List[str]]]) -> int:
+        # Map special tokens to class attributes (self.pad_token...)
+        num_added_tokens = super().add_special_tokens(special_tokens_dict)
+
+        # If the backend tokenizer the only specificities of special tokens are that
+        #    - they will never be processed by the model, and
+        #    - they will be removed while decoding.
+        # But they are not mapped to special attributes in the backend so we can just
+        # send a list.
+        tokens = []
+        for tok in special_tokens_dict.values():
+            if isinstance(tok, str):
+                tokens.append(tok)
+            elif isinstance(tok, (list, tuple)):
+                tokens += tok
+            else:
+                raise ValueError(f"Check special_tokens_dict input, {tok} should be str, list or tuple.")
+        self._tokenizer.add_special_tokens(tokens)
+
+        return num_added_tokens
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         return self._tokenizer.num_special_tokens_to_add(pair)
@@ -464,35 +309,21 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 continue
             tokens.append(self._tokenizer.id_to_token(index))
         return tokens
-=======
-        return self._tokenizer.add_tokens(new_tokens)
-
-    def add_special_tokens(self, special_tokens_dict: dict) -> int:
-        # Map special tokens to class attributes (self.pad_token...)
-        num_added_tokens = super().add_special_tokens(special_tokens_dict)
-
-        # If the backend tokenizer the only specificities of special tokens are that
-        #    - they will never be processed by the model, and
-        #    - they will be removed while decoding.
-        # But they are not mapped to special attributes in the backend so we can just
-        # send a list.
-        tokens = flatten(special_tokens_dict.values())
-        self._tokenizer.add_special_tokens(tokens)
-
-        return num_added_tokens
-
-    def num_special_tokens_to_add(self, pair: bool = False) -> int:
-        return self._tokenizer.num_special_tokens_to_add(pair)
->>>>>>> tokenizers clean up - new padding_strategy - split the files
 
     def tokenize(
         self, text: TextInput, pair: Optional[TextInput] = None, add_special_tokens: bool = False
     ) -> List[str]:
         return self._tokenizer.encode(text, pair, add_special_tokens=add_special_tokens).tokens
 
-<<<<<<< HEAD
     def set_truncation_and_padding(
-        self, padding_strategy: PaddingStrategy, truncation_strategy: TruncationStrategy, max_length: int, stride: int,
+        self,
+        max_length: int,
+        stride: int,
+        truncate: bool,
+        pad: bool,
+        truncation_strategy: Union[str, TruncationStrategy],
+        padding_strategy: Union[str, PaddingStrategy],
+        pad_to_max_length: bool,
     ):
         """ This contextmanager is in charge of defining the truncation and the padding strategies for fast tokenizers
             (provided by HuggingFace tokenizers library) and restore the tokenizer settings afterwards.
@@ -513,13 +344,59 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
                 pad_token (str): The string representation of the padding token to use
 
         """
+        if not isinstance(padding_strategy, PaddingStrategy):
+            padding_strategy = PaddingStrategy(padding_strategy)
+
+        if not isinstance(truncation_strategy, TruncationStrategy):
+            truncation_strategy = TruncationStrategy(truncation_strategy)
+
+        if pad_to_max_length:  # Kept for backward compatibility. Don't use anymore, use the padding_strategy instead.
+            warnings.warn(
+                "The `pad_to_max_length` argument is deprecated and will be removed in a future version, use `padding_strategy='max_length'` instead.",
+                DeprecationWarning,
+            )
+            pad_to_max_length = False
+            pad = True
+            if max_length is None:
+                padding_strategy = PaddingStrategy.LONGEST
+            else:
+                padding_strategy = PaddingStrategy.MAX_LENGTH
+
+        # Checks on the truncation and padding options
+        if pad and padding_strategy == PaddingStrategy.MAX_LENGTH and max_length is None:
+            if self.model_max_length > LARGE_INTEGER:
+                logger.warning(
+                    "Asking to pad to max_length but no max length is provided and the model has no predefined maximum length. "
+                    "Default to no padding."
+                )
+                pad = False
+            else:
+                max_length = self.model_max_length
+
+        if pad and (not self.pad_token or self.pad_token_id < 0):
+            raise ValueError(
+                "Unable to set proper padding strategy as the tokenizer does not have a padding token. "
+                "In this case please set the `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` "
+                "or add a new pad token via the function add_special_tokens if you want to use a padding strategy"
+            )
+
+        if truncate and max_length is None:
+            if self.model_max_length > LARGE_INTEGER:
+                logger.warning(
+                    "Asking to truncate to max_length but no max length is provided and the model has no predefined maximum length. "
+                    "Default to no truncation."
+                )
+                truncate = False
+            else:
+                max_length = self.model_max_length
+
         # Set truncation and padding on the backend tokenizer
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
+        if truncate:
             self._tokenizer.enable_truncation(max_length, stride=stride, strategy=truncation_strategy.value)
         else:
             self._tokenizer.no_truncation()
 
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD:
+        if pad:
             self._tokenizer.enable_padding(
                 length=max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None,
                 direction=self.padding_side,
@@ -530,27 +407,20 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         else:
             self._tokenizer.no_padding()
 
-    def _batch_encode_plus(
-=======
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def batch_encode_plus(
->>>>>>> tokenizers clean up - new padding_strategy - split the files
         self,
         batch_text_or_text_pairs: Union[
             List[TextInput], List[TextInputPair], List[PreTokenizedInput], List[PreTokenizedInputPair]
         ],
         add_special_tokens: bool = True,
-<<<<<<< HEAD
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
+        truncate: bool = False,
+        pad: bool = False,
         stride: int = 0,
-=======
-        max_length: Optional[int] = None,
-        stride: int = 0,
-        truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
-        padding_strategy: Union[str, PaddingStrategy] = "do_not_pad",
+        truncation_strategy: Union[str, TruncationStrategy] = "only_first",
+        padding_strategy: Union[str, PaddingStrategy] = "longest",
         pad_to_max_length: bool = False,
->>>>>>> tokenizers clean up - new padding_strategy - split the files
         is_pretokenized: bool = False,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -559,25 +429,36 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_lengths: bool = False,
-<<<<<<< HEAD
-        verbose: bool = True,
-=======
->>>>>>> tokenizers clean up - new padding_strategy - split the files
         **kwargs
     ) -> BatchEncoding:
+        """
+        Returns a dictionary containing the encoded sequence or sequence pair and additional information:
+        the mask for sequence classification and the overflowing elements if a ``max_length`` is specified.
+
+        Args:
+            batch_text_or_text_pairs (:obj:`List[str]`,  :obj:`List[Tuple[str, str]]`,
+                                      :obj:`List[List[str]]`,  :obj:`List[Tuple[List[str], List[str]]]`,
+                                      and for not-fast tokenizers, also:
+                                      :obj:`List[List[int]]`,  :obj:`List[Tuple[List[int], List[int]]]`):
+                Batch of sequences or pair of sequences to be encoded.
+                This can be a list of string/string-sequences/int-sequences or a list of pair of
+                string/string-sequences/int-sequence (see details in encode_plus)
+        """
 
         if not isinstance(batch_text_or_text_pairs, list):
             raise ValueError(
                 "batch_text_or_text_pairs has to be a list (got {})".format(type(batch_text_or_text_pairs))
             )
 
-<<<<<<< HEAD
         # Set the truncation and padding strategy and restore the initial configuration
         self.set_truncation_and_padding(
-            padding_strategy=padding_strategy,
-            truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
+            truncate=truncate,
+            pad=pad,
+            truncation_strategy=truncation_strategy,
+            padding_strategy=padding_strategy,
+            pad_to_max_length=pad_to_max_length,
         )
 
         # Avoid thread overhead if only one example.
@@ -601,48 +482,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
             encodings = self._tokenizer.encode_batch(
                 batch_text_or_text_pairs, add_special_tokens=add_special_tokens, is_pretokenized=is_pretokenized
             )
-=======
-        # Needed if we have to return a tensor
-        pad_to_max_length = pad_to_max_length or (return_tensors is not None and len(batch_text_or_text_pairs) > 1)
-
-        # Throw an error if we can pad because there is no padding token
-        if pad_to_max_length and self.pad_token_id is None:
-            raise ValueError("Unable to set proper padding strategy as the tokenizer does not have a padding token")
-
-        # Set the truncation and padding strategy and restore the initial configuration
-        with truncate_and_pad(
-            tokenizer=self._tokenizer,
-            max_length=max_length,
-            stride=stride,
-            strategy=truncation_strategy,
-            pad_to_max_length=pad_to_max_length,
-            padding_side=self.padding_side,
-            pad_token_id=self.pad_token_id,
-            pad_token_type_id=self.pad_token_type_id,
-            pad_token=self._pad_token,
-        ):
-            # Avoid thread overhead if only one example.
-            if len(batch_text_or_text_pairs) == 1:
-                if isinstance(batch_text_or_text_pairs[0], tuple):
-                    # We got a Tuple with a pair of sequences
-                    encodings = self._tokenizer.encode(
-                        *batch_text_or_text_pairs[0],
-                        add_special_tokens=add_special_tokens,
-                        is_pretokenized=is_pretokenized,
-                    )
-                else:
-                    # We got a single sequence
-                    encodings = self._tokenizer.encode(
-                        batch_text_or_text_pairs[0],
-                        add_special_tokens=add_special_tokens,
-                        is_pretokenized=is_pretokenized,
-                    )
-                encodings = [encodings]
-            else:
-                encodings = self._tokenizer.encode_batch(
-                    batch_text_or_text_pairs, add_special_tokens=add_special_tokens, is_pretokenized=is_pretokenized
-                )
->>>>>>> tokenizers clean up - new padding_strategy - split the files
 
         # Convert encoding to dict
         # `Tokens` has type: List[Dict[str, List[List[int]]]] or List[Dict[str, 2D-Tensor]]
@@ -650,80 +489,59 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         tokens = [
             self._convert_encoding(
                 encoding=encoding,
-<<<<<<< HEAD
-=======
                 return_tensors=return_tensors,
->>>>>>> tokenizers clean up - new padding_strategy - split the files
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
-<<<<<<< HEAD
-                verbose=verbose,
-=======
->>>>>>> tokenizers clean up - new padding_strategy - split the files
             )
             for encoding in encodings
         ]
 
-<<<<<<< HEAD
-        # Convert the output to have dict[list] from list[dict]
-=======
         # Sanitize the output to have dict[list] from list[dict]
->>>>>>> tokenizers clean up - new padding_strategy - split the files
         sanitized = {}
         for key in tokens[0].keys():
             # To List[List[List[int]]] of shape (batch, overflows, sequence length)
             stack = [e for item in tokens for e in item[key]]
-<<<<<<< HEAD
-=======
-            if return_tensors == "tf":
-                stack = tf.stack(stack, axis=0)
-            elif return_tensors == "pt":
-                stack = torch.stack(stack, dim=0)
+            try:
+                if return_tensors == "tf":
+                    stack = tf.stack(stack, axis=0)
+                elif return_tensors == "pt":
+                    stack = torch.stack(stack, dim=0)
+            except:  # noqa E722
+                raise ValueError(
+                    "Unable to stack tensor, you should probably activate truncation and/or padding "
+                    "with 'pad=True' 'truncation=True' to have batched tensors with the same length."
+                )
             # elif not return_tensors and len(stack) == 1:
             #     stack = stack[0]
 
->>>>>>> tokenizers clean up - new padding_strategy - split the files
             sanitized[key] = stack
 
         # If returning overflowing tokens, we need to return a mapping
         # from the batch idx to the original sample
         if return_overflowing_tokens:
-<<<<<<< HEAD
             overflow_to_sample_mapping = []
             for i, enc in enumerate(tokens):
                 overflow_to_sample_mapping += [i] * len(enc["input_ids"])
             sanitized["overflow_to_sample_mapping"] = overflow_to_sample_mapping
 
-        return BatchEncoding(sanitized, encodings, tensor_type=return_tensors)
-
-    def _encode_plus(
-=======
-            overflow_to_sample_mapping = flatten([[i] * len(enc["input_ids"]) for i, enc in enumerate(tokens)])
-            sanitized["overflow_to_sample_mapping"] = overflow_to_sample_mapping
-
         return BatchEncoding(sanitized, encodings)
 
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
->>>>>>> tokenizers clean up - new padding_strategy - split the files
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[Union[TextInput, PreTokenizedInput]] = None,
         add_special_tokens: bool = True,
-<<<<<<< HEAD
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
+        truncate: bool = False,
+        pad: bool = False,
         stride: int = 0,
-=======
-        max_length: Optional[int] = None,
+        truncation_strategy: Union[str, TruncationStrategy] = "only_first",
+        padding_strategy: Union[str, PaddingStrategy] = "longest",
         pad_to_max_length: bool = False,
-        stride: int = 0,
-        truncation_strategy: Union[str, TruncationStrategy] = "longest_first",
-        padding_strategy: Union[str, PaddingStrategy] = "do_not_pad",
->>>>>>> tokenizers clean up - new padding_strategy - split the files
         is_pretokenized: bool = False,
         return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -731,54 +549,47 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
-<<<<<<< HEAD
-        verbose: bool = True,
-=======
->>>>>>> tokenizers clean up - new padding_strategy - split the files
         **kwargs
     ) -> BatchEncoding:
+        """
+        Returns a dictionary containing the encoded sequence or sequence pair and additional information:
+        the mask for sequence classification and the overflowing elements if a ``max_length`` is specified.
+
+        Args:
+            text (:obj:`str`, :obj:`List[str]` or :obj:`List[int]` (the later only for not-fast tokenizers)):
+                The first sequence to be encoded. This can be a string, a list of strings (tokenized string using
+                the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
+                method)
+            text_pair (:obj:`str`, :obj:`List[str]` or :obj:`List[int]`, `optional`, defaults to :obj:`None`):
+                Optional second sequence to be encoded. This can be a string, a list of strings (tokenized
+                string using the `tokenize` method) or a list of integers (tokenized string ids using the
+                `convert_tokens_to_ids` method)
+        """
 
         batched_input = [(text, text_pair)] if text_pair else [text]
-<<<<<<< HEAD
-        batched_output = self._batch_encode_plus(
-            batched_input,
-            is_pretokenized=is_pretokenized,
-            add_special_tokens=add_special_tokens,
-            padding_strategy=padding_strategy,
-            truncation_strategy=truncation_strategy,
-            max_length=max_length,
-            stride=stride,
-=======
         batched_output = self.batch_encode_plus(
             batched_input,
             is_pretokenized=is_pretokenized,
             add_special_tokens=add_special_tokens,
             max_length=max_length,
+            truncate=truncate,
+            pad=pad,
             stride=stride,
             truncation_strategy=truncation_strategy,
             padding_strategy=padding_strategy,
->>>>>>> tokenizers clean up - new padding_strategy - split the files
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
-<<<<<<< HEAD
-            verbose=verbose,
-=======
             pad_to_max_length=pad_to_max_length,
->>>>>>> tokenizers clean up - new padding_strategy - split the files
             **kwargs,
         )
 
         # Return tensor is None, then we can remove the leading batch axis
-<<<<<<< HEAD
         # Overfolwing tokens are returned as a batch of output so we keep them in this case
-        if return_tensors is None and not return_overflowing_tokens:
-=======
-        if not return_tensors:
->>>>>>> tokenizers clean up - new padding_strategy - split the files
+        if not return_tensors and not return_overflowing_tokens:
             batched_output = BatchEncoding(
                 {
                     key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
@@ -802,16 +613,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory: str) -> Tuple[str]:
         if os.path.isdir(save_directory):
-<<<<<<< HEAD
             files = self._tokenizer.save_model(save_directory)
         else:
             folder, file = os.path.split(os.path.abspath(save_directory))
             files = self._tokenizer.save_model(folder, name=file)
-=======
-            files = self._tokenizer.save(save_directory)
-        else:
-            folder, file = os.path.split(os.path.abspath(save_directory))
-            files = self._tokenizer.save(folder, name=file)
->>>>>>> tokenizers clean up - new padding_strategy - split the files
 
         return tuple(files)
