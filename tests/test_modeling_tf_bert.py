@@ -49,6 +49,7 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
             TFBertForQuestionAnswering,
             TFBertForSequenceClassification,
             TFBertForTokenClassification,
+            TFBertForMultipleChoice,
         )
         if is_tf_available()
         else ()

@@ -78,6 +78,7 @@ from .file_utils import (
     cached_path,
     is_tf_available,
     is_torch_available,
+    is_torch_tpu_available,
 )
 from .hf_argparser import HfArgumentParser
 
@@ -165,11 +166,17 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForQuestionAnswering,
         AutoModelWithLMHead,
+        AutoModelForCausalLM,
+        AutoModelForMaskedLM,
+        AutoModelForSeq2SeqLM,
         AutoModelForTokenClassification,
         AutoModelForMultipleChoice,
         MODEL_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_WITH_LM_HEAD_MAPPING,
+        MODEL_FOR_CAUSAL_LM_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
@@ -181,6 +188,7 @@ if is_torch_available():
         BertModel,
         BertForPreTraining,
         BertForMaskedLM,
+        BertLMHeadModel,
         BertForNextSentencePrediction,
         BertForSequenceClassification,
         BertForMultipleChoice,
@@ -242,6 +250,7 @@ if is_torch_available():
         BartForSequenceClassification,
         BartModel,
         BartForConditionalGeneration,
+        BartForQuestionAnswering,
         BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_marian import MarianMTModel
@@ -286,6 +295,7 @@ if is_torch_available():
         AlbertModel,
         AlbertForPreTraining,
         AlbertForMaskedLM,
+        AlbertForMultipleChoice,
         AlbertForSequenceClassification,
         AlbertForQuestionAnswering,
         AlbertForTokenClassification,
@@ -298,6 +308,7 @@ if is_torch_available():
         XLMRobertaForMultipleChoice,
         XLMRobertaForSequenceClassification,
         XLMRobertaForTokenClassification,
+        XLMRobertaForQuestionAnswering,
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_mmbt import ModalEmbeddings, MMBTModel, MMBTForClassification
@@ -317,6 +328,7 @@ if is_torch_available():
         ElectraForTokenClassification,
         ElectraPreTrainedModel,
         ElectraForSequenceClassification,
+        ElectraForQuestionAnswering,
         ElectraModel,
         load_tf_weights_in_electra,
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,

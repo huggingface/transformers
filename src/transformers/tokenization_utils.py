@@ -266,7 +266,10 @@ class BatchEncoding(UserDict):
             )
 
     def __getattr__(self, item: str):
-        return self.data[item]
+        try:
+            return self.data[item]
+        except KeyError:
+            raise AttributeError
 
     def keys(self):
         return self.data.keys()

@@ -67,6 +67,14 @@ AlbertForSequenceClassification
 .. autoclass:: transformers.AlbertForSequenceClassification
     :members:
 
+
+AlbertForMultipleChoice
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AlbertForMultipleChoice
+    :members:
+
+
 AlbertForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

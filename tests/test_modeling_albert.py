@@ -29,6 +29,7 @@ if is_torch_available():
         AlbertModel,
         AlbertForPreTraining,
         AlbertForMaskedLM,
+        AlbertForMultipleChoice,
         AlbertForSequenceClassification,
         AlbertForTokenClassification,
         AlbertForQuestionAnswering,
@@ -42,11 +43,12 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             AlbertModel,
-            AlbertForMaskedLM,
             AlbertForPreTraining,
-            AlbertForQuestionAnswering,
+            AlbertForMaskedLM,
+            AlbertForMultipleChoice,
             AlbertForSequenceClassification,
             AlbertForTokenClassification,
+            AlbertForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -263,6 +265,29 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.check_loss_output(result)
 
+        def create_and_check_albert_for_multiple_choice(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            config.num_choices = self.num_choices
+            model = AlbertForMultipleChoice(config=config)
+            model.to(torch_device)
+            model.eval()
+            multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+            loss, logits = model(
+                multiple_choice_inputs_ids,
+                attention_mask=multiple_choice_input_mask,
+                token_type_ids=multiple_choice_token_type_ids,
+                labels=choice_labels,
+            )
+            result = {
+                "loss": loss,
+                "logits": logits,
+            }
+            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_choices])
+            self.check_loss_output(result)
+
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
             (
@@ -295,6 +320,10 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_albert_for_masked_lm(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_albert_for_multiple_choice(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -84,6 +84,13 @@ XLMRobertaForTokenClassification
     :members:
 
 
+XLMRobertaForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.XLMRobertaForQuestionAnswering
+    :members:
+
+
 TFXLMRobertaModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
