@@ -68,7 +68,8 @@ class TokenizerTesterMixin:
         shutil.rmtree(self.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
-        return self.get_clean_sequence(tokenizer)[0]
+        input_txt = self.get_clean_sequence(tokenizer)[0]
+        return input_txt, input_txt
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=None) -> Tuple[str, list]:
         toks = [(i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in range(len(tokenizer))]
@@ -103,13 +104,13 @@ class TokenizerTesterMixin:
     def get_rust_tokenizer(self, **kwargs):
         raise NotImplementedError
 
-    def get_input_output_texts(self) -> Tuple[str, str]:
-        """Feel free to overwrite"""
-        # TODO: @property
-        return (
-            "This is a test",
-            "This is a test",
-        )
+    # def get_input_output_texts(self) -> Tuple[str, str]:
+    #     """Feel free to overwrite"""
+    #     # TODO: @property
+    #     return (
+    #         "This is a test",
+    #         "This is a test",
+    #     )
 
     @staticmethod
     def convert_batch_encode_plus_format_to_encode_plus(batch_encode_plus_sequences):
@@ -327,7 +328,7 @@ class TokenizerTesterMixin:
                 self.assertTrue(special_token not in decoded)
 
     def test_internal_consistency(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
+        tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 input_text, output_text = self.get_input_output_texts(tokenizer)
@@ -458,7 +459,7 @@ class TokenizerTesterMixin:
                 seq1_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
                 if len(seq0_tokens) == len(seq1_tokens):
                     seq1_tokens = seq1_tokens + seq1_tokens
-                    seq_1 = tokenizer.decode(seq_1, clean_up_tokenization_spaces=False)
+                    seq_1 = tokenizer.decode(seq1_tokens, clean_up_tokenization_spaces=False)
                 seq1_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
 
                 assert len(seq1_tokens) > 2 + stride

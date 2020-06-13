@@ -564,6 +564,24 @@ class CommonFastTokenizerTest(unittest.TestCase):
         )
         assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
 
+        # Using pad on single examples after tokenization
+        input_r = tokenizer_r.encode_plus("This is a input 1")
+        input_r = tokenizer_r.pad(input_r)
+
+        input_p = tokenizer_r.encode_plus("This is a input 1")
+        input_p = tokenizer_r.pad(input_p)
+
+        assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], len(input_r["input_ids"]))
+
+        # Using pad on single examples after tokenization
+        input_r = tokenizer_r.encode_plus("This is a input 1")
+        input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
+
+        input_p = tokenizer_r.encode_plus("This is a input 1")
+        input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
+
+        assert_padded_input_match(input_r["input_ids"], input_p["input_ids"], max_length)
+
         # Using pad after tokenization
         input_r = tokenizer_r.batch_encode_plus(
             ["This is a input 1", "This is a much longer input whilch should be padded"]
