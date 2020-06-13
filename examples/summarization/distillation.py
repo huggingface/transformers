@@ -11,6 +11,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from durbango import pickle_load
+from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
 from transformers import AdamW, BartConfig, BartForConditionalGeneration, T5Config, T5ForConditionalGeneration
 from transformers.modeling_bart import invert_mask
 
@@ -18,7 +19,7 @@ from transformers.modeling_bart import invert_mask
 try:
     from .finetune import (
         SummarizationTrainer,
-        freeze_part,
+        freeze_params,
         assert_all_frozen,
         grad_status,
     )
@@ -46,7 +47,7 @@ class SummarizationDistiller(SummarizationTrainer):
 
         super().__init__(hparams, model=student, config=student_cfg)
         self.teacher = teacher
-        freeze_part(self.teacher)
+        freeze_params(self.teacher)
         self.freeze_stuff(d_layers_to_copy)
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
@@ -66,12 +67,12 @@ class SummarizationDistiller(SummarizationTrainer):
         if self.different_encoder:
             assert any(grad_status(self.model.model.encoder))
         else:
-            freeze_part(self.model.model.encoder)
+            freeze_params(self.model.model.encoder)
             del self.teacher.model.encoder
         if self.different_decoder:
             assert any(grad_status(self.model.model.decoder))
         else:
-            freeze_part(self.model.model.decoder)  # TODO(SS): very suspicious
+            freeze_params(self.model.model.decoder)  # TODO(SS): very suspicious
 
     def pre_init(self, hparams):
         # Dump empty student model at a path, then call from_pretrained on it
@@ -114,7 +115,7 @@ class SummarizationDistiller(SummarizationTrainer):
 
     def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
-        dataset = SummarizationDataset.from_raw_data(
+        dataset = SummarizationDataset(
             self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs
         )
         return dataset
@@ -199,7 +200,7 @@ class SummarizationDistiller(SummarizationTrainer):
         parser.add_argument(  # TODO: remove
             "--enc_only", action="store_true", default=False,
         )
-        parser.add_argument( # TODO: remove
+        parser.add_argument(  # TODO: remove
             "--freeze_decoder", action="store_true",
         )
 
@@ -307,9 +308,9 @@ class T5SummarizationDistiller(SummarizationDistiller):
         return d_layers_to_copy, student, student_cfg, teacher
 
     def freeze_embeds(self):
-        freeze_part(self.model.shared)
+        freeze_params(self.model.shared)
         for d in [self.model.encoder, self.model.decoder]:
-            freeze_part(d.embed_tokens)
+            freeze_params(d.embed_tokens)
 
     def freeze_stuff(self, d_layers_to_copy):
         """T5"""
@@ -320,12 +321,12 @@ class T5SummarizationDistiller(SummarizationDistiller):
         if self.different_encoder:
             assert any(grad_status(self.model.encoder))
         else:
-            freeze_part(self.model.encoder)
+            freeze_params(self.model.encoder)
             del self.teacher.model.encoder
         if self.different_decoder:
             assert any(grad_status(self.model.decoder))
         else:
-            freeze_part(self.model.decoder)  # TODO(SS): very suspicious
+            freeze_params(self.model.decoder)  # TODO(SS): very suspicious
 
     def _step(self, batch):
         # assert is_frozen(self.teacher)
@@ -395,7 +396,7 @@ def main(args):
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
 
-    model: BaseTransformer = create_module(args)
+    model = create_module(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
     if not args.do_predict:
         return model
@@ -411,7 +412,7 @@ def main(args):
     return model
 
 
-def create_module(args) -> BaseTransformer:
+def create_module(args):
     t5 = "t5" in args.model_name_or_path
     if args.no_teacher:
         assert not args.enc_only
