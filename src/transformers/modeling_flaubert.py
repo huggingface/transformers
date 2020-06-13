@@ -131,13 +131,14 @@ class FlaubertModel(XLMModel):
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
+        output_hidden_states=None,
     ):
         r"""
     Return:
         :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -162,6 +163,7 @@ class FlaubertModel(XLMModel):
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
 
         # removed: src_enc=None, src_len=None
         if input_ids is not None:
@@ -240,7 +242,7 @@ class FlaubertModel(XLMModel):
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            if self.output_hidden_states:
+            if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
@@ -281,7 +283,7 @@ class FlaubertModel(XLMModel):
             tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
         # Add last hidden state
-        if self.output_hidden_states:
+        if output_hidden_states:
             hidden_states = hidden_states + (tensor,)
 
         # update cache length
@@ -292,7 +294,7 @@ class FlaubertModel(XLMModel):
         # tensor = tensor.transpose(0, 1)
 
         outputs = (tensor,)
-        if self.output_hidden_states:
+        if output_hidden_states:
             outputs = outputs + (hidden_states,)
         if output_attentions:
             outputs = outputs + (attentions,)

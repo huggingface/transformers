@@ -517,6 +517,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         inputs_embeds=None,
         use_cache=True,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -549,6 +550,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
 
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -677,7 +679,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             # cache new mems
             if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
                 new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
-            if self.output_hidden_states:
+            if cast_bool_to_primitive(output_hidden_states):
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
             outputs = layer_module(
@@ -692,6 +694,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                     target_mapping,
                     head_mask[i],
                     output_attentions,
+                    output_hidden_states,
                 ],
                 training=training,
             )
@@ -700,7 +703,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                 attentions.append(outputs[2])
 
         # Add last hidden state
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states):
             hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
         output = self.dropout(output_g if output_g is not None else output_h, training=training)
@@ -711,7 +714,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
             outputs = outputs + (new_mems,)
 
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states):
             if output_g is not None:
                 hidden_states = tuple(tf.transpose(h, perm=(1, 0, 2)) for hs in hidden_states for h in hs)
             else:
@@ -838,7 +841,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `mems` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -922,7 +925,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -996,6 +999,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         use_cache=True,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -1013,7 +1017,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1050,6 +1054,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         output = transformer_outputs[0]
 
@@ -1106,6 +1111,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         use_cache=True,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -1120,7 +1126,8 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
 
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
+        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1200,6 +1207,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             inputs_embeds,
             use_cache,
             output_attentions,
+            output_hidden_states,
         ]
 
         transformer_outputs = self.transformer(flat_inputs, training=training)
@@ -1246,6 +1254,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         use_cache=True,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -1261,7 +1270,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1298,6 +1307,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
         output = transformer_outputs[0]
@@ -1345,6 +1355,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         p_mask=None,
         is_impossible=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -1369,7 +1380,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1408,6 +1419,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
 
@@ -1457,7 +1469,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
 #             that contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model
 #             if config.mem_len > 0 else tuple of None. Can be used to speed up sequential decoding and attend to longer context.
 #             See details in the docstring of the `mems` input above.
-#         **hidden_states**: (`optional`, returned when ``config.output_hidden_states=True``)
+#         **hidden_states**: (`optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``)
 #             list of ``tf.Tensor`` (one for the output of each layer + the output of the embeddings)
 #             of shape ``(batch_size, sequence_length, hidden_size)``:
 #             Hidden-states of the model at the output of each layer plus the initial embedding outputs.

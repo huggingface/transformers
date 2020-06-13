@@ -332,6 +332,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):  # removed: src_enc=None, src_len=None
         if isinstance(inputs, (tuple, list)):
@@ -362,6 +363,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -445,7 +447,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         hidden_states = ()
         attentions = ()
         for i in range(self.n_layers):
-            if self.output_hidden_states:
+            if cast_bool_to_primitive(output_hidden_states):
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
@@ -472,7 +474,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             tensor = tensor * mask[..., tf.newaxis]
 
         # Add last hidden state
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states):
             hidden_states = hidden_states + (tensor,)
 
         # update cache length
@@ -483,7 +485,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         # tensor = tensor.transpose(0, 1)
 
         outputs = (tensor,)
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states):
             outputs = outputs + (hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (attentions,)
@@ -610,7 +612,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -706,7 +708,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         prediction_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -766,6 +768,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -779,7 +782,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.XLMConfig`) and inputs:
         logits (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -815,6 +818,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
         output = transformer_outputs[0]
@@ -865,6 +869,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -879,7 +884,8 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above).
 
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
+        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -956,6 +962,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             head_mask,
             inputs_embeds,
             output_attentions,
+            output_hidden_states,
         ]
 
         transformer_outputs = self.transformer(flat_inputs, training=training)
@@ -1002,6 +1009,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -1013,7 +1021,8 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
+        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1045,6 +1054,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
 
@@ -1093,6 +1103,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         p_mask=None,
         is_impossible=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -1111,7 +1122,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             Span-start scores (before SoftMax).
         end_scores (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` or :obj:`Numpy array` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -1150,6 +1161,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
 

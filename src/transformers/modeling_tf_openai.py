@@ -246,6 +246,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -270,6 +271,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -332,7 +334,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         all_attentions = []
         all_hidden_states = ()
         for i, block in enumerate(self.h):
-            if self.output_hidden_states:
+            if cast_bool_to_primitive(output_hidden_states):
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
             outputs = block([hidden_states, attention_mask, head_mask[i], output_attentions], training=training)
@@ -342,11 +344,11 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
 
         hidden_states = tf.reshape(hidden_states, output_shape)
         # Add last hidden state
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if self.output_hidden_states:
+        if cast_bool_to_primitive(output_hidden_states):
             outputs = outputs + (all_hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             # let the number of heads free (-1) so we can extract attention even after head pruning
@@ -451,7 +453,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.OpenAIGPTConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the last layer of the model.
-        hidden_states (:obj:`tuple(tf.Tensor)` `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)` `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -499,7 +501,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel):
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.OpenAIGPTConfig`) and inputs:
         prediction_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -564,6 +566,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         inputs_embeds=None,
         mc_token_ids=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -581,7 +584,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             Contains pre-computed hidden-states (key and values in the attention blocks).
             Can be used (see `past` input) to speed up sequential decoding. The token ids which have their past given to this model
             should not be passed as input ids as they have already been computed.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -661,6 +664,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             head_mask,
             inputs_embeds,
             output_attentions,
+            output_hidden_states
         ]
 
         transformer_outputs = self.transformer(flat_inputs, training=training)

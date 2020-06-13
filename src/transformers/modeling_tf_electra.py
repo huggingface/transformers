@@ -240,6 +240,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         if isinstance(inputs, (tuple, list)):
@@ -264,6 +265,7 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
             input_ids = inputs
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -288,7 +290,8 @@ class TFElectraMainLayer(TFElectraPreTrainedModel):
             hidden_states = self.embeddings_project(hidden_states, training=training)
 
         hidden_states = self.encoder(
-            [hidden_states, extended_attention_mask, head_mask, output_attentions], training=training
+            [hidden_states, extended_attention_mask, head_mask,
+             output_attentions, output_hidden_states], training=training
         )
 
         return hidden_states
@@ -382,7 +385,8 @@ class TFElectraModel(TFElectraPreTrainedModel):
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
         last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
+        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -433,6 +437,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -440,7 +445,8 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Prediction scores of the head (scores for each token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
+        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -471,6 +477,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
             head_mask,
             inputs_embeds,
             output_attentions,
+            output_hidden_states,
             training=training,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
@@ -530,6 +537,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -537,7 +545,8 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
         prediction_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
+        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -569,6 +578,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel):
             head_mask,
             inputs_embeds,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             training=training,
         )
         generator_sequence_output = generator_hidden_states[0]
@@ -607,6 +617,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -618,7 +629,8 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         :obj:`tuple(tf.Tensor)` comprising various elements depending on the configuration (:class:`~transformers.ElectraConfig`) and inputs:
         scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.num_labels)`):
             Classification scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
+        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -651,6 +663,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
             head_mask,
             inputs_embeds,
             output_attentions,
+            output_hidden_states,
             training=training,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
@@ -696,6 +709,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
         p_mask=None,
         is_impossible=None,
         output_attentions=None,
+        output_hidden_states=None,
         training=False,
     ):
         r"""
@@ -714,7 +728,8 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             Span-start scores (before SoftMax).
         end_scores (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length,)`):
             Span-end scores (before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when :obj:`config.output_hidden_states=True`):
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when
+        ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
@@ -749,6 +764,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             head_mask,
             inputs_embeds,
             output_attentions,
+            output_hidden_states,
             training=training,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
