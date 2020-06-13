@@ -1,6 +1,8 @@
+import itertools
 import os
 import pickle
 from pathlib import Path
+from typing import List
 
 import numpy as np
 import torch
@@ -160,3 +162,7 @@ def pickle_load(path):
     """pickle.load(path)"""
     with open(path, "rb") as f:
         return pickle.load(f)
+
+
+def flatten_list(summary_ids: List[List]):
+    return [x for x in itertools.chain.from_iterable(summary_ids)]

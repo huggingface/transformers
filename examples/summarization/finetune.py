@@ -7,12 +7,10 @@ import time
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
-import funcy
 import git
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning import Trainer
 from rouge_score import rouge_scorer, scoring
 from torch import nn
 from torch.utils.data import DataLoader
@@ -23,10 +21,10 @@ from transformers import AutoModelWithLMHead, get_linear_schedule_with_warmup
 
 
 try:
-    from .utils import SummarizationDataset, lmap
+    from .utils import SummarizationDataset, lmap, flatten_list
     from .callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
 except ImportError:
-    from utils import SummarizationDataset, lmap
+    from utils import SummarizationDataset, lmap, flatten_list
     from callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
 
 logger = logging.getLogger(__name__)
@@ -297,7 +295,7 @@ class SummarizationTrainer(BaseTransformer):
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         add_generic_args(parser, root_dir)
-        parser = Trainer.add_argparse_args(parser)
+
         BaseTransformer.add_model_specific_args(parser, root_dir)
         parser.add_argument(
             "--max_source_length",
@@ -363,7 +361,6 @@ def main(args, model=None):
     )
     if not args.do_predict:
         return model
-    # return model  # hack
 
     model.hparams.test_checkpoint = ""
     checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
@@ -382,7 +379,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args)
-
-
-def flatten_list(summary_ids: List[List]):
-    return [x for x in funcy.flatten(summary_ids)]
