@@ -1,6 +1,5 @@
 import argparse
 import gc
-import glob
 import os
 from pathlib import Path
 from typing import List
@@ -10,8 +9,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from durbango import pickle_load
-from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
+from lightning_base import generic_train
 from transformers import AdamW, BartConfig, BartForConditionalGeneration, T5Config, T5ForConditionalGeneration
 from transformers.modeling_bart import invert_mask
 
@@ -21,20 +19,21 @@ try:
         SummarizationTrainer,
         freeze_params,
         assert_all_frozen,
-        grad_status,
+        any_requires_grad,
     )
     from .initialization_utils import init_student, copy_layers
-    from .utils import SummarizationDataset
+    from .utils import SummarizationDataset, pickle_load
+    from .finetune import main as ft_main
 except ModuleNotFoundError:
     from finetune import (
         SummarizationTrainer,
-        freeze_part,
+        freeze_params,
         assert_all_frozen,
-        grad_status,
-        get_layers_to_copy,
+        any_requires_grad,
     )
+    from finetune import main as ft_main
     from initialization_utils import init_student, copy_layers
-    from utils import SummarizationDataset
+    from utils import SummarizationDataset, pickle_load
 
 
 class SummarizationDistiller(SummarizationTrainer):
@@ -65,14 +64,10 @@ class SummarizationDistiller(SummarizationTrainer):
         assert_all_frozen(self.model.model.decoder.embed_tokens)
         assert_all_frozen(self.model.model.encoder.embed_tokens)
         if self.different_encoder:
-            assert any(grad_status(self.model.model.encoder))
+            assert any_requires_grad(self.model.model.encoder)
         else:
             freeze_params(self.model.model.encoder)
             del self.teacher.model.encoder
-        if self.different_decoder:
-            assert any(grad_status(self.model.model.decoder))
-        else:
-            freeze_params(self.model.model.decoder)  # TODO(SS): very suspicious
 
     def pre_init(self, hparams):
         # Dump empty student model at a path, then call from_pretrained on it
@@ -115,9 +110,7 @@ class SummarizationDistiller(SummarizationTrainer):
 
     def get_dataset(self, type_path) -> SummarizationDataset:
         n_obs = self.n_obs[type_path]
-        dataset = SummarizationDataset(
-            self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs
-        )
+        dataset = SummarizationDataset(self.tokenizer, type_path=type_path, n_obs=n_obs, **self.dataset_kwargs)
         return dataset
 
     def calc_mse_loss(self, teacher_outputs: torch.Tensor, student_outputs: torch.Tensor, mask) -> torch.FloatTensor:
@@ -319,12 +312,12 @@ class T5SummarizationDistiller(SummarizationDistiller):
         assert_all_frozen(self.model.decoder.embed_tokens)
         assert_all_frozen(self.model.encoder.embed_tokens)
         if self.different_encoder:
-            assert any(grad_status(self.model.encoder))
+            assert any_requires_grad(self.model.encoder)
         else:
             freeze_params(self.model.encoder)
             del self.teacher.model.encoder
         if self.different_decoder:
-            assert any(grad_status(self.model.decoder))
+            assert any_requires_grad(self.model.decoder)
         else:
             freeze_params(self.model.decoder)  # TODO(SS): very suspicious
 
@@ -391,25 +384,13 @@ class T5SummarizationDistiller(SummarizationDistiller):
         return blended_loss, loss_ce, sloss, loss_encoder, hid_loss_enc, hid_loss_dec
 
 
-def main(args):
+def distill_main(args):
     Path(args.output_dir).mkdir(exist_ok=True)
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
 
     model = create_module(args)
-    trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
-    if not args.do_predict:
-        return model
-    # return model  # hack
-
-    model.hparams.test_checkpoint = ""
-    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
-    if checkpoints:
-        model.hparams.test_checkpoint = checkpoints[-1]
-        trainer.resume_from_checkpoint = checkpoints[-1]
-    trainer.logger.log_hyperparams(model.hparams)
-    trainer.test(model)
-    return model
+    ft_main(args, model=model)
 
 
 def create_module(args):
@@ -446,7 +427,7 @@ def evaluate_checkpoint(ckpt_path: Path, dest_dir=None):
     args.n_gpu = 1
     args.eval_batch_size = 16
     Path(args.output_dir).mkdir(exist_ok=True)
-    model: BaseTransformer = create_module(args)
+    model = create_module(args)
     trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=False)
     trainer.test(model)
 
@@ -470,8 +451,7 @@ def get_layers_to_copy(n_to_get, tot):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    add_generic_args(parser, os.getcwd())
     parser = SummarizationDistiller.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
-    main(args)
+    distill_main(args)

@@ -1,4 +1,5 @@
 import os
+import pickle
 from pathlib import Path
 
 import numpy as np
@@ -8,7 +9,6 @@ from tqdm import tqdm
 
 from transformers import BartTokenizer
 from transformers.tokenization_utils import trim_batch
-
 
 
 def encode_file(
@@ -22,13 +22,20 @@ def encode_file(
     tok_name="",
 ):
     cache_path = Path(f"{data_path}_{tok_name}{max_length}.pt")
-    # if not overwrite_cache and cache_path.exists():
-    #     with cache_path.open('rb') as f:
-    #         return torch.load(f)
+    if not overwrite_cache and cache_path.exists():
+        try:
+            examples = torch.load(cache_path)
+            assert isinstance(examples, list)
+            return examples
+
+        except Exception:
+            print(f"failed to load from {cache_path}, retokenizing {data_path}")
     data_path = Path(data_path)
-    examples = []
+
     lns = lmap(str.strip, data_path.open().readlines())
     lns = [prefix + text for text in lns]
+    assert lns, f"found empty file at {data_path}"
+    examples = []
     for text in tqdm(lns, desc=f"Tokenizing {data_path.name}"):
         tokenized = tokenizer.batch_encode_plus(
             [text],  # DONT ADD SPACES
@@ -38,8 +45,7 @@ def encode_file(
             return_tensors=return_tensors,
         )
         examples.append(tokenized)
-    #torch.save(examples, cache_path.open('wb'))
-    #import ipdb; ipdb.set_trace()
+    torch.save(lmap(dict, examples), cache_path.open("wb"))
     return examples
 
 
@@ -60,7 +66,7 @@ class SummarizationDataset(Dataset):
         max_target_length=56,
         n_obs=None,
         overwrite_cache=False,
-        prefix='',
+        prefix="",
     ):
         super().__init__()
         tok_name = "T5" if not isinstance(tokenizer, BartTokenizer) else ""
@@ -148,3 +154,9 @@ class SortishSampler(Sampler):
         sort_idx = np.concatenate(np.random.permutation(ck_idx[1:])) if len(ck_idx) > 1 else np.array([], dtype=np.int)
         sort_idx = np.concatenate((ck_idx[0], sort_idx))
         return iter(sort_idx)
+
+
+def pickle_load(path):
+    """pickle.load(path)"""
+    with open(path, "rb") as f:
+        return pickle.load(f)

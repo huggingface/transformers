@@ -1,4 +1,5 @@
 import argparse
+import glob
 import json
 import logging
 import os
@@ -11,21 +12,22 @@ import git
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning import Trainer
 from rouge_score import rouge_scorer, scoring
 from torch import nn
 from torch.utils.data import DataLoader
 
 from durbango import pickle_save
-from lightning_base import BaseTransformer, add_generic_args, generic_train, get_linear_schedule_with_warmup
-from transformers import AutoModelWithLMHead
+from lightning_base import BaseTransformer, add_generic_args, generic_train
+from transformers import AutoModelWithLMHead, get_linear_schedule_with_warmup
 
 
 try:
     from .utils import SummarizationDataset, lmap
-    from .initialization_utils import init_student, copy_layers
+    from .callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
 except ImportError:
     from utils import SummarizationDataset, lmap
-    from initialization_utils import init_student, copy_layers
+    from callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,10 @@ def grad_status(model: nn.Module) -> Iterable:
     return (par.requires_grad for par in model.parameters())
 
 
+def any_requires_grad(model: nn.Module) -> bool:
+    return any(grad_status(model))
+
+
 def assert_all_frozen(model):
     model_grads: List[bool] = list(grad_status(model))
     n_require_grad = sum(lmap(int, model_grads))
@@ -118,7 +124,7 @@ class SummarizationTrainer(BaseTransformer):
             data_dir=self.hparams.data_dir,
             max_source_length=self.hparams.max_source_length,
             # overwrite_cache=self.hparams.no_cache,
-            prefix=self.model.config.prefix or '',
+            prefix=self.model.config.prefix or "",
         )
         base_nobs = {
             "train": self.hparams.n_train,
@@ -160,6 +166,7 @@ class SummarizationTrainer(BaseTransformer):
             generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
         )
         return lmap(str.strip, gen_text)
+
     def _step(self, batch: dict) -> Tuple:
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
@@ -289,6 +296,8 @@ class SummarizationTrainer(BaseTransformer):
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
+        add_generic_args(parser, root_dir)
+        parser = Trainer.add_argparse_args(parser)
         BaseTransformer.add_model_specific_args(parser, root_dir)
         parser.add_argument(
             "--max_source_length",
@@ -337,15 +346,21 @@ class SummarizationTrainer(BaseTransformer):
         parser.add_argument("--n_test", type=int, default=-1, required=False)
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
         return parser
-import glob
 
-def main(args):
+
+def main(args, model=None):
     Path(args.output_dir).mkdir(exist_ok=True)
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
-
-    model: BaseTransformer = SummarizationTrainer(args)
-    trainer: pl.Trainer = generic_train(model, args, early_stopping_callback=True)
+    if model is None:
+        model: BaseTransformer = SummarizationTrainer(args)
+    trainer: pl.Trainer = generic_train(
+        model,
+        args,
+        early_stopping_callback=True,
+        logging_callback=Seq2SeqLoggingCallback(),
+        checkpoint_callback=get_rouge2_checkpoint_callback(args.output_dir),
+    )
     if not args.do_predict:
         return model
     # return model  # hack

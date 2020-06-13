@@ -11,14 +11,12 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from durbango import DEFAULT_DEVICE, lmap, pickle_load, pickle_save
 from transformers import BartTokenizer
 
-from .distillation import evaluate_checkpoint
-from .distillation import main as distill_main
+from .distillation import distill_main, evaluate_checkpoint
 from .evaluate_cnn import generate_summaries, run_generate
-from .utils import SummarizationDataset
 from .finetune import main
+from .utils import SummarizationDataset, lmap, pickle_load
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -93,6 +91,7 @@ def make_test_data_dir():
         _dump_articles((tmp_dir / f"{split}.source"), articles)
         _dump_articles((tmp_dir / f"{split}.target"), summaries)
     return tmp_dir
+
 
 @unittest.skip("These wont' pass until hidden_states kwarg is merged.")
 class TestSummarizationDistiller(unittest.TestCase):
@@ -177,9 +176,6 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertEqual(1, len(ckpts))
         transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(transformer_ckpts), len(ckpts))
-        n_extra = 0  # more than 1 checkpoint saved, specified in lightning_base.py
-        # removed = clean_output_dir(model.output_dir)
-        # elf.assertEqual(len(removed), n_extra)
         new_transformer_ckpts = list(Path(model.output_dir).glob("**/*.bin"))
         self.assertEqual(len(new_transformer_ckpts), 1)
         examples = lmap(str.strip, model.hparams.data_dir.joinpath("test.source").open().readlines())
@@ -257,6 +253,7 @@ class TestSummarizationDistiller(unittest.TestCase):
         self.assertEqual(train_df.shape[0], 0)
         return model
 
+
 class TestBartExamples(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -285,14 +282,14 @@ class TestBartExamples(unittest.TestCase):
             data_dir=tmp_dir,
             model_type="t5",
             model_name_or_path="patrickvonplaten/t5-tiny-random",
-            tokenizer_name=None, #"patrickvonplaten/t5-tiny-random",
+            tokenizer_name=None,  # "patrickvonplaten/t5-tiny-random",
             train_batch_size=2,
             eval_batch_size=2,
             gpus=0,
             output_dir=output_dir,
             do_predict=True,
         )
-        assert 'n_train' in args_d
+        assert "n_train" in args_d
         args = argparse.Namespace(**args_d)
         main(args)
 
@@ -319,14 +316,6 @@ class TestBartExamples(unittest.TestCase):
             # show that targets were truncated
             self.assertEqual(batch["decoder_input_ids"].shape[1], trunc_target)  # Truncated
             self.assertGreater(max_len_target, trunc_target)  # Truncated
-
-    def tearDown(self) -> None:
-        import shutil
-
-        if not hasattr(self, "needs_remove"):
-            return
-        data_dir = self.needs_remove
-        type_path = "train"
 
 
 def list_to_text_file(lst, path):

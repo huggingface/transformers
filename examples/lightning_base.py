@@ -3,13 +3,10 @@ import logging
 import os
 import random
 from pathlib import Path
-from typing import Any, Dict, List
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.utilities import rank_zero_only
 
 from transformers import (
     AdamW,
@@ -90,7 +87,7 @@ class BaseTransformer(pl.LightningModule):
             self.tokenizer: PreTrainedTokenizer = tokenizer
         if model is None:
             self.model_type = MODEL_MODES[mode]
-            self.model: PretrainedModel = self.model_type.from_pretrained(
+            self.model = self.model_type.from_pretrained(
                 self.hparams.model_name_or_path,
                 from_tf=bool(".ckpt" in self.hparams.model_name_or_path),
                 config=self.config,
@@ -98,7 +95,7 @@ class BaseTransformer(pl.LightningModule):
             )
         else:
             self.model_type = type(model)
-            self.model: PretrainedModel = model
+            self.model = model
 
     def load_hf_checkpoint(self, *args, **kwargs):
         self.model = self.model_type.from_pretrained(*args, **kwargs)
@@ -181,7 +178,7 @@ class BaseTransformer(pl.LightningModule):
             "--model_name_or_path",
             default=None,
             type=str,
-            required=False,
+            required=True,
             help="Path to pretrained model or model identifier from huggingface.co/models",
         )
         parser.add_argument(
@@ -207,77 +204,33 @@ class BaseTransformer(pl.LightningModule):
             "--num_train_epochs", default=3, type=int, help="Total number of training epochs to perform."
         )
 
-        parser.add_argument("--train_batch_size", default=4, type=int)
-        parser.add_argument("--eval_batch_size", default=8, type=int)
-        parser.add_argument("--val_check_interval", default=1.0, type=float)
-
-    @rank_zero_only
-    def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
-        save_path = self.output_dir.joinpath("best_tfmr")
-        save_path.mkdir(exist_ok=True)
-        self.model.save_pretrained(save_path)
-
-    @property
-    def pl_checkpoints(self) -> List[Path]:
-        return list(sorted(Path(self.output_dir).glob("*.ckpt")))
+        parser.add_argument("--train_batch_size", default=32, type=int)
+        parser.add_argument("--eval_batch_size", default=32, type=int)
 
 
 class LoggingCallback(pl.Callback):
-    def _do_work(
-        self, trainer: pl.Trainer, pl_module: pl.LightningModule, type_path: str, save_generations=True
-    ) -> None:
-        logger.info(f"***** {type_path} results *****")
-        if not pl_module.is_logger():
-            return
-        metrics = trainer.callback_metrics
-        trainer.logger.log_metrics({k: v for k, v in metrics.items() if k not in ["log", "progress_bar", "preds"]})
-        # Log results
-        od = Path(pl_module.hparams.output_dir)
-        if type_path == "test":
-            output_val_results_file = od / f"{type_path}_results.txt"
-        else:
-            output_val_results_file = od / f"{type_path}_{trainer.global_step}_results.txt"
-
-        with open(output_val_results_file, "a+") as writer:
-            for key in sorted(metrics):
-                if key in ["log", "progress_bar", "preds"]:
-                    continue
-                val = metrics[key]
-                if isinstance(val, torch.Tensor):
-                    val = val.item()
-                msg = f"{key}: {val:.6f}\n"
-                # logger.info(msg)
-                writer.write(msg)
-
-        if not save_generations:
-            return
-        epoch = metrics.get("epoch", "")
-        if type_path == "val":
-            generations_file = od / f"{type_path}_generations_{trainer.global_step}.txt"
-        else:
-            generations_file = od / f"{type_path}_generations.txt"
-        # sanity_path = od/ f"{type_path}_generations_sanity.txt"
-        if "preds" in metrics:
-            content = "\n".join(metrics["preds"])
-            generations_file.open("w+").write(content)
-
-    @rank_zero_only
-    def on_train_start(self, trainer, pl_module):
-        try:
-            npars = pl_module.model.model.num_parameters()
-        except AttributeError:
-            npars = pl_module.model.num_parameters()
-
-        n_trainable_pars = count_trainable_parameters(pl_module)
-        trainer.logger.log_metrics({"n_params": npars, "mp": npars / 1e6, "grad_mp": n_trainable_pars / 1e6})
-
-    @rank_zero_only
     def on_validation_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        return self._do_work(trainer, pl_module, "val")
+        logger.info("***** Validation results *****")
+        if pl_module.is_logger():
+            metrics = trainer.callback_metrics
+            # Log results
+            for key in sorted(metrics):
+                if key not in ["log", "progress_bar"]:
+                    logger.info("{} = {}\n".format(key, str(metrics[key])))
 
-    @rank_zero_only
     def on_test_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        return self._do_work(trainer, pl_module, "test")
+        logger.info("***** Test results *****")
+
+        if pl_module.is_logger():
+            metrics = trainer.callback_metrics
+
+            # Log and save results to file
+            output_test_results_file = os.path.join(pl_module.hparams.output_dir, "test_results.txt")
+            with open(output_test_results_file, "w") as writer:
+                for key in sorted(metrics):
+                    if key not in ["log", "progress_bar"]:
+                        logger.info("{} = {}\n".format(key, str(metrics[key])))
+                        writer.write("{} = {}\n".format(key, str(metrics[key])))
 
 
 def add_generic_args(parser, root_dir):
@@ -323,31 +276,23 @@ def generic_train(
     model: BaseTransformer,
     args: argparse.Namespace,
     early_stopping_callback=False,
+    logger=True,
     extra_callbacks=[],
+    checkpoint_callback=None,
+    logging_callback=None,
     **extra_train_kwargs
 ):
     # init model
     set_seed(args)
     odir = Path(model.hparams.output_dir)
     odir.mkdir(exist_ok=True)
-    if (
-        args.output_dir.startswith("/var/")
-        or args.fast_dev_run
-        or args.output_dir.startswith("/tmp/")
-        # or args.gpus > 1  # should be fixed in pl 0.8 June 12th
-    ):
-        logger = True
-    else:
-        logger = WandbLogger(name=model.output_dir.name)
+    if checkpoint_callback is None:
+        checkpoint_callback = pl.callbacks.ModelCheckpoint(
+            filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=1
+        )
+    if logging_callback is None:
+        logging_callback = LoggingCallback()
 
-    checkpoint_callback = ModelCheckpoint(
-        filepath=str(model.output_dir / "{val_avg_rouge2:.4f}-{step_count}"),
-        monitor="val_rouge",
-        mode="max",
-        save_top_k=1,
-        save_weights_only=False,
-        period=0,
-    )
     train_params = {}
 
     if args.fp16:
@@ -363,14 +308,14 @@ def generic_train(
         train_params["distributed_backend"] = "ddp"
 
     trainer = pl.Trainer(
-        logger=logger,
+        logger=True,
         accumulate_grad_batches=args.gradient_accumulation_steps,
         gpus=args.gpus,
         max_epochs=args.num_train_epochs,
         early_stop_callback=early_stopping_callback,
         gradient_clip_val=args.max_grad_norm,
         checkpoint_callback=checkpoint_callback,
-        callbacks=[LoggingCallback()] + extra_callbacks,
+        callbacks=[logging_callback] + extra_callbacks,
         fast_dev_run=args.fast_dev_run,
         val_check_interval=args.val_check_interval,
         weights_summary=None,
