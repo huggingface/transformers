@@ -144,6 +144,20 @@ class SummarizationTrainer(BaseTransformer):
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
         )
+        parser.add_argument(
+            "--val_max_target_length",
+            default=142,
+            type=int,
+            help="The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded.",
+        )
+        parser.add_argument(
+            "--test_max_target_length",
+            default=142,
+            type=int,
+            help="The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded.",
+        )
 
         parser.add_argument(
             "--data_dir",
