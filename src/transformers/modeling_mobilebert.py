@@ -41,7 +41,7 @@ from transformers.modeling_bert import (
 from .activations import gelu, gelu_new, swish
 from .configuration_mobilebert import MobileBertConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_utils import PreTrainedModel
+from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 
 
 logger = logging.getLogger(__name__)
@@ -296,6 +296,24 @@ class MobileBertAttention(nn.Module):
         self.self = MobileBertSelfAttention(config)
         self.output = MobileBertSelfOutput(config)
         self.pruned_heads = set()
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.self.query = prune_linear_layer(self.self.query, index)
+        self.self.key = prune_linear_layer(self.self.key, index)
+        self.self.value = prune_linear_layer(self.self.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
+        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -646,6 +664,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
         self.embeddings = MobileBertEmbeddings(config)
         self.encoder = MobileBertEncoder(config)
         self.pooler = MobileBertPooler(config)
+
         self.init_weights()
 
     def get_input_embeddings(self):
@@ -787,13 +806,11 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         super().__init__(config)
         self.mobilebert = MobileBertModel(config)
         self.cls = MobileBertPreTrainingHeads(config)
+
         self.init_weights()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
-
-    def get_input_embeddings(self):
-        return self.mobilebert.embeddings.word_embeddings
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
     def forward(
@@ -804,7 +821,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
+        labels=None,
         next_sentence_label=None,
         output_attentions=None,
     ):
@@ -865,9 +882,9 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
             2:
         ]  # add hidden states and attention if they are here
 
-        if masked_lm_labels is not None and next_sentence_label is not None:
+        if labels is not None and next_sentence_label is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), masked_lm_labels.view(-1))
+            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
             total_loss = masked_lm_loss + next_sentence_loss
             outputs = (total_loss,) + outputs
@@ -889,18 +906,18 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            output_attentions=None,
-            **kwargs
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        output_attentions=None,
+        **kwargs
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -986,7 +1003,8 @@ class MobileBertOnlyNSPHead(nn.Module):
 
 
 @add_start_docstrings(
-    """MobileBert Model with a `next sentence prediction (classification)` head on top. """, MOBILEBERT_START_DOCSTRING,
+    """MobileBert Model with a `next sentence prediction (classification)` head on top. """,
+    MOBILEBERT_START_DOCSTRING,
 )
 class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
     def __init__(self, config):
@@ -999,15 +1017,15 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            next_sentence_label=None,
-            output_attentions=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        next_sentence_label=None,
+        output_attentions=None,
     ):
         r"""
         next_sentence_label (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1072,6 +1090,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
 
         return outputs  # (next_sentence_loss), seq_relationship_score, (hidden_states), (attentions)
 
+
 @add_start_docstrings(
     """MobileBert Model transformer with a sequence classification/regression head on top (a linear layer on top of
     the pooled output) e.g. for GLUE tasks. """,
@@ -1084,6 +1103,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
         self.mobilebert = MobileBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, self.num_labels)
+
         self.init_weights()
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING)
@@ -1291,15 +1311,15 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, num_choices, sequence_length)"))
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
@@ -1402,15 +1422,15 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
 
     @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -1482,4 +1502,3 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
             outputs = (loss,) + outputs
 
         return outputs  # (loss), scores, (hidden_states), (attentions)
-
