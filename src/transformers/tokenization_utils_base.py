@@ -12,7 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tools for the tokenization classes: Special token mixing and batch encoding output
+""" Base classes common to both the slow and the fast tokenization classes:
+    PreTrainedTokenizerBase (host all the user fronting encoding methodes)
+    Special token mixing (host the special tokens logic) and
+    BatchEncoding (wrap the dictionnary of output with special method for the Fast tokenizers)
 """
 
 import copy
@@ -426,7 +429,7 @@ class SpecialTokensMixin:
         "additional_special_tokens",
     ]
 
-    def __init__(self, **kwargs):
+    def __init__(self, verbose=True, **kwargs):
         self._bos_token = None
         self._eos_token = None
         self._unk_token = None
@@ -436,6 +439,7 @@ class SpecialTokensMixin:
         self._mask_token = None
         self._pad_token_type_id = 0
         self._additional_special_tokens = []
+        self.verbose = verbose
 
         for key, value in kwargs.items():
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
@@ -499,7 +503,8 @@ class SpecialTokensMixin:
             else:
                 assert isinstance(value, str)
                 added_tokens += self.add_tokens([value])
-            logger.info("Assigning %s to the %s key of the tokenizer", value, key)
+            if self.verbose:
+                logger.info("Assigning %s to the %s key of the tokenizer", value, key)
             setattr(self, key, value)
 
         return added_tokens
@@ -515,56 +520,56 @@ class SpecialTokensMixin:
     @property
     def bos_token(self):
         """ Beginning of sentence token (string). Log an error if used while not having been set. """
-        if self._bos_token is None:
+        if self._bos_token is None and self.verbose:
             logger.error("Using bos_token, but it is not set yet.")
         return self._bos_token
 
     @property
     def eos_token(self):
         """ End of sentence token (string). Log an error if used while not having been set. """
-        if self._eos_token is None:
+        if self._eos_token is None and self.verbose:
             logger.error("Using eos_token, but it is not set yet.")
         return self._eos_token
 
     @property
     def unk_token(self):
         """ Unknown token (string). Log an error if used while not having been set. """
-        if self._unk_token is None:
+        if self._unk_token is None and self.verbose:
             logger.error("Using unk_token, but it is not set yet.")
         return self._unk_token
 
     @property
     def sep_token(self):
         """ Separation token (string). E.g. separate context and query in an input sequence. Log an error if used while not having been set. """
-        if self._sep_token is None:
+        if self._sep_token is None and self.verbose:
             logger.error("Using sep_token, but it is not set yet.")
         return self._sep_token
 
     @property
     def pad_token(self):
         """ Padding token (string). Log an error if used while not having been set. """
-        if self._pad_token is None:
+        if self._pad_token is None and self.verbose:
             logger.error("Using pad_token, but it is not set yet.")
         return self._pad_token
 
     @property
     def cls_token(self):
         """ Classification token (string). E.g. to extract a summary of an input sequence leveraging self-attention along the full depth of the model. Log an error if used while not having been set. """
-        if self._cls_token is None:
+        if self._cls_token is None and self.verbose:
             logger.error("Using cls_token, but it is not set yet.")
         return self._cls_token
 
     @property
     def mask_token(self):
         """ Mask token (string). E.g. when training a model with masked-language modeling. Log an error if used while not having been set. """
-        if self._mask_token is None:
+        if self._mask_token is None and self.verbose:
             logger.error("Using mask_token, but it is not set yet.")
         return self._mask_token
 
     @property
     def additional_special_tokens(self):
         """ All the additional special tokens you may want to use (list of strings). Log an error if used while not having been set. """
-        if self._additional_special_tokens is None:
+        if self._additional_special_tokens is None and self.verbose:
             logger.error("Using additional_special_tokens, but it is not set yet.")
         return self._additional_special_tokens
 
@@ -837,7 +842,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     @max_len_single_sentence.setter
     def max_len_single_sentence(self, value) -> int:
         """ For backward compatibility, allow to try to setup 'max_len_single_sentence' """
-        if value == self.model_max_length - self.num_special_tokens_to_add(pair=False):
+        if value == self.model_max_length - self.num_special_tokens_to_add(pair=False) and self.verbose:
             logger.warning(
                 "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
             )
@@ -849,7 +854,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     @max_len_sentences_pair.setter
     def max_len_sentences_pair(self, value) -> int:
         """ For backward compatibility, allow to try to setup 'max_len_sentences_pair' """
-        if value == self.model_max_length - self.num_special_tokens_to_add(pair=True):
+        if value == self.model_max_length - self.num_special_tokens_to_add(pair=True) and self.verbose:
             logger.warning(
                 "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
             )
@@ -1178,6 +1183,112 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         return encoded_inputs["input_ids"]
 
+    def num_special_tokens_to_add(self, pair: bool = False) -> int:
+        raise NotImplementedError
+
+    def _get_padding_truncation_strategies(
+        self, padding=False, truncation=False, max_length=None, verbose=True, **kwargs
+    ):
+        """ Find the correct padding/truncation strategy with backward compatibility
+            for old arguments (truncation_strategy and pad_to_max_length) and behaviors.
+        """
+        old_truncation_strategy = kwargs.pop("truncation_strategy", "do_not_truncate")
+        old_pad_to_max_length = kwargs.pop("pad_to_max_length", False)
+
+        # Backward compatibility for previous behavior, maybe we should deprecate it:
+        # If you only set max_length, it activates truncation for max_length
+        if max_length is not None and padding is False and truncation is False:
+            if verbose:
+                logger.warning(
+                    "Truncation was not explicitely activated but `max_length` is provided a specific value, "
+                    "please use `truncation=True` to explicitely truncate examples to max length. "
+                    "Defaulting to 'only_first' truncation strategy. "
+                    "If you encode pairs of sequences (GLUE-style) with the tokenizer you may want to check this is the right behavior."
+                )
+            truncation = "only_first"
+
+        # Get padding strategy
+        if padding is False and old_pad_to_max_length:
+            if verbose:
+                warnings.warn(
+                    "The `pad_to_max_length` argument is deprecated and will be removed in a future version, "
+                    "use `padding=True` or `padding='longest'` to pad to the longest sequence in the batch, or "
+                    "use `padding='max_length'` to pad to a max length. In this case, you can give a specific "
+                    "length with `max_length` (e.g. `max_length=45`) or leave max_length to None to pad to the "
+                    "maximal input size of the model (e.g. 512 for Bert).",
+                    DeprecationWarning,
+                )
+            if max_length is None:
+                padding_strategy = PaddingStrategy.LONGEST
+            else:
+                padding_strategy = PaddingStrategy.MAX_LENGTH
+        elif padding is not False:
+            if padding is True:
+                padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
+            else:
+                padding_strategy = PaddingStrategy(padding)
+        else:
+            padding_strategy = PaddingStrategy.DO_NOT_PAD
+
+        # Get truncation strategy
+        if truncation is False and old_truncation_strategy != "do_not_truncate":
+            if verbose:
+                warnings.warn(
+                    "The `truncation_strategy` argument is deprecated and will be removed in a future version, "
+                    "use `truncation=True` to truncate examples to a max length. You can give a specific "
+                    "length with `max_length` (e.g. `max_length=45`) or leave max_length to None to truncate to the "
+                    "maximal input size of the model (e.g. 512 for Bert). "
+                    " If you have pairs of inputs, you can give a specific truncation strategy selected among "
+                    "`truncation='only_first'` (will only truncate the first sentence in the pairs) "
+                    "`truncation='only_second'` (will only truncate the second sentence in the pairs) "
+                    "or `truncation='longest_first'` (will iteratively remove tokens from the longest sentence in the pairs).",
+                    DeprecationWarning,
+                )
+            truncation_strategy = TruncationStrategy(old_truncation_strategy)
+        elif truncation is not False:
+            if truncation is True:
+                truncation_strategy = (
+                    TruncationStrategy.ONLY_FIRST
+                )  # Default to truncate the first sequences in pairs of inputs
+            else:
+                truncation_strategy = TruncationStrategy(truncation)
+        else:
+            truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
+
+        # Set max length if needed
+        if max_length is None:
+            if padding_strategy == PaddingStrategy.MAX_LENGTH:
+                if self.model_max_length > LARGE_INTEGER:
+                    if verbose:
+                        logger.warning(
+                            "Asking to pad to max_length but no maximum length is provided and the model has no predefined maximum length. "
+                            "Default to no padding."
+                        )
+                    padding_strategy = PaddingStrategy.DO_NOT_PAD
+                else:
+                    max_length = self.model_max_length
+
+            if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
+                if self.model_max_length > LARGE_INTEGER:
+                    if verbose:
+                        logger.warning(
+                            "Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. "
+                            "Default to no truncation."
+                        )
+                    truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
+                else:
+                    max_length = self.model_max_length
+
+        # Test if we have a padding token
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (not self.pad_token or self.pad_token_id < 0):
+            raise ValueError(
+                "Asking to pad but the tokenizer does not have a padding token. "
+                "Please select a token to use as `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` "
+                "or add a new pad token via `tokenizer.add_special_tokens({'pad_token': '[PAD]'})`."
+            )
+
+        return padding_strategy, truncation_strategy, max_length, kwargs
+
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
@@ -1196,6 +1307,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_lengths: bool = False,
+        verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
         """
@@ -1236,7 +1348,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 return_special_tokens_masks=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
                 return_lengths=return_lengths,
-                **kwargs,
+                verbose=verbose ** kwargs,
             )
         else:
             return self.encode_plus(
@@ -1254,107 +1366,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
-                **kwargs,
+                verbose=verbose ** kwargs,
             )
-
-    def num_special_tokens_to_add(self, pair: bool = False) -> int:
-        raise NotImplementedError
-
-    def _get_padding_truncation_strategies(self, padding=False, truncation=False, max_length=None, **kwargs):
-        """ Find the correct padding/truncation strategy with backward compatibility
-            for old arguments (truncation_strategy and pad_to_max_length) and behaviors.
-        """
-        old_truncation_strategy = kwargs.pop("truncation_strategy", "do_not_truncate")
-        old_pad_to_max_length = kwargs.pop("pad_to_max_length", False)
-
-        # Backward compatibility for previous behavior, maybe we should deprecate it:
-        # If you only set max_length, it activates truncation for max_length
-        if max_length is not None and padding is False and truncation is False:
-            logger.warning(
-                "Truncation was not explicitely activated but `max_length` is provided a specific value, "
-                "please use `truncation=True` to explicitely truncate examples to max length. "
-                "Defaulting to 'only_first' truncation strategy. "
-                "If you encode pairs of sequences (GLUE-style) with the tokenizer you may want to check this is the right behavior."
-            )
-            truncation = "only_first"
-
-        # Get padding strategy
-        if padding is False and old_pad_to_max_length:
-            warnings.warn(
-                "The `pad_to_max_length` argument is deprecated and will be removed in a future version, "
-                "use `padding=True` or `padding='longest'` to pad to the longest sequence in the batch, or "
-                "use `padding='max_length'` to pad to a max length. In this case, you can give a specific "
-                "length with `max_length` (e.g. `max_length=45`) or leave max_length to None to pad to the "
-                "maximal input size of the model (e.g. 512 for Bert).",
-                DeprecationWarning,
-            )
-            if max_length is None:
-                padding_strategy = PaddingStrategy.LONGEST
-            else:
-                padding_strategy = PaddingStrategy.MAX_LENGTH
-        elif padding is not False:
-            if padding is True:
-                padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
-            else:
-                padding_strategy = PaddingStrategy(padding)
-        else:
-            padding_strategy = PaddingStrategy.DO_NOT_PAD
-
-        # Get truncation strategy
-        if truncation is False and old_truncation_strategy != "do_not_truncate":
-            warnings.warn(
-                "The `truncation_strategy` argument is deprecated and will be removed in a future version, "
-                "use `truncation=True` to truncate examples to a max length. You can give a specific "
-                "length with `max_length` (e.g. `max_length=45`) or leave max_length to None to truncate to the "
-                "maximal input size of the model (e.g. 512 for Bert). "
-                " If you have pairs of inputs, you can give a specific truncation strategy selected among "
-                "`truncation='only_first'` (will only truncate the first sentence in the pairs) "
-                "`truncation='only_second'` (will only truncate the second sentence in the pairs) "
-                "or `truncation='longest_first'` (will iteratively remove tokens from the longest sentence in the pairs).",
-                DeprecationWarning,
-            )
-            truncation_strategy = TruncationStrategy(old_truncation_strategy)
-        elif truncation is not False:
-            if truncation is True:
-                truncation_strategy = (
-                    TruncationStrategy.ONLY_FIRST
-                )  # Default to truncate the first sequences in pairs of inputs
-            else:
-                truncation_strategy = TruncationStrategy(truncation)
-        else:
-            truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
-
-        # Set max length if needed
-        if max_length is None:
-            if padding_strategy == PaddingStrategy.MAX_LENGTH:
-                if self.model_max_length > LARGE_INTEGER:
-                    logger.warning(
-                        "Asking to pad to max_length but no maximum length is provided and the model has no predefined maximum length. "
-                        "Default to no padding."
-                    )
-                    padding_strategy = PaddingStrategy.DO_NOT_PAD
-                else:
-                    max_length = self.model_max_length
-
-            if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
-                if self.model_max_length > LARGE_INTEGER:
-                    logger.warning(
-                        "Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. "
-                        "Default to no truncation."
-                    )
-                    truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
-                else:
-                    max_length = self.model_max_length
-
-        # Test if we have a padding token
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (not self.pad_token or self.pad_token_id < 0):
-            raise ValueError(
-                "Asking to pad but the tokenizer does not have a padding token. "
-                "Please select a token to use as `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` "
-                "or add a new pad token via `tokenizer.add_special_tokens({'pad_token': '[PAD]'})`."
-            )
-
-        return padding_strategy, truncation_strategy, max_length, kwargs
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
@@ -1374,6 +1387,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_lengths: bool = False,
+        verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
         """
@@ -1393,7 +1407,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding, truncation, max_length, **kwargs
+            padding, truncation, max_length, verbose, **kwargs
         )
 
         return self._encode_plus(
@@ -1412,6 +1426,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
             return_lengths=return_lengths,
+            verbose=verbose,
             **kwargs,
         )
 
@@ -1431,6 +1446,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
+        verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
         raise NotImplementedError
@@ -1459,6 +1475,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return_special_tokens_masks: bool = False,
         return_offsets_mapping: bool = False,
         return_lengths: bool = False,
+        verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
         """
@@ -1477,7 +1494,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding, truncation, max_length, **kwargs
+            padding, truncation, max_length, verbose, **kwargs
         )
 
         return self._batch_encode_plus(
@@ -1495,6 +1512,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             return_special_tokens_masks=return_special_tokens_masks,
             return_offsets_mapping=return_offsets_mapping,
             return_lengths=return_lengths,
+            verbose=verbose,
             **kwargs,
         )
 
@@ -1521,6 +1539,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return_special_tokens_masks: bool = False,
         return_offsets_mapping: bool = False,
         return_lengths: bool = False,
+        verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
         raise NotImplementedError
@@ -1531,6 +1550,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         padding: Union[bool, str] = True,
         max_length: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
+        verbose: bool = True,
     ) -> dict:
         """ Pad encoded inputs (on left/right and up to predefined legnth or max length in the batch)
 
@@ -1560,7 +1580,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(
-            padding=padding, max_length=max_length
+            padding=padding, max_length=max_length, verbose=verbose
         )
 
         if encoding_or_batch["input_ids"] and not isinstance(encoding_or_batch["input_ids"][0], (list, tuple)):

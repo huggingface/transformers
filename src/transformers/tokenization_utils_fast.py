@@ -151,6 +151,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
+        verbose: bool = True,
     ) -> Dict[str, Any]:
         """ Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
 
@@ -191,7 +192,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                         encoding_dict[key] = tf.constant(value)
                     elif return_tensors == "pt" and is_torch_available():
                         encoding_dict[key] = torch.tensor(value)
-                    elif return_tensors is not None:
+                    elif return_tensors is not None and verbose:
                         logger.warning(
                             "Unable to convert output to tensors format {}, "
                             "PyTorch or TensorFlow is not available.".format(return_tensors)
@@ -369,6 +370,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_lengths: bool = False,
+        verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
 
@@ -419,6 +421,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
+                verbose=verbose,
             )
             for encoding in encodings
         ]
@@ -469,6 +472,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
+        verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
 
@@ -487,6 +491,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
+            verbose=verbose,
             **kwargs,
         )
 
