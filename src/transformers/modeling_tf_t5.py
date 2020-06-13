@@ -698,7 +698,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         hidden_states = self.dropout(inputs_embeds, training=training)
 
         for i, (layer_module, past_key_value_state) in enumerate(zip(self.block, past_key_value_states)):
-            if cast_bool_to_primitive(output_hidden_states):
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
@@ -733,14 +733,14 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=training)
 
         # Add last layer
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         if use_cache is True:
             assert self.is_decoder, "`use_cache` can only be set to `True` if {} is used as a decoder".format(self)
             outputs = outputs + (present_key_value_states,)
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (all_attentions,)

@@ -520,22 +520,32 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
         return new_mems
 
-    def call(self, inputs, mems=None, head_mask=None, inputs_embeds=None,
-             output_attentions=None, output_hidden_states=None, training=False):
+    def call(
+        self,
+        inputs,
+        mems=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        training=False,
+    ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             mems = inputs[1] if len(inputs) > 1 else mems
             head_mask = inputs[2] if len(inputs) > 2 else head_mask
             inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
             output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
-            assert len(inputs) <= 5, "Too many inputs."
+            output_hidden_states = inputs[5] if len(inputs) > 4 else output_hidden_states
+            assert len(inputs) <= 6, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             mems = inputs.get("mems", mems)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            assert len(inputs) <= 5, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 6, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -870,8 +880,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             bsz, tgt_len = shape_list(inputs_embeds)[:2]
 
         transformer_outputs = self.transformer(
-            [input_ids, mems, head_mask, inputs_embeds, output_attentions,
-             output_hidden_states], training=training
+            [input_ids, mems, head_mask, inputs_embeds, output_attentions, output_hidden_states], training=training
         )
 
         last_hidden = transformer_outputs[0]

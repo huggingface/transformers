@@ -801,7 +801,9 @@ class XLNetModel(XLNetPreTrainedModel):
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -935,7 +937,7 @@ class XLNetModel(XLNetPreTrainedModel):
             if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
                 # cache new mems
                 new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
-            if cast_bool_to_primitive(output_hidden_states):
+            if output_hidden_states:
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
             outputs = layer_module(
@@ -955,7 +957,7 @@ class XLNetModel(XLNetPreTrainedModel):
                 attentions.append(outputs[2])
 
         # Add last hidden state
-        if cast_bool_to_primitive(output_hidden_states):
+        if output_hidden_states:
             hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
         output = self.dropout(output_g if output_g is not None else output_h)
@@ -966,7 +968,7 @@ class XLNetModel(XLNetPreTrainedModel):
         if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
             outputs = outputs + (new_mems,)
 
-        if cast_bool_to_primitive(output_hidden_states):
+        if output_hidden_states:
             if output_g is not None:
                 hidden_states = tuple(h.permute(1, 0, 2).contiguous() for hs in hidden_states for h in hs)
             else:

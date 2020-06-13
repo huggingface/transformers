@@ -269,7 +269,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
             use_cache = inputs[7] if len(inputs) > 7 else use_cache
             output_attentions = inputs[8] if len(inputs) > 7 else output_attentions
-            assert len(inputs) <= 9, "Too many inputs."
+            output_hidden_states = inputs[9] if len(inputs) > 8 else output_hidden_states
+            assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             past = inputs.get("past", past)
@@ -280,7 +281,8 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             use_cache = inputs.get("use_cache", use_cache)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            assert len(inputs) <= 9, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -354,7 +356,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         all_attentions = []
         all_hidden_states = ()
         for i, (block, layer_past) in enumerate(zip(self.h, past)):
-            if cast_bool_to_primitive(output_hidden_states):
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
             outputs = block(
@@ -372,14 +374,14 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
         hidden_states = tf.reshape(hidden_states, output_shape)
         # Add last hidden state
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
 
         if use_cache is True:
             outputs = outputs + (presents,)
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             # let the number of heads free (-1) so we can extract attention even after head pruning

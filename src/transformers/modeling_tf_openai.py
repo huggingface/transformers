@@ -257,7 +257,8 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             head_mask = inputs[4] if len(inputs) > 4 else head_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
             output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
-            assert len(inputs) <= 7, "Too many inputs."
+            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
+            assert len(inputs) <= 8, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
@@ -266,7 +267,8 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
-            assert len(inputs) <= 7, "Too many inputs."
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 8, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -334,7 +336,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         all_attentions = []
         all_hidden_states = ()
         for i, block in enumerate(self.h):
-            if cast_bool_to_primitive(output_hidden_states):
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
             outputs = block([hidden_states, attention_mask, head_mask[i], output_attentions], training=training)
@@ -344,11 +346,11 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
 
         hidden_states = tf.reshape(hidden_states, output_shape)
         # Add last hidden state
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             # let the number of heads free (-1) so we can extract attention even after head pruning
@@ -664,7 +666,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             head_mask,
             inputs_embeds,
             output_attentions,
-            output_hidden_states
+            output_hidden_states,
         ]
 
         transformer_outputs = self.transformer(flat_inputs, training=training)

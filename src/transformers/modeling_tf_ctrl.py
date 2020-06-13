@@ -353,7 +353,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         all_hidden_states = ()
         all_attentions = []
         for i, (h, layer_past) in enumerate(zip(self.h, past)):
-            if cast_bool_to_primitive(output_hidden_states):
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
             outputs = h(
                 [hidden_states, mask, layer_past, attention_mask, head_mask[i], use_cache, output_attentions],
@@ -369,13 +369,13 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
         hidden_states = self.layernorm(hidden_states)
         hidden_states = tf.reshape(hidden_states, output_shape)
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
         if use_cache is True:
             outputs = outputs + (presents,)
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             # let the number of heads free (-1) so we can extract attention even after head pruning

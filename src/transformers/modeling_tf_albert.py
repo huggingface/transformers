@@ -366,8 +366,7 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
         ]
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask, output_attentions,
-        output_hidden_states = inputs
+        hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states = inputs
 
         layer_hidden_states = ()
         layer_attentions = ()
@@ -381,11 +380,11 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
             if cast_bool_to_primitive(output_attentions) is True:
                 layer_attentions = layer_attentions + (layer_output[1],)
 
-            if cast_bool_to_primitive(output_hidden_states):
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 layer_hidden_states = layer_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (layer_hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (layer_attentions,)
@@ -409,13 +408,12 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
         ]
 
     def call(self, inputs, training=False):
-        hidden_states, attention_mask, head_mask, output_attentions,
-        output_hidden_states  = inputs
+        hidden_states, attention_mask, head_mask, output_attentions, output_hidden_states = inputs
 
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
         all_attentions = ()
 
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = (hidden_states,)
 
         for i in range(self.config.num_hidden_layers):
@@ -431,7 +429,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
                     attention_mask,
                     head_mask[group_idx * layers_per_group : (group_idx + 1) * layers_per_group],
                     output_attentions,
-                    output_hidden_states
+                    output_hidden_states,
                 ],
                 training=training,
             )
@@ -440,11 +438,11 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
             if cast_bool_to_primitive(output_attentions) is True:
                 all_attentions = all_attentions + layer_group_output[-1]
 
-            if cast_bool_to_primitive(output_hidden_states):
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         outputs = (hidden_states,)
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (all_attentions,)
@@ -611,8 +609,8 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
 
         embedding_output = self.embeddings([input_ids, position_ids, token_type_ids, inputs_embeds], training=training)
         encoder_outputs = self.encoder(
-            [embedding_output, extended_attention_mask, head_mask,
-             output_attentions, output_hidden_states], training=training
+            [embedding_output, extended_attention_mask, head_mask, output_attentions, output_hidden_states],
+            training=training,
         )
 
         sequence_output = encoder_outputs[0]

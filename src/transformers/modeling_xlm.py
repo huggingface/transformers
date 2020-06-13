@@ -121,8 +121,7 @@ class MultiHeadAttention(nn.Module):
         self.dim = attention_head_size * self.n_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, input, mask, kv=None, cache=None, head_mask=None,
-                output_attentions=False):
+    def forward(self, input, mask, kv=None, cache=None, head_mask=None, output_attentions=False):
         """
         Self-attention (if kv is None) or attention over source sentence (provided by kv).
         """
@@ -440,7 +439,9 @@ class XLMModel(XLMPreTrainedModel):
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if input_ids is not None:
             bs, slen = input_ids.size()
@@ -513,7 +514,7 @@ class XLMModel(XLMPreTrainedModel):
         hidden_states = ()
         attentions = ()
         for i in range(self.n_layers):
-            if cast_bool_to_primitive(output_hidden_states):
+            if output_hidden_states:
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
@@ -540,7 +541,7 @@ class XLMModel(XLMPreTrainedModel):
             tensor *= mask.unsqueeze(-1).to(tensor.dtype)
 
         # Add last hidden state
-        if cast_bool_to_primitive(output_hidden_states):
+        if output_hidden_states:
             hidden_states = hidden_states + (tensor,)
 
         # update cache length
@@ -551,7 +552,7 @@ class XLMModel(XLMPreTrainedModel):
         # tensor = tensor.transpose(0, 1)
 
         outputs = (tensor,)
-        if cast_bool_to_primitive(output_hidden_states):
+        if output_hidden_states:
             outputs = outputs + (hidden_states,)
         if output_attentions:
             outputs = outputs + (attentions,)

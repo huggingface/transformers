@@ -308,7 +308,9 @@ class ElectraModel(ElectraPreTrainedModel):
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -434,8 +436,14 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
 
         """
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask,
-            inputs_embeds, output_attentions, output_hidden_states
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            inputs_embeds,
+            output_attentions,
+            output_hidden_states,
         )
 
         sequence_output = discriminator_hidden_states[0]
@@ -528,8 +536,14 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         """
 
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, output_attentions,
-            output_hidden_states
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            inputs_embeds,
+            output_attentions,
+            output_hidden_states,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 
@@ -639,8 +653,14 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         generator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, output_attentions,
-            output_hidden_states
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            inputs_embeds,
+            output_attentions,
+            output_hidden_states,
         )
         generator_sequence_output = generator_hidden_states[0]
 
@@ -687,7 +707,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
-        output_hidden_states=None
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
@@ -729,8 +749,14 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         """
 
         discriminator_hidden_states = self.electra(
-            input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, output_attentions,
-            output_hidden_states
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids,
+            head_mask,
+            inputs_embeds,
+            output_attentions,
+            output_hidden_states,
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
 

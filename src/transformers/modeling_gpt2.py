@@ -381,7 +381,7 @@ class GPT2Model(GPT2PreTrainedModel):
         inputs_embeds=None,
         use_cache=True,
         output_attentions=None,
-        output_hidden_states=None
+        output_hidden_states=None,
     ):
         r"""
     Return:
@@ -417,7 +417,9 @@ class GPT2Model(GPT2PreTrainedModel):
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -562,7 +564,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         labels=None,
         use_cache=True,
         output_attentions=None,
-        output_hidden_states=None
+        output_hidden_states=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):

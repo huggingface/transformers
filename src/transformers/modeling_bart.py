@@ -268,8 +268,7 @@ class BartEncoder(nn.Module):
         # mbart has one extra layer_norm
         self.layer_norm = LayerNorm(config.d_model) if config.normalize_before else None
 
-    def forward(self, input_ids, attention_mask=None, output_attentions=False,
-                output_hidden_states=False):
+    def forward(self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False):
         """
         Args:
             input_ids (LongTensor): tokens in the source language of shape
@@ -820,7 +819,9 @@ class BartModel(PretrainedBartModel):
         output_hidden_states=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         # make masks if user doesn't supply
         if not use_cache:
@@ -838,8 +839,10 @@ class BartModel(PretrainedBartModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
         assert isinstance(encoder_outputs, tuple)
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
