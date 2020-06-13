@@ -417,8 +417,12 @@ class CommonFastTokenizerTest(unittest.TestCase):
 
         def assert_batch_padded_input_match(input_r: dict, input_p: dict, max_length: int):
             for i_r in input_r.values():
-                self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(len(i_r[1]), max_length)
-                self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(len(i_r[1]), max_length)
+                self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(
+                    len(i_r[1]), max_length
+                )
+                self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(
+                    len(i_r[1]), max_length
+                )
 
             for i_r, i_p in zip(input_r["input_ids"], input_p["input_ids"]):
                 assert_padded_input_match(i_r, i_p, max_length)
@@ -542,7 +546,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
             pad=True,
             padding_strategy="longest",
         )
-        assert_batch_padded_input_match(input_r, input_p, len(input_r['input_ids'][0]))
+        assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
 
         input_r = tokenizer_r.batch_encode_plus(
             ["This is a simple input 1", "This is a simple input 2"], pad=True, padding_strategy="longest"
@@ -550,7 +554,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
         input_p = tokenizer_p.batch_encode_plus(
             ["This is a simple input 1", "This is a simple input 2"], pad=True, padding_strategy="longest"
         )
-        assert_batch_padded_input_match(input_r, input_p, len(input_r['input_ids'][0]))
+        assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
 
         # Batch_encode_plus - Pair input
         input_r = tokenizer_r.batch_encode_plus(
@@ -561,7 +565,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
             max_length=max_length,
             pad=True,
             truncate=True,
-            padding_strategy='max_length',
+            padding_strategy="max_length",
         )
         input_p = tokenizer_p.batch_encode_plus(
             [
@@ -571,7 +575,7 @@ class CommonFastTokenizerTest(unittest.TestCase):
             max_length=max_length,
             pad=True,
             truncate=True,
-            padding_strategy='max_length',
+            padding_strategy="max_length",
         )
         assert_batch_padded_input_match(input_r, input_p, max_length)
 
@@ -591,26 +595,30 @@ class CommonFastTokenizerTest(unittest.TestCase):
             pad=True,
             padding_strategy="longest",
         )
-        assert_batch_padded_input_match(input_r, input_p, len(input_r['input_ids'][0]))
+        assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
 
         # Using pad after tokenization
         input_r = tokenizer_r.batch_encode_plus(
-            [ "This is a input 1", "This is a much longer input whilch should be padded" ])
+            ["This is a input 1", "This is a much longer input whilch should be padded"]
+        )
         input_r = tokenizer_r.pad(input_r)
 
         input_p = tokenizer_r.batch_encode_plus(
-            [ "This is a input 1", "This is a much longer input whilch should be padded" ])
+            ["This is a input 1", "This is a much longer input whilch should be padded"]
+        )
         input_p = tokenizer_r.pad(input_p)
 
-        assert_batch_padded_input_match(input_r, input_p, len(input_r['input_ids'][0]))
+        assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]))
 
         # Using pad after tokenization
         input_r = tokenizer_r.batch_encode_plus(
-            [ "This is a input 1", "This is a much longer input whilch should be padded" ])
+            ["This is a input 1", "This is a much longer input whilch should be padded"]
+        )
         input_r = tokenizer_r.pad(input_r, max_length=max_length, padding_strategy="max_length")
 
         input_p = tokenizer_r.batch_encode_plus(
-            [ "This is a input 1", "This is a much longer input whilch should be padded" ])
+            ["This is a input 1", "This is a much longer input whilch should be padded"]
+        )
         input_p = tokenizer_r.pad(input_p, max_length=max_length, padding_strategy="max_length")
 
         assert_batch_padded_input_match(input_r, input_p, max_length)
