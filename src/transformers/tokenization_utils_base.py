@@ -1348,7 +1348,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 return_special_tokens_masks=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
                 return_lengths=return_lengths,
-                verbose=verbose ** kwargs,
+                verbose=verbose,
+                **kwargs,
             )
         else:
             return self.encode_plus(
@@ -1366,7 +1367,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
-                verbose=verbose ** kwargs,
+                verbose=verbose,
+                **kwargs,
             )
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
