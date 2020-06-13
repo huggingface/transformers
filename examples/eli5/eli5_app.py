@@ -1,14 +1,14 @@
 import base64
 from pathlib import Path
 
-import faiss
 import numpy as np
-import streamlit as st
 import torch
-from elasticsearch import Elasticsearch
 
+import faiss
 import nlp
+import streamlit as st
 import transformers
+from elasticsearch import Elasticsearch
 from eli5_utils import (
     embed_questions_for_retrieval,
     make_qa_s2s_model,
