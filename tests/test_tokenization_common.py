@@ -67,6 +67,9 @@ class TokenizerTesterMixin:
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    def get_input_output_texts(self, tokenizer):
+        return self.get_clean_sequence(tokenizer)[0]
+
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=None) -> Tuple[str, list]:
         toks = [(i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in range(len(tokenizer))]
         toks = list(filter(lambda t: re.match(r"^[ a-zA-Z]+$", t[1]), toks))
@@ -327,7 +330,7 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                input_text, ids = self.get_clean_sequence(tokenizer)
+                input_text, output_text = self.get_input_output_texts(tokenizer)
 
                 tokens = tokenizer.tokenize(input_text)
                 ids = tokenizer.convert_tokens_to_ids(tokens)
@@ -339,7 +342,7 @@ class TokenizerTesterMixin:
                 text_2 = tokenizer.decode(ids)
                 self.assertIsInstance(text_2, str)
 
-                self.assertEqual(text_2, input_text)
+                self.assertEqual(text_2, output_text)
 
     def test_encode_decode_with_spaces(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -454,7 +457,8 @@ class TokenizerTesterMixin:
                 seq_1 = "This is another sentence to be encoded."
                 seq1_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
                 if len(seq0_tokens) == len(seq1_tokens):
-                    seq_1 = seq_1 + " " + seq_1
+                    seq1_tokens = seq1_tokens + seq1_tokens
+                    seq_1 = tokenizer.decode(seq_1, clean_up_tokenization_spaces=False)
                 seq1_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
 
                 assert len(seq1_tokens) > 2 + stride
@@ -808,9 +812,7 @@ class TokenizerTesterMixin:
                 # Test 'longest' and 'no_padding' don't do anything
                 tokenizer.padding_side = "right"
 
-                not_padded_sequence = tokenizer.encode_plus(
-                    sequence, padding=True, return_special_tokens_mask=True,
-                )
+                not_padded_sequence = tokenizer.encode_plus(sequence, padding=True, return_special_tokens_mask=True,)
                 not_padded_input_ids = not_padded_sequence["input_ids"]
 
                 not_padded_special_tokens_mask = not_padded_sequence["special_tokens_mask"]
@@ -1183,26 +1185,14 @@ class TokenizerTesterMixin:
 
                 if tokenizer.pad_token_id is None:
                     self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        sequences,
-                        padding=True,
-                        return_tensors="pt",
+                        ValueError, tokenizer.batch_encode_plus, sequences, padding=True, return_tensors="pt",
                     )
                     self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        sequences,
-                        padding="longest",
-                        return_tensors="tf",
+                        ValueError, tokenizer.batch_encode_plus, sequences, padding="longest", return_tensors="tf",
                     )
                 else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(
-                        sequences, padding=True, return_tensors="pt"
-                    )
-                    tensorflow_tensor = tokenizer.batch_encode_plus(
-                        sequences, padding="longest", return_tensors="tf"
-                    )
+                    pytorch_tensor = tokenizer.batch_encode_plus(sequences, padding=True, return_tensors="pt")
+                    tensorflow_tensor = tokenizer.batch_encode_plus(sequences, padding="longest", return_tensors="tf")
                     encoded_sequences = tokenizer.batch_encode_plus(sequences, padding=True)
 
                     for key in encoded_sequences.keys():

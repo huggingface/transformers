@@ -340,7 +340,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 return text
             else:
                 raise ValueError(
-                    "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
+                    f"Input {text} is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
                 )
 
         if return_offsets_mapping:
@@ -627,7 +627,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
 
         # Check lengths
-        assert max_length is None or len(encoded_inputs["input_ids"]) <= max_length
         if max_length is None and len(encoded_inputs["input_ids"]) > self.model_max_length and verbose:
             logger.warning(
                 "Token indices sequence length is longer than the specified maximum sequence length "
