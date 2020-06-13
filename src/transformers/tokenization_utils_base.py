@@ -12,14 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-<<<<<<< HEAD
 """ Base classes common to both the slow and the fast tokenization classes:
     PreTrainedTokenizerBase (host all the user fronting encoding methodes)
     Special token mixing (host the special tokens logic) and
     BatchEncoding (wrap the dictionnary of output with special method for the Fast tokenizers)
-=======
-""" Tools for the tokenization classes: Special token mixing and batch encoding output
->>>>>>> switched padding/truncation API - simpler better backward compat
 """
 
 import copy
@@ -31,32 +27,10 @@ from collections import UserDict
 from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
-<<<<<<< HEAD
-import numpy as np
-from tokenizers import AddedToken as AddedTokenFast
-from tokenizers import Encoding as EncodingFast
-
-from .file_utils import (
-    add_end_docstrings,
-    cached_path,
-    hf_bucket_url,
-    is_remote_url,
-    is_tf_available,
-    is_torch_available,
-    torch_required,
-)
-
-
-if is_tf_available():
-    import tensorflow as tf
-if is_torch_available():
-    import torch
-=======
 from tokenizers import AddedToken as AddedTokenFast
 from tokenizers import Encoding as EncodingFast
 
 from .file_utils import add_end_docstrings, cached_path, hf_bucket_url, is_remote_url, torch_required
->>>>>>> switched padding/truncation API - simpler better backward compat
 
 
 logger = logging.getLogger(__name__)
@@ -80,11 +54,7 @@ FULL_TOKENIZER_FILE = "tokenizer.json"
 
 
 class ExplicitEnum(Enum):
-<<<<<<< HEAD
-    """ Enum with more explicit error message for missing values.
-=======
     """ With more explicit missing values error message.
->>>>>>> switched padding/truncation API - simpler better backward compat
     """
 
     @classmethod
@@ -108,15 +78,6 @@ class PaddingStrategy(ExplicitEnum):
     DO_NOT_PAD = "do_not_pad"
 
 
-<<<<<<< HEAD
-class TensorType(ExplicitEnum):
-    PYTORCH = "pt"
-    TENSORFLOW = "tf"
-    NUMPY = "np"
-
-
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
 class CharSpan(NamedTuple):
     """ Character span in the original string
 
@@ -151,25 +112,13 @@ class BatchEncoding(UserDict):
             encoding (:obj:`EncodingFast`, :obj:`list(EncodingFast)`, `optional`, defaults to :obj:`None`):
                 If the tokenizer is a fast tokenizer which outputs additional informations like mapping from word/char space to token space
                 the `EncodingFast` instance or list of instance (for batches) hold these informations.
-<<<<<<< HEAD
-            tensor_type (:obj:`Union[None, str, TensorType]`, `optional`, defaults to :obj:`None`):
-                You can give a tensor_type here to convert the lists of integers in PyTorch/TF/Numpy Tensors at initialization
-            prepend_batch_axis (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Set to True to add a batch axis when converting in Tensors (see :obj:`tensor_type` above)
-=======
 
->>>>>>> switched padding/truncation API - simpler better backward compat
     """
 
     def __init__(
         self,
         data: Optional[Dict[str, Any]] = None,
         encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None,
-<<<<<<< HEAD
-        tensor_type: Union[None, str, TensorType] = None,
-        prepend_batch_axis: bool = False,
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
     ):
         super().__init__(data)
 
@@ -178,19 +127,6 @@ class BatchEncoding(UserDict):
 
         self._encodings = encoding
 
-<<<<<<< HEAD
-        self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
-
-    @property
-    def is_fast(self):
-        """
-        Indicate if this BatchEncoding was generated from the result of a PreTrainedTokenizerFast
-        Returns: True if generated from subclasses of PreTrainedTokenizerFast, else otherwise
-        """
-        return self._encodings is not None
-
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
     def __getitem__(self, item: Union[int, str]) -> EncodingFast:
         """ If the key is a string, get the value of the dict associated to `key` ('input_ids', 'attention_mask'...)
             If the key is an integer, get the EncodingFast for batch item with index `key`
@@ -206,24 +142,7 @@ class BatchEncoding(UserDict):
             )
 
     def __getattr__(self, item: str):
-<<<<<<< HEAD
-        try:
-            return self.data[item]
-        except KeyError:
-            raise AttributeError
-
-    def __getstate__(self):
-        return {"data": self.data, "encodings": self._encodings}
-
-    def __setstate__(self, state):
-        if "data" in state:
-            self.data = state["data"]
-
-        if "encodings" in state:
-            self._encodings = state["encodings"]
-=======
         return self.data[item]
->>>>>>> switched padding/truncation API - simpler better backward compat
 
     def keys(self):
         return self.data.keys()
@@ -247,11 +166,7 @@ class BatchEncoding(UserDict):
         """
         return self._encodings
 
-<<<<<<< HEAD
-    def tokens(self, batch_index: int = 0) -> List[str]:
-=======
     def tokens(self, batch_index: int = 0) -> List[int]:
->>>>>>> switched padding/truncation API - simpler better backward compat
         if not self._encodings:
             raise ValueError("tokens() is not available when using Python based tokenizers")
         return self._encodings[batch_index].tokens
@@ -262,20 +177,6 @@ class BatchEncoding(UserDict):
         return self._encodings[batch_index].words
 
     def token_to_word(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
-<<<<<<< HEAD
-        """
-        Get the index of the word corresponding (i.e. comprising) to an encoded token
-        in a sequence of the batch.
-
-        Can be called as:
-
-        - ``self.token_to_word(token_index)`` if batch size is 1
-        - ``self.token_to_word(batch_index, token_index)`` if batch size is greater than 1
-
-        This method is particularly suited when the input sequences are provided as
-        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
-        to easily associate encoded tokens with provided tokenized words.
-=======
         """ Get the index of the word corresponding (i.e. comprising) to an encoded token
             in a sequence of the batch.
 
@@ -286,7 +187,6 @@ class BatchEncoding(UserDict):
             This method is particularly suited when the input sequences are provided as
             pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
             to easily associate encoded tokens with provided tokenized words.
->>>>>>> switched padding/truncation API - simpler better backward compat
 
         Args:
             batch_or_token_index (:obj:`int`):
@@ -297,11 +197,7 @@ class BatchEncoding(UserDict):
                 of the token in the sequence.
 
         Returns:
-<<<<<<< HEAD
-            :obj:`int`:
-=======
             word_index (:obj:`int`):
->>>>>>> switched padding/truncation API - simpler better backward compat
                 index of the word in the input sequence.
 
         """
@@ -320,24 +216,6 @@ class BatchEncoding(UserDict):
         return self._encodings[batch_index].token_to_word(token_index)
 
     def word_to_tokens(self, batch_or_word_index: int, word_index: Optional[int] = None) -> TokenSpan:
-<<<<<<< HEAD
-        """
-        Get the encoded token span corresponding to a word in the sequence of the batch.
-
-        Token spans are returned as a TokenSpan NamedTuple with:
-
-        - start: index of the first token
-        - end: index of the token following the last token
-
-        Can be called as:
-
-        - ``self.word_to_tokens(word_index)`` if batch size is 1
-        - ``self.word_to_tokens(batch_index, word_index)`` if batch size is greater or equal to 1
-
-        This method is particularly suited when the input sequences are provided as
-        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
-        to easily associate encoded tokens with provided tokenized words.
-=======
         """ Get the encoded token span corresponding to a word in the sequence of the batch.
 
             Token spans are returned as a TokenSpan NamedTuple with:
@@ -351,7 +229,6 @@ class BatchEncoding(UserDict):
             This method is particularly suited when the input sequences are provided as
             pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
             to easily associate encoded tokens with provided tokenized words.
->>>>>>> switched padding/truncation API - simpler better backward compat
 
         Args:
             batch_or_word_index (:obj:`int`):
@@ -362,22 +239,12 @@ class BatchEncoding(UserDict):
                 of the word in the sequence.
 
         Returns:
-<<<<<<< HEAD
-            :obj:`TokenSpan`:
-                Span of tokens in the encoded sequence.
-
-                :obj:`TokenSpan` are NamedTuple with:
-
-                - start: index of the first token
-                - end: index of the token following the last token
-=======
             token_span (:obj:`TokenSpan`):
                 Span of tokens in the encoded sequence.
 
                 TokenSpan are NamedTuple with:
                     start: index of the first token
                     end: index of the token following the last token
->>>>>>> switched padding/truncation API - simpler better backward compat
         """
 
         if not self._encodings:
@@ -394,20 +261,6 @@ class BatchEncoding(UserDict):
         return TokenSpan(*(self._encodings[batch_index].word_to_tokens(word_index)))
 
     def token_to_chars(self, batch_or_token_index: int, token_index: Optional[int] = None) -> CharSpan:
-<<<<<<< HEAD
-        """
-        Get the character span corresponding to an encoded token in a sequence of the batch.
-
-        Character spans are returned as a CharSpan NamedTuple with:
-
-        - start: index of the first character in the original string associated to the token
-        - end: index of the character following the last character in the original string associated to the token
-
-        Can be called as:
-
-        - ``self.token_to_chars(token_index)`` if batch size is 1
-        - ``self.token_to_chars(batch_index, token_index)`` if batch size is greater or equal to 1
-=======
         """ Get the character span corresponding to an encoded token in a sequence of the batch.
 
             Character spans are returned as a CharSpan NamedTuple with:
@@ -417,7 +270,6 @@ class BatchEncoding(UserDict):
             Can be called as:
                 - self.token_to_chars(token_index) if batch size is 1
                 - self.token_to_chars(batch_index, token_index) if batch size is greater or equal to 1
->>>>>>> switched padding/truncation API - simpler better backward compat
 
         Args:
             batch_or_token_index (:obj:`int`):
@@ -428,22 +280,12 @@ class BatchEncoding(UserDict):
                 of the token or tokens in the sequence.
 
         Returns:
-<<<<<<< HEAD
-            :obj:`CharSpan`:
-                Span of characters in the original string.
-
-                :obj:`CharSpan` are NamedTuple with:
-
-                - start: index of the first character in the original string
-                - end: index of the character following the last character in the original string
-=======
             char_span (:obj:`CharSpan`):
                 Span of characters in the original string.
 
                 CharSpan are NamedTuple with:
                     start: index of the first character in the original string
                     end: index of the character following the last character in the original string
->>>>>>> switched padding/truncation API - simpler better backward compat
         """
 
         if not self._encodings:
@@ -456,20 +298,6 @@ class BatchEncoding(UserDict):
         return CharSpan(*(self._encodings[batch_index].token_to_chars(token_index)))
 
     def char_to_token(self, batch_or_char_index: int, char_index: Optional[int] = None) -> int:
-<<<<<<< HEAD
-        """
-        Get the index of the token in the encoded output comprising a character
-        in the original string for a sequence of the batch.
-
-        Can be called as:
-
-        - ``self.char_to_token(char_index)`` if batch size is 1
-        - ``self.char_to_token(batch_index, char_index)`` if batch size is greater or equal to 1
-
-        This method is particularly suited when the input sequences are provided as
-        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
-        to easily associate encoded tokens with provided tokenized words.
-=======
         """ Get the index of the token in the encoded output comprising a character
             in the original string for a sequence of the batch.
 
@@ -480,7 +308,6 @@ class BatchEncoding(UserDict):
             This method is particularly suited when the input sequences are provided as
             pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
             to easily associate encoded tokens with provided tokenized words.
->>>>>>> switched padding/truncation API - simpler better backward compat
 
         Args:
             batch_or_char_index (:obj:`int`):
@@ -492,12 +319,8 @@ class BatchEncoding(UserDict):
 
 
         Returns:
-<<<<<<< HEAD
-            :obj:`int`: Index of the token.
-=======
             token_index (:obj:`int`):
                 Index of the token.
->>>>>>> switched padding/truncation API - simpler better backward compat
         """
 
         if not self._encodings:
@@ -510,21 +333,6 @@ class BatchEncoding(UserDict):
         return self._encodings[batch_index].char_to_token(char_index)
 
     def word_to_chars(self, batch_or_word_index: int, word_index: Optional[int] = None) -> CharSpan:
-<<<<<<< HEAD
-        """
-        Get the character span in the original string corresponding to given word in a sequence
-        of the batch.
-
-        Character spans are returned as a CharSpan NamedTuple with:
-
-        - start: index of the first character in the original string
-        - end: index of the character following the last character in the original string
-
-        Can be called as:
-
-        - ``self.word_to_chars(word_index)`` if batch size is 1
-        - ``self.word_to_chars(batch_index, word_index)`` if batch size is greater or equal to 1
-=======
         """ Get the character span in the original string corresponding to given word in a sequence
             of the batch.
 
@@ -535,7 +343,6 @@ class BatchEncoding(UserDict):
             Can be called as:
                 - self.word_to_chars(word_index) if batch size is 1
                 - self.word_to_chars(batch_index, word_index) if batch size is greater or equal to 1
->>>>>>> switched padding/truncation API - simpler better backward compat
 
         Args:
             batch_or_word_index (:obj:`int`):
@@ -546,20 +353,11 @@ class BatchEncoding(UserDict):
                 of the word in the sequence.
 
         Returns:
-<<<<<<< HEAD
-            :obj:`CharSpan` or :obj:`List[CharSpan]`:
-                Span(s) of the associated character or characters in the string.
-                CharSpan are NamedTuple with:
-
-                - start: index of the first character associated to the token in the original string
-                - end: index of the character following the last character associated to the token in the original string
-=======
             char_span (:obj:`CharSpan` or :obj:`List[CharSpan]`):
                 Span(s) of the associated character or characters in the string.
                 CharSpan are NamedTuple with:
                     start: index of the first character associated to the token in the original string
                     end: index of the character following the last character associated to the token in the original string
->>>>>>> switched padding/truncation API - simpler better backward compat
         """
 
         if not self._encodings:
@@ -572,20 +370,6 @@ class BatchEncoding(UserDict):
         return CharSpan(*(self._encodings[batch_index].word_to_chars(word_index)))
 
     def char_to_word(self, batch_or_char_index: int, char_index: Optional[int] = None) -> int:
-<<<<<<< HEAD
-        """
-        Get the word in the original string corresponding to a character in the original string of
-        a sequence of the batch.
-
-        Can be called as:
-
-        - ``self.char_to_word(char_index)`` if batch size is 1
-        - ``self.char_to_word(batch_index, char_index)`` if batch size is greater than 1
-
-        This method is particularly suited when the input sequences are provided as
-        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
-        to easily associate encoded tokens with provided tokenized words.
-=======
         """ Get the word in the original string corresponding to a character in the original string of
             a sequence of the batch.
 
@@ -596,7 +380,6 @@ class BatchEncoding(UserDict):
             This method is particularly suited when the input sequences are provided as
             pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
             to easily associate encoded tokens with provided tokenized words.
->>>>>>> switched padding/truncation API - simpler better backward compat
 
         Args:
             batch_or_char_index (:obj:`int`):
@@ -608,11 +391,7 @@ class BatchEncoding(UserDict):
 
 
         Returns:
-<<<<<<< HEAD
-            :obj:`int` or :obj:`List[int]`:
-=======
             token_index (:obj:`int` or :obj:`List[int]`):
->>>>>>> switched padding/truncation API - simpler better backward compat
                 Index or indices of the associated encoded token(s).
         """
 
@@ -625,54 +404,6 @@ class BatchEncoding(UserDict):
             char_index = batch_or_char_index
         return self._encodings[batch_index].char_to_word(char_index)
 
-<<<<<<< HEAD
-    def convert_to_tensors(self, tensor_type: Union[None, str, TensorType], prepend_batch_axis: bool = False):
-        if tensor_type is None:
-            return self
-
-        # Convert to TensorType
-        if not isinstance(tensor_type, TensorType):
-            tensor_type = TensorType(tensor_type)
-
-        # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW and is_tf_available():
-            as_tensor = tf.constant
-        elif tensor_type == TensorType.PYTORCH and is_torch_available():
-            as_tensor = torch.tensor
-        elif tensor_type == TensorType.NUMPY:
-            as_tensor = np.asarray
-        else:
-            raise ImportError(
-                "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
-                    tensor_type
-                )
-            )
-
-        # Do the tensor conversion in batch
-        for key, value in self.items():
-            try:
-                if prepend_batch_axis:
-                    value = [value]
-
-                tensor = as_tensor(value)
-
-                # at-least2d
-                if tensor.ndim > 2:
-                    tensor = tensor.squeeze(0)
-                elif tensor.ndim < 2:
-                    tensor = tensor[None, :]
-
-                self[key] = tensor
-            except:  # noqa E722
-                raise ValueError(
-                    "Unable to create tensor, you should probably activate truncation and/or padding "
-                    "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
-                )
-
-        return self
-
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
     @torch_required
     def to(self, device: str):
         """Send all values to device by calling v.to(device)"""
@@ -698,11 +429,7 @@ class SpecialTokensMixin:
         "additional_special_tokens",
     ]
 
-<<<<<<< HEAD
     def __init__(self, verbose=True, **kwargs):
-=======
-    def __init__(self, **kwargs):
->>>>>>> switched padding/truncation API - simpler better backward compat
         self._bos_token = None
         self._eos_token = None
         self._unk_token = None
@@ -712,10 +439,7 @@ class SpecialTokensMixin:
         self._mask_token = None
         self._pad_token_type_id = 0
         self._additional_special_tokens = []
-<<<<<<< HEAD
         self.verbose = verbose
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
 
         for key, value in kwargs.items():
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
@@ -779,12 +503,8 @@ class SpecialTokensMixin:
             else:
                 assert isinstance(value, str)
                 added_tokens += self.add_tokens([value])
-<<<<<<< HEAD
             if self.verbose:
                 logger.info("Assigning %s to the %s key of the tokenizer", value, key)
-=======
-            logger.info("Assigning %s to the %s key of the tokenizer", value, key)
->>>>>>> switched padding/truncation API - simpler better backward compat
             setattr(self, key, value)
 
         return added_tokens
@@ -800,88 +520,56 @@ class SpecialTokensMixin:
     @property
     def bos_token(self):
         """ Beginning of sentence token (string). Log an error if used while not having been set. """
-<<<<<<< HEAD
         if self._bos_token is None and self.verbose:
-=======
-        if self._bos_token is None:
->>>>>>> switched padding/truncation API - simpler better backward compat
             logger.error("Using bos_token, but it is not set yet.")
         return self._bos_token
 
     @property
     def eos_token(self):
         """ End of sentence token (string). Log an error if used while not having been set. """
-<<<<<<< HEAD
         if self._eos_token is None and self.verbose:
-=======
-        if self._eos_token is None:
->>>>>>> switched padding/truncation API - simpler better backward compat
             logger.error("Using eos_token, but it is not set yet.")
         return self._eos_token
 
     @property
     def unk_token(self):
         """ Unknown token (string). Log an error if used while not having been set. """
-<<<<<<< HEAD
         if self._unk_token is None and self.verbose:
-=======
-        if self._unk_token is None:
->>>>>>> switched padding/truncation API - simpler better backward compat
             logger.error("Using unk_token, but it is not set yet.")
         return self._unk_token
 
     @property
     def sep_token(self):
         """ Separation token (string). E.g. separate context and query in an input sequence. Log an error if used while not having been set. """
-<<<<<<< HEAD
         if self._sep_token is None and self.verbose:
-=======
-        if self._sep_token is None:
->>>>>>> switched padding/truncation API - simpler better backward compat
             logger.error("Using sep_token, but it is not set yet.")
         return self._sep_token
 
     @property
     def pad_token(self):
         """ Padding token (string). Log an error if used while not having been set. """
-<<<<<<< HEAD
         if self._pad_token is None and self.verbose:
-=======
-        if self._pad_token is None:
->>>>>>> switched padding/truncation API - simpler better backward compat
             logger.error("Using pad_token, but it is not set yet.")
         return self._pad_token
 
     @property
     def cls_token(self):
         """ Classification token (string). E.g. to extract a summary of an input sequence leveraging self-attention along the full depth of the model. Log an error if used while not having been set. """
-<<<<<<< HEAD
         if self._cls_token is None and self.verbose:
-=======
-        if self._cls_token is None:
->>>>>>> switched padding/truncation API - simpler better backward compat
             logger.error("Using cls_token, but it is not set yet.")
         return self._cls_token
 
     @property
     def mask_token(self):
         """ Mask token (string). E.g. when training a model with masked-language modeling. Log an error if used while not having been set. """
-<<<<<<< HEAD
         if self._mask_token is None and self.verbose:
-=======
-        if self._mask_token is None:
->>>>>>> switched padding/truncation API - simpler better backward compat
             logger.error("Using mask_token, but it is not set yet.")
         return self._mask_token
 
     @property
     def additional_special_tokens(self):
         """ All the additional special tokens you may want to use (list of strings). Log an error if used while not having been set. """
-<<<<<<< HEAD
         if self._additional_special_tokens is None and self.verbose:
-=======
-        if self._additional_special_tokens is None:
->>>>>>> switched padding/truncation API - simpler better backward compat
             logger.error("Using additional_special_tokens, but it is not set yet.")
         return self._additional_special_tokens
 
@@ -1008,35 +696,6 @@ ENCODE_KWARGS_DOCSTRING = r"""
             add_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 If set to ``True``, the sequences will be encoded with the special tokens relative
                 to their model.
-<<<<<<< HEAD
-            `padding` (:obj:`Union[bool, str]`, `optional`, defaults to :obj:`False`):
-                Activate and control padding. Accepts the following values:
-
-                * `True` or `'longest'`: pad to the longest sequence in the batch (or no padding if only a single sequence if provided),
-                * `'max_length'`: pad to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`)
-                * `False` or `'do_not_pad'` (default): No padding (i.e. can output batch with sequences of uneven lengths)
-            `truncation` (:obj:`Union[bool, str]`, `optional`, defaults to :obj:`False`):
-                Activate and control truncation. Accepts the following values:
-
-                * `True` or `'only_first'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`). This will only truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided,
-                * `'only_second'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`). This will only truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided,
-                * `'longest_first'`: truncate to a max length specified in `max_length` or to the max acceptable input length for the model if no length is provided (`max_length=None`). This will truncate token by token, removing a token from the longest sequence in the pair if a pair of sequences (or a batch of pairs) is provided,
-                * `False` or `'do_not_truncate'` (default): No truncation (i.e. can output batch with sequences length greater than the model max admissible input size)
-            `max_length` (:obj:`Union[int, None]`, `optional`, defaults to :obj:`None`):
-                Control the length for padding/truncation. Accepts the following values
-
-                * `None` (default): This will use the predefined model max length if required by one of the truncation/padding parameters. If the model has no specific max input length (e.g. XLNet) truncation/padding to max length is deactivated.
-                * `any integer value` (e.g. `42`): Use this specific maximum length value if required by one of the truncation/padding parameters.
-            stride (:obj:`int`, `optional`, defaults to ``0``):
-                If set to a number along with max_length, the overflowing tokens returned when `return_overflowing_tokens=True`
-                will contain some tokens from the end of the truncated sequence returned to provide some overlap between truncated and overflow ing sequences.
-                The value of this argument defines the number of overlapping tokens.
-            is_pretokenized (:obj:`bool`, defaults to :obj:`False`):
-                Set to True to indicate the input is already tokenized
-            return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
-                Can be set to 'tf', 'pt' or 'np' to return respectively TensorFlow :obj:`tf.constant`,
-                PyTorch :obj:`torch.Tensor` or Numpy :oj: `np.ndarray` instead of a list of python integers.
-=======
             max_length (:obj:`int`, `optional`, defaults to :obj:`None`):
                 If set to a number, will limit the total sequence returned so that it has a maximum length.
                 If there are overflowing tokens, those will be added to the returned dictionary.
@@ -1072,7 +731,6 @@ ENCODE_KWARGS_DOCSTRING = r"""
             return_tensors (:obj:`str`, `optional`, defaults to :obj:`None`):
                 Can be set to 'tf' or 'pt' to return respectively TensorFlow :obj:`tf.constant`
                 or PyTorch :obj:`torch.Tensor` instead of a list of python integers.
->>>>>>> switched padding/truncation API - simpler better backward compat
 """
 
 ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
@@ -1087,11 +745,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
             return_overflowing_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-<<<<<<< HEAD
-                Set to True to return overflowing token sequences (default False).
-=======
                 Set to True to return overflowing token information (default False).
->>>>>>> switched padding/truncation API - simpler better backward compat
             return_special_tokens_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Set to True to return special tokens mask information (default False).
             return_offsets_mapping (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -1107,12 +761,8 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                     input_ids: list[int],
                     token_type_ids: list[int] if return_token_type_ids is True (default)
                     attention_mask: list[int] if return_attention_mask is True (default)
-<<<<<<< HEAD
-                    overflowing_tokens: list[int] if the tokenizer is a slow tokenize, else a List[List[int]] if a ``max_length`` is specified and ``return_overflowing_tokens=True``
-=======
                     overflowing_tokens: list[int] if a ``max_length`` is specified and return_overflowing_tokens is True
                     num_truncated_tokens: int if a ``max_length`` is specified and return_overflowing_tokens is True
->>>>>>> switched padding/truncation API - simpler better backward compat
                     special_tokens_mask: list[int] if ``add_special_tokens`` if set to ``True``
                     and return_special_tokens_mask is True
                 }
@@ -1122,12 +772,8 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             - ``input_ids``: list of token ids to be fed to a model
             - ``token_type_ids``: list of token type ids to be fed to a model
             - ``attention_mask``: list of indices specifying which tokens should be attended to by the model
-<<<<<<< HEAD
-            - ``overflowing_tokens``: list of overflowing tokens sequences if a max length is specified and ``return_overflowing_tokens=True``.
-=======
             - ``overflowing_tokens``: list of overflowing tokens if a max length is specified.
             - ``num_truncated_tokens``: number of overflowing tokens a ``max_length`` is specified
->>>>>>> switched padding/truncation API - simpler better backward compat
             - ``special_tokens_mask``: if adding special tokens, this is a list of [0, 1], with 0 specifying special added
               tokens and 1 specifying sequence tokens.
 """
@@ -1147,8 +793,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
     padding_side: str = "right"
 
-<<<<<<< HEAD
-=======
     NO_PAD_TOKEN_FOR_BATCH_MSG = (
         "No padding token is set for this model, therefore no batch can be made with uneven "
         "sequences. Set a padding token or adjust the lengths of the sequences building the "
@@ -1161,7 +805,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         "up to the larger sequence's length."
     )
 
->>>>>>> switched padding/truncation API - simpler better backward compat
     def __init__(self, model_max_length=None, **kwargs):
         super().__init__(**kwargs)
 
@@ -1199,11 +842,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     @max_len_single_sentence.setter
     def max_len_single_sentence(self, value) -> int:
         """ For backward compatibility, allow to try to setup 'max_len_single_sentence' """
-<<<<<<< HEAD
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=False) and self.verbose:
-=======
-        if value == self.model_max_length - self.num_special_tokens_to_add(pair=False):
->>>>>>> switched padding/truncation API - simpler better backward compat
             logger.warning(
                 "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
             )
@@ -1215,11 +854,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     @max_len_sentences_pair.setter
     def max_len_sentences_pair(self, value) -> int:
         """ For backward compatibility, allow to try to setup 'max_len_sentences_pair' """
-<<<<<<< HEAD
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=True) and self.verbose:
-=======
-        if value == self.model_max_length - self.num_special_tokens_to_add(pair=True):
->>>>>>> switched padding/truncation API - simpler better backward compat
             logger.warning(
                 "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
             )
@@ -1516,11 +1151,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation: Union[bool, str] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
-<<<<<<< HEAD
-        return_tensors: Optional[Union[str, TensorType]] = None,
-=======
         return_tensors: Optional[str] = None,
->>>>>>> switched padding/truncation API - simpler better backward compat
         **kwargs
     ):
         """
@@ -1552,7 +1183,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         return encoded_inputs["input_ids"]
 
-<<<<<<< HEAD
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         raise NotImplementedError
 
@@ -1659,8 +1289,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         return padding_strategy, truncation_strategy, max_length, kwargs
 
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
@@ -1672,21 +1300,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-<<<<<<< HEAD
-        return_tensors: Optional[Union[str, TensorType]] = None,
-=======
         return_tensors: Optional[str] = None,
->>>>>>> switched padding/truncation API - simpler better backward compat
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_lengths: bool = False,
-<<<<<<< HEAD
         verbose: bool = True,
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
         **kwargs
     ) -> BatchEncoding:
         """
@@ -1694,28 +1315,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         the mask for sequence classification and the overflowing elements if a ``max_length`` is specified.
 
         Args:
-<<<<<<< HEAD
-            text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]``):
-=======
             text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]``:
->>>>>>> switched padding/truncation API - simpler better backward compat
                 The sequence or batch of sequences to be encoded.
                 Each sequence can be a string or a list of strings (pre-tokenized string).
                 If the sequences are provided as list of strings (pretokenized), you must set `is_pretokenized=True`
                  (to lift the ambiguity with a batch of sequences)
-<<<<<<< HEAD
-            text_pair (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]``):
-                The sequence or batch of sequences to be encoded.
-                Each sequence can be a string or a list of strings (pre-tokenized string).
-                If the sequences are provided as list of strings (pretokenized), you must set `is_pretokenized=True`
-                (to lift the ambiguity with a batch of sequences)
-=======
             text_pair (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]``:
                 The sequence or batch of sequences to be encoded.
                 Each sequence can be a string or a list of strings (pre-tokenized string).
                 If the sequences are provided as list of strings (pretokenized), you must set `is_pretokenized=True`
                  (to lift the ambiguity with a batch of sequences)
->>>>>>> switched padding/truncation API - simpler better backward compat
         """
         is_batched = bool(
             (not is_pretokenized and isinstance(text, (list, tuple)))
@@ -1739,11 +1348,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 return_special_tokens_masks=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
                 return_lengths=return_lengths,
-<<<<<<< HEAD
-                verbose=verbose,
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
-                **kwargs,
+                verbose=verbose ** kwargs,
             )
         else:
             return self.encode_plus(
@@ -1761,115 +1366,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
-<<<<<<< HEAD
-                verbose=verbose,
-                **kwargs,
+                verbose=verbose ** kwargs,
             )
 
-=======
-                **kwargs,
-            )
-
-    def num_special_tokens_to_add(self, pair: bool = False) -> int:
-        raise NotImplementedError
-
-    def _get_padding_truncation_strategies(self, padding=False, truncation=False, max_length=None, **kwargs):
-        """ Find the correct padding/truncation strategy with backward compatibility
-            for old arguments (truncation_strategy and pad_to_max_length) and behaviors.
-        """
-        old_truncation_strategy = kwargs.pop("truncation_strategy", "do_not_truncate")
-        old_pad_to_max_length = kwargs.pop("pad_to_max_length", False)
-
-        # Backward compatibility for previous behavior, maybe we should deprecate it:
-        # If you only set max_length, it activates truncation for max_length
-        if max_length is not None and padding is False and truncation is False:
-            logger.warning(
-                "Truncation was not explicitely activated but `max_length` is provided a specific value, "
-                "please use `truncation=True` to explicitely truncate examples to max length. "
-                "Defaulting to 'only_first' truncation strategy. "
-                "If you encode pairs of sequences (GLUE-style) with the tokenizer you may want to check this is the right behavior."
-            )
-            truncation = "only_first"
-
-        # Get padding strategy
-        if padding is False and old_pad_to_max_length:
-            warnings.warn(
-                "The `pad_to_max_length` argument is deprecated and will be removed in a future version, "
-                "use `padding=True` or `padding='longest'` to pad to the longest sequence in the batch, or "
-                "use `padding='max_length'` to pad to a max length. In this case, you can give a specific "
-                "length with `max_length` (e.g. `max_length=45`) or leave max_length to None to pad to the "
-                "maximal input size of the model (e.g. 512 for Bert).",
-                DeprecationWarning,
-            )
-            if max_length is None:
-                padding_strategy = PaddingStrategy.LONGEST
-            else:
-                padding_strategy = PaddingStrategy.MAX_LENGTH
-        elif padding is not False:
-            if padding is True:
-                padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
-            else:
-                padding_strategy = PaddingStrategy(padding)
-        else:
-            padding_strategy = PaddingStrategy.DO_NOT_PAD
-
-        # Get truncation strategy
-        if truncation is False and old_truncation_strategy != "do_not_truncate":
-            warnings.warn(
-                "The `truncation_strategy` argument is deprecated and will be removed in a future version, "
-                "use `truncation=True` to truncate examples to a max length. You can give a specific "
-                "length with `max_length` (e.g. `max_length=45`) or leave max_length to None to truncate to the "
-                "maximal input size of the model (e.g. 512 for Bert). "
-                " If you have pairs of inputs, you can give a specific truncation strategy selected among "
-                "`truncation='only_first'` (will only truncate the first sentence in the pairs) "
-                "`truncation='only_second'` (will only truncate the second sentence in the pairs) "
-                "or `truncation='longest_first'` (will iteratively remove tokens from the longest sentence in the pairs).",
-                DeprecationWarning,
-            )
-            truncation_strategy = TruncationStrategy(old_truncation_strategy)
-        elif truncation is not False:
-            if truncation is True:
-                truncation_strategy = (
-                    TruncationStrategy.ONLY_FIRST
-                )  # Default to truncate the first sequences in pairs of inputs
-            else:
-                truncation_strategy = TruncationStrategy(truncation)
-        else:
-            truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
-
-        # Set max length if needed
-        if max_length is None:
-            if padding_strategy == PaddingStrategy.MAX_LENGTH:
-                if self.model_max_length > LARGE_INTEGER:
-                    logger.warning(
-                        "Asking to pad to max_length but no maximum length is provided and the model has no predefined maximum length. "
-                        "Default to no padding."
-                    )
-                    padding_strategy = PaddingStrategy.DO_NOT_PAD
-                else:
-                    max_length = self.model_max_length
-
-            if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
-                if self.model_max_length > LARGE_INTEGER:
-                    logger.warning(
-                        "Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. "
-                        "Default to no truncation."
-                    )
-                    truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
-                else:
-                    max_length = self.model_max_length
-
-        # Test if we have a padding token
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (not self.pad_token or self.pad_token_id < 0):
-            raise ValueError(
-                "Asking to pad but the tokenizer does not have a padding token. "
-                "Please select a token to use as `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` "
-                "or add a new pad token via `tokenizer.add_special_tokens({'pad_token': '[PAD]'})`."
-            )
-
-        return padding_strategy, truncation_strategy, max_length, kwargs
-
->>>>>>> switched padding/truncation API - simpler better backward compat
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
         self,
@@ -1881,21 +1380,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-<<<<<<< HEAD
-        return_tensors: Optional[Union[str, TensorType]] = None,
-=======
         return_tensors: Optional[str] = None,
->>>>>>> switched padding/truncation API - simpler better backward compat
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_lengths: bool = False,
-<<<<<<< HEAD
         verbose: bool = True,
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
         **kwargs
     ) -> BatchEncoding:
         """
@@ -1915,11 +1407,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-<<<<<<< HEAD
             padding, truncation, max_length, verbose, **kwargs
-=======
-            padding, truncation, max_length, **kwargs
->>>>>>> switched padding/truncation API - simpler better backward compat
         )
 
         return self._encode_plus(
@@ -1938,10 +1426,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
             return_lengths=return_lengths,
-<<<<<<< HEAD
             verbose=verbose,
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
             **kwargs,
         )
 
@@ -1955,20 +1440,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-<<<<<<< HEAD
-        return_tensors: Optional[Union[str, TensorType]] = None,
-=======
         return_tensors: Optional[str] = None,
->>>>>>> switched padding/truncation API - simpler better backward compat
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
-<<<<<<< HEAD
         verbose: bool = True,
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
         **kwargs
     ) -> BatchEncoding:
         raise NotImplementedError
@@ -1990,21 +1468,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-<<<<<<< HEAD
-        return_tensors: Optional[Union[str, TensorType]] = None,
-=======
         return_tensors: Optional[str] = None,
->>>>>>> switched padding/truncation API - simpler better backward compat
         return_token_type_ids: Optional[bool] = None,
         return_attention_masks: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_masks: bool = False,
         return_offsets_mapping: bool = False,
         return_lengths: bool = False,
-<<<<<<< HEAD
         verbose: bool = True,
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
         **kwargs
     ) -> BatchEncoding:
         """
@@ -2023,11 +1494,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-<<<<<<< HEAD
             padding, truncation, max_length, verbose, **kwargs
-=======
-            padding, truncation, max_length, **kwargs
->>>>>>> switched padding/truncation API - simpler better backward compat
         )
 
         return self._batch_encode_plus(
@@ -2045,10 +1512,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             return_special_tokens_masks=return_special_tokens_masks,
             return_offsets_mapping=return_offsets_mapping,
             return_lengths=return_lengths,
-<<<<<<< HEAD
             verbose=verbose,
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
             **kwargs,
         )
 
@@ -2068,21 +1532,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         is_pretokenized: bool = False,
-<<<<<<< HEAD
-        return_tensors: Optional[Union[str, TensorType]] = None,
-=======
         return_tensors: Optional[str] = None,
->>>>>>> switched padding/truncation API - simpler better backward compat
         return_token_type_ids: Optional[bool] = None,
         return_attention_masks: Optional[bool] = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_masks: bool = False,
         return_offsets_mapping: bool = False,
         return_lengths: bool = False,
-<<<<<<< HEAD
         verbose: bool = True,
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
         **kwargs
     ) -> BatchEncoding:
         raise NotImplementedError
@@ -2093,10 +1550,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         padding: Union[bool, str] = True,
         max_length: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
-<<<<<<< HEAD
         verbose: bool = True,
-=======
->>>>>>> switched padding/truncation API - simpler better backward compat
     ) -> dict:
         """ Pad encoded inputs (on left/right and up to predefined legnth or max length in the batch)
 
@@ -2126,11 +1580,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(
-<<<<<<< HEAD
             padding=padding, max_length=max_length, verbose=verbose
-=======
-            padding=padding, max_length=max_length
->>>>>>> switched padding/truncation API - simpler better backward compat
         )
 
         if encoding_or_batch["input_ids"] and not isinstance(encoding_or_batch["input_ids"][0], (list, tuple)):
@@ -2182,11 +1632,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
                 - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
-<<<<<<< HEAD
-                - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
-=======
                 - PaddingStrategy..MAX_LENGTH: Pad to the max length (default)
->>>>>>> switched padding/truncation API - simpler better backward compat
                 - PaddingStrategy.DO_NOT_PAD: Do not pad
                 The tokenizer padding sides are defined in self.padding_side:
                     - 'left': pads on the left of the sequences

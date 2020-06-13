@@ -649,7 +649,7 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
         wordpieces_prefix="##",
         **kwargs
     ):
-        super(BertTokenizerFast, self).__init__(
+        super().__init__(
             BertWordPieceTokenizer(
                 vocab_file=vocab_file,
                 unk_token=unk_token,

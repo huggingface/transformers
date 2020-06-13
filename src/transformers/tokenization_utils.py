@@ -164,7 +164,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 and token not in tokens_to_add
             ):
                 tokens_to_add.append(token)
-                logger.info("Adding %s to the vocabulary", token)
+                if self.verbose:
+                    logger.info("Adding %s to the vocabulary", token)
 
         added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}
@@ -355,7 +356,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
 
-        return self.prepare_for_model(
+        return self._prepare_for_model(
             first_ids,
             pair_ids=second_ids,
             add_special_tokens=add_special_tokens,
@@ -441,7 +442,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             second_ids = get_input_ids(pair_ids) if pair_ids is not None else None
             input_ids.append((first_ids, second_ids))
 
-        batch_outputs = self.batch_prepare_for_model(
+        batch_outputs = self._batch_prepare_for_model(
             input_ids,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
@@ -458,11 +459,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         )
 
         if return_tensors is not None:
-            self.convert_to_tensors_(batch_outputs, return_tensors)
+            self.convert_to_tensors_(batch_outputs, return_tensors, verbose=verbose)
 
         return BatchEncoding(batch_outputs)
 
-    def convert_to_tensors_(self, batch_outputs: dict, return_tensors: str) -> None:
+    def convert_to_tensors_(self, batch_outputs: dict, return_tensors: str, verbose: bool = True) -> None:
         # Do the tensor conversion in batch
         for key, value in batch_outputs.items():
             if return_tensors == "tf" and is_tf_available():
@@ -484,7 +485,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     else:
                         raise
 
-            elif return_tensors is not None:
+            elif return_tensors is not None and verbose:
                 logger.warning(
                     "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
                         return_tensors
@@ -492,7 +493,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 )
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
-    def batch_prepare_for_model(
+    def _batch_prepare_for_model(
         self,
         batch_ids_pairs: List[Union[PreTokenizedInputPair, Tuple[List[int], None]]],
         add_special_tokens: bool = True,
@@ -530,7 +531,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         batch_outputs = {}
         for first_ids, second_ids in batch_ids_pairs:
-            outputs = self.prepare_for_model(
+            outputs = self._prepare_for_model(
                 first_ids,
                 second_ids,
                 add_special_tokens=add_special_tokens,
@@ -555,7 +556,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return batch_outputs
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
-    def prepare_for_model(
+    def _prepare_for_model(
         self,
         ids: List[int],
         pair_ids: Optional[List[int]] = None,
@@ -663,7 +664,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
             if "attention_mask" in encoded_inputs:
                 encoded_inputs["attention_mask"] = torch.tensor([encoded_inputs["attention_mask"]])
-        elif return_tensors is not None:
+        elif return_tensors is not None and verbose:
             logger.warning(
                 "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
                     return_tensors

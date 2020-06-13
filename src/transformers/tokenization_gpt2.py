@@ -350,7 +350,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         )
         self.add_prefix_space = add_prefix_space
 
-    def batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
+    def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
 
         is_pretokenized = kwargs.get("is_pretokenized", False)
         assert self.add_prefix_space or not is_pretokenized, (
@@ -358,9 +358,9 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             "to use it with pretokenized inputs."
         )
 
-        return super().batch_encode_plus(*args, **kwargs)
+        return super()._batch_encode_plus(*args, **kwargs)
 
-    def encode_plus(self, *args, **kwargs) -> BatchEncoding:
+    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
 
         is_pretokenized = kwargs.get("is_pretokenized", False)
         assert self.add_prefix_space or not is_pretokenized, (
@@ -368,4 +368,4 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             "to use it with pretokenized inputs."
         )
 
-        return super().encode_plus(*args, **kwargs)
+        return super()._encode_plus(*args, **kwargs)
