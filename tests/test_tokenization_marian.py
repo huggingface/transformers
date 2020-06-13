@@ -55,7 +55,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # overwrite max_len=512 default
         return MarianTokenizer.from_pretrained(self.tmpdirname, max_len=max_len, **kwargs)
 
-    def get_input_output_texts(self):
+    def get_input_output_texts(self, tokenizer):
         return (
             "This is a test",
             "This is a test",
