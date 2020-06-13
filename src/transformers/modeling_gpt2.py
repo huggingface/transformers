@@ -76,23 +76,28 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
         name = name[6:]  # skip "model/"
         name = name.split("/")
         pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+\d+", m_name):
-                scope_names = re.split(r"(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "w" or scope_names[0] == "g":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "b":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "wpe" or scope_names[0] == "wte":
-                pointer = getattr(pointer, scope_names[0])
-                pointer = getattr(pointer, "weight")
-            else:
-                pointer = getattr(pointer, scope_names[0])
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
+        try:
+            for m_name in name_parts:
+                if re.fullmatch(r"[A-Za-z]+\d+", m_name):
+                    scope_names = re.split(r"(\d+)", m_name)
+                else:
+                    scope_names = [m_name]
+                if scope_names[0] == "w" or scope_names[0] == "g":
+                    pointer = getattr(pointer, "weight")
+                elif scope_names[0] == "b":
+                    pointer = getattr(pointer, "bias")
+                elif scope_names[0] == "wpe" or scope_names[0] == "wte":
+                    pointer = getattr(pointer, scope_names[0])
+                    pointer = getattr(pointer, "weight")
+                else:
+                    pointer = getattr(pointer, scope_names[0])
+                if len(scope_names) >= 2:
+                    num = int(scope_names[1])
+                    pointer = pointer[num]
+        except AttributeError:
+            logger.warn('Unexpected weight {} found, ignoring!'.format(name))
+            continue
+            
         try:
             assert pointer.shape == array.shape
         except AssertionError as e:
