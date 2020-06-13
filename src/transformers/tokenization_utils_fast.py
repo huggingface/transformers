@@ -18,7 +18,6 @@
 
 import logging
 import os
-import warnings
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -27,10 +26,8 @@ from tokenizers import Encoding as EncodingFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.implementations import BaseTokenizer as BaseTokenizerFast
 
-from .file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from .tokenization_utils import ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING
-from .tokenization_utils_tools import (
-    LARGE_INTEGER,
+from .file_utils import is_tf_available, is_torch_available
+from .tokenization_utils_base import (
     BatchEncoding,
     PaddingStrategy,
     PreTokenizedInput,
@@ -316,14 +313,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return self._tokenizer.encode(text, pair, add_special_tokens=add_special_tokens).tokens
 
     def set_truncation_and_padding(
-        self,
-        max_length: int,
-        stride: int,
-        truncate: bool,
-        pad: bool,
-        truncation_strategy: Union[str, TruncationStrategy],
-        padding_strategy: Union[str, PaddingStrategy],
-        pad_to_max_length: bool,
+        self, padding_strategy: PaddingStrategy, truncation_strategy: TruncationStrategy, max_length: int, stride: int,
     ):
         """ This contextmanager is in charge of defining the truncation and the padding strategies for fast tokenizers
             (provided by HuggingFace tokenizers library) and restore the tokenizer settings afterwards.
@@ -344,59 +334,13 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 pad_token (str): The string representation of the padding token to use
 
         """
-        if not isinstance(padding_strategy, PaddingStrategy):
-            padding_strategy = PaddingStrategy(padding_strategy)
-
-        if not isinstance(truncation_strategy, TruncationStrategy):
-            truncation_strategy = TruncationStrategy(truncation_strategy)
-
-        if pad_to_max_length:  # Kept for backward compatibility. Don't use anymore, use the padding_strategy instead.
-            warnings.warn(
-                "The `pad_to_max_length` argument is deprecated and will be removed in a future version, use `padding_strategy='max_length'` instead.",
-                DeprecationWarning,
-            )
-            pad_to_max_length = False
-            pad = True
-            if max_length is None:
-                padding_strategy = PaddingStrategy.LONGEST
-            else:
-                padding_strategy = PaddingStrategy.MAX_LENGTH
-
-        # Checks on the truncation and padding options
-        if pad and padding_strategy == PaddingStrategy.MAX_LENGTH and max_length is None:
-            if self.model_max_length > LARGE_INTEGER:
-                logger.warning(
-                    "Asking to pad to max_length but no max length is provided and the model has no predefined maximum length. "
-                    "Default to no padding."
-                )
-                pad = False
-            else:
-                max_length = self.model_max_length
-
-        if pad and (not self.pad_token or self.pad_token_id < 0):
-            raise ValueError(
-                "Unable to set proper padding strategy as the tokenizer does not have a padding token. "
-                "In this case please set the `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` "
-                "or add a new pad token via the function add_special_tokens if you want to use a padding strategy"
-            )
-
-        if truncate and max_length is None:
-            if self.model_max_length > LARGE_INTEGER:
-                logger.warning(
-                    "Asking to truncate to max_length but no max length is provided and the model has no predefined maximum length. "
-                    "Default to no truncation."
-                )
-                truncate = False
-            else:
-                max_length = self.model_max_length
-
         # Set truncation and padding on the backend tokenizer
-        if truncate:
+        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
             self._tokenizer.enable_truncation(max_length, stride=stride, strategy=truncation_strategy.value)
         else:
             self._tokenizer.no_truncation()
 
-        if pad:
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD:
             self._tokenizer.enable_padding(
                 length=max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None,
                 direction=self.padding_side,
@@ -407,20 +351,16 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         else:
             self._tokenizer.no_padding()
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
-    def batch_encode_plus(
+    def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
             List[TextInput], List[TextInputPair], List[PreTokenizedInput], List[PreTokenizedInputPair]
         ],
         add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
-        truncate: bool = False,
-        pad: bool = False,
         stride: int = 0,
-        truncation_strategy: Union[str, TruncationStrategy] = "only_first",
-        padding_strategy: Union[str, PaddingStrategy] = "longest",
-        pad_to_max_length: bool = False,
         is_pretokenized: bool = False,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -431,19 +371,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_lengths: bool = False,
         **kwargs
     ) -> BatchEncoding:
-        """
-        Returns a dictionary containing the encoded sequence or sequence pair and additional information:
-        the mask for sequence classification and the overflowing elements if a ``max_length`` is specified.
-
-        Args:
-            batch_text_or_text_pairs (:obj:`List[str]`,  :obj:`List[Tuple[str, str]]`,
-                                      :obj:`List[List[str]]`,  :obj:`List[Tuple[List[str], List[str]]]`,
-                                      and for not-fast tokenizers, also:
-                                      :obj:`List[List[int]]`,  :obj:`List[Tuple[List[int], List[int]]]`):
-                Batch of sequences or pair of sequences to be encoded.
-                This can be a list of string/string-sequences/int-sequences or a list of pair of
-                string/string-sequences/int-sequence (see details in encode_plus)
-        """
 
         if not isinstance(batch_text_or_text_pairs, list):
             raise ValueError(
@@ -452,13 +379,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         # Set the truncation and padding strategy and restore the initial configuration
         self.set_truncation_and_padding(
+            padding_strategy=padding_strategy,
+            truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
-            truncate=truncate,
-            pad=pad,
-            truncation_strategy=truncation_strategy,
-            padding_strategy=padding_strategy,
-            pad_to_max_length=pad_to_max_length,
         )
 
         # Avoid thread overhead if only one example.
@@ -529,19 +453,15 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         return BatchEncoding(sanitized, encodings)
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
-    def encode_plus(
+    def _encode_plus(
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[Union[TextInput, PreTokenizedInput]] = None,
         add_special_tokens: bool = True,
+        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
+        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
-        truncate: bool = False,
-        pad: bool = False,
         stride: int = 0,
-        truncation_strategy: Union[str, TruncationStrategy] = "only_first",
-        padding_strategy: Union[str, PaddingStrategy] = "longest",
-        pad_to_max_length: bool = False,
         is_pretokenized: bool = False,
         return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -551,39 +471,22 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         **kwargs
     ) -> BatchEncoding:
-        """
-        Returns a dictionary containing the encoded sequence or sequence pair and additional information:
-        the mask for sequence classification and the overflowing elements if a ``max_length`` is specified.
-
-        Args:
-            text (:obj:`str`, :obj:`List[str]` or :obj:`List[int]` (the later only for not-fast tokenizers)):
-                The first sequence to be encoded. This can be a string, a list of strings (tokenized string using
-                the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
-                method)
-            text_pair (:obj:`str`, :obj:`List[str]` or :obj:`List[int]`, `optional`, defaults to :obj:`None`):
-                Optional second sequence to be encoded. This can be a string, a list of strings (tokenized
-                string using the `tokenize` method) or a list of integers (tokenized string ids using the
-                `convert_tokens_to_ids` method)
-        """
 
         batched_input = [(text, text_pair)] if text_pair else [text]
-        batched_output = self.batch_encode_plus(
+        batched_output = self._batch_encode_plus(
             batched_input,
             is_pretokenized=is_pretokenized,
             add_special_tokens=add_special_tokens,
-            max_length=max_length,
-            truncate=truncate,
-            pad=pad,
-            stride=stride,
-            truncation_strategy=truncation_strategy,
             padding_strategy=padding_strategy,
+            truncation_strategy=truncation_strategy,
+            max_length=max_length,
+            stride=stride,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
             return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
-            pad_to_max_length=pad_to_max_length,
             **kwargs,
         )
 
