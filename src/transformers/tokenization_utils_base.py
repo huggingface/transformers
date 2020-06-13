@@ -1789,7 +1789,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 "Defaulting to 'only_first' truncation strategy. "
                 "If you encode pairs of sequences (GLUE-style) with the tokenizer you may want to check this is the right behavior."
             )
-            truncation = 'only_first'
+            truncation = "only_first"
 
         # Get padding strategy
         if padding is False and old_pad_to_max_length:
