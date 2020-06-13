@@ -987,6 +987,9 @@ class BertLMHeadModel(BertPreTrainedModel):
 class BertForMaskedLM(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
+        assert (
+            not config.is_decoder
+        ), "If you want to use `BertForMaskedLM` make sure `config.is_decoder=False` for bi-directional self-attention."
 
         self.bert = BertModel(config)
         self.cls = BertOnlyMLMHead(config)
@@ -1351,7 +1354,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         choice0 = "It is eaten with a fork and a knife."
         choice1 = "It is eaten while held in the hand."
-        labels = torch.tensor(0) # choice0 is correct (according to Wikipedia ;))
+        labels = torch.tensor(0).unsqueeze(0)  # choice0 is correct (according to Wikipedia ;)), batch size 1
 
         encoding = tokenizer.batch_encode_plus([[prompt, choice0], [prompt, choice1]], return_tensors='pt', pad_to_max_length=True)
         outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels) # batch size is 1

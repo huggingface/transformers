@@ -55,6 +55,13 @@ BartForSequenceClassification
     :members: forward
 
 
+BartForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BartForQuestionAnswering
+    :members: forward
+
+
 BartForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

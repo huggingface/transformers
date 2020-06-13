@@ -1,5 +1,7 @@
 ---
 thumbnail: https://raw.githubusercontent.com/JetRunner/BERT-of-Theseus/master/bert-of-theseus.png
+datasets:
+- multi_nli
 ---
 
 # BERT-of-Theseus
