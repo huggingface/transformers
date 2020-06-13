@@ -675,7 +675,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             # cache new mems
             if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
                 new_mems = new_mems + (self.cache_mem(output_h, mems[i]),)
-            if cast_bool_to_primitive(output_hidden_states):
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
             outputs = layer_module(
@@ -690,7 +690,6 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                     target_mapping,
                     head_mask[i],
                     output_attentions,
-                    output_hidden_states,
                 ],
                 training=training,
             )
@@ -699,7 +698,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                 attentions.append(outputs[2])
 
         # Add last hidden state
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             hidden_states.append((output_h, output_g) if output_g is not None else output_h)
 
         output = self.dropout(output_g if output_g is not None else output_h, training=training)
@@ -710,7 +709,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         if self.mem_len is not None and self.mem_len > 0 and use_cache is True:
             outputs = outputs + (new_mems,)
 
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             if output_g is not None:
                 hidden_states = tuple(tf.transpose(h, perm=(1, 0, 2)) for hs in hidden_states for h in hs)
             else:

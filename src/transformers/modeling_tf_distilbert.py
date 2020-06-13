@@ -381,7 +381,7 @@ class TFTransformer(tf.keras.layers.Layer):
 
         hidden_state = x
         for i, layer_module in enumerate(self.layer):
-            if cast_bool_to_primitive(output_hidden_states):
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
             layer_outputs = layer_module([hidden_state, attn_mask, head_mask[i], output_attentions], training=training)
@@ -395,11 +395,11 @@ class TFTransformer(tf.keras.layers.Layer):
                 assert len(layer_outputs) == 1
 
         # Add last layer
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             all_hidden_states = all_hidden_states + (hidden_state,)
 
         outputs = (hidden_state,)
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (all_hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (all_attentions,)
@@ -429,8 +429,14 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         raise NotImplementedError
 
     def call(
-        self, inputs, attention_mask=None, head_mask=None, inputs_embeds=None,
-        output_attentions=None, output_hidden_states=None, training=False
+        self,
+        inputs,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        training=False,
     ):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -477,8 +483,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
 
         embedding_output = self.embeddings(input_ids, inputs_embeds=inputs_embeds)  # (bs, seq_length, dim)
         tfmr_output = self.transformer(
-            [embedding_output, attention_mask, head_mask, output_attentions,
-             output_hidden_states], training=training
+            [embedding_output, attention_mask, head_mask, output_attentions, output_hidden_states], training=training
         )
 
         return tfmr_output  # last-layer hidden-state, (all hidden_states), (all attentions)

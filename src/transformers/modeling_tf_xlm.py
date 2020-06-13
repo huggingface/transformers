@@ -443,7 +443,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         hidden_states = ()
         attentions = ()
         for i in range(self.n_layers):
-            if cast_bool_to_primitive(output_hidden_states):
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
@@ -470,7 +470,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             tensor = tensor * mask[..., tf.newaxis]
 
         # Add last hidden state
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             hidden_states = hidden_states + (tensor,)
 
         # update cache length
@@ -481,7 +481,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         # tensor = tensor.transpose(0, 1)
 
         outputs = (tensor,)
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (hidden_states,)
         if cast_bool_to_primitive(output_attentions) is True:
             outputs = outputs + (attentions,)

@@ -263,8 +263,7 @@ class Transformer(nn.Module):
         layer = TransformerBlock(config)
         self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.n_layers)])
 
-    def forward(self, x, attn_mask=None, head_mask=None,
-                output_attentions=False, output_hidden_states=False):
+    def forward(self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False):
         """
         Parameters
         ----------
@@ -411,7 +410,12 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
     @add_start_docstrings_to_callable(DISTILBERT_INPUTS_DOCSTRING)
     def forward(
-        self, input_ids=None, attention_mask=None, head_mask=None, inputs_embeds=None, output_attentions=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
         output_hidden_states=None,
     ):
         r"""
@@ -446,7 +450,9 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -468,8 +474,11 @@ class DistilBertModel(DistilBertPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)  # (bs, seq_length, dim)
         tfmr_output = self.transformer(
-            x=inputs_embeds, attn_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states
+            x=inputs_embeds,
+            attn_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
         hidden_state = tfmr_output[0]
         output = (hidden_state,) + tfmr_output[1:]

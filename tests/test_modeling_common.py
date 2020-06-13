@@ -200,7 +200,6 @@ class ModelTesterMixin:
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
-            self.assertEqual(model.config.output_hidden_states, True)
 
             self_attentions = outputs[-1]
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
@@ -488,14 +487,13 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            config.output_hidden_states = True
+            inputs_dict["output_hidden_states"] = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs[-1]
-            self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
 
             if hasattr(self.model_tester, "encoder_seq_length"):

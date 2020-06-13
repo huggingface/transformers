@@ -269,8 +269,9 @@ class AlbertLayer(nn.Module):
         self.ffn_output = nn.Linear(config.intermediate_size, config.hidden_size)
         self.activation = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None,
-                output_attentions=False, output_hidden_states=False):
+    def forward(
+        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False
+    ):
         attention_output = self.attention(hidden_states, attention_mask, head_mask, output_attentions)
         ffn_output = self.ffn(attention_output[0])
         ffn_output = self.activation(ffn_output)
@@ -286,8 +287,9 @@ class AlbertLayerGroup(nn.Module):
 
         self.albert_layers = nn.ModuleList([AlbertLayer(config) for _ in range(config.inner_group_num)])
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None,
-                output_attentions=False, output_hidden_states=False):
+    def forward(
+        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False
+    ):
         layer_hidden_states = ()
         layer_attentions = ()
 
@@ -317,8 +319,9 @@ class AlbertTransformer(nn.Module):
         self.embedding_hidden_mapping_in = nn.Linear(config.embedding_size, config.hidden_size)
         self.albert_layer_groups = nn.ModuleList([AlbertLayerGroup(config) for _ in range(config.num_hidden_groups)])
 
-    def forward(self, hidden_states, attention_mask=None, head_mask=None,
-                output_attentions=False, output_hidden_states=False):
+    def forward(
+        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False
+    ):
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
 
         all_attentions = ()
@@ -535,7 +538,9 @@ class AlbertModel(AlbertPreTrainedModel):
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -562,8 +567,11 @@ class AlbertModel(AlbertPreTrainedModel):
             input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
         encoder_outputs = self.encoder(
-            embedding_output, extended_attention_mask, head_mask=head_mask, output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states
+            embedding_output,
+            extended_attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = encoder_outputs[0]

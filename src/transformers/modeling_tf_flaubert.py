@@ -252,7 +252,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             if training and (dropout_probability < self.layerdrop):
                 continue
 
-            if cast_bool_to_primitive(output_hidden_states):
+            if cast_bool_to_primitive(output_hidden_states) is True:
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
@@ -293,7 +293,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
             tensor = tensor * mask[..., tf.newaxis]
 
         # Add last hidden state
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             hidden_states = hidden_states + (tensor,)
 
         # update cache length
@@ -304,7 +304,7 @@ class TFFlaubertMainLayer(TFXLMMainLayer):
         # tensor = tensor.transpose(0, 1)
 
         outputs = (tensor,)
-        if cast_bool_to_primitive(output_hidden_states):
+        if cast_bool_to_primitive(output_hidden_states) is True:
             outputs = outputs + (hidden_states,)
         if output_attentions:
             outputs = outputs + (attentions,)
