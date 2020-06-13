@@ -24,8 +24,8 @@ import regex as re
 from tokenizers import ByteLevelBPETokenizer
 
 from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils_base import BatchEncoding
 from .tokenization_utils_fast import PreTrainedTokenizerFast
-from .tokenization_utils_tools import BatchEncoding
 
 
 logger = logging.getLogger(__name__)
