@@ -1295,7 +1295,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         """
         assert "input_ids" in encoding_or_batch, (
             "You should supply an encoding to this method (a dict of lists/batch of int). "
-            "This is the output of encode/encode_plus/batch_encode_plus/__call__. ")
+            "This is the output of encode/encode_plus/batch_encode_plus/__call__. "
+        )
 
         if not encoding_or_batch["input_ids"]:
             if return_attention_mask:
@@ -1303,12 +1304,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             return encoding_or_batch
 
         if encoding_or_batch["input_ids"] and not isinstance(encoding_or_batch["input_ids"][0], (list, tuple)):
-            return self._pad(encoding_or_batch,
-                    max_length=max_length,
-                    pad=pad,
-                    padding_strategy=padding_strategy,
-                    pad_to_max_length=pad_to_max_length,
-                    return_attention_mask=return_attention_mask)
+            return self._pad(
+                encoding_or_batch,
+                max_length=max_length,
+                pad=pad,
+                padding_strategy=padding_strategy,
+                pad_to_max_length=pad_to_max_length,
+                return_attention_mask=return_attention_mask,
+            )
 
         if not isinstance(padding_strategy, PaddingStrategy):
             padding_strategy = PaddingStrategy(padding_strategy)
