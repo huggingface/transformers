@@ -1022,7 +1022,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel):
 
         example1 = ["This is a context", "Is it a context? Yes"]
         example2 = ["This is a context", "Is it a context? No"]
-        encoding = tokenizer.batch_encode_plus([example1, example2], return_tensors='tf', truncation_strategy="only_first", pad_to_max_length=True, max_length=128)
+        encoding = tokenizer.batch_encode_plus([example1, example2], return_tensors='tf', truncation_strategy="first", pad_to_max_length=True, max_length=128)
         outputs = model(encoding["input_ids"][None, :])
         logits = outputs[0]
 
