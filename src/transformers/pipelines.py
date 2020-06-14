@@ -1069,7 +1069,7 @@ class TokenClassificationPipeline(Pipeline):
         Returns grouped entities
         """
         # Get the last entity in the entity group
-        entity = entities[-1]["entity"]
+        entity = entities[0]["entity"]
         scores = np.mean([entity["score"] for entity in entities])
         tokens = [entity["word"] for entity in entities]
 
