@@ -7,7 +7,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
@@ -244,6 +243,8 @@ class TestSummarizationDistiller(unittest.TestCase):
         # self.assertEqual(len(contents), 15)
 
         metrics = pickle_load(Path(output_dir) / "metrics.pkl")
+        import pandas as pd
+
         val_df = pd.DataFrame(metrics["val"])
         train_df = pd.DataFrame(metrics["train"])
         test_df = pd.DataFrame(metrics["test"])

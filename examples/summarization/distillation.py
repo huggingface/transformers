@@ -11,7 +11,6 @@ from torch.nn import functional as F
 
 from lightning_base import generic_train
 from transformers import AdamW, BartConfig, BartForConditionalGeneration, T5Config, T5ForConditionalGeneration
-from transformers.modeling_bart import invert_mask
 
 
 try:
