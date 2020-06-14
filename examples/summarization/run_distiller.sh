@@ -3,7 +3,7 @@
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
 
-python finetune.py \
+python distillation.py \
 --learning_rate=3e-4 \
 --do_train \
 --do_predict \

@@ -318,7 +318,6 @@ def generic_train(
         val_check_interval=args.val_check_interval,
         weights_summary=None,
         resume_from_checkpoint=args.resume_from_checkpoint,
-        auto_scale_batch_size=args.auto_scale_batch_size,
         **train_params,
     )
 
