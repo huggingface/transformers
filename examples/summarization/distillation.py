@@ -246,7 +246,7 @@ class SummarizationDistiller(SummarizationTrainer):
                 lm_labels=labels,
                 output_hidden_states=True,
             )
-        dec_mask = invert_mask(self.model.model.last_padding_mask)
+        dec_mask = decoder_input_ids.eq(self.tokenizer.pad_token_id)
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
         if not self.hparams.freeze_decoder and self.alpha_hid > 0:
             hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.layer_to_copy)
