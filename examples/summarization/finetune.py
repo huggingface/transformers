@@ -16,14 +16,14 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train
-from transformers import AutoModelWithLMHead, get_linear_schedule_with_warmup
+from transformers import get_linear_schedule_with_warmup
 
 
 try:
-    from .utils import SummarizationDataset, lmap, flatten_list, pickle_save
+    from .utils import use_task_specific_params, SummarizationDataset, lmap, flatten_list, pickle_save
     from .callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
 except ImportError:
-    from utils import SummarizationDataset, lmap, flatten_list, pickle_save
+    from utils import use_task_specific_params, SummarizationDataset, lmap, flatten_list, pickle_save
     from callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
 
 logger = logging.getLogger(__name__)
@@ -105,13 +105,13 @@ def assert_not_all_frozen(model):
 
 
 class SummarizationTrainer(BaseTransformer):
-    mode = "language-modeling"
+    mode = "summarization"
     loss_names = ["loss"]
 
     def __init__(self, hparams, **kwargs):
         super().__init__(hparams, num_labels=None, mode=self.mode, **kwargs)
+        use_task_specific_params(self.model, "summarization")
         save_git_info(self.hparams.output_dir)
-        self.model: AutoModelWithLMHead
         self.metrics_save_path = Path(self.output_dir) / "metrics.pkl"
         self.hparams_save_path = Path(self.output_dir) / "hparams.pkl"
         self.step_count = 0

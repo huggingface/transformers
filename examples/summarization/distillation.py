@@ -21,7 +21,7 @@ try:
         any_requires_grad,
     )
     from .initialization_utils import init_student, copy_layers
-    from .utils import SummarizationDataset, pickle_load
+    from .utils import use_task_specific_params, SummarizationDataset, pickle_load
     from .finetune import main as ft_main
 except ImportError:
     from finetune import (
@@ -32,7 +32,7 @@ except ImportError:
     )
     from finetune import main as ft_main
     from initialization_utils import init_student, copy_layers
-    from utils import SummarizationDataset, pickle_load
+    from utils import use_task_specific_params, SummarizationDataset, pickle_load
 
 
 class SummarizationDistiller(SummarizationTrainer):
@@ -45,6 +45,7 @@ class SummarizationDistiller(SummarizationTrainer):
 
         super().__init__(hparams, model=student, config=student_cfg)
         self.teacher = teacher
+        use_task_specific_params(self.teacher, "summarization")
         freeze_params(self.teacher)
         assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
         self.sanity_check_gradients()

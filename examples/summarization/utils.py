@@ -158,6 +158,13 @@ class SortishSampler(Sampler):
         return iter(sort_idx)
 
 
+def use_task_specific_params(model, task):
+    # update config with summarization specific params
+    task_specific_params = model.config.task_specific_params
+    if task_specific_params is not None:
+        model.config.update(task_specific_params.get(task, {}))
+
+
 def pickle_load(path):
     """pickle.load(path)"""
     with open(path, "rb") as f:

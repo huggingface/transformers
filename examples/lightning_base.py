@@ -14,6 +14,7 @@ from transformers import (
     AutoModel,
     AutoModelForPreTraining,
     AutoModelForQuestionAnswering,
+    AutoModelForSeq2SeqLM,
     AutoModelForSequenceClassification,
     AutoModelForTokenClassification,
     AutoModelWithLMHead,
@@ -34,6 +35,8 @@ MODEL_MODES = {
     "pretraining": AutoModelForPreTraining,
     "token-classification": AutoModelForTokenClassification,
     "language-modeling": AutoModelWithLMHead,
+    "summarization": AutoModelForSeq2SeqLM,
+    "translation": AutoModelForSeq2SeqLM,
 }
 
 
