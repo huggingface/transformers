@@ -309,7 +309,7 @@ def generic_train(
         train_params["distributed_backend"] = "ddp"
 
     trainer = pl.Trainer(
-        logger=True,
+        logger=logger,
         accumulate_grad_batches=args.gradient_accumulation_steps,
         gpus=args.gpus,
         max_epochs=args.num_train_epochs,
