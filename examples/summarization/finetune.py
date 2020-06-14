@@ -367,7 +367,7 @@ def main(args, model=None):
         model.hparams.test_checkpoint = checkpoints[-1]
         trainer.resume_from_checkpoint = checkpoints[-1]
     trainer.logger.log_hyperparams(model.hparams)
-    trainer.test(model)
+    trainer.test(model)  # NOTE(SS): this will break in DDP, known lightning issue. See evaluate_checkpoint
     return model
 
 
