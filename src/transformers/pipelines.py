@@ -1021,21 +1021,24 @@ class TokenClassificationPipeline(Pipeline):
                     "index": idx,
                 }
                 last_idx, _ = filtered_labels_idx[-1]
+                is_last_idx = idx == last_idx
+
                 if self.grouped_entities:
                     if not entity_group_disagg:
                         entity_group_disagg += [entity]
-                        if idx == last_idx:
+                        if is_last_idx:
                             entity_groups += [self.group_entities(entity_group_disagg)]
                         continue
 
                     # If the current entity is similar and adjacent to the previous entity, append it to the disaggregated entity group
+                    # The split is meant to account for the "B" and "I" suffixes
                     if (
-                        entity["entity"] == entity_group_disagg[-1]["entity"]
+                        entity["entity"].split("-")[-1] == entity_group_disagg[-1]["entity"].split("-")[-1]
                         and entity["index"] == entity_group_disagg[-1]["index"] + 1
                     ):
                         entity_group_disagg += [entity]
                         # Group the entities at the last entity
-                        if idx == last_idx:
+                        if is_last_idx:
                             entity_groups += [self.group_entities(entity_group_disagg)]
                     # If the current entity is different from the previous entity, aggregate the disaggregated entity group
                     else:
