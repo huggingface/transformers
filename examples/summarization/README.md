@@ -27,3 +27,8 @@ The default batch size, 4, fits in 16GB GPU memory, but may need to be adjusted 
 
 ### Training
 Run/modify `finetune.sh`
+
+Tips:
+- 1 epoch at batch size 1 for bart-large takes 24 hours, requires 13GB GPU RAM with fp16.
+- try --freeze_encoder or --freeze_embeds for faster training/larger batch size.
+- fp16 opt level O1 is best.
