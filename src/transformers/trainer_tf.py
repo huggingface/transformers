@@ -66,6 +66,7 @@ class TFTrainer:
         self.optimizers = optimizers
         self.gradient_accumulator = GradientAccumulator()
         self.global_step = 0
+        self.epoch_logging = 0
 
         if tb_writer is not None:
             self.tb_writer = tb_writer
@@ -271,9 +272,7 @@ class TFTrainer:
         output = self._prediction_loop(eval_ds, description="Evaluation")
 
         logs = {**output.metrics}
-        # add epoch when running evaluate from training loop
-        if self.epoch_logging is not None:
-            logs["epoch"] = self.epoch_logging
+        logs["epoch"] = self.epoch_logging
         self._log(logs)
 
         return output.metrics
@@ -326,8 +325,6 @@ class TFTrainer:
         logger.info("  Num examples = %d", self.num_train_examples)
         logger.info("  Num Epochs = %d", epochs)
         logger.info("  Total optimization steps = %d", self.train_steps)
-
-        self.epoch_logging = 0
 
         for epoch_iter in range(start_epoch, int(epochs + 1)):
             for step, training_loss in enumerate(self._training_steps(train_ds, optimizer)):
