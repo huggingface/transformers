@@ -1,19 +1,15 @@
 import argparse
 import glob
-import json
 import logging
 import os
 import time
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, List, Tuple
 
-import git
 import numpy as np
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.loggers import WandbLogger
-from rouge_score import rouge_scorer, scoring
-from torch import nn
 from torch.utils.data import DataLoader
 
 from lightning_base import BaseTransformer, add_generic_args, generic_train
@@ -21,88 +17,35 @@ from transformers import get_linear_schedule_with_warmup
 
 
 try:
-    from .utils import use_task_specific_params, SummarizationDataset, lmap, flatten_list, pickle_save
+    from .utils import (
+        use_task_specific_params,
+        SummarizationDataset,
+        lmap,
+        flatten_list,
+        pickle_save,
+        save_git_info,
+        freeze_params,
+        calculate_rouge,
+        get_git_info,
+        ROUGE_KEYS,
+    )
     from .callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
 except ImportError:
-    from utils import use_task_specific_params, SummarizationDataset, lmap, flatten_list, pickle_save
+    from .utils import (
+        use_task_specific_params,
+        SummarizationDataset,
+        lmap,
+        flatten_list,
+        pickle_save,
+        save_git_info,
+        freeze_params,
+        calculate_rouge,
+        get_git_info,
+        ROUGE_KEYS,
+    )
     from callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
 
 logger = logging.getLogger(__name__)
-
-ROUGE_KEYS = ["rouge1", "rouge2", "rougeL"]
-
-
-def save_git_info(folder_path: str):
-    """
-    Log commit info.
-    """
-    repo_infos = get_git_info()
-
-    with open(os.path.join(folder_path, "git_log.json"), "w") as f:
-        json.dump(repo_infos, f, indent=4)
-
-
-def get_git_info():
-    repo = git.Repo(search_parent_directories=True)
-    repo_infos = {
-        "repo_id": str(repo),
-        "repo_sha": str(repo.head.object.hexsha),
-        "repo_branch": str(repo.active_branch),
-    }
-    return repo_infos
-
-
-def calculate_rouge(output_lns: List[str], reference_lns: List[str]) -> Dict:
-    scorer = rouge_scorer.RougeScorer(ROUGE_KEYS, use_stemmer=True)
-    aggregator = scoring.BootstrapAggregator()
-
-    for reference_ln, output_ln in zip(reference_lns, output_lns):
-        scores = scorer.score(reference_ln, output_ln)
-        aggregator.add_scores(scores)
-
-    result = aggregator.aggregate()
-    return {k: v.mid.fmeasure for k, v in result.items()}
-
-
-def dictify(rouge_obj) -> List:
-    records = []
-    for k, rouge_measurement in rouge_obj.items():
-        if k == "rouge1":
-            continue
-        for k1 in ["low", "mid", "high"]:
-            if k1 != "mid":
-                continue
-            v1 = getattr(rouge_measurement, k1)
-            for k2 in ["precision", "recall", "fmeasure"]:
-                records.append([k, k1, k2, getattr(v1, k2)])
-
-    return records
-
-
-def freeze_params(model: nn.Module):
-    for par in model.parameters():
-        par.requires_grad = False
-
-
-def grad_status(model: nn.Module) -> Iterable:
-    return (par.requires_grad for par in model.parameters())
-
-
-def any_requires_grad(model: nn.Module) -> bool:
-    return any(grad_status(model))
-
-
-def assert_all_frozen(model):
-    model_grads: List[bool] = list(grad_status(model))
-    n_require_grad = sum(lmap(int, model_grads))
-    npars = len(model_grads)
-    assert not any(model_grads), f"{n_require_grad/npars:.1%} of {npars} weights require grad"
-
-
-def assert_not_all_frozen(model):
-    model_grads: List[bool] = list(grad_status(model))
-    npars = len(model_grads)
-    assert any(model_grads), f"none of {npars} weights require grad"
 
 
 class SummarizationTrainer(BaseTransformer):

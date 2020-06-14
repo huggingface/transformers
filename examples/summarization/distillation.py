@@ -14,25 +14,29 @@ from transformers import AdamW, BartConfig, BartForConditionalGeneration, T5Conf
 
 
 try:
-    from .finetune import (
-        SummarizationTrainer,
+    from .finetune import SummarizationTrainer
+    from .initialization_utils import init_student, copy_layers
+    from .utils import (
+        use_task_specific_params,
+        SummarizationDataset,
+        pickle_load,
         freeze_params,
         assert_all_frozen,
         any_requires_grad,
     )
-    from .initialization_utils import init_student, copy_layers
-    from .utils import use_task_specific_params, SummarizationDataset, pickle_load
     from .finetune import main as ft_main
 except ImportError:
-    from finetune import (
-        SummarizationTrainer,
+    from finetune import SummarizationTrainer
+    from finetune import main as ft_main
+    from initialization_utils import init_student, copy_layers
+    from utils import (
+        use_task_specific_params,
+        SummarizationDataset,
+        pickle_load,
         freeze_params,
         assert_all_frozen,
         any_requires_grad,
     )
-    from finetune import main as ft_main
-    from initialization_utils import init_student, copy_layers
-    from utils import use_task_specific_params, SummarizationDataset, pickle_load
 
 
 class SummarizationDistiller(SummarizationTrainer):
