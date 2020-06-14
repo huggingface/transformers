@@ -265,6 +265,7 @@ def add_generic_args(parser, root_dir) -> None:
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
     parser.add_argument("--resume_from_checkpoint", type=str, default=None)
+    parser.add_argument("--val_check_interval", default=1.0, type=float)
 
 
 def generic_train(
