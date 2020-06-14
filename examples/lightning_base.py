@@ -227,7 +227,7 @@ class LoggingCallback(pl.Callback):
                         writer.write("{} = {}\n".format(key, str(metrics[key])))
 
 
-def add_generic_args(parser, root_dir):
+def add_generic_args(parser, root_dir) -> None:
     #  TODO(SS): allow all pl args? parser = pl.Trainer.add_argparse_args(parser)
     parser.add_argument(
         "--output_dir",
