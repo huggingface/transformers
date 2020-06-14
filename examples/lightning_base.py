@@ -45,12 +45,6 @@ def set_seed(args: argparse.Namespace):
         torch.cuda.manual_seed_all(args.seed)
 
 
-def count_trainable_parameters(model):
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-    params = sum([np.prod(p.size()) for p in model_parameters])
-    return params
-
-
 class BaseTransformer(pl.LightningModule):
     def __init__(
         self,
@@ -94,7 +88,7 @@ class BaseTransformer(pl.LightningModule):
                 cache_dir=cache_dir,
             )
         else:
-            self.model_type = type(model)
+            self.model_type = None
             self.model = model
 
     def load_hf_checkpoint(self, *args, **kwargs):
@@ -186,7 +180,7 @@ class BaseTransformer(pl.LightningModule):
         )
         parser.add_argument(
             "--tokenizer_name",
-            default="facebook/bart-large",
+            default=None,
             type=str,
             help="Pretrained tokenizer name or path if not the same as model_name",
         )
@@ -234,7 +228,7 @@ class LoggingCallback(pl.Callback):
 
 
 def add_generic_args(parser, root_dir):
-    parser = pl.Trainer.add_argparse_args(parser)
+    #  TODO(SS): allow all pl args? parser = pl.Trainer.add_argparse_args(parser)
     parser.add_argument(
         "--output_dir",
         default=None,
@@ -277,7 +271,7 @@ def generic_train(
     model: BaseTransformer,
     args: argparse.Namespace,
     early_stopping_callback=False,
-    logger=True,
+    logger=True,  # can pass WandbLogger() here
     extra_callbacks=[],
     checkpoint_callback=None,
     logging_callback=None,
@@ -302,6 +296,8 @@ def generic_train(
 
     if args.n_tpu_cores > 0:
         global xm
+        import torch_xla.core.xla_model as xm
+
         train_params["num_tpu_cores"] = args.n_tpu_cores
         train_params["gpus"] = 0
 

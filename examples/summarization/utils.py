@@ -164,5 +164,11 @@ def pickle_load(path):
         return pickle.load(f)
 
 
+def pickle_save(obj, path):
+    """pickle.dump(obj, path)"""
+    with open(path, "wb") as f:
+        return pickle.dump(obj, f)
+
+
 def flatten_list(summary_ids: List[List]):
     return [x for x in itertools.chain.from_iterable(summary_ids)]

@@ -23,7 +23,7 @@ try:
     from .initialization_utils import init_student, copy_layers
     from .utils import SummarizationDataset, pickle_load
     from .finetune import main as ft_main
-except ModuleNotFoundError:
+except ImportError:
     from finetune import (
         SummarizationTrainer,
         freeze_params,
@@ -46,7 +46,8 @@ class SummarizationDistiller(SummarizationTrainer):
         super().__init__(hparams, model=student, config=student_cfg)
         self.teacher = teacher
         freeze_params(self.teacher)
-        self.freeze_stuff(d_layers_to_copy)
+        assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
+        self.sanity_check_gradients()
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
         self.alpha_mlm = hparams.alpha_mlm
@@ -57,8 +58,7 @@ class SummarizationDistiller(SummarizationTrainer):
         gc.collect()
         torch.cuda.empty_cache()
 
-    def freeze_stuff(self, d_layers_to_copy):
-        assert len(self.model.model.decoder.layers) == len(d_layers_to_copy)
+    def sanity_check_gradients(self):
         assert_all_frozen(self.teacher)
         assert_all_frozen(self.model.model.decoder.embed_tokens)
         assert_all_frozen(self.model.model.encoder.embed_tokens)
@@ -77,7 +77,7 @@ class SummarizationDistiller(SummarizationTrainer):
         }
         d_layers_to_copy = get_layers_to_copy(student_updates["decoder_layers"], teacher.config.decoder_layers)
         e_layers_to_copy: List = get_layers_to_copy(student_updates["encoder_layers"], teacher.config.encoder_layers)
-        hparams.layer_to_copy = d_layers_to_copy
+        hparams.d_layer_to_copy = d_layers_to_copy
         hparams.e_layer_to_copy = e_layers_to_copy
         kw = teacher.config.to_diff_dict()
         kw.update(student_updates)
@@ -248,7 +248,7 @@ class SummarizationDistiller(SummarizationTrainer):
         dec_mask = decoder_input_ids.eq(self.tokenizer.pad_token_id)
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
         if not self.hparams.freeze_decoder and self.alpha_hid > 0:
-            hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.layer_to_copy)
+            hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.d_layer_to_copy)
 
         blended_loss = (
             self.alpha_ce * loss_ce
@@ -283,7 +283,7 @@ class T5SummarizationDistiller(SummarizationDistiller):
         d_layers_to_copy = get_layers_to_copy(n_layer, len(teacher.decoder.block))
         e_layers_to_copy: List = get_layers_to_copy(n_layer, len(teacher.encoder.block))
         student_updates = {"num_layers": n_layer}
-        hparams.layer_to_copy = d_layers_to_copy
+        hparams.d_layer_to_copy = d_layers_to_copy
         hparams.e_layer_to_copy = e_layers_to_copy
         kw = teacher.config.to_diff_dict()
 
@@ -304,7 +304,7 @@ class T5SummarizationDistiller(SummarizationDistiller):
         for d in [self.model.encoder, self.model.decoder]:
             freeze_params(d.embed_tokens)
 
-    def freeze_stuff(self, d_layers_to_copy):
+    def sanity_check_gradients(self, d_layers_to_copy):
         """T5"""
         assert len(self.model.decoder.block) == len(d_layers_to_copy)
         assert_all_frozen(self.teacher)
@@ -321,7 +321,6 @@ class T5SummarizationDistiller(SummarizationDistiller):
             freeze_params(self.model.decoder)  # TODO(SS): very suspicious
 
     def _step(self, batch):
-        # assert is_frozen(self.teacher)
         pad_token_id = self.tokenizer.pad_token_id
         source_ids, source_mask, y = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
         decoder_input_ids = y[:, :-1].contiguous()
@@ -372,7 +371,7 @@ class T5SummarizationDistiller(SummarizationDistiller):
 
         loss_ce, s_logits_slct, t_logits_slct = self.calc_ce_loss(dec_mask, slogits, tlogits)
         if not self.hparams.freeze_decoder and self.alpha_hid > 0:
-            hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.layer_to_copy)
+            hid_loss_dec = self.calc_hidden_loss(dec_mask, dec_hidden, tdec_hidden, self.hparams.d_layer_to_copy)
 
         blended_loss = (
             self.alpha_ce * loss_ce
@@ -381,15 +380,6 @@ class T5SummarizationDistiller(SummarizationDistiller):
             + self.hparams.alpha_hid * (hid_loss_enc + hid_loss_dec)
         )
         return blended_loss, loss_ce, sloss, loss_encoder, hid_loss_enc, hid_loss_dec
-
-
-def distill_main(args):
-    Path(args.output_dir).mkdir(exist_ok=True)
-    if len(os.listdir(args.output_dir)) > 3 and args.do_train:
-        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
-
-    model = create_module(args)
-    ft_main(args, model=model)
 
 
 def create_module(args):
@@ -446,6 +436,15 @@ def get_layers_to_copy(n_to_get, tot):
         return layers_to_copy[n_to_get]
     else:
         return all_layers[:n_to_get]
+
+
+def distill_main(args):
+    Path(args.output_dir).mkdir(exist_ok=True)
+    if len(os.listdir(args.output_dir)) > 3 and args.do_train:
+        raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
+
+    model = create_module(args)
+    ft_main(args, model=model)
 
 
 if __name__ == "__main__":

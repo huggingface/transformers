@@ -15,16 +15,15 @@ from rouge_score import rouge_scorer, scoring
 from torch import nn
 from torch.utils.data import DataLoader
 
-from durbango import pickle_save
 from lightning_base import BaseTransformer, add_generic_args, generic_train
 from transformers import AutoModelWithLMHead, get_linear_schedule_with_warmup
 
 
 try:
-    from .utils import SummarizationDataset, lmap, flatten_list
+    from .utils import SummarizationDataset, lmap, flatten_list, pickle_save
     from .callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
 except ImportError:
-    from utils import SummarizationDataset, lmap, flatten_list
+    from utils import SummarizationDataset, lmap, flatten_list, pickle_save
     from callbacks import Seq2SeqLoggingCallback, get_rouge2_checkpoint_callback
 
 logger = logging.getLogger(__name__)
