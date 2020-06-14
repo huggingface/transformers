@@ -16,7 +16,7 @@
 import logging
 from typing import List, Optional
 
-from .tokenization_roberta import RobertaTokenizer
+from .tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
 from .tokenization_utils import BatchEncoding
 from .tokenization_xlm_roberta import XLMRobertaTokenizer
 
@@ -36,6 +36,15 @@ _all_bart_models = [
 
 
 class BartTokenizer(RobertaTokenizer):
+    # merges and vocab same as Roberta
+    max_model_input_sizes = {m: 1024 for m in _all_bart_models}
+    pretrained_vocab_files_map = {
+        "vocab_file": {m: vocab_url for m in _all_bart_models},
+        "merges_file": {m: merges_url for m in _all_bart_models},
+    }
+
+
+class BartTokenizerFast(RobertaTokenizerFast):
     # merges and vocab same as Roberta
     max_model_input_sizes = {m: 1024 for m in _all_bart_models}
     pretrained_vocab_files_map = {
