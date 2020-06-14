@@ -293,9 +293,8 @@ class SummarizationTrainer(BaseTransformer):
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
-        add_generic_args(parser, root_dir)
-
         BaseTransformer.add_model_specific_args(parser, root_dir)
+        add_generic_args(parser, root_dir)
         parser.add_argument(
             "--max_source_length",
             default=1024,
@@ -373,7 +372,6 @@ def main(args, model=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    add_generic_args(parser, os.getcwd())
     parser = SummarizationTrainer.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
