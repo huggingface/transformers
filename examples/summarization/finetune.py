@@ -11,6 +11,7 @@ import git
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning.loggers import WandbLogger
 from rouge_score import rouge_scorer, scoring
 from torch import nn
 from torch.utils.data import DataLoader
@@ -323,7 +324,6 @@ class SummarizationTrainer(BaseTransformer):
             help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded.",
         )
-
         parser.add_argument(
             "--data_dir",
             default=None,
@@ -337,11 +337,15 @@ class SummarizationTrainer(BaseTransformer):
         parser.add_argument(
             "--freeze_embeds", action="store_true",
         )
+        parser.add_argument("--sortish_sampler", action="store_true", default=False)
+        parser.add_argument("--logger", type="str", choices=["default", "wandb", "wandb_shared"], default="default")
         parser.add_argument("--n_train", type=int, default=-1, required=False)
         parser.add_argument("--n_val", type=int, default=500, required=False)
         parser.add_argument("--n_test", type=int, default=-1, required=False)
-        parser.add_argument("--sortish_sampler", action="store_true", default=False)
+
         return parser
+
+
 
 
 def main(args, model=None):
@@ -350,12 +354,19 @@ def main(args, model=None):
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
         model: BaseTransformer = SummarizationTrainer(args)
+    if args.logger == "default":
+        logger = True
+    elif args.logger == "wandb":
+        logger = WandbLogger()
+    elif args.logger == "wandb_shared":
+        logger = WandbLogger(name=args.output_dir, project="hf_summarization")
     trainer: pl.Trainer = generic_train(
         model,
         args,
         early_stopping_callback=True,
         logging_callback=Seq2SeqLoggingCallback(),
         checkpoint_callback=get_rouge2_checkpoint_callback(args.output_dir),
+        logger=logger,
     )
     if not args.do_predict:
         return model

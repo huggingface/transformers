@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 FP16_EVER = False
 CHEAP_ARGS = {
+    "logger": "default",
     "alpha_hid": 0,
     "freeze_embeds": True,
     "enc_only": False,
