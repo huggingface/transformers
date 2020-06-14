@@ -34,12 +34,12 @@ Run/modify `finetune.sh`
 
 The following command should work on a 16GB GPU:
 ```bash
-export myhandle='sshleifer'
+export me=`git config user.name`
 ./finetune.sh \
     --data_dir $XSUM_DIR \
     --train_batch_size=1 \
     --eval_batch_size=1 \
-    --output_dir="$myhandle"_xsum_results \
+    --output_dir="$me"_xsum_results \
     --num_train_epochs 1
 ```
 
@@ -52,12 +52,12 @@ Tips:
 Compare XSUM results with others by using `--logger wandb_shared`. This requires `wandb` registration.
 Here is an example command
 ```bash
-export myhandle='sshleifer'
-./finetune.sh
+export me=`git config user.name`
+./finetune.sh \
     --data_dir $XSUM_DIR \
-    --output_dir "$myhandle"xsum_frozen_embs \
+    --output_dir "$me"_xsum_frozen_embs \
     --logger wandb_shared \
-    --train_batch_size 8 -eval_batch_size 16 --freeze_embeds --freeze_encoder \
+    --train_batch_size 16 -eval_batch_size 32 --freeze_embeds --freeze_encoder \
     --num_train_epochs 6
 ```
 

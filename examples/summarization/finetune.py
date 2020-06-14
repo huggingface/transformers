@@ -338,7 +338,7 @@ class SummarizationTrainer(BaseTransformer):
             "--freeze_embeds", action="store_true",
         )
         parser.add_argument("--sortish_sampler", action="store_true", default=False)
-        parser.add_argument("--logger", type="str", choices=["default", "wandb", "wandb_shared"], default="default")
+        parser.add_argument("--logger", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
         parser.add_argument("--n_train", type=int, default=-1, required=False)
         parser.add_argument("--n_val", type=int, default=500, required=False)
         parser.add_argument("--n_test", type=int, default=-1, required=False)
