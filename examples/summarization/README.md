@@ -61,4 +61,4 @@ export me=`git config user.name`
     --num_train_epochs 6
 ```
 
-Results can be viewed [here](https://app.wandb.ai/sshleifer)
+Results can be viewed [here](https://app.wandb.ai/sshleifer/hf_summarization/table?workspace=user-)
