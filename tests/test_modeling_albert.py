@@ -37,7 +37,7 @@ if is_torch_available():
     from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-class AlbertModelTester:
+class AlbertModelTester():
     def __init__(
         self, parent,
     ):
