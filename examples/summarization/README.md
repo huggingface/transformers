@@ -57,7 +57,7 @@ export me=`git config user.name`
     --data_dir $XSUM_DIR \
     --output_dir "$me"_xsum_frozen_embs \
     --logger wandb_shared \
-    --train_batch_size 16 -eval_batch_size 32 --freeze_embeds --freeze_encoder \
+    --train_batch_size 16 --eval_batch_size 16 --freeze_embeds --freeze_encoder \
     --num_train_epochs 6
 ```
 
