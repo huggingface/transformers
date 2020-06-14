@@ -7,3 +7,4 @@ rouge-score
 tensorflow_datasets
 pytorch-lightning==0.7.6  # April 10, 2020 release
 matplotlib
+git-python==1.0.3
