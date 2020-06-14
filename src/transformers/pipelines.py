@@ -1011,6 +1011,7 @@ class TokenClassificationPipeline(Pipeline):
                 for idx, label_idx in enumerate(labels_idx)
                 if self.model.config.id2label[label_idx] not in self.ignore_labels
             ]
+            last_idx, _ = filtered_labels_idx[-1]
 
             for idx, label_idx in filtered_labels_idx:
 
@@ -1020,7 +1021,6 @@ class TokenClassificationPipeline(Pipeline):
                     "entity": self.model.config.id2label[label_idx],
                     "index": idx,
                 }
-                last_idx, _ = filtered_labels_idx[-1]
                 is_last_idx = idx == last_idx
 
                 if self.grouped_entities:
