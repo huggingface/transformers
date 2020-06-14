@@ -346,15 +346,13 @@ class SummarizationTrainer(BaseTransformer):
         return parser
 
 
-
-
 def main(args, model=None):
     Path(args.output_dir).mkdir(exist_ok=True)
     if len(os.listdir(args.output_dir)) > 3 and args.do_train:
         raise ValueError("Output directory ({}) already exists and is not empty.".format(args.output_dir))
     if model is None:
         model: BaseTransformer = SummarizationTrainer(args)
-    if args.logger == "default":
+    if args.logger == "default" or args.fast_dev_run:
         logger = True
     elif args.logger == "wandb":
         logger = WandbLogger()
