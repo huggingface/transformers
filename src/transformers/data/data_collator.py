@@ -8,6 +8,11 @@ from ..tokenization_utils import PreTrainedTokenizer
 
 
 InputDataClass = NewType("InputDataClass", Any)
+
+"""
+A DataCollator is a function that takes a list of samples from a Dataset
+and collate them into a batch, as a dictionary of Tensors.
+"""
 DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, torch.Tensor]])
 
 
