@@ -187,7 +187,7 @@ class ModelTesterMixin:
                     decoder_attention_idx += 1
                 # Question Answering model returns start_logits and end_logits
                 if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
-                    correct_outlen += 1  # compute loss
+                    correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                     decoder_attention_idx += 1
                 self.assertEqual(out_len, correct_outlen)
 
