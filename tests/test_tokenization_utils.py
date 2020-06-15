@@ -116,3 +116,13 @@ class TokenizerUtilsTest(unittest.TestCase):
                 tokenizer_r("Small example to encode", return_tensors=TensorType.PYTORCH),
                 torch.equal
             )
+
+    def test_batch_encoding_is_fast(self):
+        tokenizer_p = BertTokenizer.from_pretrained("bert-base-cased")
+        tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")
+
+        with self.subTest("Python Tokenizer"):
+            self.assertFalse(tokenizer_p("Small example to_encode").is_fast)
+
+        with self.subTest("Rust Tokenizer"):
+            self.assertFalse(tokenizer_r("Small example to_encode").is_fast)
