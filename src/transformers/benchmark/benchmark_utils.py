@@ -16,7 +16,6 @@ from collections import defaultdict, namedtuple
 from datetime import datetime
 from multiprocessing import Pipe, Process
 from multiprocessing.connection import Connection
-from signal import SIGKILL
 from typing import Callable, Iterable, List, NamedTuple, Optional, Union
 
 from transformers import AutoConfig, PretrainedConfig
@@ -31,6 +30,12 @@ if is_torch_available():
 
 if is_tf_available():
     from tensorflow.python.eager import context as tf_context
+
+
+if platform.system() == "Windows":
+    from signal import CTRL_C_EVENT as SIGKILL
+else:
+    from signal import SIGKILL
 
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
