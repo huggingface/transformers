@@ -42,6 +42,16 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         be_restored = pickle.loads(batch_encoding_str)
 
+        # Ensure is_fast is correctly restored
+        self.assertEqual(be_restored.is_fast, be_original.is_fast)
+
+        # Ensure encodings are potentially correctly restored
+        if be_original.is_fast:
+            self.assertIsNotNone(be_restored.encodings)
+        else:
+            self.assertIsNone(be_restored.encodings)
+
+        # Ensure the keys are the same
         for original_v, restored_v in zip(be_original.values(), be_restored.values()):
             if equal_op:
                 self.assertTrue(equal_op(restored_v, original_v))
